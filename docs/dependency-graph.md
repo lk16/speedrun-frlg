@@ -57,12 +57,14 @@ flowchart LR
     champ --> hof([Hall of Fame / credits = END])
 ```
 
-> **⚠️verify (gym order):** The gym *badge* numbers above are the conventional
-> order, but FRLG does **not** strictly force all of them in this sequence — the
-> real constraints are the **HM/area gates** in §2–§4, plus the Earth-Badge gym
-> opening only after a mid-game event (Silph Co). The router's true ordering
-> freedom is whatever those gates leave open. Treat this column as illustrative
-> until the gate graph (§5) is decomp-confirmed.
+> **⚠️verify (gym order) — partly resolved.** The first seven gyms are *not* a
+> forced linear sequence; their real constraints are the HM/area gates in §2–§5.
+> **But** the decomp pins two hard ordering facts (§5/§6): the **Viridian Gym
+> door requires badges 02–07**, so **Brock-or-not aside, Misty/Surge/Erika/Koga/
+> Sabrina/Blaine all precede Giovanni (Earth)**; and the **league approach
+> checks all 8 badges** (Boulder at the Route 22 gate). So Giovanni/Earth is
+> genuinely last, and every other gym is mandatory. Ordering freedom lives among
+> gyms 1–7, bounded by the §5 gate graph.
 
 ---
 
@@ -107,12 +109,17 @@ flowchart TD
     hFlash -- "helps in" --> useFlash[Dark caves - Rock Tunnel / Victory Road]
 ```
 
-> **⚠️verify (badge↔HM map):** the badge→HM authorization pairs above are the
-> standard FRLG mapping but MUST be confirmed against the decomp's field-use
-> badge checks (look for the per-HM `BADGE0x_GET` / `FLAG_BADGE0x_GET` checks in
-> the field-move scripts). **Fly/Flash/Rock Smash/Waterfall are likely
-> *optional*** for a glitchless completion (convenience, not gating) — confirm
-> which HMs are *strictly required* to reach the E4 vs. merely useful.
+> **✅ CONFIRMED (2026-06-22).** The badge→HM map is exact. `party_menu.c:3926`
+> gates field-move use on `FlagGet(FLAG_BADGE01_GET + fieldMove)` over the
+> `FIELD_MOVE_*` enum (`include/constants/party_menu.h`): Flash(0)→Boulder,
+> **Cut(1)→Cascade**, Fly(2)→Thunder, **Strength(3)→Rainbow**, **Surf(4)→Soul**,
+> RockSmash(5)→Marsh, Waterfall(6)→Volcano. (`field_control_avatar.c:605` also
+> uses `FLAG_BADGE05_GET` for the auto-Surf prompt — consistent.)
+>
+> Still open: which HMs are *strictly required* to reach the E4. Confirmed
+> required so far: **Cut** (Vermilion gym), **Strength** (Victory Road), **Surf**
+> (Cinnabar/Blaine path). **Fly / Flash / Rock Smash / Waterfall** still look
+> optional — confirm individually.
 
 ---
 
@@ -143,14 +150,17 @@ flowchart LR
     secretkey[Secret Key - Pokemon Mansion] --> cinnabargym[Open Cinnabar Gym]
 ```
 
-> **⚠️verify (FRLG-specific items & givers):**
-> - **Tea** is an FRLG-only gate for the Saffron guards (replaces RBY drinks) —
->   confirm the item id, where it's obtained, and which gatehouses it opens.
-> - Confirm **Surf** location (Safari Zone Secret House) and that **Strength**
->   comes from the **Warden** in exchange for **Gold Teeth**.
-> - Confirm **Silph Scope** comes from Giovanni at the Game Corner Rocket
->   Hideout, and is the hard gate for Pokémon Tower.
-> - Confirm **Secret Key** (Pokémon Mansion) gates the Cinnabar Gym door.
+> **✅ CONFIRMED (2026-06-22)** — all givers/gates verified (see §6 for files):
+> - **Tea** → obtained in `CeladonCity_Condominiums_1F`; checked at all **four**
+>   Saffron gatehouses (Route 5 South / 6 North / 7 East / 8 West entrances).
+> - **Surf (HM03)** → `SafariZone_SecretHouse`. **Strength (HM04)** → Warden
+>   trades it for **Gold Teeth** (`FuchsiaCity_WardensHouse`).
+> - **Silph Scope** → `RocketHideout_B4F`; hard gate for the Pokémon Tower
+>   Marowak ghost (`StartMarowakBattle` checks `ITEM_SILPH_SCOPE`).
+> - **Poké Flute** → Mr. Fuji in `LavenderTown_VolunteerPokemonHouse`.
+> - **Secret Key** → found in `PokemonMansion_B1F`; unlocks the Cinnabar Gym
+>   door (`CinnabarIsland` checks `FLAG_HIDE_POKEMON_MANSION_B1F_SECRET_KEY`).
+> - **S.S. Ticket** → Bill in `Route25_SeaCottage` (no badge gate).
 
 ---
 
@@ -242,7 +252,6 @@ flowchart TD
     %% --- Saffron via Tea ---
     tea --> saffron[Saffron + Silph Co -> Giovanni #2]
     saffron --> sabrina[Sabrina / Marsh]
-    saffron --> viridian8_open[Viridian Gym opens]
 
     %% --- South to Fuchsia (Snorlax woken by Poke Flute - may be reachable earlier, VERIFY) ---
     tower --> flute[Poke Flute -> wake Snorlax]
@@ -264,51 +273,106 @@ flowchart TD
     surfok --> cinnabar[Reach Cinnabar -> Secret Key -> Blaine / Volcano]
     cinnabar --> blaine[Blaine / Volcano]
 
-    %% --- Earth-Badge gym opens after Silph Co ---
-    viridian8_open --> giovanni8[Giovanni / Earth]
-    blaine --> giovanni8
+    %% --- Viridian Gym DOOR requires badges 2-7 (Cascade..Volcano) - CONFIRMED in decomp.
+    %%     So all six middle gyms must precede Giovanni / Earth. ---
+    misty --> viridian_door[Viridian Gym door - needs badges 2-7]
+    surge --> viridian_door
+    erika --> viridian_door
+    koga --> viridian_door
+    sabrina --> viridian_door
+    blaine --> viridian_door
+    viridian_door --> giovanni8[Giovanni / Earth]
 
-    %% --- Endgame ---
-    giovanni8 --> badgecheck[Route 23 - all 8 badges]
-    badgecheck --> vroad[Victory Road - Strength + Surf]
-    strok --> vroad
-    surfok --> vroad
+    %% --- Endgame: league gate checks ALL 8 badges
+    %%     (Boulder at Route 22 gate, Cascade..Earth at Route 23) ---
+    giovanni8 --> badgecheck[League gate - all 8 badges]
+    strok --> vroad[Victory Road - Strength]
+    badgecheck --> vroad
     vroad --> e4[Elite Four]
     e4 --> champ[Champion]
     champ --> END([Hall of Fame])
 ```
 
-> **⚠️verify (the whole DAG):** §5 is the highest-value artifact and the most
-> assumption-laden. The key claims to confirm from decomp:
-> 1. **Cut** (HM01 from S.S. Anne) + **Cascade** is the gate to **Surge's gym**.
-> 2. **Silph Scope** → Pokémon Tower → **Poké Flute** → Snorlax is a hard chain
->    on the way south to Fuchsia.
-> 3. **Surf** (Safari Zone) + **Soul** is the gate to **Cinnabar**, and
->    **Strength** (Warden, via Gold Teeth) + **Rainbow** is a Victory Road gate.
-> 4. **Viridian Gym (Giovanni / Earth)** only opens **after Silph Co.**
-> 5. Victory Road's real internal HM requirements.
-> 6. **Bill / S.S. Ticket** prerequisite: is it truly just "reach Cerulean," or
->    is **Cascade** (Misty) actually required? Drawn here as Cerulean-only.
-> 7. **Fuchsia reachability** — is it gated *solely* by Poké Flute → Snorlax, or
->    is there an **earlier** legitimate (glitchless) approach (e.g. via Surf, or
->    a southern route) that would let Fuchsia/Koga/Safari happen sooner? If so,
->    the `flute → fuchsia` edge is too strict and should be loosened.
+> **✅ Decomp-verified (2026-06-22).** §5 gates checked against `decompiled/`.
+> Citations in §6. Results:
+> 1. **Cut → Surge's gym** — ✅ HM01 from `SSAnne_CaptainsOffice`; Cut gated by
+>    **Cascade** (badge 02, see §2); a `EventScript_CutTree` sits in
+>    `VermilionCity` blocking the gym approach.
+> 2. **Silph Scope → Tower → Poké Flute → Snorlax** — ✅ `StartMarowakBattle`
+>    requires `ITEM_SILPH_SCOPE`; Snorlax (Routes 12 **and** 16) requires
+>    `FLAG_GOT_POKE_FLUTE`. Hard chain confirmed.
+> 3. **Surf/Soul → Cinnabar; Strength via Gold Teeth/Warden** — ✅ HM03 Surf in
+>    `SafariZone_SecretHouse`; Cinnabar gym door unlocks on the **Secret Key**
+>    flag (`FLAG_HIDE_POKEMON_MANSION_B1F_SECRET_KEY`); Warden trades **HM04
+>    Strength** for **Gold Teeth**.
+> 4. **Viridian Gym (Earth)** — ⚠️ **CORRECTED.** Not a "Silph Co. flag" — the
+>    door (`ViridianCity_EventScript_TryUnlockGym`) hard-requires **badges
+>    02–07** (Cascade, Thunder, Rainbow, Soul, Marsh, Volcano). So **all six
+>    middle gyms precede Giovanni/Earth** (graph updated). It's *indirectly*
+>    after Silph only because Marsh/Sabrina needs Saffron freed.
+> 5. **Victory Road HMs** — ✅ **Strength** confirmed (multiple
+>    `EventScript_StrengthBoulder` on all 3 floors). **Surf inside VR not
+>    found** — the old `surfok → vroad` edge was removed; Surf stays critical
+>    anyway via Blaine/Cinnabar. (A water section inside VR is still worth a
+>    closer look.)
+> 6. **Bill / S.S. Ticket** — ✅ **Cerulean-only.** Gated solely on
+>    `FLAG_HELPED_BILL_IN_SEA_COTTAGE`; **no badge check** — Cascade not required.
+> 7. **Fuchsia reachability** — ✅ **Poké Flute is the hard gate.** Fuchsia's
+>    only connections are Route 19 (water/Surf), 18 (Cycling Road) and 15; both
+>    land approaches route through a Snorlax (Routes 12/16), and Surf (HM03) is
+>    unobtainable until *inside* Fuchsia's Safari Zone. No earlier approach.
+>
+> **Bonus finding:** the **league approach checks all 8 badges**, split across
+> two gates — **Boulder** at `Route22_NorthEntrance`, **Cascade…Earth** at
+> `Route23` (sequential per-badge guards keyed by `VAR_MAP_SCENE_ROUTE23`). So
+> Brock/Boulder stays mandatory even though the Viridian door doesn't check it.
 
 ---
 
-## Verification checklist (next pass against `decompiled/`)
+## Verification checklist (against `decompiled/`)
 
-- [ ] Badge → HM field-use authorization map (field-move scripts / badge flags).
-- [ ] Which HMs are **strictly required** to reach the E4 vs. optional.
-- [ ] Gym entry gates (Cut tree at Vermilion Gym; Secret Key at Cinnabar Gym;
-      Viridian Gym open-flag tied to Silph Co.).
-- [ ] Key-item givers & flags: S.S. Ticket (Bill), Silph Scope (Rocket Hideout),
-      Poké Flute (Mr. Fuji), Tea (Celadon), Gold Teeth → Strength (Warden),
-      Secret Key (Pokémon Mansion), Surf (Safari Zone).
-- [ ] Snorlax block flags (Routes 12 & 16) and Poké Flute dependency.
-- [ ] Saffron gatehouse guard gate (Tea) — FRLG-specific, confirm item + scripts.
-- [ ] Route 23 badge-check count and Victory Road traversal HMs.
+- [x] Badge → HM field-use authorization map — `party_menu.c:3926`.
+- [~] Which HMs are **strictly required** to reach the E4 — Cut/Strength/Surf
+      confirmed required; Fly/Flash/Rock Smash/Waterfall still to disprove.
+- [x] Gym entry gates — Cut tree at Vermilion; Secret Key at Cinnabar; **Viridian
+      door = badges 02–07** (NOT a Silph flag — corrected).
+- [x] Key-item givers & flags — S.S. Ticket (Bill), Silph Scope (Rocket Hideout
+      B4F), Poké Flute (Mr. Fuji), Tea (Celadon Condominiums), Gold Teeth →
+      Strength (Warden), Secret Key (Pokémon Mansion B1F), Surf (Safari Zone).
+- [x] Snorlax block flags (Routes 12 & 16) → `FLAG_GOT_POKE_FLUTE`.
+- [x] Saffron gatehouse guard gate (Tea) — four entrances confirmed.
+- [x] League badge gate — **all 8** (Boulder @ Route 22 gate, Cascade…Earth @
+      Route 23). Victory Road traversal → **Strength** (boulders); Surf-inside
+      not found.
 - [ ] Exact final-input endpoint at the Champion→Hall-of-Fame transition
       (from scripts, per `tas-rules.md`).
 - [ ] FireRed vs LeafGreen differences in any of the above (should be none for
       structure, but confirm version-exclusive item/encounter givers).
+
+---
+
+## 6. Decomp source citations
+
+All paths relative to `decompiled/`. Verified 2026-06-22.
+
+| Gate / fact | Source |
+|---|---|
+| Badge→HM field-use map | `src/party_menu.c:3926` (`FLAG_BADGE01_GET + fieldMove`); enum `include/constants/party_menu.h:34-41` |
+| Surf auto-prompt badge | `src/field_control_avatar.c:605` (`FLAG_BADGE05_GET`) |
+| Badge flag constants | `include/constants/flags.h:1364-1372` |
+| S.S. Ticket (Bill, no badge) | `data/maps/Route25_SeaCottage/scripts.inc` (`FLAG_HELPED_BILL_IN_SEA_COTTAGE`) |
+| HM01 Cut giver | `data/maps/SSAnne_CaptainsOffice/scripts.inc` |
+| Vermilion Cut tree | `data/maps/VermilionCity/map.json` (`EventScript_CutTree`, ~tile 19,24; gym warp 14,25) |
+| Silph Scope giver | `data/maps/RocketHideout_B4F/scripts.inc` |
+| Marowak ghost needs Silph Scope | `src/battle_setup.c:221,320` (`StartMarowakBattle`, `CheckSilphScopeInPokemonTower`) |
+| Poké Flute giver | `data/maps/LavenderTown_VolunteerPokemonHouse/scripts.inc` |
+| Snorlax needs Poké Flute | `data/maps/Route12/scripts.inc:16`, `data/maps/Route16/scripts.inc:34` |
+| HM03 Surf giver | `data/maps/SafariZone_SecretHouse/scripts.inc` |
+| Gold Teeth → HM04 Strength | `data/maps/FuchsiaCity_WardensHouse/scripts.inc:7,26` |
+| Secret Key → Cinnabar gym | `data/maps/CinnabarIsland/scripts.inc:40-44` (`FLAG_HIDE_POKEMON_MANSION_B1F_SECRET_KEY`); item in `data/maps/PokemonMansion_B1F/map.json` |
+| Viridian door = badges 02–07 | `data/maps/ViridianCity/scripts.inc:29-39` (`TryUnlockGym`) |
+| Giovanni/Earth = badge 08 | `data/maps/ViridianCity_Gym/scripts.inc:20` |
+| Tea gate (4 gatehouses) | `data/maps/Route{5_South,6_North,7_East,8_West}Entrance/scripts.inc`; Tea from `data/maps/CeladonCity_Condominiums_1F/scripts.inc` |
+| Victory Road Strength boulders | `data/maps/VictoryRoad_{1F,2F,3F}/map.json` (`EventScript_StrengthBoulder`) |
+| League badge gates (all 8) | Boulder: `data/maps/Route22_NorthEntrance/scripts.inc:4`; Cascade…Earth: `data/maps/Route23/scripts.inc`; logic `data/scripts/route23.inc:46-77` |
+| Fuchsia connections | `data/maps/FuchsiaCity/map.json` (Route 19 down / 18 left / 15 right) |
