@@ -8,7 +8,7 @@ name: speedrun-frlg-network-policy
 displayName: speedrun-frlg network policy
 description: The agent's own API calls only; ROM, emulator, Rust and Python all come off read-only mounts
 
-caps:
+permissions:
   network:
     allow:
       - api.anthropic.com:443   # the agent's own API calls (not auto-included by the claude kit)
@@ -19,7 +19,7 @@ caps:
       #   github.com     -- agbcc, mGBA and BizHawk are prebuilt into <deps> on the host
       #   everything else-- so route knowledge cannot be looked up
 
-commands:
+setup:
   startup:
     - command: ["sudo", "rm", "-f", "/usr/local/bin/clipboard-bridge", "/usr/local/bin/sbx-clipboard"]
       description: Remove the clipboard bridge binaries (no documented off-switch exists)
