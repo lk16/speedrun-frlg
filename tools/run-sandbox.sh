@@ -23,7 +23,8 @@ DEPS="${FRLG_DEPS_DIR:-$HOME/.cache/speedrun-frlg/deps}"
 ARTIFACTS="${FRLG_ARTIFACTS_DIR:-$HOME/.cache/speedrun-frlg/artifacts}"
 DECOMP="$REPO/decompiled"
 
-NAME="${FRLG_SANDBOX_NAME:-frlg}"
+BASE="${FRLG_SANDBOX_NAME:-frlg}"
+NAME=""            # resolved below, once the action is known
 MODEL="${FRLG_MODEL:-claude-opus-5}"
 CPUS="${FRLG_CPUS:-16}"
 MEMORY="${FRLG_MEMORY:-12g}"
@@ -32,7 +33,13 @@ MEMORY="${FRLG_MEMORY:-12g}"
 # filesystem has to be generous: the decomp copy, its build tree and Rust's
 # target/ all live there, because artifacts is the only writable mount and a
 # build tree does not belong on it.
-export DOCKER_SANDBOXES_ROOT_SIZE="${FRLG_ROOT_SIZE:-24g}"
+#
+# 16g, not more. A root size of 24g makes `sbx create` hang: the sandbox is
+# created and its startup commands finish, then the container disappears and the
+# client blocks in a futex forever with nothing printed. 16g and 12g were both
+# verified to create cleanly; the cliff sits somewhere between 16g and 24g. If a
+# create ever hangs again with no output, drop this first.
+export DOCKER_SANDBOXES_ROOT_SIZE="${FRLG_ROOT_SIZE:-16g}"
 export DOCKER_SANDBOXES_DOCKER_SIZE="${FRLG_DOCKER_SIZE:-4g}"
 
 ACTION=run
@@ -49,6 +56,38 @@ while [ $# -gt 0 ]; do
 done
 
 die() { printf '\033[31m !! \033[0m%s\n' "$*" >&2; exit 1; }
+
+# Names in use, from two sources. A sandbox-scoped secret outlives the sandbox it
+# was made for -- it cannot be deleted, only parked (docker/sbx-releases#230) -- so
+# a name whose secret still exists is spent, even with no sandbox behind it.
+# Reusing one means `sbx secret set-custom` refuses and the run cannot authenticate.
+existing() {
+  {
+    sbx ls 2>/dev/null | awk 'NR > 1 {print $1}'
+    sbx secret ls 2>/dev/null | awk '{print $1}'
+  } | grep -E "^$BASE-[0-9]+$" | sort -u
+}
+
+# Each run gets its own <base>-<n>, as box did. Not just for parallel sandboxes: a
+# sandbox-scoped secret cannot be updated or removed once set -- `sbx secret
+# set-custom` refuses with "already exists" and no rm key matches it -- so reusing
+# one name would wedge its credentials permanently on the first bad token.
+next_name() {
+  local n=1
+  while existing | grep -qx "$BASE-$n"; do n=$((n + 1)); done
+  echo "$BASE-$n"
+}
+
+# For --fetch and --rm, act on the newest sandbox unless told otherwise.
+latest_name() { existing | sort -t- -k2 -n | tail -1; }
+
+if [ -z "$NAME" ]; then
+  case "$ACTION" in
+    fetch|rm) NAME="$(latest_name)"
+              [ -n "$NAME" ] || die "no $BASE-* sandbox exists; pass --name" ;;
+    *)        NAME="$(next_name)" ;;
+  esac
+fi
 
 case "$ACTION" in
 fetch)
@@ -83,6 +122,12 @@ command -v sbx >/dev/null   || die "sbx is not on PATH"
 # is a slow way to find a typo. sbx validates it in a second.
 sbx kit validate .sbx/kit >/dev/null || die "the kit at .sbx/kit is not valid; run: sbx kit validate .sbx/kit"
 
+token_file="${CLAUDE_OAUTH_TOKEN_FILE:-}"
+if [ -n "$token_file" ]; then
+  token_file="${token_file/#\~/$HOME}"
+  [ -s "$token_file" ] || die "CLAUDE_OAUTH_TOKEN_FILE points at $token_file, which is missing or empty"
+fi
+
 # The three mounts. Only artifacts is writable -- everything else the agent needs
 # to change, it changes inside the container. sbx defaults to read-write, so ":ro"
 # is what does the work here.
@@ -108,6 +153,28 @@ if [ "$ACTION" = print ]; then
     "$DOCKER_SANDBOXES_ROOT_SIZE" "$DOCKER_SANDBOXES_DOCKER_SIZE"
   printf '%q ' "${command[@]}"; echo
   exit 0
+fi
+
+# Past the dry run, so this is the first thing with a side effect. sbx substitutes
+# the real token into outbound requests to api.anthropic.com -- the container only
+# ever sees a placeholder. It has to exist before create, because that is when the
+# placeholder env var is injected. Passed on stdin: --value and --token would both
+# land in the shell history.
+if [ -n "$token_file" ]; then
+  # A fresh name per run means this never collides. If it somehow does, a custom
+  # secret cannot be removed (docker/sbx-releases#230), only "parked".
+  sbx secret set-custom --sandbox "$NAME" --host api.anthropic.com \
+    --env CLAUDE_CODE_OAUTH_TOKEN < "$token_file" >/dev/null \
+    || die "could not store the OAuth token for $NAME.
+  If it says the env already exists, park the old placeholder rather than removing it:
+    sbx secret ls | grep $NAME
+    sbx secret set-custom --sandbox $NAME --host unused.invalid --env PARKED \\
+      --placeholder <that-placeholder> --value parked"
+else
+  # Not fatal: sbx may already hold global Anthropic credentials. Worth saying out
+  # loud, because the failure mode otherwise is an agent that starts and then
+  # cannot authenticate.
+  printf '\033[33m !! \033[0mCLAUDE_OAUTH_TOKEN_FILE is not set; relying on sbx global credentials\n' >&2
 fi
 
 cat <<EOF
