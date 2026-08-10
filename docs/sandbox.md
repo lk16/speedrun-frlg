@@ -145,6 +145,11 @@ it — do not vendor a crate by hand into the repo.
 absorbs most of the rebuild, which is why it is the one build cache allowed on the artifacts
 volume.
 
+`cargo clippy` and `cargo fmt` work; the components are installed into the prebuilt toolchain on
+the host. Any other component (`rust-src`, `miri`, a second target) is not there and cannot be
+added — `rustup component add` needs the network. Ask for it the same way you would ask for a
+crate.
+
 ## Python
 
 Standard library only, and it covers what this project needs: `struct`, `zipfile` (a `.bk2` is a

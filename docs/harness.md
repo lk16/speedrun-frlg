@@ -100,9 +100,6 @@ library, not assumed.
   its HLE BIOS. Whether BizHawk's mGBA core does the same is unverified, and HLE-vs-real is a
   plausible divergence axis. `Emu::load_bios` exists so testing that needs a file, not a code change.
 - **No `.bk2` writer yet**, deliberately -- see the column-order note above.
-- **`cargo fmt` and `cargo clippy` are unavailable.** The prebuilt toolchain under `$FRLG_DEPS/rust`
-  ships only cargo/rustc/rustdoc, and components cannot be added offline. Fixing that is a host-side
-  change to `tools/host-prep.sh` (`rustup component add rustfmt clippy`) plus a fresh sandbox.
 
 ## Tests
 

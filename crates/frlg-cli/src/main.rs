@@ -167,7 +167,8 @@ fn cmd_info(args: RomArgs) -> Result<()> {
 
 fn cmd_run(args: RunArgs) -> Result<()> {
     let rom = resolve_rom(&args.rom)?;
-    let rom_sha1 = frlg_emu::file_sha1(&rom).with_context(|| format!("hashing {}", rom.display()))?;
+    let rom_sha1 =
+        frlg_emu::file_sha1(&rom).with_context(|| format!("hashing {}", rom.display()))?;
     let syms = resolve_syms(&args.sym)?;
 
     let watches = resolve_targets(&syms, &args.watches)?;
@@ -311,8 +312,9 @@ fn read_log(path: &Path) -> Result<InputLog> {
     match InputLog::decode(&bytes) {
         Ok(log) => Ok(log),
         Err(frlg_emu::LogError::BadMagic) => {
-            let text = String::from_utf8(bytes)
-                .with_context(|| format!("{} is neither a binary nor a text log", path.display()))?;
+            let text = String::from_utf8(bytes).with_context(|| {
+                format!("{} is neither a binary nor a text log", path.display())
+            })?;
             Ok(InputLog::from_text(&text)?)
         }
         Err(other) => Err(other.into()),
@@ -371,8 +373,8 @@ fn cmd_log(command: LogCommand) -> Result<()> {
             }
         }
         LogCommand::FromText { path, out } => {
-            let text = fs::read_to_string(&path)
-                .with_context(|| format!("reading {}", path.display()))?;
+            let text =
+                fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
             let log = InputLog::from_text(&text)?;
             write_out(&out, &log.encode())?;
             println!("{} frames, digest {}", log.frames.len(), log.digest());

@@ -186,7 +186,8 @@ impl InputLog {
                 line,
                 message: format!("bad count {:?}", fields[1]),
             })?;
-            let keys = keys::parse(fields[2]).map_err(|message| LogError::Text { line, message })?;
+            let keys =
+                keys::parse(fields[2]).map_err(|message| LogError::Text { line, message })?;
 
             if start != frames.len() {
                 return Err(LogError::Text {

@@ -32,9 +32,7 @@ pub enum EmuError {
     StateSize { expected: usize, actual: usize },
     #[error("no memory block covers {addr:#010x}")]
     NoMemoryBlock { addr: u32 },
-    #[error(
-        "input log was routed against ROM {expected}, but this ROM is {actual}"
-    )]
+    #[error("input log was routed against ROM {expected}, but this ROM is {actual}")]
     RomMismatch { expected: String, actual: String },
     #[error(transparent)]
     Io(#[from] std::io::Error),
@@ -78,7 +76,8 @@ impl Emu {
         SILENCE.call_once(|| unsafe { mgba_sys::frlg_silence_logs() });
 
         let display = rom.display().to_string();
-        let path = CString::new(display.as_bytes()).map_err(|_| EmuError::BadPath(display.clone()))?;
+        let path =
+            CString::new(display.as_bytes()).map_err(|_| EmuError::BadPath(display.clone()))?;
         let raw = unsafe { mgba_sys::frlg_core_new(path.as_ptr()) };
         if raw.is_null() {
             return Err(EmuError::Create(display));
@@ -92,7 +91,8 @@ impl Emu {
     /// time, and that experiment should not need a code change.
     pub fn load_bios(&mut self, bios: &Path) -> Result<(), EmuError> {
         let display = bios.display().to_string();
-        let path = CString::new(display.as_bytes()).map_err(|_| EmuError::BadPath(display.clone()))?;
+        let path =
+            CString::new(display.as_bytes()).map_err(|_| EmuError::BadPath(display.clone()))?;
         if unsafe { mgba_sys::frlg_core_load_bios(self.raw, path.as_ptr()) } == 0 {
             return Err(EmuError::Bios(display));
         }
@@ -254,7 +254,8 @@ impl Emu {
         let pixels = (self.width() * self.height()) as usize;
         // SAFETY: the shim allocated width*height color_t and keeps it alive
         // for the lifetime of the core.
-        let buffer = unsafe { std::slice::from_raw_parts(mgba_sys::frlg_video_buffer(self.raw), pixels) };
+        let buffer =
+            unsafe { std::slice::from_raw_parts(mgba_sys::frlg_video_buffer(self.raw), pixels) };
         let mut out = Vec::with_capacity(pixels * 4);
         for &pixel in buffer {
             out.extend_from_slice(&[
@@ -274,11 +275,8 @@ impl Emu {
             }
         }
         let file = std::fs::File::create(path)?;
-        let mut encoder = png::Encoder::new(
-            std::io::BufWriter::new(file),
-            self.width(),
-            self.height(),
-        );
+        let mut encoder =
+            png::Encoder::new(std::io::BufWriter::new(file), self.width(), self.height());
         encoder.set_color(png::ColorType::Rgba);
         encoder.set_depth(png::BitDepth::Eight);
         let mut writer = encoder

@@ -30,6 +30,10 @@ AGBCC_REF="${AGBCC_REF:-master}"          # pret/agbcc has no releases; the reso
 MGBA_REF="${MGBA_REF:-auto}"              # auto = newest 0.10.x tag; see the note in step mgba
 BIZHAWK_VER="${BIZHAWK_VER:-2.11.1}"      # must match the BizHawk you replay .bk2 files in
 RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}" # resolved version is recorded in MANIFEST
+# The minimal profile is cargo/rustc/rustdoc and nothing else, and `rustup component add`
+# needs the network -- which the sandbox does not have. Anything the agent is expected to
+# run on its own code has to be pulled in here or it is simply absent in there.
+RUST_COMPONENTS=(clippy rustfmt)
 SCCACHE_VER="${SCCACHE_VER:-0.17.0}"      # musl release tarball, so it runs on any image
 
 # The sandbox image. sbx's stock claude image is Ubuntu 26.04 with no compiler at all --
@@ -262,7 +266,8 @@ do_mgba() {
 do_rust() {
   rm -rf "$DEPS/rustup" "$DEPS/rust"
   RUSTUP_HOME="$DEPS/rustup" CARGO_HOME="$WORK/cargo" \
-    rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update >/dev/null
+    rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update \
+      $(printf -- '--component %s ' "${RUST_COMPONENTS[@]}") >/dev/null
   local resolved
   resolved=$(ls "$DEPS/rustup/toolchains" | head -1)
   # Relative on purpose: an absolute link records the path the tree had when it was
@@ -271,7 +276,15 @@ do_rust() {
   # missing", which is a confusing way to say "the link text is stale".
   ln -sfn "rustup/toolchains/$resolved" "$DEPS/rust"
   [ -x "$DEPS/rust/bin/cargo" ] || die "$DEPS/rust does not resolve to a toolchain"
-  manifest rust "$resolved"
+  # `cargo clippy` and `cargo fmt` are found as cargo-clippy and cargo-fmt on PATH, and
+  # each needs its driver next to it. Checked by name because a component that failed to
+  # install leaves the toolchain otherwise working, and the sandbox is the wrong place to
+  # discover that -- nothing can be added there.
+  for b in cargo-clippy clippy-driver cargo-fmt rustfmt; do
+    [ -x "$DEPS/rust/bin/$b" ] \
+      || die "$DEPS/rust/bin/$b is missing -- rustup did not install the ${RUST_COMPONENTS[*]} components"
+  done
+  manifest rust "$resolved (${RUST_COMPONENTS[*]})"
 }
 
 do_sccache() {
@@ -353,7 +366,7 @@ step image     "$IMAGE_TAG:$(printf '%s,' "${IMAGE_PKGS[@]}")" do_image
 step sysroot   "$(printf '%s,' "${SYSROOT_PKGS[@]}")" do_sysroot
 step agbcc     "$AGBCC_REF"      do_agbcc
 step mgba      "$MGBA_REF"       do_mgba
-step rust      "$RUST_TOOLCHAIN" do_rust
+step rust      "$RUST_TOOLCHAIN+$(printf '%s,' "${RUST_COMPONENTS[@]}")" do_rust
 step sccache   "$SCCACHE_VER"    do_sccache
 step vendor    "$(sha1sum "$REPO/tools/vendor-manifest/Cargo.toml" 2>/dev/null | cut -c1-12)" do_vendor
 step wheels    "$(sha1sum "$REPO/tools/requirements.txt" 2>/dev/null | cut -c1-12 || echo empty)" do_wheels

@@ -75,6 +75,11 @@ chk "agbcc compiles" sh -c '
 have "agbcc in decomp"  "${FRLG_DECOMP:-/nonexistent}/tools/agbcc/bin/agbcc"
 chk "cargo"             cargo --version
 chk "rustc"             rustc --version
+# Components, not binaries that come with the toolchain: rustup installs them on the host
+# and `rustup component add` cannot run here. A FAIL means the deps tree predates the
+# RUST_COMPONENTS line in tools/host-prep.sh -- re-run it with --force rust on the host.
+chk "cargo clippy"      cargo clippy --version
+chk "cargo fmt"         cargo fmt --version
 chk "sccache"           sccache --version
 have "vendored crates"  "${FRLG_DEPS:-/nonexistent}/cargo-vendor"
 # dlopen, not stat: the whole point of the check is whether the loader can satisfy it,
