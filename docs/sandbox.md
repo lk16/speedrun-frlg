@@ -1,6 +1,6 @@
 # Sandbox environment
 
-What is true of this repository inside a box sandbox. Read it before running anything; almost
+What is true of this repository inside the sandbox. Read it before running anything; almost
 nothing here is where a normal machine would put it.
 
 Run `bin/frlg-doctor` first, in every new sandbox. It checks the three mounts, executes each

@@ -3,18 +3,24 @@
 # Host-side preparation. Run this on your own machine, where there is a network;
 # the sandbox has none, so everything the agent needs has to exist before it starts.
 #
-#   tools/host-prep.sh            build/download whatever is missing, then write .box/mounts.json
+#   tools/host-prep.sh            build or download whatever is missing
 #   tools/host-prep.sh --check    report what is present and what is not, change nothing
 #   tools/host-prep.sh --force X  redo step X even if its stamp is current
 #
 # Steps are idempotent and stamped, so a re-run after adding one crate does not
-# rebuild agbcc. Everything lands in .box/deps/, which is gitignored and mounted
-# read-only into the sandbox as a single "deps" mount.
+# rebuild agbcc.
+#
+# Everything lands in ~/.cache/speedrun-frlg/deps, next to the artifacts volume,
+# and is mounted read-only into the sandbox as a single tree. It lives outside the
+# repository on purpose: it is a gigabyte of machine-local build output that can be
+# regenerated at any time, which is not something a source tree should carry.
+# tools/run-sandbox.sh reads the same two defaults; override with FRLG_DEPS_DIR
+# and FRLG_ARTIFACTS_DIR if you keep them elsewhere.
 
 set -euo pipefail
 
 # ---------------------------------------------------------------- pins --------
-# Resolved refs are recorded in .box/deps/MANIFEST. Change a pin, re-run, and the
+# Resolved refs are recorded in the deps tree's MANIFEST. Change a pin, re-run, and the
 # affected step rebuilds; every sandbox created afterwards gets the new tree.
 AGBCC_REF="${AGBCC_REF:-master}"          # pret/agbcc has no releases; the resolved SHA is recorded
 MGBA_REF="${MGBA_REF:-auto}"              # auto = newest 0.10.x tag; see the note in step mgba
@@ -28,10 +34,11 @@ SYSROOT_PKGS=(binutils-arm-none-eabi libpng-dev zlib1g-dev pkg-config cmake)
 SYSROOT_EXCLUDE='^(libc6|libc6-dev|libc-bin|libgcc-s1|libgcc-\d+-dev|libstdc\+\+6|libstdc\+\+-\d+-dev|gcc-\d+-base|libcrypt1|libcrypt-dev)$'
 
 ARTIFACTS_DEFAULT="${FRLG_ARTIFACTS_DIR:-$HOME/.cache/speedrun-frlg/artifacts}"
+DEPS_DEFAULT="${FRLG_DEPS_DIR:-$HOME/.cache/speedrun-frlg/deps}"
 
 # --------------------------------------------------------------- setup --------
 REPO="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
-DEPS="$REPO/.box/deps"
+DEPS="$DEPS_DEFAULT"
 STAMPS="$DEPS/.stamps"
 WORK="$DEPS/.work"
 
@@ -238,22 +245,6 @@ do_artifacts() {
   manifest artifacts "$ARTIFACTS_DEFAULT"
 }
 
-do_mounts() {
-  local f="$REPO/.box/mounts.json"
-  if [ -s "$f" ] && ! grep -q '^{}$' "$f"; then
-    note "$f already filled in, leaving it alone"
-    return
-  fi
-  cat > "$f" <<EOF
-{
-  "decomp": "$REPO/decompiled",
-  "deps": "$DEPS",
-  "artifacts": "$ARTIFACTS_DEFAULT:rw"
-}
-EOF
-  note "wrote $f"
-}
-
 # ------------------------------------------------------------------ run -------
 [ -d "$REPO/decompiled/src" ] || die "$REPO/decompiled is not a pokefirered checkout"
 [ "$MODE" = check ] || need_host
@@ -278,7 +269,6 @@ if [ "$MODE" = check ]; then
   exit 0
 fi
 
-do_mounts
 mv "$DEPS/MANIFEST.new" "$DEPS/MANIFEST" 2>/dev/null || rm -f "$DEPS/MANIFEST.new"
 rmdir "$WORK" 2>/dev/null || true
 
@@ -297,6 +287,6 @@ Next, on the host, once:
      are guaranteed to load in the BizHawk you actually watch them in. Guessing at
      SyncSettings is the single most likely way to end up with a desyncing file.
 
-  3. box run
+  3. tools/run-sandbox.sh
 
 EOF

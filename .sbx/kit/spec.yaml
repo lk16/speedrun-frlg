@@ -42,7 +42,7 @@ setup:
 
           if [ -z "$DEPS" ] || [ -z "$DECOMP" ] || [ -z "$ART" ]; then
             echo "frlg startup: mount not found (deps='$DEPS' decomp='$DECOMP' artifacts='$ART')" >&2
-            echo "frlg startup: run tools/host-prep.sh on the host, then check .box/mounts.json" >&2
+            echo "frlg startup: run tools/host-prep.sh on the host, then tools/run-sandbox.sh --print" >&2
           fi
 
           # Debian multiarch dir the extracted .deb sysroot puts its libraries in.
