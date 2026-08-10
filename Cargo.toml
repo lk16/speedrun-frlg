@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/mgba-sys", "crates/frlg-emu", "crates/frlg-cli"]
+members = ["crates/mgba-sys", "crates/frlg-emu", "crates/frlg-route", "crates/frlg-cli"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,6 +13,8 @@ cc = "1"
 clap = { version = "4", features = ["derive"] }
 hex = "0.4"
 png = "0.17"
+serde = "1"
+serde_json = "1"
 sha1 = "0.10"
 thiserror = "2"
 

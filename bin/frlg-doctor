@@ -41,6 +41,17 @@ if [ -n "${FRLG_ARTIFACTS:-}" ]; then
   fi
 fi
 
+# Docs and route notes cite paths as `decompiled/...`, but the checkout lives outside the
+# repo (it has to: an 81 MB tree inside the workspace hangs sandbox create -- see
+# docs/sandbox-validation.md) and the link is gitignored, so every sandbox starts without it.
+# Recreating it here is idempotent and saves the citations from dangling.
+repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+if [ -n "${FRLG_DECOMP:-}" ] && [ -d "$FRLG_DECOMP" ]; then
+  [ -L "$repo/decompiled" ] && [ "$(readlink "$repo/decompiled")" = "$FRLG_DECOMP" ] \
+    || ln -sfn "$FRLG_DECOMP" "$repo/decompiled" 2>/dev/null
+fi
+have "decompiled/ citation root" "$repo/decompiled/include/gba/io_reg.h"
+
 echo
 echo "image (built by tools/host-prep.sh -- a FAIL here means the sandbox is on the stock image)"
 # The stock sbx image has no compiler at all. perl and bash are not optional either:

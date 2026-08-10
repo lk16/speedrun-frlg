@@ -18,6 +18,8 @@ pub struct Symbol {
 #[derive(Debug, Default, Clone)]
 pub struct SymbolTable {
     by_name: HashMap<String, Symbol>,
+    /// `(addr, size, name)`, sorted by address, for the reverse lookup.
+    by_addr: Vec<(u32, u32, String)>,
 }
 
 /// An address and a byte length to read there.
@@ -47,7 +49,15 @@ impl SymbolTable {
                 .entry(fields[3].to_string())
                 .or_insert(Symbol { addr, size });
         }
-        Self { by_name }
+        let mut by_addr: Vec<(u32, u32, String)> = by_name
+            .iter()
+            .map(|(name, sym)| (sym.addr, sym.size, name.clone()))
+            .collect();
+        // Ties are broken by the larger symbol first, then by name, so the
+        // reverse lookup is deterministic where several names share an address
+        // (the sym file has plenty: a function and the label at its entry).
+        by_addr.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
+        Self { by_name, by_addr }
     }
 
     pub fn load(path: &Path) -> std::io::Result<Self> {
@@ -64,6 +74,31 @@ impl SymbolTable {
 
     pub fn is_empty(&self) -> bool {
         self.by_name.is_empty()
+    }
+
+    /// The symbol covering `addr`, and how far into it the address is.
+    ///
+    /// Thumb function pointers carry bit 0 set (`gMain.callback2` is one), so
+    /// that bit is cleared before the search -- otherwise every callback lands
+    /// one byte past its own symbol. A symbol with a recorded size of 0 covers
+    /// only its own address; anything else would have this claim the rest of
+    /// the ROM.
+    pub fn covering(&self, addr: u32) -> Option<(&str, u32)> {
+        let addr = addr & !1;
+        let idx = self.by_addr.partition_point(|(a, _, _)| *a <= addr);
+        let (sym_addr, size, name) = self.by_addr.get(idx.checked_sub(1)?)?;
+        let offset = addr - sym_addr;
+        (offset < (*size).max(1)).then_some((name.as_str(), offset))
+    }
+
+    /// `covering`, rendered as `CB2_MainMenu` or `CB2_MainMenu+0x4`, falling
+    /// back to the bare address when nothing covers it.
+    pub fn describe(&self, addr: u32) -> String {
+        match self.covering(addr) {
+            Some((name, 0)) => name.to_string(),
+            Some((name, off)) => format!("{name}+{off:#x}"),
+            None => format!("{addr:#010x}"),
+        }
     }
 
     /// Names containing `needle`, case-insensitively, sorted.
@@ -215,6 +250,26 @@ garbage line
         assert!(t.resolve("gNotAThing").is_err());
         assert!(t.resolve("gRngValue:0").is_err());
         assert!(t.resolve("gRngValue:xyz").is_err());
+    }
+
+    #[test]
+    fn covering_finds_the_symbol_an_address_falls_inside() {
+        let t = table();
+        assert_eq!(t.covering(0x0300_3100), Some(("gMain", 0x10)));
+        assert_eq!(t.covering(0x0300_5000), Some(("gRngValue", 0)));
+        // Past the end of gRngValue (4 bytes) and before the next symbol.
+        assert_eq!(t.covering(0x0300_5004), None);
+        assert_eq!(t.covering(0x0000_0000), None);
+    }
+
+    #[test]
+    fn covering_ignores_the_thumb_bit_so_callbacks_resolve() {
+        // gMain.callback2 holds a Thumb pointer, i.e. the entry address | 1.
+        let t = SymbolTable::parse("0800c2d4 l 00000016 CB2_MainMenu\n");
+        assert_eq!(t.covering(0x0800_c2d5), Some(("CB2_MainMenu", 0)));
+        assert_eq!(t.describe(0x0800_c2d5), "CB2_MainMenu");
+        assert_eq!(t.describe(0x0800_c2db), "CB2_MainMenu+0x6");
+        assert_eq!(t.describe(0x0800_0000), "0x08000000");
     }
 
     #[test]

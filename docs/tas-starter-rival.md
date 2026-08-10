@@ -17,11 +17,11 @@ acceptance; BizHawk does not run here.
 
 ### Infrastructure
 
-- [ ] `decompiled/` symlink to `$FRLG_DECOMP` restored at the repo root, and documented as the
+- [x] `decompiled/` symlink to `$FRLG_DECOMP` restored at the repo root, and documented as the
       citation root (it is gitignored, so every sandbox has to recreate it)
-- [ ] `frlg-route` crate with a `Recorder`: drives an `Emu`, records exactly one mask per frame, and
+- [x] `frlg-route` crate with a `Recorder`: drives an `Emu`, records exactly one mask per frame, and
       exposes `hold`/`wait`/`tap`/`until` so a segment is code, not hand-counted frame numbers
-- [ ] `observe` module: named RAM probes with decomp citations -- map group/number, player position
+- [x] `observe` module: named RAM probes with decomp citations -- map group/number, player position
       and facing, main callback, script-context state, menu cursor, battle state, battle outcome,
       party species/level/HP
 - [ ] `route/ledger.json`: segment -> parent -> input-log digest -> frame cost -> tier-1 evidence ->
