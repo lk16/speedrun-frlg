@@ -1,0 +1,156 @@
+# The agent's own API calls and nothing else. Every toolchain this project needs is
+# prebuilt on the host by tools/host-prep.sh and mounted read-only, so nothing here
+# has to reach the network -- and the agent cannot reach it either, which is the point:
+# the route has to come out of decompiled/, not out of a web search.
+schemaVersion: "2"
+kind: mixin
+name: speedrun-frlg-network-policy
+displayName: speedrun-frlg network policy
+description: The agent's own API calls only; ROM, emulator, Rust and Python all come off read-only mounts
+
+caps:
+  network:
+    allow:
+      - api.anthropic.com:443   # the agent's own API calls (not auto-included by the claude kit)
+      #
+      # Deliberately absent, and each absence is load-bearing:
+      #   crates.io      -- Rust deps come from the vendored tree in <deps>/cargo-vendor
+      #   pypi.org       -- Python deps come from the wheelhouse in <deps>/wheels
+      #   github.com     -- agbcc, mGBA and BizHawk are prebuilt into <deps> on the host
+      #   everything else-- so route knowledge cannot be looked up
+
+commands:
+  startup:
+    - command: ["sudo", "rm", "-f", "/usr/local/bin/clipboard-bridge", "/usr/local/bin/sbx-clipboard"]
+      description: Remove the clipboard bridge binaries (no documented off-switch exists)
+
+    - command:
+        - "sh"
+        - "-c"
+        - |
+          set -eu
+
+          # A mount keeps the path it has on the host, and those differ per machine, so find
+          # the three by what they contain rather than by where anyone happens to keep them.
+          DEPS=""; DECOMP=""; ART=""
+          mounts=$(awk '$2 != "/" && $2 !~ "^/(proc|sys|dev|run|etc|var|usr|boot|tmp|snap)(/|$)" {print $2}' /proc/mounts)
+          for m in $mounts; do
+            if [ -f "$m/.frlg-deps" ]; then DEPS="$m"; fi
+            if [ -f "$m/.frlg-artifacts" ]; then ART="$m"; fi
+            if [ -f "$m/firered.sha1" ] && [ -d "$m/src" ]; then DECOMP="$m"; fi
+          done
+
+          if [ -z "$DEPS" ] || [ -z "$DECOMP" ] || [ -z "$ART" ]; then
+            echo "frlg startup: mount not found (deps='$DEPS' decomp='$DECOMP' artifacts='$ART')" >&2
+            echo "frlg startup: run tools/host-prep.sh on the host, then check .box/mounts.json" >&2
+          fi
+
+          # Debian multiarch dir the extracted .deb sysroot puts its libraries in.
+          TRIPLE=$(gcc -dumpmachine 2>/dev/null || echo x86_64-linux-gnu)
+
+          # One place that says where everything is. Every script in this repo reads these
+          # rather than hardcoding a path, because none of these paths are stable.
+          sudo tee /etc/profile.d/10-frlg.sh >/dev/null <<EOF
+          export FRLG_DEPS="$DEPS"
+          export FRLG_DECOMP_RO="$DECOMP"
+          export FRLG_DECOMP="\$HOME/decomp"
+          export FRLG_ARTIFACTS="$ART"
+          export MGBA_PREFIX="$DEPS/mgba/prefix"
+          export BIZHAWK_HOME="$DEPS/bizhawk"
+
+          export PATH="\$HOME/.cargo/bin:$DEPS/bin:$DEPS/rust/bin:$DEPS/sysroot/usr/bin:$DEPS/mgba/prefix/bin:\$PATH"
+          export CPATH="$DEPS/sysroot/usr/include:$DEPS/mgba/prefix/include\${CPATH:+:\$CPATH}"
+          export LIBRARY_PATH="$DEPS/sysroot/usr/lib/$TRIPLE:$DEPS/mgba/prefix/lib\${LIBRARY_PATH:+:\$LIBRARY_PATH}"
+          export LD_LIBRARY_PATH="$DEPS/sysroot/usr/lib/$TRIPLE:$DEPS/mgba/prefix/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
+          export PKG_CONFIG_PATH="$DEPS/sysroot/usr/lib/$TRIPLE/pkgconfig:$DEPS/sysroot/usr/share/pkgconfig:$DEPS/mgba/prefix/lib/pkgconfig"
+
+          export RUSTUP_HOME="$DEPS/rustup"
+          export CARGO_HOME="\$HOME/.cargo"
+          export CARGO_NET_OFFLINE=true
+          export PIP_NO_INDEX=1
+          export PIP_FIND_LINKS="$DEPS/wheels"
+
+          # sccache is the one build cache allowed to live in artifacts: it caps itself,
+          # which is what makes it safe against the disk budget.
+          export SCCACHE_DIR="$ART/cache/sccache"
+          export SCCACHE_CACHE_SIZE=4G
+          EOF
+
+          # Non-login shells do not read profile.d.
+          if ! grep -q 10-frlg "$HOME/.bashrc" 2>/dev/null; then
+            echo '. /etc/profile.d/10-frlg.sh' >> "$HOME/.bashrc"
+          fi
+      description: >-
+        Resolve the three mounts and write /etc/profile.d/10-frlg.sh, the single
+        place that says where the toolchain, the decomp and the artifacts volume
+        landed on this machine.
+
+    - command:
+        - "sh"
+        - "-c"
+        - |
+          set -eu
+          . /etc/profile.d/10-frlg.sh
+
+          # cargo insists on a writable CARGO_HOME, so it is sandbox-local and the vendored
+          # tree it reads is the read-only mount. Generated here because the vendor path is
+          # only known once the mount has been resolved.
+          mkdir -p "$HOME/.cargo"
+          cat > "$HOME/.cargo/config.toml" <<EOF
+          [source.crates-io]
+          replace-with = "vendored-sources"
+
+          [source.vendored-sources]
+          directory = "$FRLG_DEPS/cargo-vendor"
+
+          [net]
+          offline = true
+          EOF
+          if [ -x "$FRLG_DEPS/bin/sccache" ]; then
+            printf '\n[build]\nrustc-wrapper = "%s"\n' "$FRLG_DEPS/bin/sccache" >> "$HOME/.cargo/config.toml"
+          fi
+      description: Point cargo at the vendored crate tree, offline.
+
+    - command:
+        - "sh"
+        - "-c"
+        - |
+          set -eu
+          . /etc/profile.d/10-frlg.sh
+
+          # The decomp is mounted read-only but pokefirered builds in-tree and wants agbcc
+          # inside tools/, so the build gets a writable copy on the sandbox's own disk.
+          # Ephemeral on purpose: nothing but /artifacts is writable, and a build tree is
+          # exactly the kind of thing that should not survive a sandbox.
+          if [ -n "${FRLG_DECOMP_RO:-}" ] && [ ! -d "$FRLG_DECOMP" ]; then
+            rm -rf "$FRLG_DECOMP.incoming"
+            mkdir -p "$FRLG_DECOMP.incoming"
+            tar -C "$FRLG_DECOMP_RO" --exclude=./.git -cf - . \
+              | tar -C "$FRLG_DECOMP.incoming" -xf -
+            if [ -d "$FRLG_DEPS/agbcc" ]; then
+              mkdir -p "$FRLG_DECOMP.incoming/tools/agbcc"
+              cp -a "$FRLG_DEPS/agbcc/." "$FRLG_DECOMP.incoming/tools/agbcc/"
+            fi
+            mv "$FRLG_DECOMP.incoming" "$FRLG_DECOMP"
+          fi
+      description: >-
+        Copy the read-only decomp to ~/decomp and drop agbcc into its tools/,
+        so `make COMPARE=1` can run against a SHA1 check.
+
+    - command:
+        - "sh"
+        - "-c"
+        - |
+          set -eu
+          . /etc/profile.d/10-frlg.sh
+          [ -n "${FRLG_ARTIFACTS:-}" ] || exit 0
+
+          # Fixed layout, because the budget in bin/frlg-artifacts-gc is per directory.
+          for d in rom states runs scratch cache/sccache verify/queue verify/results; do
+            mkdir -p "$FRLG_ARTIFACTS/$d"
+          done
+
+          # scratch is defined as "gone at the start of every sandbox". Anything worth
+          # keeping goes in runs/ or states/ and is subject to the budget.
+          find "$FRLG_ARTIFACTS/scratch" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+      description: Create the artifacts layout and sweep scratch/.

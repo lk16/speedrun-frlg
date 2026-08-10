@@ -1,0 +1,29 @@
+# The crate set the sandbox is allowed to use. `cargo add` cannot work in there --
+# crates.io is not on the kit's allowlist -- so a new dependency is a host-side act:
+# add it here, re-run tools/host-prep.sh, start a fresh sandbox.
+#
+# This package is never built. It exists so `cargo vendor` has a dependency graph to
+# resolve, and its Cargo.lock is what pins the versions the sandbox gets.
+
+[package]
+name = "frlg-vendor-manifest"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rayon = "1"          # the frame-level input search is the compute sink
+libc = "0.2"         # hand-written FFI to libmgba; bindgen would want clang in the sandbox
+zip = "2"            # .bk2 is a zip of text files
+sha1 = "0.10"        # ROM hash for the .bk2 Header, and input-log identity
+crc32fast = "1"
+png = "0.17"         # screenshot dumps out of libmgba, for eyeballing a divergence
+hex = "0.4"

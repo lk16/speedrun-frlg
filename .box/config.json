@@ -1,0 +1,15 @@
+{
+  "name": "frlg",
+  "memory": "12g",
+  "cpus": "16",
+  "root_size": "24g",
+  "docker_size": "4g",
+  "model": "claude-opus-5",
+  "prompt_file": "docs/sandbox.md",
+  "kit": ".box/kit",
+  "required_mounts": {
+    "decomp": "the pret/pokefirered checkout, the directory holding firered.sha1 and src/ (this repo's gitignored decompiled/)",
+    "deps": "the prebuilt toolchain tree, the .box/deps directory that tools/host-prep.sh fills in (it holds a .frlg-deps marker)",
+    "artifacts": "writable scratch that outlives a sandbox, the directory holding a .frlg-artifacts marker that tools/host-prep.sh creates; must be given as PATH:rw"
+  }
+}

@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#
+# Keeps $FRLG_ARTIFACTS inside its budget. The artifacts volume is the one writable
+# mount, so it is also the one thing in this project that can quietly eat the host's
+# disk -- savestates, traces and candidate input logs all churn.
+#
+#   frlg-artifacts-gc            enforce the budget, deleting oldest-first
+#   frlg-artifacts-gc --check    report only; exit 1 if over the hard ceiling
+#
+# Run it after any run that writes a lot, and before ending a session.
+
+set -euo pipefail
+
+# Per-directory caps, in GiB. Total soft budget is their sum; HARD is the line past
+# which the harness should refuse to write at all.
+#
+#   cache/sccache  self-capping (SCCACHE_CACHE_SIZE), only reported
+#   states         checkpoint savestates, ~0.5 MB each -- thousands fit
+#   runs           per-run dirs: input logs, RAM signature traces, divergence reports
+#   rom            built ROM + .map + .sym, per version/revision
+#   scratch        wiped at the start of every sandbox anyway
+declare -A CAP=( [cache/sccache]=4 [states]=3 [runs]=4 [rom]=1 [scratch]=2 )
+HARD=20
+
+ART="${FRLG_ARTIFACTS:-}"
+[ -n "$ART" ] || { echo "FRLG_ARTIFACTS is not set (is /etc/profile.d/10-frlg.sh sourced?)" >&2; exit 1; }
+
+CHECK=0
+[ "${1:-}" = "--check" ] && CHECK=1
+
+gib() { echo $(( $(du -sk --apparent-size "$1" 2>/dev/null | cut -f1) / 1048576 )); }
+mib() { echo $(( $(du -sk --apparent-size "$1" 2>/dev/null | cut -f1) / 1024 )); }
+
+# Delete whole top-level entries, oldest mtime first, until under cap. Whole entries
+# and not individual files: a half-deleted run directory is worse than no run directory.
+trim() {
+  local dir="$1" cap_gib="$2" cap_mib=$(( $2 * 1024 ))
+  [ -d "$dir" ] || return 0
+  while [ "$(mib "$dir")" -gt "$cap_mib" ]; do
+    local oldest
+    oldest=$(find "$dir" -mindepth 1 -maxdepth 1 -printf '%T@ %p\n' 2>/dev/null \
+             | sort -n | head -1 | cut -d' ' -f2-)
+    [ -n "$oldest" ] || break
+    echo "  rm $(basename "$oldest")"
+    rm -rf "$oldest"
+  done
+}
+
+over=0
+printf '\n  %-16s %8s %8s\n' dir used cap
+for d in "${!CAP[@]}"; do
+  used=$(mib "$ART/$d")
+  printf '  %-16s %6s M %6s G' "$d" "$used" "${CAP[$d]}"
+  if [ "$used" -gt $(( CAP[$d] * 1024 )) ]; then
+    printf '  OVER\n'
+    over=1
+    if [ "$CHECK" -eq 0 ] && [ "$d" != "cache/sccache" ]; then trim "$ART/$d" "${CAP[$d]}"; fi
+  else
+    printf '\n'
+  fi
+done
+
+total=$(gib "$ART")
+printf '\n  %-16s %6s G  (hard ceiling %s G)\n\n' total "$total" "$HARD"
+
+if [ "$total" -ge "$HARD" ]; then
+  echo "artifacts is at or past its hard ceiling -- stop writing and clear something out" >&2
+  exit 1
+fi
+[ "$CHECK" -eq 1 ] && [ "$over" -eq 1 ] && exit 1
+exit 0

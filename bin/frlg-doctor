@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+#
+# Says what actually works in this sandbox. Run it first in any new sandbox: the base
+# image's contents are not under our control, and the prebuilt tools in the deps mount
+# were compiled on the host, so an ABI mismatch shows up as a confusing failure three
+# steps later unless it is checked here.
+
+set -uo pipefail
+[ -f /etc/profile.d/10-frlg.sh ] && . /etc/profile.d/10-frlg.sh
+
+RED=$'\033[31m'; GREEN=$'\033[32m'; YELLOW=$'\033[33m'; DIM=$'\033[2m'; OFF=$'\033[0m'
+fail=0
+
+chk() { # chk <label> <command...>
+  local label="$1"; shift
+  local out
+  if out=$("$@" 2>&1); then
+    printf '  %s ok  %s %-26s %s%s%s\n' "$GREEN" "$OFF" "$label" "$DIM" "$(head -1 <<<"$out")" "$OFF"
+  else
+    printf '  %s FAIL%s %-26s %s\n' "$RED" "$OFF" "$label" "$(head -1 <<<"$out")"
+    fail=1
+  fi
+}
+have() { # have <label> <path>
+  if [ -e "$2" ]; then printf '  %s ok  %s %-26s %s%s%s\n' "$GREEN" "$OFF" "$1" "$DIM" "$2" "$OFF"
+  else printf '  %s FAIL%s %-26s missing: %s\n' "$RED" "$OFF" "$1" "$2"; fail=1; fi
+}
+
+echo
+echo "mounts"
+have "deps"        "${FRLG_DEPS:-/nonexistent}"
+have "decomp (ro)" "${FRLG_DECOMP_RO:-/nonexistent}"
+have "decomp (rw copy)" "${FRLG_DECOMP:-/nonexistent}/Makefile"
+have "artifacts"   "${FRLG_ARTIFACTS:-/nonexistent}/.frlg-artifacts"
+if [ -n "${FRLG_ARTIFACTS:-}" ]; then
+  if touch "$FRLG_ARTIFACTS/.wtest" 2>/dev/null; then
+    rm -f "$FRLG_ARTIFACTS/.wtest"
+    printf '  %s ok  %s %-26s\n' "$GREEN" "$OFF" "artifacts is writable"
+  else
+    printf '  %s FAIL%s %-26s (did mounts.json append :rw?)\n' "$RED" "$OFF" "artifacts is writable"; fail=1
+  fi
+fi
+
+echo
+echo "image (not ours -- if one of these fails, extract it into the sysroot on the host)"
+# perl and bash are not optional: the decomp Makefile sets SHELL := bash -o pipefail,
+# and the `syms` rule pipes objdump through perl.
+for c in gcc g++ make python3 perl bash tar git pkg-config; do chk "$c" "$c" --version; done
+
+echo
+echo "toolchain (prebuilt on the host -- a FAIL here is usually a glibc/ABI mismatch)"
+chk "arm-none-eabi-as"  arm-none-eabi-as --version
+chk "arm-none-eabi-ld"  arm-none-eabi-ld --version
+chk "agbcc"             sh -c '"$FRLG_DEPS/agbcc/bin/agbcc" --version 2>&1 | head -1 || true'
+have "agbcc in decomp"  "${FRLG_DECOMP:-/nonexistent}/tools/agbcc/bin/agbcc"
+chk "cargo"             cargo --version
+chk "rustc"             rustc --version
+have "vendored crates"  "${FRLG_DEPS:-/nonexistent}/cargo-vendor"
+have "libmgba"          "${MGBA_PREFIX:-/nonexistent}/lib/libmgba.so"
+have "mgba headers"     "${MGBA_PREFIX:-/nonexistent}/include/mgba/core/core.h"
+have "bizhawk (ref)"    "${BIZHAWK_HOME:-/nonexistent}"
+chk "libpng"            pkg-config --modversion libpng
+
+echo
+echo "network (all four should fail -- that is the point)"
+for h in crates.io pypi.org github.com tasvideos.org; do
+  if curl -sS --max-time 4 -o /dev/null "https://$h" 2>/dev/null; then
+    printf '  %s !! %s %-26s reachable, the kit allowlist is too wide\n' "$YELLOW" "$OFF" "$h"; fail=1
+  else
+    printf '  %s ok  %s %-26s blocked\n' "$GREEN" "$OFF" "$h"
+  fi
+done
+
+echo
+echo "artifacts budget"
+"$(dirname "$0")/frlg-artifacts-gc" --check || true
+
+echo
+if [ "$fail" -eq 0 ]; then
+  printf '%s all good%s\n\n' "$GREEN" "$OFF"
+else
+  printf '%s something is wrong above%s\n\n' "$RED" "$OFF"
+fi
+exit "$fail"

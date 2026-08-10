@@ -1,2 +1,6 @@
 decompiled
 .claude-user/
+.box/mounts.json
+.box/deps/
+tools/vendor-manifest/src/
+ignored/
