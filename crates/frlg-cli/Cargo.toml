@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 frlg-emu = { path = "../frlg-emu" }
+frlg-route = { path = "../frlg-route" }
 anyhow.workspace = true
 clap.workspace = true
 hex.workspace = true

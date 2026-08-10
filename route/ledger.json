@@ -1,0 +1,103 @@
+{
+  "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
+  "starter": "squirtle",
+  "total_frames": 11873,
+  "segments": [
+    {
+      "name": "01-boot",
+      "goal": "NEW GAME selected (CB2_NewGameScene running)",
+      "parent": null,
+      "log": "route/logs/01-boot.ilog",
+      "digest": "01581377d2071902ab863097819d2c53e9570735",
+      "frames": 347,
+      "start_frame": 0,
+      "ram_hash": "d70509eed54ebdfbe9e324d47b3fde65ba633bbc",
+      "tier1": true,
+      "tier2": "blocked: no route/template.bk2 to take SyncSettings and the Input Log column order from"
+    },
+    {
+      "name": "02-intro-oak",
+      "goal": "the player naming screen is up (gender chosen)",
+      "parent": "01-boot",
+      "log": "route/logs/02-intro-oak.ilog",
+      "digest": "519a6e015b9a7fbb3a31c7a9505cadff462970ff",
+      "frames": 1840,
+      "start_frame": 347,
+      "ram_hash": "755ea7bb67ca650b2a572effe8bb3c7214da59fb",
+      "tier1": true,
+      "tier2": "blocked: no route/template.bk2 to take SyncSettings and the Input Log column order from"
+    },
+    {
+      "name": "03-names",
+      "goal": "standing in the bedroom, both names entered",
+      "parent": "02-intro-oak",
+      "log": "route/logs/03-names.ilog",
+      "digest": "2a020544c11c1020d26ee55a777998f528f41f03",
+      "frames": 1442,
+      "start_frame": 2187,
+      "ram_hash": "7327076e05ed5a1b4c13264e71e6c3ed0daf795b",
+      "tier1": true,
+      "tier2": "blocked: no route/template.bk2 to take SyncSettings and the Input Log column order from"
+    },
+    {
+      "name": "04-house",
+      "goal": "outside, in Pallet Town",
+      "parent": "03-names",
+      "log": "route/logs/04-house.ilog",
+      "digest": "97cc3ad6cd56b58f2edd28b6aa067d3139422f12",
+      "frames": 455,
+      "start_frame": 3629,
+      "ram_hash": "8dea25b7e04f393663638de9f5475e3c253c9bcb",
+      "tier1": true,
+      "tier2": "blocked: no route/template.bk2 to take SyncSettings and the Input Log column order from"
+    },
+    {
+      "name": "05-to-lab",
+      "goal": "inside Oak's lab, after his interruption",
+      "parent": "04-house",
+      "log": "route/logs/05-to-lab.ilog",
+      "digest": "63541737f09360ad922c58547f013274af93945b",
+      "frames": 1359,
+      "start_frame": 4084,
+      "ram_hash": "7e479c3d77933bc48a397ad28a2e8f1a0718c34c",
+      "tier1": true,
+      "tier2": "blocked: no route/template.bk2 to take SyncSettings and the Input Log column order from"
+    },
+    {
+      "name": "06-starter",
+      "goal": "squirtle in the party, rival has his",
+      "parent": "05-to-lab",
+      "log": "route/logs/06-starter.ilog",
+      "digest": "f2876d3d1239675fbcf77d7606fa23752ac3eb8a",
+      "frames": 2496,
+      "start_frame": 5443,
+      "ram_hash": "bf96b10e5749ea40e8073e54e5bbcd8d42e79b5b",
+      "tier1": true,
+      "tier2": "blocked: no route/template.bk2 to take SyncSettings and the Input Log column order from"
+    },
+    {
+      "name": "07-battle-start",
+      "goal": "the rival battle has started",
+      "parent": "06-starter",
+      "log": "route/logs/07-battle-start.ilog",
+      "digest": "06ea57f322de9f16fc33753b98b5797f27faaf5f",
+      "frames": 473,
+      "start_frame": 7939,
+      "ram_hash": "81000592f9bfde91c9e270b6967e3d482d702763",
+      "tier1": true,
+      "tier2": "blocked: no route/template.bk2 to take SyncSettings and the Input Log column order from"
+    },
+    {
+      "name": "08-battle-win",
+      "goal": "gBattleOutcome == B_OUTCOME_WON",
+      "parent": "07-battle-start",
+      "log": "route/logs/08-battle-win.ilog",
+      "digest": "7674723ae035ecd72b11b2f60da5a81fdf14509f",
+      "frames": 3461,
+      "start_frame": 8412,
+      "ram_hash": "884098b71ea9e75bd992894371f510ce4c1f5675",
+      "tier1": true,
+      "tier2": "blocked: no route/template.bk2 to take SyncSettings and the Input Log column order from"
+    }
+  ]
+}

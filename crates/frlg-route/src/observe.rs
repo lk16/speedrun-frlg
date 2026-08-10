@@ -31,9 +31,29 @@ mod sb1_off {
     /// `/*0x0004*/ struct WarpData location`, so mapGroup is +0 and mapNum +1.
     pub const MAP_GROUP: u32 = 0x0004;
     pub const MAP_NUM: u32 = 0x0005;
-    /// `/*0x0034*/ u8 playerPartyCount`.
-    pub const PARTY_COUNT: u32 = 0x0034;
+    /// `/*0x0034*/ u8 playerPartyCount` -- the *saved* count, not the live
+    /// one. `SavePlayerParty` copies `gPlayerPartyCount` into it
+    /// (`decompiled/src/load_save.c:164`) and `LoadPlayerParty` copies it back
+    /// out (`:174`), so between saves it is stale. Kept for completeness;
+    /// [`Observer::party_count`] reads the live global instead.
+    pub const SAVED_PARTY_COUNT: u32 = 0x0034;
+    /// `/*0x1000*/ u16 vars[VARS_COUNT]` -- the script variables, indexed from
+    /// `VARS_START 0x4000` (`decompiled/include/constants/vars.h:4`).
+    pub const VARS: u32 = 0x1000;
 }
+
+/// `VARS_START`, the id every `VAR_*` constant is an offset from.
+pub const VARS_START: u16 = 0x4000;
+
+/// `VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB`
+/// (`decompiled/include/constants/vars.h:137`). 1 once Oak has walked the
+/// player in, 2 once he has offered the starters, 3 once the rival has taken
+/// his -- which is the state the battle trigger wants.
+pub const VAR_OAKS_LAB_SCENE: u16 = 0x4055;
+
+/// `VAR_STARTER_MON` (`decompiled/include/constants/vars.h:98`):
+/// 0 Bulbasaur, 1 Squirtle, 2 Charmander.
+pub const VAR_STARTER_MON: u16 = 0x4031;
 
 /// `struct BattlePokemon`, `decompiled/include/pokemon.h:170`. Unlike a party
 /// `struct Pokemon`, its substructs are not encrypted, so species and HP can be
@@ -80,6 +100,7 @@ pub struct Observer {
     g_battle_type_flags: u32,
     g_rng_value: u32,
     g_player_avatar: u32,
+    g_player_party_count: u32,
 }
 
 impl Observer {
@@ -97,6 +118,7 @@ impl Observer {
             g_battle_type_flags: addr("gBattleTypeFlags")?,
             g_rng_value: addr("gRngValue")?,
             g_player_avatar: addr("gPlayerAvatar")?,
+            g_player_party_count: addr("gPlayerPartyCount")?,
             syms,
         })
     }
@@ -162,10 +184,25 @@ impl Observer {
         ))
     }
 
-    /// `gSaveBlock1Ptr->playerPartyCount`.
-    pub fn party_count(&self, emu: &mut Emu) -> Option<u8> {
+    /// `gPlayerPartyCount` (`decompiled/include/pokemon.h:285`) -- the live
+    /// party size. This is what `givemon` moves; the save block's copy only
+    /// catches up when the game saves, which cost a debugging session once.
+    pub fn party_count(&self, emu: &mut Emu) -> u8 {
+        emu.read8(self.g_player_party_count)
+    }
+
+    /// `gSaveBlock1Ptr->playerPartyCount`, the saved copy. Only interesting
+    /// when checking that a save happened.
+    pub fn saved_party_count(&self, emu: &mut Emu) -> Option<u8> {
         let sb1 = self.save_block1(emu)?;
-        Some(emu.read8(sb1 + sb1_off::PARTY_COUNT))
+        Some(emu.read8(sb1 + sb1_off::SAVED_PARTY_COUNT))
+    }
+
+    /// A script variable by its `VAR_*` id, e.g. [`VAR_OAKS_LAB_SCENE`].
+    pub fn var(&self, emu: &mut Emu, id: u16) -> Option<u16> {
+        let sb1 = self.save_block1(emu)?;
+        let index = id.checked_sub(VARS_START)? as u32;
+        Some(emu.read16(sb1 + sb1_off::VARS + index * 2))
     }
 
     /// `gBattleOutcome`. Stale between battles -- it is only meaningful once a
@@ -249,7 +286,7 @@ pub struct Snapshot {
     pub in_battle: bool,
     pub map: Option<(u8, u8)>,
     pub pos: Option<(i16, i16)>,
-    pub party_count: Option<u8>,
+    pub party_count: u8,
     pub battle_outcome: u8,
     pub rng: u32,
 }
@@ -261,9 +298,7 @@ impl std::fmt::Display for Snapshot {
             (Some((g, n)), Some((x, y))) => write!(f, " map {g}.{n} at ({x},{y})")?,
             _ => write!(f, " (no save block)")?,
         }
-        if let Some(count) = self.party_count {
-            write!(f, " party {count}")?;
-        }
+        write!(f, " party {}", self.party_count)?;
         if self.in_battle {
             write!(f, " IN-BATTLE")?;
         }

@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use frlg_emu::{check_log_rom, keys, Emu, InputLog, SymbolTable, Target};
+use frlg_route::{ledger, Starter};
 
 #[derive(Parser)]
 #[command(name = "frlg", about = "Headless mGBA harness for the FireRed TAS")]
@@ -29,6 +30,52 @@ enum Command {
     /// Inspect and convert input logs.
     #[command(subcommand)]
     Log(LogCommand),
+    /// Build and verify the route.
+    #[command(subcommand)]
+    Route(RouteCommand),
+}
+
+#[derive(Subcommand)]
+enum RouteCommand {
+    /// Run the segments, writing an input log each and the ledger.
+    Build(RouteArgs),
+    /// Replay the committed logs from reset and check the ledger's claims.
+    Verify(RouteArgs),
+    /// Print the ledger as it stands, without running anything.
+    Status {
+        #[arg(long, default_value = "route/ledger.json")]
+        ledger: PathBuf,
+    },
+}
+
+#[derive(Args)]
+struct RouteArgs {
+    #[command(flatten)]
+    rom: RomArgs,
+
+    #[arg(long)]
+    sym: Option<PathBuf>,
+
+    /// Which starter to route. The rival always takes the one that beats it.
+    #[arg(long, default_value = "squirtle")]
+    starter: String,
+
+    /// Where the per-segment input logs go.
+    #[arg(long, default_value = "route/logs")]
+    logs: PathBuf,
+
+    #[arg(long, default_value = "route/ledger.json")]
+    ledger: PathBuf,
+
+    /// Checkpoint savestates. Defaults to $FRLG_ARTIFACTS/states/route, and is
+    /// skipped when that is not set -- they are convenience, not evidence.
+    #[arg(long)]
+    states: Option<PathBuf>,
+
+    /// Write the ledger back with what this run established. `verify` only
+    /// fills in tier-1 status, which is the only thing a replay can prove.
+    #[arg(long)]
+    write: bool,
 }
 
 #[derive(Args)]
@@ -114,6 +161,13 @@ enum LogCommand {
         #[arg(short, long)]
         out: PathBuf,
     },
+    /// Join segment logs, in order, into one whole-run log.
+    Cat {
+        /// Logs to join. They must agree on the ROM they were routed against.
+        paths: Vec<PathBuf>,
+        #[arg(short, long)]
+        out: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -122,7 +176,115 @@ fn main() -> Result<()> {
         Command::Run(args) => cmd_run(args),
         Command::Sym(args) => cmd_sym(args),
         Command::Log(args) => cmd_log(args),
+        Command::Route(args) => cmd_route(args),
     }
+}
+
+fn cmd_route(command: RouteCommand) -> Result<()> {
+    match command {
+        RouteCommand::Build(args) => {
+            let (rom, sym, starter) = route_setup(&args)?;
+            let paths = ledger::Paths {
+                logs: args.logs.clone(),
+                ledger: args.ledger.clone(),
+                states: args.states.clone().or_else(default_states_dir),
+            };
+            let built = ledger::build(&rom, &sym, starter, &paths, |line| println!("{line}"))?;
+            println!("\n{} frames total", built.total_frames);
+            println!("wrote {}", args.ledger.display());
+            println!("tier 1 is claimed by `frlg route verify`, not by this command");
+            Ok(())
+        }
+        RouteCommand::Verify(args) => {
+            let (rom, sym, starter) = route_setup(&args)?;
+            let recorded = ledger::read(&args.ledger)
+                .with_context(|| format!("reading {}", args.ledger.display()))?;
+            let checked =
+                ledger::verify(&rom, &sym, starter, &recorded, |line| println!("{line}"))?;
+
+            let mut drifted = Vec::new();
+            for (was, now) in recorded.segments.iter().zip(&checked.segments) {
+                if was.ram_hash != now.ram_hash {
+                    drifted.push(format!(
+                        "{}: ledger says RAM {} but the replay produced {}",
+                        now.name, was.ram_hash, now.ram_hash
+                    ));
+                }
+            }
+            let failed: Vec<&str> = checked
+                .segments
+                .iter()
+                .filter(|s| !s.tier1)
+                .map(|s| s.name.as_str())
+                .collect();
+
+            if args.write {
+                ledger::write(&checked, &args.ledger)?;
+                println!("wrote {}", args.ledger.display());
+            }
+            for line in &drifted {
+                println!("DRIFT {line}");
+            }
+            if !failed.is_empty() {
+                bail!("segments did not reach their goal on replay: {failed:?}");
+            }
+            if !drifted.is_empty() {
+                bail!("the replay diverged from the ledger's recorded RAM fingerprints");
+            }
+            println!("\n{} frames, tier 1 ok", checked.total_frames);
+            Ok(())
+        }
+        RouteCommand::Status { ledger: path } => {
+            let led = ledger::read(&path).with_context(|| format!("reading {}", path.display()))?;
+            println!("rom     {}", led.rom_sha1);
+            println!("starter {}", led.starter);
+            println!("frames  {}", led.total_frames);
+            println!();
+            for s in &led.segments {
+                println!(
+                    "{} {:<16} {:>6} frames  f{:<6} {:<8} {}",
+                    if s.tier1 { "t1" } else { "--" },
+                    s.name,
+                    s.frames,
+                    s.start_frame,
+                    &s.digest[..8],
+                    s.goal
+                );
+            }
+            println!(
+                "\ntier 2: {}",
+                led.segments
+                    .first()
+                    .map(|s| s.tier2.as_str())
+                    .unwrap_or("-")
+            );
+            Ok(())
+        }
+    }
+}
+
+fn route_setup(args: &RouteArgs) -> Result<(PathBuf, PathBuf, Starter)> {
+    let rom = resolve_rom(&args.rom)?;
+    let sym = match &args.sym {
+        Some(path) => path.clone(),
+        None => frlg_emu::default_sym_path().context(
+            "no pokefirered.sym found: pass --sym, or set $FRLG_SYM, or copy it \
+             into $FRLG_ARTIFACTS/rom",
+        )?,
+    };
+    let starter = match args.starter.to_lowercase().as_str() {
+        "bulbasaur" => Starter::Bulbasaur,
+        "squirtle" => Starter::Squirtle,
+        "charmander" => Starter::Charmander,
+        other => bail!("unknown starter {other:?}: bulbasaur, squirtle or charmander"),
+    };
+    Ok((rom, sym, starter))
+}
+
+fn default_states_dir() -> Option<PathBuf> {
+    std::env::var("FRLG_ARTIFACTS")
+        .ok()
+        .map(|dir| PathBuf::from(dir).join("states").join("route"))
 }
 
 fn resolve_rom(args: &RomArgs) -> Result<PathBuf> {
@@ -378,6 +540,41 @@ fn cmd_log(command: LogCommand) -> Result<()> {
             let log = InputLog::from_text(&text)?;
             write_out(&out, &log.encode())?;
             println!("{} frames, digest {}", log.frames.len(), log.digest());
+            Ok(())
+        }
+        LogCommand::Cat { paths, out } => {
+            if paths.is_empty() {
+                bail!("nothing to join");
+            }
+            let mut frames = Vec::new();
+            let mut rom_sha1 = [0u8; 20];
+            for path in &paths {
+                let log = read_log(path)?;
+                // Joining logs routed against different ROMs would produce a
+                // file that replays as nonsense, so it is refused. An unknown
+                // (all-zero) hash joins with anything.
+                if log.rom_sha1 != [0u8; 20] {
+                    if rom_sha1 != [0u8; 20] && rom_sha1 != log.rom_sha1 {
+                        bail!(
+                            "{} was routed against ROM {}, the others against {}",
+                            path.display(),
+                            hex::encode(log.rom_sha1),
+                            hex::encode(rom_sha1)
+                        );
+                    }
+                    rom_sha1 = log.rom_sha1;
+                }
+                frames.extend_from_slice(&log.frames);
+            }
+            let joined = InputLog::new(rom_sha1, frames);
+            joined.validate()?;
+            write_out(&out, &joined.encode())?;
+            println!(
+                "{} logs, {} frames, digest {}",
+                paths.len(),
+                joined.frames.len(),
+                joined.digest()
+            );
             Ok(())
         }
     }

@@ -24,36 +24,36 @@ acceptance; BizHawk does not run here.
 - [x] `observe` module: named RAM probes with decomp citations -- map group/number, player position
       and facing, main callback, script-context state, menu cursor, battle state, battle outcome,
       party species/level/HP
-- [ ] `route/ledger.json`: segment -> parent -> input-log digest -> frame cost -> tier-1 evidence ->
+- [x] `route/ledger.json`: segment -> parent -> input-log digest -> frame cost -> tier-1 evidence ->
       tier-2 status, plus a `frlg route` subcommand that verifies it rather than trusting it
-- [ ] `docs/journal.md` started: what was tried, what failed, what is next
+- [x] `docs/journal.md` started: what was tried, what failed, what is next
 
 ### Route
 
-- [ ] Segment 01 `boot`: reset -> title -> main menu -> NEW GAME accepted
-- [ ] Segment 02 `intro-oak`: Oak's speech through the boy/girl choice
-- [ ] Segment 03 `names`: player name and rival name chosen (preset names, if presets are cheaper --
+- [x] Segment 01 `boot`: reset -> title -> main menu -> NEW GAME accepted
+- [x] Segment 02 `intro-oak`: Oak's speech through the boy/girl choice
+- [x] Segment 03 `names`: player name and rival name chosen (preset names, if presets are cheaper --
       measured, not assumed)
-- [ ] Segment 04 `house`: bedroom -> ground floor -> outside, observable is the map change to
+- [x] Segment 04 `house`: bedroom -> ground floor -> outside, observable is the map change to
       Pallet Town
-- [ ] Segment 05 `to-lab`: north out of Pallet, Oak's interruption, arrive inside Oak's Lab
-- [ ] Segment 06 `starter`: walk to the ball, take the starter, party count 1 with the species
+- [x] Segment 05 `to-lab`: north out of Pallet, Oak's interruption, arrive inside Oak's Lab
+- [x] Segment 06 `starter`: walk to the ball, take the starter, party count 1 with the species
       recorded
-- [ ] Segment 07 `battle-start`: rival battle entered (battle-state observable set)
-- [ ] Segment 08 `battle-win`: `gBattleOutcome == B_OUTCOME_WON`
+- [x] Segment 07 `battle-start`: rival battle entered (battle-state observable set)
+- [x] Segment 08 `battle-win`: `gBattleOutcome == B_OUTCOME_WON`
 - [ ] Starter choice decided by measurement: frames-to-win compared across all three, result written
       up with the numbers
 
 ### Verification
 
-- [ ] One-pass replay from reset over the concatenated log reproduces every segment observable, and
+- [x] One-pass replay from reset over the concatenated log reproduces every segment observable, and
       the final RAM fingerprint is recorded
-- [ ] Checkpoint savestates per segment in `$FRLG_ARTIFACTS/states`, `bin/frlg-artifacts-gc` run
+- [x] Checkpoint savestates per segment in `$FRLG_ARTIFACTS/states`, `bin/frlg-artifacts-gc` run
       after
-- [ ] `cargo test --release` gains a test that replays the committed route log and asserts the win
-- [ ] `cargo fmt` and `cargo clippy` clean
-- [ ] `docs/route.md` written: the route, its observables, and the evidence for each claim
-- [ ] Ledger records tier-2 as blocked on `route/template.bk2`; no `.bk2` is emitted until that file
+- [x] `cargo test --release` gains a test that replays the committed route log and asserts the win
+- [x] `cargo fmt` and `cargo clippy` clean
+- [x] `docs/route.md` written: the route, its observables, and the evidence for each claim
+- [x] Ledger records tier-2 as blocked on `route/template.bk2`; no `.bk2` is emitted until that file
       exists
 
 ### Optimisation (only once the route wins at all)

@@ -211,6 +211,7 @@ dependencies = [
  "anyhow",
  "clap",
  "frlg-emu",
+ "frlg-route",
  "hex",
 ]
 
@@ -231,6 +232,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "frlg-emu",
+ "hex",
  "serde",
  "serde_json",
  "thiserror",

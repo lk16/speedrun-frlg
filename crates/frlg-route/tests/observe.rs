@@ -61,7 +61,7 @@ fn the_save_block_probes_agree_with_where_a_new_game_starts() {
     // that would mean the offsets are pointing at something else entirely.
     let (x, y) = obs.pos(rec.emu()).unwrap();
     assert!((0..12).contains(&x) && (0..9).contains(&y), "pos ({x},{y})");
-    assert_eq!(obs.party_count(rec.emu()), Some(0));
+    assert_eq!(obs.party_count(rec.emu()), 0);
     assert!(!obs.in_battle(rec.emu()));
 }
 
