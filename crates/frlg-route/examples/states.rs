@@ -7,7 +7,8 @@
 //! frames by hand.
 
 use frlg_emu::{keys, SymbolTable};
-use frlg_route::{observe::Observer, record::Recorder};
+use frlg_route::observe::Observer;
+use frlg_route::record::{Feed, Recorder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);

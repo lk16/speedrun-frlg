@@ -4,7 +4,8 @@
 
 use frlg_emu::{keys, SymbolTable};
 use frlg_route::nav::{self, Goal};
-use frlg_route::{observe::Observer, record::Recorder};
+use frlg_route::observe::Observer;
+use frlg_route::record::{Feed, Recorder};
 
 const PLAYERS_HOUSE_1F: (u8, u8) = (4, 0);
 const PALLET_TOWN: (u8, u8) = (3, 0);

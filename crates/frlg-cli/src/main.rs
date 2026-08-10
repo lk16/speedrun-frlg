@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use frlg_emu::{check_log_rom, keys, Emu, InputLog, SymbolTable, Target};
+use frlg_route::segments::Tuning;
 use frlg_route::{ledger, Starter};
 
 #[derive(Parser)]
@@ -41,6 +42,12 @@ enum RouteCommand {
     Build(RouteArgs),
     /// Replay the committed logs from reset and check the ledger's claims.
     Verify(RouteArgs),
+    /// Sweep the route-level knobs end-to-end and keep the fastest run.
+    ///
+    /// A knob cannot be judged by the segment it sits in: a frame saved before
+    /// the rival battle re-rolls the battle, which is worth far more than the
+    /// frame. So each variant is built in full and scored on total frames.
+    Tune(RouteArgs),
     /// Print the ledger as it stands, without running anything.
     Status {
         #[arg(long, default_value = "route/ledger.json")]
@@ -76,6 +83,11 @@ struct RouteArgs {
     /// fills in tier-1 status, which is the only thing a replay can prove.
     #[arg(long)]
     write: bool,
+
+    /// Frames of UP held to face the starter's ball. Defaults to the ledger's
+    /// value if one is there, else the built-in default; `tune` sweeps it.
+    #[arg(long)]
+    turn_hold: Option<usize>,
 }
 
 #[derive(Args)]
@@ -189,7 +201,10 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
                 ledger: args.ledger.clone(),
                 states: args.states.clone().or_else(default_states_dir),
             };
-            let built = ledger::build(&rom, &sym, starter, &paths, |line| println!("{line}"))?;
+            let tuning = tuning_for(&args);
+            let built = ledger::build(&rom, &sym, starter, tuning, &paths, |line| {
+                println!("{line}")
+            })?;
             println!("\n{} frames total", built.total_frames);
             println!("wrote {}", args.ledger.display());
             println!("tier 1 is claimed by `frlg route verify`, not by this command");
@@ -234,10 +249,42 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             println!("\n{} frames, tier 1 ok", checked.total_frames);
             Ok(())
         }
+        RouteCommand::Tune(args) => {
+            let (rom, sym, starter) = route_setup(&args)?;
+            let mut best: Option<(Tuning, usize)> = None;
+            for tuning in Tuning::variants() {
+                // Sweep into a scratch directory: a variant that loses must not
+                // leave its logs behind claiming to be the route.
+                let scratch = std::env::temp_dir().join(format!("frlg-tune-{}", tuning.turn_hold));
+                let paths = ledger::Paths {
+                    logs: scratch.join("logs"),
+                    ledger: scratch.join("ledger.json"),
+                    states: None,
+                };
+                let built = ledger::build(&rom, &sym, starter, tuning, &paths, |_| {})?;
+                let total = built.total_frames;
+                println!("turn_hold {:>2}  {total:>6} frames", tuning.turn_hold);
+                if best.as_ref().is_none_or(|(_, seen)| total < *seen) {
+                    best = Some((tuning, total));
+                }
+            }
+            let (tuning, total) = best.expect("Tuning::variants is not empty");
+            println!("\nbest: turn_hold {} at {total} frames", tuning.turn_hold);
+
+            let paths = ledger::Paths {
+                logs: args.logs.clone(),
+                ledger: args.ledger.clone(),
+                states: args.states.clone().or_else(default_states_dir),
+            };
+            ledger::build(&rom, &sym, starter, tuning, &paths, |_| {})?;
+            println!("rebuilt {} with it", args.ledger.display());
+            Ok(())
+        }
         RouteCommand::Status { ledger: path } => {
             let led = ledger::read(&path).with_context(|| format!("reading {}", path.display()))?;
             println!("rom     {}", led.rom_sha1);
             println!("starter {}", led.starter);
+            println!("tuning  turn_hold {}", led.tuning.turn_hold);
             println!("frames  {}", led.total_frames);
             println!();
             for s in &led.segments {
@@ -279,6 +326,18 @@ fn route_setup(args: &RouteArgs) -> Result<(PathBuf, PathBuf, Starter)> {
         other => bail!("unknown starter {other:?}: bulbasaur, squirtle or charmander"),
     };
     Ok((rom, sym, starter))
+}
+
+/// The knobs a build should use: what was asked for, else what the ledger the
+/// build is about to overwrite already settled on, else the default.
+fn tuning_for(args: &RouteArgs) -> Tuning {
+    let mut tuning = ledger::read(&args.ledger)
+        .map(|led| led.tuning)
+        .unwrap_or_default();
+    if let Some(turn_hold) = args.turn_hold {
+        tuning.turn_hold = turn_hold;
+    }
+    tuning
 }
 
 fn default_states_dir() -> Option<PathBuf> {

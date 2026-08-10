@@ -5,7 +5,8 @@
 //! Run with `cargo test --release` -- these boot the real ROM.
 
 use frlg_emu::{keys, SymbolTable};
-use frlg_route::{observe::Observer, record::Recorder};
+use frlg_route::observe::Observer;
+use frlg_route::record::{Feed, Recorder};
 
 /// `data/maps/map_groups.json`: group 4 index 1 is
 /// `PalletTown_PlayersHouse_2F`, which is where a new game starts.

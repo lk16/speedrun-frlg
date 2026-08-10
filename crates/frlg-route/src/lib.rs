@@ -12,8 +12,9 @@ pub mod ledger;
 pub mod nav;
 pub mod observe;
 pub mod record;
+pub mod search;
 pub mod segments;
 
 pub use observe::{Observer, Snapshot};
-pub use record::{Recorder, RouteError};
+pub use record::{Feed, Recorder, RouteError};
 pub use segments::{Segment, Starter};

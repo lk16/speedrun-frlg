@@ -18,7 +18,7 @@ use std::collections::{BinaryHeap, HashMap};
 use frlg_emu::{keys, Emu, SaveState};
 
 use crate::observe::Observer;
-use crate::record::{Recorder, RouteError};
+use crate::record::{Feed, Recorder, RouteError};
 
 /// The four walking directions, in the decomp's key bits.
 pub const DIRECTIONS: [u16; 4] = [keys::UP, keys::DOWN, keys::LEFT, keys::RIGHT];

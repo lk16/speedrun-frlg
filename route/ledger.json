@@ -1,6 +1,9 @@
 {
   "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
   "starter": "squirtle",
+  "tuning": {
+    "turn_hold": 8
+  },
   "total_frames": 11873,
   "segments": [
     {

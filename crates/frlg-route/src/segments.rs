@@ -15,7 +15,8 @@ use frlg_emu::{keys, Emu};
 
 use crate::nav::{self, Goal};
 use crate::observe::{Observer, B_OUTCOME_WON, VAR_OAKS_LAB_SCENE, VAR_STARTER_MON};
-use crate::record::{Recorder, RouteError};
+use crate::record::{Feed, Recorder, RouteError};
+use crate::search;
 
 /// `data/maps/map_groups.json`, `group_order` index and position in the group.
 pub const PLAYERS_HOUSE_2F: (u8, u8) = (4, 1);
@@ -92,6 +93,35 @@ impl Starter {
     }
 }
 
+/// Knobs whose right value is not a local question.
+///
+/// Measured the hard way: trimming `turn_hold` from 8 frames to the 1 that
+/// still works saved 6 frames in `06-starter` and cost 391 in the battle,
+/// because every frame before a battle moves `gRngValue` and the battle is
+/// worth two orders of magnitude more than the trim. So these are route-level
+/// variants, swept end-to-end by `frlg route tune`, not decisions a segment
+/// gets to make for itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Tuning {
+    /// Frames of UP held to turn towards the starter's ball without walking.
+    pub turn_hold: usize,
+}
+
+impl Default for Tuning {
+    fn default() -> Self {
+        // The value the swept build settled on; `frlg route tune` re-derives it.
+        Self { turn_hold: 8 }
+    }
+}
+
+impl Tuning {
+    /// The variants a tuning sweep tries. One knob so far, so this is a range;
+    /// a second knob makes it a product, and the sweep stays the same shape.
+    pub fn variants() -> impl Iterator<Item = Tuning> {
+        (1..=8).map(|turn_hold| Tuning { turn_hold })
+    }
+}
+
 /// Drives the game through a segment, recording every frame it advances.
 pub type Drive = Box<dyn Fn(&mut Recorder, &Observer) -> Result<(), RouteError>>;
 /// Answers "is the game where the segment says it should be?".
@@ -110,14 +140,14 @@ pub struct Segment {
 }
 
 /// The whole route, in order.
-pub fn all(starter: Starter) -> Vec<Segment> {
+pub fn all(starter: Starter, tuning: Tuning) -> Vec<Segment> {
     vec![
         boot(),
         intro_oak(),
         names(),
         house(),
         to_lab(),
-        starter_segment(starter),
+        starter_segment(starter, tuning),
         battle_start(),
         battle_win(),
     ]
@@ -234,7 +264,7 @@ fn to_lab() -> Segment {
 ///
 /// It ends with the rival taking his, because the battle trigger is inert until
 /// `VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB` reaches 3.
-fn starter_segment(starter: Starter) -> Segment {
+fn starter_segment(starter: Starter, tuning: Tuning) -> Segment {
     Segment {
         name: "06-starter",
         goal: format!("{} in the party, rival has his", starter.name()),
@@ -256,12 +286,16 @@ fn starter_segment(starter: Starter) -> Segment {
                 4000,
             )?;
             rec.wait_until("the player to settle", 240, |emu| obs.player_can_step(emu))?;
-            rec.hold(keys::UP, 8)?;
+
+            // Turn towards the ball. One frame of UP is enough to turn without
+            // walking, but the right number is not a local question -- see
+            // `Tuning`.
+            rec.hold(keys::UP, tuning.turn_hold)?;
             rec.idle(1)?;
 
             // A opens the ball's script and answers YES to "so, you want it?".
-            // Stop the moment the mon is in the party -- the next prompt is the
-            // nickname one, and A would say yes.
+            // Stop the moment the mon is in the party: the next prompt is the
+            // nickname one, and A would say yes to that too.
             rec.mash_until("the starter in the party", keys::A, 1200, |emu| {
                 obs.party_count(emu) == 1
             })?;
@@ -301,20 +335,52 @@ fn battle_start() -> Segment {
     }
 }
 
-/// Fight. A takes FIGHT and then the first move, and advances every message in
-/// between, so the whole battle is one mash until `gBattleOutcome` is set.
+/// Fight, and manipulate the fight.
 ///
-/// Whether that wins is not a given -- both mons are level 5 with no
-/// type-effective moves, so it comes down to damage rolls and criticals, which
-/// is exactly what the optimisation pass has to look at.
+/// A takes FIGHT and then the first move and advances every message, so a
+/// battle is one mash. Whether that mash *wins* is not a given: both mons are
+/// level 5 with no type-effective moves, criticals are suppressed for the first
+/// battle unless the tutorial has said its piece
+/// (`decompiled/src/battle_script_commands.c:1199`), and what is left is the
+/// 85-100% damage roll (`:1558`) and accuracy (`:1093`), all off `gRngValue`
+/// (`decompiled/src/random.c`).
+///
+/// Measured: delaying the mash by one frame flips the battle from a win to a
+/// loss, and back again, all the way up (`docs/route.md`). So the segment does
+/// not accept the roll it is handed -- it tries a delay at a time and commits
+/// the shortest one that wins. A route that merely *happened* to win would go
+/// on happening to lose every time something upstream of it changed by a frame.
 fn battle_win() -> Segment {
+    /// Wide enough to cross the win/lose alternation several times, which is
+    /// what makes "no delay wins" a finding rather than a coincidence.
+    const DELAYS: std::ops::Range<usize> = 0..16;
+
     Segment {
         name: "08-battle-win",
         goal: "gBattleOutcome == B_OUTCOME_WON".into(),
         run: Box::new(|rec, obs| {
-            rec.mash_until("the battle to end", keys::A, 20000, |emu| {
-                obs.battle_outcome(emu) != 0
-            })?;
+            let mut wins = 0usize;
+            let mut tried = 0usize;
+            let (delay, frames) = search::best_of(
+                rec,
+                DELAYS,
+                |trial, delay| {
+                    trial.idle(delay)?;
+                    trial.mash_until("the battle to end", keys::A, 20000, |emu| {
+                        obs.battle_outcome(emu) != 0
+                    })?;
+                    Ok(obs.battle_outcome(trial.core()) == B_OUTCOME_WON)
+                },
+                |_, attempt| {
+                    tried += 1;
+                    wins += attempt.ok as usize;
+                },
+            )?;
+            // The segment cannot reach the ledger's progress channel, and a
+            // search that reports nothing is a black box.
+            eprintln!(
+                "      battle: {wins}/{tried} delays win, took delay {delay} at {frames} frames"
+            );
             Ok(())
         }),
         reached: Box::new(|obs, emu| obs.battle_outcome(emu) == B_OUTCOME_WON),

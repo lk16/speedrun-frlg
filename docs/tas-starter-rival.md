@@ -41,8 +41,9 @@ acceptance; BizHawk does not run here.
       recorded
 - [x] Segment 07 `battle-start`: rival battle entered (battle-state observable set)
 - [x] Segment 08 `battle-win`: `gBattleOutcome == B_OUTCOME_WON`
-- [ ] Starter choice decided by measurement: frames-to-win compared across all three, result written
-      up with the numbers
+- [x] Starter choice decided by measurement: frames-to-win compared across all three, result written
+      up with the numbers (Squirtle 11873, Charmander 12179, Bulbasaur 12194 -- one mashed build
+      each, so it is a measurement and not yet a ranking)
 
 ### Verification
 
@@ -58,6 +59,10 @@ acceptance; BizHawk does not run here.
 
 ### Optimisation (only once the route wins at all)
 
-- [ ] Per-segment frame costs in the ledger, obvious idle trimmed, each trim re-verified
-- [ ] The battle's RNG use understood well enough to say whether the win is manipulated or
-      luck-independent, with the decomp citations for the damage/crit path
+- [x] Per-segment frame costs in the ledger, obvious idle trimmed, each trim re-verified -- the trim
+      was measured end-to-end and *rejected*: all eight values of `turn_hold` built in full, and the
+      untrimmed one is the fastest by 163 frames
+- [x] The battle's RNG use understood well enough to say whether the win is manipulated or
+      luck-independent, with the decomp citations for the damage/crit path -- it was neither, and is
+      now manipulated: criticals are off for the first battle, a one-frame shift flips win to loss,
+      and `08-battle-win` searches start delays for a win

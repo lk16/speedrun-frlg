@@ -27,6 +27,115 @@ pub enum RouteError {
     BadKeys(u16, &'static str),
 }
 
+/// Anything that advances a core while keeping the masks it fed.
+///
+/// Two things do: [`Recorder`], whose masks become the route's log, and
+/// [`Trial`], whose masks are a candidate the search may throw away. They share
+/// this trait so there is exactly one implementation of "mash A until X" and it
+/// cannot drift between the route and the searches that optimise it.
+pub trait Feed {
+    fn core(&mut self) -> &mut Emu;
+    /// Record one mask. Called once per advanced frame, by `step` only.
+    fn record(&mut self, keys: u16);
+    /// How many frames this feed has advanced.
+    fn fed(&self) -> usize;
+
+    /// One frame with `keys` held.
+    fn step(&mut self, keys: u16) -> Result<(), RouteError> {
+        if keys & !keys::MASK != 0 {
+            return Err(RouteError::BadKeys(keys, "bits outside KEYS_MASK"));
+        }
+        if keys::is_impossible_dpad(keys) {
+            return Err(RouteError::BadKeys(keys, "opposing d-pad directions"));
+        }
+        self.record(keys);
+        self.core().step(keys);
+        Ok(())
+    }
+
+    /// `keys` held for `frames` frames.
+    fn hold(&mut self, keys: u16, frames: usize) -> Result<(), RouteError> {
+        for _ in 0..frames {
+            self.step(keys)?;
+        }
+        Ok(())
+    }
+
+    /// Nothing held, for `frames` frames.
+    fn idle(&mut self, frames: usize) -> Result<(), RouteError> {
+        self.hold(0, frames)
+    }
+
+    /// One frame pressed, one frame released.
+    ///
+    /// The game acts on `gMain.newKeys` (`decompiled/include/main.h:32`), which
+    /// is the difference between this frame's and last frame's held keys, so a
+    /// button held across frames registers once. Releasing afterwards is what
+    /// makes the next press register at all.
+    fn tap(&mut self, keys: u16) -> Result<(), RouteError> {
+        self.step(keys)?;
+        self.step(0)
+    }
+
+    /// Advance, cycling `pattern` one mask per frame, until `until` says the
+    /// game got where it was going.
+    ///
+    /// The predicate is checked after each frame, so the returned count is the
+    /// number of frames this call added. `pattern` is the input to feed while
+    /// waiting: `&[0]` to sit still, `&[keys::A, 0]` to mash A.
+    fn advance_while(
+        &mut self,
+        what: &str,
+        pattern: &[u16],
+        budget: usize,
+        mut until: impl FnMut(&mut Emu) -> bool,
+    ) -> Result<usize, RouteError>
+    where
+        Self: Sized,
+    {
+        assert!(!pattern.is_empty(), "advance_while needs a pattern");
+        let start = self.fed();
+        for i in 0..budget {
+            self.step(pattern[i % pattern.len()])?;
+            if until(self.core()) {
+                return Ok(self.fed() - start);
+            }
+        }
+        Err(RouteError::Timeout {
+            what: what.to_string(),
+            budget,
+            frames: self.fed(),
+        })
+    }
+
+    /// Sit still until `until` holds.
+    fn wait_until(
+        &mut self,
+        what: &str,
+        budget: usize,
+        until: impl FnMut(&mut Emu) -> bool,
+    ) -> Result<usize, RouteError>
+    where
+        Self: Sized,
+    {
+        self.advance_while(what, &[0], budget, until)
+    }
+
+    /// Mash `keys` (press, release, press, ...) until `until` holds.
+    fn mash_until(
+        &mut self,
+        what: &str,
+        keys: u16,
+        budget: usize,
+        until: impl FnMut(&mut Emu) -> bool,
+    ) -> Result<usize, RouteError>
+    where
+        Self: Sized,
+    {
+        self.advance_while(what, &[keys, 0], budget, until)
+    }
+}
+
 /// An emulator plus the log of what has been fed to it.
 pub struct Recorder {
     emu: Emu,
@@ -66,94 +175,17 @@ impl Recorder {
         self.frames.len()
     }
 
-    pub fn log(&self) -> InputLog {
-        InputLog::new(self.rom_sha1, self.frames.clone())
-    }
-
-    /// One frame with `keys` held.
-    pub fn step(&mut self, keys: u16) -> Result<(), RouteError> {
-        if keys & !keys::MASK != 0 {
-            return Err(RouteError::BadKeys(keys, "bits outside KEYS_MASK"));
-        }
-        if keys::is_impossible_dpad(keys) {
-            return Err(RouteError::BadKeys(keys, "opposing d-pad directions"));
-        }
-        self.frames.push(keys);
-        self.emu.step(keys);
-        Ok(())
-    }
-
-    /// `keys` held for `frames` frames.
-    pub fn hold(&mut self, keys: u16, frames: usize) -> Result<(), RouteError> {
-        for _ in 0..frames {
+    /// Feed masks that were found somewhere else -- a nav path, a search
+    /// result -- as if they had been stepped here.
+    pub fn play(&mut self, inputs: &[u16]) -> Result<(), RouteError> {
+        for &keys in inputs {
             self.step(keys)?;
         }
         Ok(())
     }
 
-    /// Nothing held, for `frames` frames.
-    pub fn idle(&mut self, frames: usize) -> Result<(), RouteError> {
-        self.hold(0, frames)
-    }
-
-    /// One frame pressed, one frame released.
-    ///
-    /// The game acts on `gMain.newKeys` (`decompiled/include/main.h:32`), which
-    /// is the difference between this frame's and last frame's held keys, so a
-    /// button held across frames registers once. Releasing afterwards is what
-    /// makes the next press register at all.
-    pub fn tap(&mut self, keys: u16) -> Result<(), RouteError> {
-        self.step(keys)?;
-        self.step(0)
-    }
-
-    /// Advance, cycling `pattern` one mask per frame, until `until` says the
-    /// game got where it was going.
-    ///
-    /// The predicate is checked after each frame, so the returned count is the
-    /// number of frames this call added. `pattern` is the input to feed while
-    /// waiting: `&[0]` to sit still, `&[keys::A, 0]` to mash A.
-    pub fn advance_while(
-        &mut self,
-        what: &str,
-        pattern: &[u16],
-        budget: usize,
-        mut until: impl FnMut(&mut Emu) -> bool,
-    ) -> Result<usize, RouteError> {
-        assert!(!pattern.is_empty(), "advance_while needs a pattern");
-        let start = self.frames.len();
-        for i in 0..budget {
-            self.step(pattern[i % pattern.len()])?;
-            if until(&mut self.emu) {
-                return Ok(self.frames.len() - start);
-            }
-        }
-        Err(RouteError::Timeout {
-            what: what.to_string(),
-            budget,
-            frames: self.frames.len(),
-        })
-    }
-
-    /// Sit still until `until` holds.
-    pub fn wait_until(
-        &mut self,
-        what: &str,
-        budget: usize,
-        until: impl FnMut(&mut Emu) -> bool,
-    ) -> Result<usize, RouteError> {
-        self.advance_while(what, &[0], budget, until)
-    }
-
-    /// Mash `keys` (press, release, press, ...) until `until` holds.
-    pub fn mash_until(
-        &mut self,
-        what: &str,
-        keys: u16,
-        budget: usize,
-        until: impl FnMut(&mut Emu) -> bool,
-    ) -> Result<usize, RouteError> {
-        self.advance_while(what, &[keys, 0], budget, until)
+    pub fn log(&self) -> InputLog {
+        InputLog::new(self.rom_sha1, self.frames.clone())
     }
 
     pub fn save_state(&mut self) -> Result<SaveState, RouteError> {
@@ -162,6 +194,55 @@ impl Recorder {
 
     pub fn save_state_file(&mut self, path: &Path) -> Result<(), RouteError> {
         Ok(self.emu.save_state_file(path)?)
+    }
+}
+
+impl Feed for Recorder {
+    fn core(&mut self) -> &mut Emu {
+        &mut self.emu
+    }
+    fn record(&mut self, keys: u16) {
+        self.frames.push(keys);
+    }
+    fn fed(&self) -> usize {
+        self.frames.len()
+    }
+}
+
+/// A candidate run on a borrowed core: same stepping helpers, but the masks are
+/// collected rather than committed, so a search can try one and throw it away.
+///
+/// The core is left wherever the trial put it. Callers restore from a savestate
+/// between trials; there is no way to do that safely for them from here,
+/// because a trial is free to walk into a different map entirely.
+pub struct Trial<'a> {
+    emu: &'a mut Emu,
+    inputs: Vec<u16>,
+}
+
+impl<'a> Trial<'a> {
+    pub fn new(emu: &'a mut Emu) -> Self {
+        Self {
+            emu,
+            inputs: Vec::new(),
+        }
+    }
+
+    /// The masks fed, ready to be handed to [`Recorder::play`].
+    pub fn into_inputs(self) -> Vec<u16> {
+        self.inputs
+    }
+}
+
+impl Feed for Trial<'_> {
+    fn core(&mut self) -> &mut Emu {
+        self.emu
+    }
+    fn record(&mut self, keys: u16) {
+        self.inputs.push(keys);
+    }
+    fn fed(&self) -> usize {
+        self.inputs.len()
     }
 }
 

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::observe::Observer;
 use crate::record::{Recorder, RouteError};
-use crate::segments::{self, Segment, Starter};
+use crate::segments::{self, Segment, Starter, Tuning};
 
 /// Tier 2 is a BizHawk replay on the host; nothing in this sandbox can do it,
 /// and until `route/template.bk2` exists no `.bk2` can even be written
@@ -28,6 +28,15 @@ pub struct Ledger {
     /// The ROM every log below was routed against.
     pub rom_sha1: String,
     pub starter: String,
+    /// The route-level knobs this build used. Recorded so `verify` rebuilds the
+    /// same segment definitions the logs were made against, and so a sweep's
+    /// answer is not folded back into the code as a magic number.
+    ///
+    /// Deliberately not `#[serde(default)]`: a ledger written before this field
+    /// existed would then be read back with a tuning it was not built with, and
+    /// silently claim knob values that are not what produced its logs. Failing
+    /// to parse is the better outcome -- rebuild it.
+    pub tuning: Tuning,
     pub total_frames: usize,
     pub segments: Vec<Entry>,
 }
@@ -97,6 +106,7 @@ pub fn build(
     rom: &Path,
     sym: &Path,
     starter: Starter,
+    tuning: Tuning,
     paths: &Paths,
     mut progress: impl FnMut(&str),
 ) -> Result<Ledger, LedgerError> {
@@ -109,7 +119,7 @@ pub fn build(
 
     let mut entries: Vec<Entry> = Vec::new();
     let mut consumed = 0usize;
-    for segment in segments::all(starter) {
+    for segment in segments::all(starter, tuning) {
         let start_frame = rec.frames();
         (segment.run)(&mut rec, &obs)?;
         if !(segment.reached)(&obs, rec.emu()) {
@@ -156,6 +166,7 @@ pub fn build(
     let ledger = Ledger {
         rom_sha1: hex::encode(rec.log().rom_sha1),
         starter: starter.name().to_string(),
+        tuning,
         total_frames: rec.frames(),
         segments: entries,
     };
@@ -183,7 +194,7 @@ pub fn verify(
         )));
     }
 
-    let defined = segments::all(starter);
+    let defined = segments::all(starter, ledger.tuning);
     if defined.len() != ledger.segments.len() {
         return Err(LedgerError::Message(format!(
             "ledger has {} segments but the route defines {}",
@@ -225,6 +236,7 @@ pub fn verify(
     Ok(Ledger {
         rom_sha1: ledger.rom_sha1.clone(),
         starter: ledger.starter.clone(),
+        tuning: ledger.tuning,
         total_frames: frame,
         segments: checked,
     })

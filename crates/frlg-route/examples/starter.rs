@@ -6,8 +6,8 @@
 use frlg_emu::{keys, SymbolTable};
 use frlg_route::nav::{self, Goal};
 use frlg_route::observe::{Observer, VAR_OAKS_LAB_SCENE, VAR_STARTER_MON};
-use frlg_route::record::Recorder;
-use frlg_route::segments::{self, Starter};
+use frlg_route::record::{Feed, Recorder};
+use frlg_route::segments::{self, Starter, Tuning};
 
 const OAKS_LAB: (u8, u8) = (4, 3);
 
@@ -18,7 +18,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut rec = Recorder::from_reset(&rom)?;
 
     // Everything up to standing in the lab is already routed.
-    for segment in segments::all(Starter::Squirtle).into_iter().take(5) {
+    for segment in segments::all(Starter::Squirtle, Tuning::default())
+        .into_iter()
+        .take(5)
+    {
         (segment.run)(&mut rec, &obs)?;
         println!("{:<16} {}", segment.name, obs.snapshot(rec.emu()));
     }
