@@ -1,0 +1,13 @@
+[package]
+name = "frlg-emu"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Tier-1 headless mGBA harness: input logs in, RAM and frames out."
+
+[dependencies]
+mgba-sys = { path = "../mgba-sys" }
+hex.workspace = true
+png.workspace = true
+sha1.workspace = true
+thiserror.workspace = true

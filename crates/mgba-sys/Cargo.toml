@@ -1,0 +1,10 @@
+[package]
+name = "mgba-sys"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Flat C ABI over libmgba, compiled against the installed headers."
+links = "mgba"
+
+[build-dependencies]
+cc.workspace = true

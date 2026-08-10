@@ -2,3 +2,4 @@ decompiled
 .claude-user/
 tools/vendor-manifest/src/
 ignored/
+/target

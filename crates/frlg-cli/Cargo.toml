@@ -1,0 +1,16 @@
+[package]
+name = "frlg-cli"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Command-line front end for the tier-1 harness."
+
+[[bin]]
+name = "frlg"
+path = "src/main.rs"
+
+[dependencies]
+frlg-emu = { path = "../frlg-emu" }
+anyhow.workspace = true
+clap.workspace = true
+hex.workspace = true
