@@ -35,6 +35,7 @@ SYSROOT_EXCLUDE='^(libc6|libc6-dev|libc-bin|libgcc-s1|libgcc-\d+-dev|libstdc\+\+
 
 ARTIFACTS_DEFAULT="${FRLG_ARTIFACTS_DIR:-$HOME/.cache/speedrun-frlg/artifacts}"
 DEPS_DEFAULT="${FRLG_DEPS_DIR:-$HOME/.cache/speedrun-frlg/deps}"
+DECOMP_DEFAULT="${FRLG_DECOMP_DIR:-$HOME/.cache/speedrun-frlg/decompiled}"
 
 # --------------------------------------------------------------- setup --------
 REPO="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
@@ -246,7 +247,9 @@ do_artifacts() {
 }
 
 # ------------------------------------------------------------------ run -------
-[ -d "$REPO/decompiled/src" ] || die "$REPO/decompiled is not a pokefirered checkout"
+[ -d "$DECOMP_DEFAULT/src" ] || die "$DECOMP_DEFAULT is not a pokefirered checkout.
+  It must live outside the repository: a mount nested inside the workspace hangs
+  sbx create. See the note in tools/run-sandbox.sh."
 [ "$MODE" = check ] || need_host
 mkdir -p "$DEPS" "$WORK"
 : > "$DEPS/MANIFEST.new"

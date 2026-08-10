@@ -21,7 +21,14 @@ cd "$REPO"
 # tools/host-prep.sh fills them and honours the same overrides.
 DEPS="${FRLG_DEPS_DIR:-$HOME/.cache/speedrun-frlg/deps}"
 ARTIFACTS="${FRLG_ARTIFACTS_DIR:-$HOME/.cache/speedrun-frlg/artifacts}"
-DECOMP="$REPO/decompiled"
+
+# The decomp must live outside the repository, and this is load-bearing rather than
+# tidiness: `sbx create --clone` mounts the workspace and clones it, and passing a
+# second mount that is a subdirectory of that same workspace wedges create. The
+# sandbox is built, its startup commands all finish, then the container disappears
+# and the client blocks forever having printed nothing. Verified by elimination:
+# with deps or artifacts alone create exits 0; with a nested path it hangs every time.
+DECOMP="${FRLG_DECOMP_DIR:-$HOME/.cache/speedrun-frlg/decompiled}"
 
 BASE="${FRLG_SANDBOX_NAME:-frlg}"
 NAME=""            # resolved below, once the action is known
@@ -33,13 +40,7 @@ MEMORY="${FRLG_MEMORY:-12g}"
 # filesystem has to be generous: the decomp copy, its build tree and Rust's
 # target/ all live there, because artifacts is the only writable mount and a
 # build tree does not belong on it.
-#
-# 16g, not more. A root size of 24g makes `sbx create` hang: the sandbox is
-# created and its startup commands finish, then the container disappears and the
-# client blocks in a futex forever with nothing printed. 16g and 12g were both
-# verified to create cleanly; the cliff sits somewhere between 16g and 24g. If a
-# create ever hangs again with no output, drop this first.
-export DOCKER_SANDBOXES_ROOT_SIZE="${FRLG_ROOT_SIZE:-16g}"
+export DOCKER_SANDBOXES_ROOT_SIZE="${FRLG_ROOT_SIZE:-24g}"
 export DOCKER_SANDBOXES_DOCKER_SIZE="${FRLG_DOCKER_SIZE:-4g}"
 
 ACTION=run
