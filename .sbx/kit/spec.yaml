@@ -1,7 +1,9 @@
 # The agent's own API calls and nothing else. Every toolchain this project needs is
-# prebuilt on the host by tools/host-prep.sh and mounted read-only, so nothing here
-# has to reach the network -- and the agent cannot reach it either, which is the point:
-# the route has to come out of decompiled/, not out of a web search.
+# either baked into the sandbox image or prebuilt on the host by tools/host-prep.sh and
+# mounted read-only, so nothing here has to reach the network -- and the agent cannot
+# reach it either, which is the point: the route has to come out of decompiled/, not out
+# of a web search. Note that the image is not the stock one; run-sandbox.sh passes
+# --template, and on sbx's own claude image there is no compiler and nothing builds.
 schemaVersion: "2"
 kind: mixin
 name: speedrun-frlg-network-policy
@@ -45,11 +47,14 @@ setup:
             echo "frlg startup: run tools/host-prep.sh on the host, then tools/run-sandbox.sh --print" >&2
           fi
 
-          # Debian multiarch dir the extracted .deb sysroot puts its libraries in.
-          TRIPLE=$(gcc -dumpmachine 2>/dev/null || echo x86_64-linux-gnu)
-
           # One place that says where everything is. Every script in this repo reads these
           # rather than hardcoding a path, because none of these paths are stable.
+          #
+          # The compiler, the ARM binutils, cmake, pkg-config and libpng all come from the
+          # image (tools/host-prep.sh builds it), so nothing here has to put a directory of
+          # distro libraries on the search paths -- which is what keeps LD_LIBRARY_PATH down
+          # to mGBA's own prefix. Anything wider shadows the image's OpenSSL and curl and
+          # silently breaks TLS for python3 and every system tool.
           sudo tee /etc/profile.d/10-frlg.sh >/dev/null <<EOF
           export FRLG_DEPS="$DEPS"
           export FRLG_DECOMP_RO="$DECOMP"
@@ -58,11 +63,23 @@ setup:
           export MGBA_PREFIX="$DEPS/mgba/prefix"
           export BIZHAWK_HOME="$DEPS/bizhawk"
 
-          export PATH="\$HOME/.cargo/bin:$DEPS/bin:$DEPS/rust/bin:$DEPS/sysroot/usr/bin:$DEPS/mgba/prefix/bin:\$PATH"
-          export CPATH="$DEPS/sysroot/usr/include:$DEPS/mgba/prefix/include\${CPATH:+:\$CPATH}"
-          export LIBRARY_PATH="$DEPS/sysroot/usr/lib/$TRIPLE:$DEPS/mgba/prefix/lib\${LIBRARY_PATH:+:\$LIBRARY_PATH}"
-          export LD_LIBRARY_PATH="$DEPS/sysroot/usr/lib/$TRIPLE:$DEPS/mgba/prefix/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}"
-          export PKG_CONFIG_PATH="$DEPS/sysroot/usr/lib/$TRIPLE/pkgconfig:$DEPS/sysroot/usr/share/pkgconfig:$DEPS/mgba/prefix/lib/pkgconfig"
+          # This file is sourced by every non-interactive shell (BASH_ENV, below), so the
+          # path variables are prepended only when they are not already there. A plain
+          # prepend grows PATH by three entries per subshell.
+          for _frlg_d in "\$HOME/.cargo/bin" "$DEPS/bin" "$DEPS/rust/bin"; do
+            case ":\$PATH:" in *":\$_frlg_d:"*) ;; *) PATH="\$_frlg_d:\$PATH" ;; esac
+          done
+          export PATH
+          unset _frlg_d
+
+          case ":\${LD_LIBRARY_PATH:-}:" in
+            *":$DEPS/mgba/prefix/lib:"*) ;;
+            *) LD_LIBRARY_PATH="$DEPS/mgba/prefix/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}" ;;
+          esac
+          export LD_LIBRARY_PATH
+          export CPATH="$DEPS/mgba/prefix/include"
+          export LIBRARY_PATH="$DEPS/mgba/prefix/lib"
+          export PKG_CONFIG_PATH="$DEPS/mgba/prefix/lib/pkgconfig"
 
           export RUSTUP_HOME="$DEPS/rustup"
           export CARGO_HOME="\$HOME/.cargo"
@@ -76,7 +93,18 @@ setup:
           export SCCACHE_CACHE_SIZE=4G
           EOF
 
-          # Non-login shells do not read profile.d.
+          # Non-login shells do not read profile.d, and almost nothing the agent runs is a
+          # login shell: `bash -c ...`, a Makefile recipe and every subprocess would all
+          # miss cargo and sccache. The harness sources CLAUDE_ENV_FILE before each command
+          # and bash reads BASH_ENV for each non-interactive shell; both point at
+          # /etc/sandbox-persistent.sh, which ships empty. One `.` line in it, and nothing
+          # else -- anything that writes to stdout from there corrupts command output.
+          for f in $(printf '%s\n' "${CLAUDE_ENV_FILE:-}" "${BASH_ENV:-}" \
+                       /etc/sandbox-persistent.sh | grep -v '^$' | sort -u); do
+            sudo touch "$f" 2>/dev/null || continue
+            grep -q 10-frlg "$f" 2>/dev/null \
+              || echo '. /etc/profile.d/10-frlg.sh' | sudo tee -a "$f" >/dev/null
+          done
           if ! grep -q 10-frlg "$HOME/.bashrc" 2>/dev/null; then
             echo '. /etc/profile.d/10-frlg.sh' >> "$HOME/.bashrc"
           fi

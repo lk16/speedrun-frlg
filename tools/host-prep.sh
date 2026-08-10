@@ -16,6 +16,10 @@
 # regenerated at any time, which is not something a source tree should carry.
 # tools/run-sandbox.sh reads the same two defaults; override with FRLG_DEPS_DIR
 # and FRLG_ARTIFACTS_DIR if you keep them elsewhere.
+#
+# The one exception is the `image` step, which builds the sandbox image and hands it
+# to the sandbox runtime's own image store. sbx's stock image ships no compiler, so
+# this is what makes the ROM build and the mGBA harness possible at all.
 
 set -euo pipefail
 
@@ -26,11 +30,27 @@ AGBCC_REF="${AGBCC_REF:-master}"          # pret/agbcc has no releases; the reso
 MGBA_REF="${MGBA_REF:-auto}"              # auto = newest 0.10.x tag; see the note in step mgba
 BIZHAWK_VER="${BIZHAWK_VER:-2.11.1}"      # must match the BizHawk you replay .bk2 files in
 RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}" # resolved version is recorded in MANIFEST
+SCCACHE_VER="${SCCACHE_VER:-0.17.0}"      # musl release tarball, so it runs on any image
 
-# .deb packages extracted into a sysroot, for what the sandbox image may not ship.
-# libc/libstdc++/libgcc are excluded on purpose: mixing a second glibc into
-# LD_LIBRARY_PATH breaks everything downstream of it.
-SYSROOT_PKGS=(binutils-arm-none-eabi libpng-dev zlib1g-dev pkg-config cmake)
+# The sandbox image. sbx's stock claude image is Ubuntu 26.04 with no compiler at all --
+# not gcc, not cpp, not a native as/ld, not even crt1.o -- and there is no network in the
+# sandbox to add one. Extracting a toolchain into a mounted sysroot was tried and is a
+# bad trade: a relocated gcc needs sysroot/-B/-isystem wrappers to find cc1, its crt
+# objects and its headers, and the lib directory it drags along has to go on
+# LD_LIBRARY_PATH, where it shadows the image's own OpenSSL and curl. Deriving an image
+# instead is one apt-get, matches the image's own glibc exactly, and leaves
+# LD_LIBRARY_PATH clean. `sbx template load` puts it in the sandbox runtime's image
+# store; tools/run-sandbox.sh passes it with -t.
+IMAGE_BASE="${FRLG_IMAGE_BASE:-docker.io/docker/sandbox-templates:claude-code-docker}"
+IMAGE_TAG="${FRLG_IMAGE:-frlg-sandbox:1}" # tools/run-sandbox.sh reads FRLG_IMAGE too
+IMAGE_PKGS=(build-essential binutils-arm-none-eabi libpng-dev zlib1g-dev pkg-config cmake perl)
+
+# .deb packages extracted into a sysroot. This is host-side only now: build.sh in the
+# agbcc step needs arm-none-eabi-as and -ar, which a host has no reason to have
+# installed, and extracting them beats asking for a sudo apt install. The sandbox gets
+# its ARM binutils from the image, so nothing here goes on the sandbox's PATH or
+# LD_LIBRARY_PATH -- see the note above for what happens when it does.
+SYSROOT_PKGS=(binutils-arm-none-eabi)
 SYSROOT_EXCLUDE='^(libc6|libc6-dev|libc-bin|libgcc-s1|libgcc-\d+-dev|libstdc\+\+6|libstdc\+\+-\d+-dev|gcc-\d+-base|libcrypt1|libcrypt-dev)$'
 
 ARTIFACTS_DEFAULT="${FRLG_ARTIFACTS_DIR:-$HOME/.cache/speedrun-frlg/artifacts}"
@@ -49,7 +69,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --check) MODE=check ;;
     --force) FORCE="${2:?--force needs a step name}"; shift ;;
-    -h|--help) sed -n '2,20p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 1 ;;
   esac
   shift
@@ -95,19 +115,57 @@ manifest() { mkdir -p "$DEPS/.resolved"; printf '%s' "$2" > "$DEPS/.resolved/$1"
 # ------------------------------------------------------------ preflight -------
 need_host() {
   local missing=()
-  for c in git curl tar gcc g++ make cmake pkg-config dpkg apt-get python3; do
+  for c in git curl tar gcc g++ make cmake pkg-config dpkg apt-get python3 docker sbx; do
     command -v "$c" >/dev/null || missing+=("$c")
   done
   [ ${#missing[@]} -eq 0 ] || die "install these on the host first: ${missing[*]}
-  on Debian/Ubuntu: sudo apt install git curl build-essential cmake pkg-config python3"
+  on Debian/Ubuntu: sudo apt install git curl build-essential cmake pkg-config python3
+  docker and sbx come with Docker Desktop / Docker Sandboxes"
   command -v rustup >/dev/null || die "rustup is not installed on the host.
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
   # mGBA's own build needs these headers on the host, not in the sandbox.
   pkg-config --exists libpng zlib || warn "host is missing libpng-dev / zlib1g-dev; the mgba step will fail
-  sudo apt install libpng-dev zlib1g-dev libzip-dev libelf-dev"
+  sudo apt install libpng-dev zlib1g-dev"
 }
 
 # ----------------------------------------------------------------- steps ------
+
+do_image() {
+  # --pull so a forced re-run picks up sbx's current base image; the stamp is the
+  # package list, so `--force image` is how you refresh after sbx ships a new one.
+  # USER is restored explicitly: the base runs as `agent`, and a derived image that
+  # forgets to switch back hands the agent a root sandbox.
+  rm -rf "$WORK/image"; mkdir -p "$WORK/image"
+  cat > "$WORK/image/Dockerfile" <<EOF
+# Generated by tools/host-prep.sh. Edit IMAGE_PKGS there, not this file.
+FROM $IMAGE_BASE
+USER root
+RUN apt-get update \\
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
+      ${IMAGE_PKGS[*]} \\
+ && rm -rf /var/lib/apt/lists/*
+USER agent
+EOF
+  docker build --pull --provenance=false --sbom=false \
+    -t "$IMAGE_TAG" "$WORK/image" >/dev/null \
+    || die "docker build failed; run it by hand to see why:
+  docker build --pull -t $IMAGE_TAG $WORK/image"
+
+  # The sandbox runtime keeps its own image store, so the image has to be handed over
+  # as a tar rather than just being present in the host daemon.
+  docker save -o "$WORK/image/img.tar" "$IMAGE_TAG"
+  sbx template load "$WORK/image/img.tar" >/dev/null \
+    || die "sbx template load failed; is the sbx daemon running? (sbx diagnose)"
+  rm -rf "$WORK/image"
+
+  local user; user=$(docker image inspect -f '{{.Config.User}}' "$IMAGE_TAG")
+  [ "$user" = agent ] || die "$IMAGE_TAG runs as '$user', not agent -- the USER line did not take"
+  docker run --rm --entrypoint sh "$IMAGE_TAG" -c '
+    for c in cc g++ ld as arm-none-eabi-as arm-none-eabi-ld make perl cmake pkg-config; do
+      command -v "$c" >/dev/null || { echo "missing: $c"; exit 1; }
+    done' || die "$IMAGE_TAG is missing a tool (above); check the apt output from the build"
+  manifest image "$IMAGE_TAG <- $(docker image inspect -f '{{index .RepoDigests 0}}' "$IMAGE_BASE" 2>/dev/null || echo "$IMAGE_BASE")"
+}
 
 do_sysroot() {
   rm -rf "$WORK/sysroot" "$DEPS/sysroot"
@@ -170,11 +228,14 @@ do_mgba() {
     -DCMAKE_INSTALL_PREFIX="$DEPS/mgba/prefix" \
     -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_SHARED=ON -DBUILD_STATIC=ON \
     -DUSE_FFMPEG=OFF -DUSE_DISCORD_RPC=OFF -DUSE_LUA=OFF -DBUILD_PYTHON=OFF \
-    -DUSE_LIBZIP=OFF -DUSE_MINIZIP=OFF -DUSE_SQLITE3=OFF >/dev/null
+    -DUSE_LIBZIP=OFF -DUSE_MINIZIP=OFF -DUSE_SQLITE3=OFF -DUSE_ELF=OFF >/dev/null
     # Zip and the game database are off because the harness hands mGBA a plain .gba
     # path. libzip in particular is worth avoiding: Ubuntu's libzip-dev ships CMake
     # targets pointing at /usr/bin/zipcmp, which lives in the separate libzip-tools
     # package, so a stock host fails configure on a feature we never use.
+    # USE_ELF=OFF for the same reason and one more: with it on, libmgba.so needs
+    # libelf.so.1, the sandbox image does not ship one, and the versioned ELFUTILS_1.0
+    # symbols mean no other library can stand in -- the library simply will not load.
   cmake --build "$WORK/mgba/build" -j"$(nproc)" >/dev/null
   cmake --install "$WORK/mgba/build" >/dev/null
   # Keep the source: if the prebuilt library turns out to be ABI-incompatible with the
@@ -182,6 +243,19 @@ do_mgba() {
   mkdir -p "$DEPS/mgba"
   tar -C "$WORK/mgba" --exclude=src/.git -czf "$DEPS/mgba/src.tar.gz" src
   rm -rf "$WORK/mgba"
+
+  # Built here, but it has to load there, and "the file exists" is not that check.
+  # dlopen it inside the sandbox image, which is the only place the answer counts.
+  if docker image inspect "$IMAGE_TAG" >/dev/null 2>&1; then
+    docker run --rm -v "$DEPS/mgba/prefix:/mgba:ro" --entrypoint python3 "$IMAGE_TAG" \
+      -c 'import ctypes; ctypes.CDLL("/mgba/lib/libmgba.so")' \
+      || die "libmgba.so does not load in $IMAGE_TAG (see the error above).
+  A missing library means a feature is still on: add the -DUSE_*=OFF for it, or the
+  package to IMAGE_PKGS. Check what it wants with:
+    docker run --rm -v $DEPS/mgba/prefix:/mgba:ro --entrypoint ldd $IMAGE_TAG /mgba/lib/libmgba.so"
+  else
+    warn "sandbox image $IMAGE_TAG is not built yet; skipping the libmgba load check"
+  fi
   manifest mgba "$ref"
 }
 
@@ -191,8 +265,27 @@ do_rust() {
     rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update >/dev/null
   local resolved
   resolved=$(ls "$DEPS/rustup/toolchains" | head -1)
-  ln -sfn "$DEPS/rustup/toolchains/$resolved" "$DEPS/rust"
+  # Relative on purpose: an absolute link records the path the tree had when it was
+  # built, and this tree gets moved (it used to live in <repo>/.box/deps) and mounted
+  # at whatever path the host gives it. A dangling deps/rust reads as "rustc is
+  # missing", which is a confusing way to say "the link text is stale".
+  ln -sfn "rustup/toolchains/$resolved" "$DEPS/rust"
+  [ -x "$DEPS/rust/bin/cargo" ] || die "$DEPS/rust does not resolve to a toolchain"
   manifest rust "$resolved"
+}
+
+do_sccache() {
+  # Rust's target/ dies with the sandbox, so without this every session pays for a cold
+  # build of the whole vendored tree. The musl release is a single static binary, which
+  # is what makes it safe to drop into an image we do not control.
+  rm -rf "$WORK/sccache"; mkdir -p "$WORK/sccache" "$DEPS/bin"
+  local url="https://github.com/mozilla/sccache/releases/download/v$SCCACHE_VER/sccache-v$SCCACHE_VER-x86_64-unknown-linux-musl.tar.gz"
+  curl -fsSL "$url" | tar -C "$WORK/sccache" --strip-components=1 -xzf - \
+    || die "could not download sccache $SCCACHE_VER from $url"
+  install -m755 "$WORK/sccache/sccache" "$DEPS/bin/sccache"
+  rm -rf "$WORK/sccache"
+  "$DEPS/bin/sccache" --version >/dev/null || die "$DEPS/bin/sccache does not run"
+  manifest sccache "$SCCACHE_VER"
 }
 
 do_vendor() {
@@ -256,10 +349,12 @@ mkdir -p "$DEPS" "$WORK"
 printf 'speedrun-frlg toolchain tree, built by tools/host-prep.sh\n' > "$DEPS/.frlg-deps"
 
 printf '\n%sdeps%s  %s\n\n' "$DIM" "$OFF" "$DEPS"
+step image     "$IMAGE_TAG:$(printf '%s,' "${IMAGE_PKGS[@]}")" do_image
 step sysroot   "$(printf '%s,' "${SYSROOT_PKGS[@]}")" do_sysroot
 step agbcc     "$AGBCC_REF"      do_agbcc
 step mgba      "$MGBA_REF"       do_mgba
 step rust      "$RUST_TOOLCHAIN" do_rust
+step sccache   "$SCCACHE_VER"    do_sccache
 step vendor    "$(sha1sum "$REPO/tools/vendor-manifest/Cargo.toml" 2>/dev/null | cut -c1-12)" do_vendor
 step wheels    "$(sha1sum "$REPO/tools/requirements.txt" 2>/dev/null | cut -c1-12 || echo empty)" do_wheels
 step bizhawk   "$BIZHAWK_VER"    do_bizhawk
@@ -276,6 +371,7 @@ mv "$DEPS/MANIFEST.new" "$DEPS/MANIFEST" 2>/dev/null || rm -f "$DEPS/MANIFEST.ne
 rmdir "$WORK" 2>/dev/null || true
 
 printf '\n%sdeps size%s  %s\n' "$DIM" "$OFF" "$(du -sh "$DEPS" | cut -f1)"
+printf '%simage%s      %s\n' "$DIM" "$OFF" "$IMAGE_TAG (in the sbx image store; sbx template ls)"
 cat <<'EOF'
 
 Next, on the host, once:
@@ -290,6 +386,14 @@ Next, on the host, once:
      are guaranteed to load in the BizHawk you actually watch them in. Guessing at
      SyncSettings is the single most likely way to end up with a desyncing file.
 
+     This is also the only way to settle the Input Log column order: it is not in
+     any file BizHawk ships -- defctrl.json gives button names and binding order,
+     not movie column order, and the real order lives in compiled CIL. The movie's
+     own LogKey line states it outright.
+
   3. tools/run-sandbox.sh
+
+Re-run `tools/host-prep.sh --force image` when sbx ships a new base image: the
+step is stamped on the package list, so it will not notice on its own.
 
 EOF

@@ -33,6 +33,10 @@ DECOMP="${FRLG_DECOMP_DIR:-$HOME/.cache/speedrun-frlg/decompiled}"
 BASE="${FRLG_SANDBOX_NAME:-frlg}"
 NAME=""            # resolved below, once the action is known
 MODEL="${FRLG_MODEL:-claude-opus-5}"
+# Built by tools/host-prep.sh's image step and loaded into the sandbox runtime's image
+# store. Not a nicety: sbx's stock claude image has no C compiler, so on the default
+# image the ROM build, the mGBA harness and every Rust link step all fail the same way.
+IMAGE="${FRLG_IMAGE:-frlg-sandbox:1}"
 CPUS="${FRLG_CPUS:-16}"
 MEMORY="${FRLG_MEMORY:-12g}"
 
@@ -119,6 +123,14 @@ esac
 [ -f "$REPO/docs/sandbox.md" ] || die "docs/sandbox.md is missing; it is the agent's system prompt"
 command -v sbx >/dev/null   || die "sbx is not on PATH"
 
+# The image lives in sbx's image store, not the host daemon's, so `docker images` is
+# not the place to look -- and a missing one fails at create time with an image pull
+# error that says nothing about this project.
+sbx template ls 2>/dev/null | awk -v ref="${IMAGE%:*}" -v tag="${IMAGE##*:}" \
+  '$1 == ref || $1 ~ "/" ref "$" { if ($2 == tag) found = 1 } END { exit !found }' \
+  || die "no sandbox image $IMAGE -- run tools/host-prep.sh (its image step builds it).
+  Present: $(sbx template ls 2>/dev/null | awk 'NR > 1 {print $1 ":" $2}' | tr '\n' ' ')"
+
 # A stale kit is a hard error at container start rather than at create time, which
 # is a slow way to find a typo. sbx validates it in a second.
 sbx kit validate .sbx/kit >/dev/null || die "the kit at .sbx/kit is not valid; run: sbx kit validate .sbx/kit"
@@ -142,6 +154,7 @@ command=(
   sbx run claude .
   --clone
   --name "$NAME"
+  --template "$IMAGE"
   --cpus "$CPUS"
   --memory "$MEMORY"
   --kit .sbx/kit
@@ -181,6 +194,7 @@ fi
 cat <<EOF
 
   sandbox   $NAME
+  image     $IMAGE
   model     $MODEL
   limits    $CPUS cpus, $MEMORY, ${DOCKER_SANDBOXES_ROOT_SIZE} root
   decomp    $DECOMP (ro)

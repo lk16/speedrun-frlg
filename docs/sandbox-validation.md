@@ -4,6 +4,24 @@ First exercise of the environment produced by `tools/host-prep.sh` + `.sbx/kit/s
 `tools/run-sandbox.sh`. Sandbox `frlg`-series, image glibc 2.43 (Ubuntu), 16 cpus, 11 GiB RAM,
 24 GiB root.
 
+> **Status: every problem below has been fixed on the host; this file is the record of the run
+> that found them, not of the environment as it stands.** The next sandbox needs a fresh run to
+> confirm. What changed, and what was verified on the host in the process:
+>
+> | | Fix | Verified on the host |
+> | --- | --- | --- |
+> | P1 | The sandbox now runs an image `tools/host-prep.sh` builds from sbx's claude image plus `build-essential binutils-arm-none-eabi libpng-dev zlib1g-dev pkg-config cmake perl`, loaded with `sbx template load` and passed by `run-sandbox.sh --template`. sbx has `-t/--template`, so the sysroot-gcc plan below was not needed. | `make tools` builds all 11 tools with gcc 15; `make COMPARE=1` produces `41cb23d8…`, matching `firered.sha1`; `make syms` gives the five addresses |
+> | P2 | `-DUSE_ELF=OFF` in `do_mgba()`, and the step now `dlopen`s the result *inside the image* before it will stamp itself done | `ldd` shows no `libelf`; the library loads; a C smoke test runs 3000 frames, feeds a key mask, reads EWRAM and writes a PNG of the title screen |
+> | P3 | Sysroot cut to `binutils-arm-none-eabi` (host-side only, for the agbcc build) and dropped from the sandbox's `PATH` entirely; `LD_LIBRARY_PATH` is now just `$MGBA_PREFIX/lib` | `python3 -c 'import ssl'` works in the image with the profile sourced; 151 MB → 20 MB |
+> | P4 | `bin/frlg-doctor` matches the proxy's own "blocked by network policy" body instead of curl's exit code — a 403 is not enough either, crates.io returns one by itself | all four verdict branches exercised, including a stubbed broken curl |
+> | P5 | `deps/rust` symlink is relative | resolves; `cargo --version` through it |
+> | P6 | The startup command appends `. /etc/profile.d/10-frlg.sh` to `/etc/sandbox-persistent.sh` (`BASH_ENV`/`CLAUDE_ENV_FILE`), and the profile is idempotent so per-shell sourcing cannot grow `PATH` | `env -i BASH_ENV=… bash -c` sees `FRLG_DEPS` and `cargo`; `PATH` identical three subshells deep |
+> | P7 | Not fixable in the sandbox. Recorded in `docs/sandbox.md` as a standing instruction: names are authoritative, order is not derivable, wait for `route/template.bk2` | — |
+> | P8 | New `sccache` step fetches the pinned musl release into `$FRLG_DEPS/bin` | `sccache --version` in the image |
+> | P9 | Dead `PATH` entries gone; the `gcc -dumpmachine` triple guess is gone with the sysroot that needed it | — |
+> | P10 | `docs/sandbox.md` states the 24 GiB root | — |
+> | P11 | `docs/sandbox.md` records the venv-has-no-pip and PEP 668 behaviour | — |
+
 **Bottom line: milestone 1 is blocked. The sandbox image ships no native C/C++ compiler and no
 native linker, and nothing in `deps/` supplies one.** That single fact takes out the ROM build,
 the symbol table, the libmgba harness *and* Rust — every executable-producing step in the project.

@@ -42,34 +42,79 @@ if [ -n "${FRLG_ARTIFACTS:-}" ]; then
 fi
 
 echo
-echo "image (not ours -- if one of these fails, extract it into the sysroot on the host)"
-# perl and bash are not optional: the decomp Makefile sets SHELL := bash -o pipefail,
-# and the `syms` rule pipes objdump through perl.
-for c in gcc g++ make python3 perl bash tar git pkg-config; do chk "$c" "$c" --version; done
-
-echo
-echo "toolchain (prebuilt on the host -- a FAIL here is usually a glibc/ABI mismatch)"
+echo "image (built by tools/host-prep.sh -- a FAIL here means the sandbox is on the stock image)"
+# The stock sbx image has no compiler at all. perl and bash are not optional either:
+# the decomp Makefile sets SHELL := bash -o pipefail, and `syms` pipes objdump through perl.
+for c in cc gcc g++ ld make python3 perl bash tar git pkg-config cmake; do chk "$c" "$c" --version; done
 chk "arm-none-eabi-as"  arm-none-eabi-as --version
 chk "arm-none-eabi-ld"  arm-none-eabi-ld --version
-chk "agbcc"             sh -c '"$FRLG_DEPS/agbcc/bin/agbcc" --version 2>&1 | head -1 || true'
-have "agbcc in decomp"  "${FRLG_DECOMP:-/nonexistent}/tools/agbcc/bin/agbcc"
-chk "cargo"             cargo --version
-chk "rustc"             rustc --version
-have "vendored crates"  "${FRLG_DEPS:-/nonexistent}/cargo-vendor"
-have "libmgba"          "${MGBA_PREFIX:-/nonexistent}/lib/libmgba.so"
-have "mgba headers"     "${MGBA_PREFIX:-/nonexistent}/include/mgba/core/core.h"
-have "bizhawk (ref)"    "${BIZHAWK_HOME:-/nonexistent}"
 chk "libpng"            pkg-config --modversion libpng
 
 echo
-echo "network (all four should fail -- that is the point)"
-for h in crates.io pypi.org github.com tasvideos.org; do
-  if curl -sS --max-time 4 -o /dev/null "https://$h" 2>/dev/null; then
-    printf '  %s !! %s %-26s reachable, the kit allowlist is too wide\n' "$YELLOW" "$OFF" "$h"; fail=1
-  else
-    printf '  %s ok  %s %-26s blocked\n' "$GREEN" "$OFF" "$h"
-  fi
-done
+echo "env (profile.d reaches login shells; almost nothing here is one)"
+# Reproduce what the harness does rather than asking this shell, which has already
+# sourced the profile and would inherit the answer: a clean environment plus the
+# BASH_ENV the harness sets. If these fail, the source line is missing from
+# /etc/sandbox-persistent.sh and only `bash -l` sees the toolchain.
+envfile="${BASH_ENV:-${CLAUDE_ENV_FILE:-/etc/sandbox-persistent.sh}}"
+chk "vars in a non-login bash" sh -c '
+  v=$(env -i HOME="$HOME" BASH_ENV="'"$envfile"'" bash -c "echo \$FRLG_DEPS")
+  [ -n "$v" ] && echo "'"$envfile"' -> $v"'
+chk "PATH in a non-login bash" sh -c '
+  env -i HOME="$HOME" PATH=/usr/bin:/bin BASH_ENV="'"$envfile"'" bash -c "command -v cargo"'
+
+echo
+echo "toolchain (prebuilt on the host -- a FAIL here is usually a glibc/ABI mismatch)"
+# A real compile, not --version: agbcc exits 0 on an unknown option, so `agbcc --version`
+# reports ok on a binary that cannot run at all.
+chk "agbcc compiles" sh -c '
+  t=$(mktemp -d); trap "rm -rf $t" EXIT
+  printf "int f(int x){return x+1;}\n" > "$t/t.i"
+  "$FRLG_DEPS/agbcc/bin/agbcc" -o "$t/t.s" "$t/t.i" >/dev/null 2>&1 || exit 1
+  grep -q "^f:" "$t/t.s" && echo "emitted arm asm"'
+have "agbcc in decomp"  "${FRLG_DECOMP:-/nonexistent}/tools/agbcc/bin/agbcc"
+chk "cargo"             cargo --version
+chk "rustc"             rustc --version
+chk "sccache"           sccache --version
+have "vendored crates"  "${FRLG_DEPS:-/nonexistent}/cargo-vendor"
+# dlopen, not stat: the whole point of the check is whether the loader can satisfy it,
+# and a libmgba.so with an unsatisfiable dependency passes every test but this one.
+chk "libmgba loads"     python3 -c 'import ctypes, os
+p = os.environ["MGBA_PREFIX"] + "/lib/libmgba.so"
+ctypes.CDLL(p)
+print(os.path.realpath(p))'
+have "mgba headers"     "${MGBA_PREFIX:-/nonexistent}/include/mgba/core/core.h"
+have "bizhawk (ref)"    "${BIZHAWK_HOME:-/nonexistent}"
+
+echo
+echo "network (blocked is the point; api.anthropic.com is the one exception)"
+# Three ways to get this wrong, all of which have happened here:
+#   - trusting curl's exit code: the proxy denies with a 403 *page*, which curl calls
+#     success, so an exit-code test reports a closed network as open;
+#   - trusting curl's exit code the other way: when curl itself is broken it fails on
+#     every host, and the same test reports an open network as closed;
+#   - trusting the 403: crates.io answers 403 to a bare request all by itself, so the
+#     status code alone cannot tell "the proxy stopped us" from "we got there".
+# The proxy names itself in the body. That is the only thing worth matching on.
+netchk() { # netchk <host> <blocked|open>
+  local resp code body verdict
+  resp=$(curl -sS --max-time 6 -w $'\n%{http_code}' "https://$1" 2>/dev/null) || resp=$'\n000'
+  code="${resp##*$'\n'}"
+  body="${resp%$'\n'*}"
+  case "$body" in
+    *"locked by network policy"*) verdict=blocked ;;
+    *) [ "$code" = 000 ] && verdict=silent || verdict=open ;;
+  esac
+  case "$2:$verdict" in
+    blocked:blocked) printf '  %s ok  %s %-26s blocked by policy (%s)\n' "$GREEN" "$OFF" "$1" "$code" ;;
+    open:open)       printf '  %s ok  %s %-26s reachable (%s)\n' "$GREEN" "$OFF" "$1" "$code" ;;
+    blocked:open)    printf '  %s !! %s %-26s answered HTTP %s itself -- reachable, the kit allowlist is too wide\n' "$YELLOW" "$OFF" "$1" "$code"; fail=1 ;;
+    open:blocked)    printf '  %s FAIL%s %-26s blocked by policy -- the kit allowlist does not cover it\n' "$RED" "$OFF" "$1"; fail=1 ;;
+    *:silent)        printf '  %s FAIL%s %-26s no answer at all -- is curl itself working? (curl -v https://%s)\n' "$RED" "$OFF" "$1" "$1"; fail=1 ;;
+  esac
+}
+for h in crates.io pypi.org github.com tasvideos.org; do netchk "$h" blocked; done
+netchk api.anthropic.com open
 
 echo
 echo "artifacts budget"

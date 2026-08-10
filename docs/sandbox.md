@@ -4,9 +4,22 @@ What is true of this repository inside the sandbox. Read it before running anyth
 nothing here is where a normal machine would put it.
 
 Run `bin/frlg-doctor` first, in every new sandbox. It checks the three mounts, executes each
-prebuilt tool, and confirms the network really is closed. The prebuilt tools were compiled on the
-host against a different glibc than this image ships, so a mismatch is possible; doctor turns it
-into one clear line instead of a confusing failure three steps later.
+prebuilt tool, `dlopen`s libmgba, and reads the network policy's own answer back. The prebuilt
+tools were compiled on the host against a different glibc than this image ships, so a mismatch is
+possible; doctor turns it into one clear line instead of a confusing failure three steps later.
+
+## The image is not the stock one
+
+This sandbox runs an image built by `tools/host-prep.sh` on top of sbx's claude image, because that
+image ships **no compiler at all** — no `cc`, no `cpp`, no native `as`/`ld`, not even `crt1.o` — and
+there is no network here to add one. The extra packages are `build-essential`,
+`binutils-arm-none-eabi`, `libpng-dev`, `zlib1g-dev`, `pkg-config` and `cmake`. So: gcc 15 and the
+ARM assembler are on `PATH` and work, `apt` is still useless, and if `bin/frlg-doctor`'s *image*
+section fails, the sandbox was started on the stock image and nothing below will build — say so and
+stop rather than working around it.
+
+Everything else — agbcc, libmgba, the Rust toolchain, the vendored crates, BizHawk — is prebuilt on
+the host and mounted read-only under `$FRLG_DEPS`.
 
 ## Why the network is closed
 
@@ -67,6 +80,14 @@ Without it, a divergence is unanswerable.
 own harness: load ROM, feed a key mask per frame, advance, read RAM, dump a PNG. Write the FFI by
 hand — there is no clang here, so bindgen is not an option. This is the loop you optimise against.
 
+The C side of that has been smoke-tested on the host against this exact image and library, so these
+are facts, not guesses: `cc prog.c -I$MGBA_PREFIX/include -L$MGBA_PREFIX/lib -lmgba -lm` links;
+`GBACoreCreate()` → `init` → `mCoreInitConfig` → `setVideoBuffer` → `loadROM(VFileOpen(path,
+O_RDONLY))` → `reset` → `setKeys`/`runFrame` boots FireRed to its title screen in a few thousand
+frames, and `busRead8` reads EWRAM. Two traps: `mgba-util/png-io.h` compiles to nothing unless you
+pass `-DUSE_PNG` and libpng's cflags, and the core logs DMA and BIOS-call chatter to stdout until
+you install a log handler — which will drown a harness that reports on stdout.
+
 **Tier 2, on the host, for acceptance.** BizHawk replays the `.bk2`. **Do not try to run BizHawk
 here.** It needs Mono, OpenAL and Lua 5.4, none of which are installed, and relocating them into a
 network-less container is not worth it for something off the inner loop.
@@ -93,9 +114,21 @@ then desyncs.
 `decompiled/include/gba/io_reg.h` defines `A_BUTTON 0x0001`, `B_BUTTON 0x0002`,
 `SELECT_BUTTON 0x0004`, `START_BUTTON 0x0008`, … `R_BUTTON 0x0100`, `L_BUTTON 0x0200`,
 `KEYS_MASK 0x03FF` — that is what the *game* reads, and what tier 1 should feed libmgba. The `.bk2`
-ordering is BizHawk's, so confirm it against the files in `$BIZHAWK_HOME` and convert explicitly.
-Keep the raw per-frame `u16` log as the canonical artifact and treat `.bk2` as an export of it;
-that way a format mistake costs a re-export, not a re-route.
+ordering is BizHawk's, and it is **not derivable from anything mounted here** — a previous session
+spent a while confirming that, so do not spend another one:
+
+- `$BIZHAWK_HOME/defctrl.json`, key `AllTrollers` → `"GBA Controller"`, is authoritative for the
+  *names*: `Up Down Left Right Start Select B A L R`, and the controller is called `GBA Controller`.
+  It gives a binding order, not a movie column order; those two coincide often enough to be a trap.
+- The real order is `ControllerDefinition.OrderedControlsFlat` for the mGBA core, which exists only
+  as compiled CIL in `dll/BizHawk.Emulation.Cores.dll`. The string heaps carry no ordering, no
+  `.bk2` ships with the release, and BizHawk must not be run here.
+
+So the order comes from a movie recorded on the host — its own `LogKey` line states it — which is
+the same file `route/template.bk2` that settles `SyncSettings`. Until that file exists, keep the raw
+per-frame `u16` log as the canonical artifact and treat `.bk2` as an export of it; a format mistake
+then costs a re-export, not a re-route. Do not invent a column order and do not infer one from
+`defctrl.json`.
 
 A `.bk2` is only real once the raw log it came from has passed tier 1 **and** the `.bk2` decodes
 back to that same log. Write that round-trip check early.
@@ -114,11 +147,18 @@ volume.
 
 ## Python
 
-Standard library only. `$FRLG_DEPS/wheels` is the offline wheelhouse and is currently empty; pip is
-configured with `--no-index`, so an install of anything else fails by design. Adding a wheel is the
-same host-side round trip as adding a crate.
+Standard library only, and it covers what this project needs: `struct`, `zipfile` (a `.bk2` is a
+zip), `hashlib`, `json`, `zlib`. `$FRLG_DEPS/wheels` is the offline wheelhouse and is currently
+empty; pip is configured with `--no-index`, so an install of anything else fails by design — a
+plain `pip install X` stops even earlier, at PEP 668's "externally-managed-environment", which is
+not the interesting error. `python3 -m venv` works but produces an environment with no pip, since
+`ensurepip` cannot reach an index. Adding a wheel is the same host-side round trip as adding a
+crate.
 
 ## Disk
+
+The sandbox root is 24 GiB and carries `~/decomp` (81 MB unpacked, ~1 GB once built) and Rust's
+`target/`. That is not tight and has been measured, so do not go hunting for space there.
 
 `$FRLG_ARTIFACTS` is a real directory on the host's disk and it is the one thing here that can eat
 it. `bin/frlg-artifacts-gc` enforces a per-directory budget — sccache 4G, runs 4G, states 3G,
