@@ -224,15 +224,23 @@ sha1 at startup.
    core configuration (`SyncSettings` beyond `SkipBios`, RTC handling) and input-delivery timing
    (when BizHawk latches a movie frame's keys vs. when `setKeys`+`runFrame` does). Getting the
    runner's Lua reporting to complete would turn "stalls in the bedroom" into a frame number and
-   a RAM diff, which is the difference between suspecting and knowing.
+   a RAM diff, which is the difference between suspecting and knowing. The BizHawk-side facts
+   are citable from inside the sandbox: `$FRLG_ARTIFACTS/reference/bizhawk-2.11.1/` holds the
+   2.11.1 sources for the frame loop, `SyncSettings`, and the movie latch path (see its README),
+   and `$FRLG_DEPS/mgba/src.tar.gz` carries the native glue (`src/platform/bizhawk/`).
 2. **The runner's Lua path is still unexercised end to end** (`tools/verify-runner.lua`,
    memory-domain names especially). It has loaded and played a movie but never written a
    complete status/RAM report.
 
 ### Requesting a run, and reading the answer
 
-`tools/verify-runner.sh` drains the queue on the host. Both sides depend on this contract, so it
-lives here rather than in either script:
+`tools/verify-runner.sh` drains the queue on the host. The Lua it hands EmuHawk is
+`$FRLG_ARTIFACTS/verify/verify-runner.lua` **when that file exists**, else the checked-in
+`tools/verify-runner.lua` — the override exists because the runner executes from the host
+checkout while Lua fixes are authored in the sandbox's clone, and iterating on the Lua must not
+need a repo round trip per attempt. When the override version stabilises, fold it back into the
+repo and delete the override. Both sides depend on this contract, so it lives here rather than
+in either script:
 
     in   $FRLG_ARTIFACTS/verify/queue/<id>.bk2     the movie to replay
          $FRLG_ARTIFACTS/verify/queue/<id>.json    optional, what the sandbox expects:

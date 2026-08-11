@@ -82,6 +82,17 @@ run_one() {
   local dump="$work/ram.bin" status="$work/status.txt"
   mkdir -p "$USERDATA"
 
+  # The Lua the sandbox can iterate on: an override dropped in artifacts wins over the
+  # checked-in copy. This runner executes from the *host* checkout while Lua fixes are
+  # authored in the sandbox's clone, so without the override every tweak would need a
+  # repo round trip before it could even be tried.
+  local lua="$ARTIFACTS/verify/verify-runner.lua"
+  if [ -f "$lua" ]; then
+    say "using the artifacts-side Lua override: $lua"
+  else
+    lua="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/verify-runner.lua"
+  fi
+
   # EmuHawk exits when the script calls client.exit(); the timeout is for the case where it
   # does not get that far. --config keeps its config out of the deps tree; --userdata is NOT
   # a data directory (it is movie key:value metadata, and a bare path makes the flag parser
@@ -90,7 +101,7 @@ run_one() {
   timeout "$TIMEOUT" "$BIZHAWK/EmuHawkMono.sh" \
     --config="$USERDATA/config.ini" \
     --movie="$bk2" \
-    --lua="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/verify-runner.lua" \
+    --lua="$lua" \
     "$ROM" >"$work/emuhawk.log" 2>&1
   local rc=$?
 
