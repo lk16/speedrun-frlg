@@ -5,7 +5,7 @@
   "tuning": {
     "turn_hold": 8
   },
-  "total_frames": 10946,
+  "total_frames": 10531,
   "segments": [
     {
       "name": "01-boot",
@@ -108,10 +108,10 @@
       "goal": "gBattleOutcome == B_OUTCOME_WON",
       "parent": "08-battle-start",
       "log": "route/logs/09-battle-win.ilog",
-      "digest": "8debfef6b6aec64e0a3b6c1e94133a37ffc527ba",
-      "frames": 3322,
+      "digest": "596059f8311c0ad48d759d71fd265dc65899a36e",
+      "frames": 2907,
       "start_frame": 7624,
-      "ram_hash": "5f82b4e397ec072dfbcfe3648bd21d32b572da76",
+      "ram_hash": "0282fc278b634f900f0ddff775e42c7d38d25ecd",
       "tier1": true,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     }

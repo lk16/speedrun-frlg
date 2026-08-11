@@ -159,6 +159,7 @@ pub struct Observer {
     g_save_block1_ptr: u32,
     g_battle_outcome: u32,
     g_battle_mons: u32,
+    g_battle_main_func: u32,
     g_battle_type_flags: u32,
     g_rng_value: u32,
     g_player_avatar: u32,
@@ -182,6 +183,7 @@ impl Observer {
             g_save_block1_ptr: addr("gSaveBlock1Ptr")?,
             g_battle_outcome: addr("gBattleOutcome")?,
             g_battle_mons: addr("gBattleMons")?,
+            g_battle_main_func: addr("gBattleMainFunc")?,
             g_battle_type_flags: addr("gBattleTypeFlags")?,
             g_rng_value: addr("gRngValue")?,
             g_player_avatar: addr("gPlayerAvatar")?,
@@ -405,6 +407,17 @@ impl Observer {
 
     pub fn battle_type_flags(&self, emu: &mut Emu) -> u32 {
         emu.read32(self.g_battle_type_flags)
+    }
+
+    /// True while the battle is waiting for action selection:
+    /// `gBattleMainFunc` points inside `HandleTurnActionSelectionState`
+    /// (`decompiled/src/battle_main.c:3097`), which `BattleTurnPassed` re-arms
+    /// at the top of every turn (`battle_main.c:2998`). One visit to this
+    /// state is one turn, which is what makes it a per-turn decision point
+    /// for the battle search.
+    pub fn battle_choosing_actions(&self, emu: &mut Emu) -> bool {
+        let func = emu.read32(self.g_battle_main_func);
+        matches!(self.syms.covering(func), Some((sym, _)) if sym == "HandleTurnActionSelectionState")
     }
 
     /// `gBattleMons[i]` -- species, level, HP, max HP.

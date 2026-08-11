@@ -15,8 +15,7 @@ use frlg_emu::{keys, Emu};
 
 use crate::nav::{self, Goal};
 use crate::observe::{self, Observer, B_OUTCOME_WON, VAR_OAKS_LAB_SCENE, VAR_STARTER_MON};
-use crate::record::{Feed, Recorder, RouteError};
-use crate::search;
+use crate::record::{Feed, Recorder, RouteError, Trial};
 
 /// `data/maps/map_groups.json`, `group_order` index and position in the group.
 pub const PLAYERS_HOUSE_2F: (u8, u8) = (4, 1);
@@ -471,49 +470,143 @@ fn battle_start() -> Segment {
 /// Fight, and manipulate the fight.
 ///
 /// A takes FIGHT and then the first move and advances every message, so a
-/// battle is one mash. Whether that mash *wins* is not a given: both mons are
-/// level 5 with no type-effective moves, criticals are suppressed for the first
-/// battle unless the tutorial has said its piece
-/// (`decompiled/src/battle_script_commands.c:1199`), and what is left is the
-/// 85-100% damage roll (`:1558`) and accuracy (`:1093`), all off `gRngValue`
-/// (`decompiled/src/random.c`).
+/// battle is one mash *plus a delay plan*. Whether it wins -- and how long it
+/// runs -- is decided by the RNG stream: both mons are level 5 with no
+/// type-effective moves, criticals are suppressed only until the tutorial has
+/// said its piece (`decompiled/src/battle_script_commands.c:1199`), and what
+/// is left is the 85-100% damage roll (`:1558`) and accuracy (`:1093`), all
+/// off `gRngValue` (`decompiled/src/random.c`), which advances once per frame
+/// (`decompiled/src/main.c:412`). Idle frames are therefore the manipulation
+/// primitive, and there is one useful place to spend them besides the start:
+/// each turn's action selection, whose state the battle re-enters once per
+/// turn (`BattleTurnPassed`, `decompiled/src/battle_main.c:2998`).
 ///
-/// Measured: delaying the mash by one frame flips the battle from a win to a
-/// loss, and back again, all the way up (`docs/route.md`). So the segment does
-/// not accept the roll it is handed -- it tries a delay at a time and commits
-/// the shortest one that wins. A route that merely *happened* to win would go
-/// on happening to lose every time something upstream of it changed by a frame.
+/// The search has two stages, both scored on total frames of the whole
+/// battle, wins only:
+///
+/// 1. **Start delay, 0..64.** Delaying the first press by one frame flips
+///    win to loss and back (`docs/route.md`), and winning battles on
+///    adjacent delays differ by hundreds of frames -- while the widest delay
+///    costs 63. Sampling widely is cheap expected profit.
+/// 2. **Per-turn delays, greedy.** For each turn of the stage-1 winner, try
+///    idling 1..16 frames at that turn's selection state, replaying the rest
+///    of the battle in full each time -- a shorter *battle* is the only
+///    accepted improvement, never a shorter turn, which is the same
+///    measure-through-the-fight rule the `turn_hold` sweep taught. Adopting
+///    an improvement re-rolls everything after it, so later turns are
+///    searched on the improved stream.
 fn battle_win() -> Segment {
-    /// Wide enough to cross the win/lose alternation several times, which is
-    /// what makes "no delay wins" a finding rather than a coincidence.
-    const DELAYS: std::ops::Range<usize> = 0..16;
+    const START_DELAYS: std::ops::Range<usize> = 0..64;
+    const TURN_DELAYS: std::ops::Range<usize> = 1..16;
+    /// More than any winning battle here has ever used; a plan that runs
+    /// past it loses rather than aborting the build.
+    const FRAME_BUDGET: usize = 20000;
 
     Segment {
         name: "09-battle-win",
         goal: "gBattleOutcome == B_OUTCOME_WON".into(),
         run: Box::new(|rec, obs| {
+            let start = rec.save_state()?;
+
+            // One battle under a delay plan: plan[0] idle frames before any
+            // input, plan[k] idle frames on arriving at the k-th turn's
+            // action selection. Timeouts are losses, not errors. Returns the
+            // masks fed, whether it won, and how many turns it saw.
+            let run_plan = |rec: &mut Recorder,
+                            plan: &[usize]|
+             -> Result<(Vec<u16>, bool, usize), RouteError> {
+                rec.emu().load_state(&start)?;
+                let mut trial = Trial::new(rec.emu());
+                let mut turns = 0usize;
+                trial.idle(plan.first().copied().unwrap_or(0))?;
+                let won = loop {
+                    // To this turn's selection state, or the end.
+                    let to_menu = trial.advance_while(
+                        "the battle menu or the end",
+                        &[keys::A, 0],
+                        FRAME_BUDGET,
+                        |emu| obs.battle_outcome(emu) != 0 || obs.battle_choosing_actions(emu),
+                    );
+                    match to_menu {
+                        Err(RouteError::Timeout { .. }) => break false,
+                        other => other?,
+                    };
+                    if obs.battle_outcome(trial.core()) != 0 {
+                        break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
+                    }
+                    turns += 1;
+                    trial.idle(*plan.get(turns).unwrap_or(&0))?;
+                    // Commit this turn's actions: mash until the state exits.
+                    let to_turn = trial.advance_while(
+                        "the turn to resolve",
+                        &[keys::A, 0],
+                        FRAME_BUDGET,
+                        |emu| obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu),
+                    );
+                    match to_turn {
+                        Err(RouteError::Timeout { .. }) => break false,
+                        other => other?,
+                    };
+                    if obs.battle_outcome(trial.core()) != 0 {
+                        break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
+                    }
+                };
+                Ok((trial.into_inputs(), won, turns))
+            };
+
+            // Stage 1: start delay.
+            let mut best: Option<(Vec<u16>, Vec<usize>, usize)> = None;
             let mut wins = 0usize;
-            let mut tried = 0usize;
-            let (delay, frames) = search::best_of(
-                rec,
-                DELAYS,
-                |trial, delay| {
-                    trial.idle(delay)?;
-                    trial.mash_until("the battle to end", keys::A, 20000, |emu| {
-                        obs.battle_outcome(emu) != 0
-                    })?;
-                    Ok(obs.battle_outcome(trial.core()) == B_OUTCOME_WON)
-                },
-                |_, attempt| {
-                    tried += 1;
-                    wins += attempt.ok as usize;
-                },
-            )?;
-            // The segment cannot reach the ledger's progress channel, and a
-            // search that reports nothing is a black box.
+            for delay in START_DELAYS {
+                let (inputs, won, turns) = run_plan(rec, &[delay])?;
+                wins += won as usize;
+                if won
+                    && best
+                        .as_ref()
+                        .is_none_or(|(seen, _, _)| inputs.len() < seen.len())
+                {
+                    best = Some((inputs, vec![delay], turns));
+                }
+            }
+            let (mut best_inputs, mut plan, turns) = best.ok_or_else(|| RouteError::Timeout {
+                what: "any start delay to win the battle".to_string(),
+                budget: START_DELAYS.end,
+                frames: rec.frames(),
+            })?;
             eprintln!(
-                "      battle: {wins}/{tried} delays win, took delay {delay} at {frames} frames"
+                "      battle stage 1: {wins}/{} start delays win, delay {} at {} frames",
+                START_DELAYS.end,
+                plan[0],
+                best_inputs.len()
             );
+
+            // Stage 2: per-turn delays, greedy on the winning stream. The
+            // adopted plan's turn count can shrink as the battle shortens;
+            // stale turn indices past the end simply change nothing and
+            // cannot win, so iterating the stage-1 count is safe.
+            for turn in 1..=turns {
+                for delay in TURN_DELAYS {
+                    let mut candidate = plan.clone();
+                    candidate.resize(turn + 1, 0);
+                    candidate[turn] = delay;
+                    let (inputs, won, _) = run_plan(rec, &candidate)?;
+                    if won && inputs.len() < best_inputs.len() {
+                        eprintln!(
+                            "      battle stage 2: turn {turn} delay {delay} -> {} frames",
+                            inputs.len()
+                        );
+                        best_inputs = inputs;
+                        plan = candidate;
+                    }
+                }
+            }
+
+            eprintln!(
+                "      battle: plan {plan:?}, {} frames, {turns} turns",
+                best_inputs.len()
+            );
+            rec.emu().load_state(&start)?;
+            rec.play(&best_inputs)?;
             Ok(())
         }),
         reached: Box::new(|obs, emu| obs.battle_outcome(emu) == B_OUTCOME_WON),
