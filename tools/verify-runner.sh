@@ -71,11 +71,21 @@ run_one() {
   local id="$1"
   local bk2="$QUEUE/$id.bk2" req="$QUEUE/$id.json"
   local expect_frames="" expect_ram="" expect_ilog=""
+  local trace_file="" trace_domain="" trace_offset=""
 
   if [ -f "$req" ]; then
     expect_frames=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("frames") or "")' "$req" 2>/dev/null)
     expect_ram=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("ram_hash") or "")' "$req" 2>/dev/null)
     expect_ilog=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("ilog_sha1") or "")' "$req" 2>/dev/null)
+    # The per-frame probe trace `frlg route export` queues beside the movie
+    # (docs/route.md): lets the Lua turn "desync" into "desync at frame N".
+    trace_file=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("trace") or {}).get("file") or "")' "$req" 2>/dev/null)
+    trace_domain=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("trace") or {}).get("domain") or "")' "$req" 2>/dev/null)
+    trace_offset=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("trace") or {}).get("offset") if (json.load(open(sys.argv[1])).get("trace") or {}).get("offset") is not None else "")' "$req" 2>/dev/null)
+  fi
+  local trace_path=""
+  if [ -n "$trace_file" ] && [ -f "$QUEUE/$trace_file" ]; then
+    trace_path="$QUEUE/$trace_file"
   fi
 
   local work; work=$(mktemp -d)
@@ -98,6 +108,8 @@ run_one() {
   # a data directory (it is movie key:value metadata, and a bare path makes the flag parser
   # throw "malformed userdata" and exit 1 -- found the hard way on the first real replay).
   FRLG_VERIFY_DUMP="$dump" FRLG_VERIFY_STATUS="$status" FRLG_VERIFY_FRAMES="${expect_frames:-0}" \
+  FRLG_VERIFY_TRACE="$trace_path" FRLG_VERIFY_TRACE_DOMAIN="$trace_domain" \
+  FRLG_VERIFY_TRACE_OFFSET="$trace_offset" \
   timeout "$TIMEOUT" "$BIZHAWK/EmuHawkMono.sh" \
     --config="$USERDATA/config.ini" \
     --movie="$bk2" \
@@ -105,7 +117,7 @@ run_one() {
     "$ROM" >"$work/emuhawk.log" 2>&1
   local rc=$?
 
-  local verdict notes ram=""
+  local verdict notes ram="" desync_frame=""
   if [ $rc -eq 124 ]; then
     verdict=error
     notes="EmuHawk did not finish within ${TIMEOUT}s -- most likely a modal dialog. Log: $(tail -3 "$work/emuhawk.log" | tr '\n' ' ')"
@@ -117,28 +129,43 @@ run_one() {
     # played rather than merely loaded.
     local played; played=$(grep -m1 '^played=' "$status" | cut -d= -f2)
     local frames; frames=$(grep -m1 '^frames=' "$status" | cut -d= -f2)
+    desync_frame=$(grep -m1 '^desync_frame=' "$status" | cut -d= -f2)
+    local desync_got; desync_got=$(grep -m1 '^desync_got=' "$status" | cut -d= -f2)
+    local desync_want; desync_want=$(grep -m1 '^desync_want=' "$status" | cut -d= -f2)
     ram=$( [ -s "$dump" ] && sha1 "$dump" )
+    local probe=""
+    if [ -n "$desync_frame" ] && [ "$desync_frame" != "-1" ]; then
+      probe="; probe first differs at frame $desync_frame (got $desync_got, tier 1 had $desync_want)"
+    elif [ "$desync_frame" = "-1" ]; then
+      probe="; the trace compare itself failed in Lua (read API?), no frame number"
+      desync_frame=""
+    fi
     if [ "$played" != "yes" ]; then
       verdict=error
-      notes="the movie loaded but did not play to its end (stopped at frame ${frames:-?})"
+      notes="the movie loaded but did not play to its end (stopped at frame ${frames:-?})$probe"
     elif [ -n "$expect_ram" ] && [ -n "$ram" ] && [ "$expect_ram" != "$ram" ]; then
       verdict=desync
-      notes="replayed $frames frames; EWRAM+IWRAM fingerprint $ram, the sandbox expected $expect_ram"
+      notes="replayed $frames frames; EWRAM+IWRAM fingerprint $ram, the sandbox expected $expect_ram$probe"
     elif [ -n "$expect_ram" ] && [ -z "$ram" ]; then
       verdict=error
-      notes="replayed $frames frames but produced no memory dump, so nothing was compared"
+      notes="replayed $frames frames but produced no memory dump, so nothing was compared$probe"
+    elif [ -n "$desync_frame" ]; then
+      # The final fingerprint matched (or was never expected) but the probe
+      # diverged mid-run: report it, do not call it a pass.
+      verdict=desync
+      notes="replayed $frames frames$probe"
     else
       verdict=pass
-      notes="replayed $frames frames${expect_ram:+; fingerprint matches}"
+      notes="replayed $frames frames${expect_ram:+; fingerprint matches}${trace_path:+; probe trace matched every frame}"
     fi
   fi
 
   EXPECT_JSON=$(python3 -c 'import json,sys; print(json.dumps({"ram_hash": sys.argv[1] or None, "ilog_sha1": sys.argv[2] or None}))' "$expect_ram" "$expect_ilog")
   export EXPECT_JSON
   python3 - "$RESULTS/$id.json" "$id" "$verdict" "$notes" "$ram" \
-           "$(sha1 "$bk2")" "$(sha1 "$ROM")" "$BIZHAWK_VERSION" <<'PY'
+           "$(sha1 "$bk2")" "$(sha1 "$ROM")" "$BIZHAWK_VERSION" "$desync_frame" <<'PY'
 import json, os, sys, datetime
-out, id, verdict, notes, ram, bk2, rom, biz = sys.argv[1:9]
+out, id, verdict, notes, ram, bk2, rom, biz, desync = sys.argv[1:10]
 expect = json.loads(os.environ["EXPECT_JSON"])
 with open(out, "w") as f:
     json.dump({
@@ -148,7 +175,7 @@ with open(out, "w") as f:
         "rom_sha1": rom or None,
         "bizhawk_version": biz or None,
         "verdict": verdict,
-        "desync_frame": None,
+        "desync_frame": int(desync) if desync else None,
         "ram_hash": ram or None,
         "expected_ram_hash": expect["ram_hash"],
         "finished_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -159,6 +186,7 @@ PY
 
   rm -rf "$work"
   rm -f "$bk2" "$req"
+  [ -n "$trace_path" ] && rm -f "$trace_path"
   case "$verdict" in
     pass)   printf '  %s ok  %s %-24s %s\n' "$GREEN" "$OFF" "$id" "$notes" ;;
     desync) printf '  %s !! %s %-24s %s\n' "$YELLOW" "$OFF" "$id" "$notes" ;;
