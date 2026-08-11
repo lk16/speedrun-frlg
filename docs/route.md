@@ -237,16 +237,28 @@ sha1 at startup.
 **Still open, in order:**
 
 1. **A tier-2 result for `route-12713f-a4ad4280bbdc`.** The boot fix (Status above) predicts a
-   pass; nothing is claimed until the result lands. If it desyncs again, the per-frame probe
-   trace queued beside the movie should this time say at which frame, and the next suspects in
-   line are input-delivery timing (when BizHawk latches a movie frame's keys vs.
-   `setKeys`+`runFrame`) and the rest of `SyncSettings` — both citable from
-   `$FRLG_ARTIFACTS/reference/bizhawk-2.11.1/` and `$FRLG_DEPS/mgba/src.tar.gz`
-   (`src/platform/bizhawk/`).
-2. **The runner's Lua path is still unexercised end to end** (`tools/verify-runner.lua`,
-   memory-domain names especially). It has loaded and played a movie but never written a
-   complete status/RAM report. It now also carries the trace compare (below), which is equally
-   unexercised.
+   pass; nothing is claimed until the result lands. The suspects that were next in line have
+   since been checked against the sources (2026-08-12 journal entry) and came up equal:
+   input latch order (`bizinterface.c:518` does `setKeys` then runs the frame, exactly tier 1's
+   `frlg_run_frame`), movie latch indexing (`MovieSession.cs:322` latches log row
+   `Emulator.Frame`, so row 0 drives the first advanced frame, like tier 1's `log[0]`),
+   savedata initial contents (both tiers see 0xFF-filled flash: `bizinterface.c:347` vs
+   `GBASavedataInitFlash` in `savedata.c`, which memsets 0xFF when no VFile is attached), and
+   the idle loop (mGBA's default `IDLE_LOOP_REMOVE`, `gba.c:120`, is a no-op because BPRE's
+   override entry says `GBA_IDLE_LOOP_NONE`, `overrides.c:134` — equal to BizHawk's forced
+   `IDLE_LOOP_IGNORE`). If the replay still desyncs, the probe trace's frame number is the
+   lead; there is no named suspect left to guess at.
+2. **The runner's Lua path is still unexercised end to end** (`tools/verify-runner.lua`). It
+   has loaded and played a movie but never written a complete status/RAM report. Its API
+   assumptions are no longer guesses, though: every call is checked against BizHawk 2.11.1's
+   shipped Lua docs (`$BIZHAWK_HOME/Lua/_docs_luacats/`) and assemblies — signatures, the
+   zero-indexed `readbyterange` table, `movie.mode()`'s exact strings, the `EWRAM`/`IWRAM`
+   domain names, the `framecount-1` indexing. It also now writes its status file
+   incrementally (on the first probe mismatch, on a ~300-frame heartbeat, and from
+   `event.onexit`), so a timed-out or hand-closed run still reports the frame it reached —
+   the 2026-08-11 watched session recorded nothing for exactly this reason. The fixed copy is
+   installed as the artifacts-side override, so the next host run uses it even if the host
+   checkout is behind.
 
 ### Requesting a run, and reading the answer
 
@@ -289,6 +301,8 @@ green. The runner always writes a result, including for its own failures, and al
 queue entry: a request that died in a dialog must not look like one nobody has picked up yet.
 `bin/frlg-doctor` prints the newest verdicts at startup.
 
-The runner has **played a movie but never written a complete Lua report**, so treat its
-BizHawk-side details (`tools/verify-runner.lua` — the memory-domain names and the trace-compare
-read API in particular) as the least-tested code in this repository.
+The runner has **played a movie but never written a complete Lua report**, so
+`tools/verify-runner.lua` remains the least-*exercised* code in this repository — but its API
+surface is desk-checked against BizHawk's own shipped Lua documentation and assemblies (open
+item 2 above lists what was verified), and its status file is written incrementally, so even a
+run that dies reports the frame it reached and any desync frame already found.

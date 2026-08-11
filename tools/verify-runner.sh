@@ -117,29 +117,34 @@ run_one() {
     "$ROM" >"$work/emuhawk.log" 2>&1
   local rc=$?
 
+  # The Lua rewrites the status file as it goes (first probe mismatch, heartbeat, onexit), so
+  # even a timed-out or killed run usually leaves the frame it reached and any desync frame it
+  # had already found. Parse whatever is there before deciding the verdict.
   local verdict notes ram="" desync_frame=""
-  if [ $rc -eq 124 ]; then
-    verdict=error
-    notes="EmuHawk did not finish within ${TIMEOUT}s -- most likely a modal dialog. Log: $(tail -3 "$work/emuhawk.log" | tr '\n' ' ')"
-  elif [ ! -s "$status" ]; then
-    verdict=error
-    notes="EmuHawk exited ($rc) without the Lua script reporting. Log: $(tail -3 "$work/emuhawk.log" | tr '\n' ' ')"
-  else
-    # The Lua side writes key=value lines; it is the only thing that knows the movie actually
-    # played rather than merely loaded.
-    local played; played=$(grep -m1 '^played=' "$status" | cut -d= -f2)
-    local frames; frames=$(grep -m1 '^frames=' "$status" | cut -d= -f2)
+  local played="" frames="" desync_got="" desync_want="" probe=""
+  if [ -s "$status" ]; then
+    played=$(grep -m1 '^played=' "$status" | cut -d= -f2)
+    frames=$(grep -m1 '^frames=' "$status" | cut -d= -f2)
     desync_frame=$(grep -m1 '^desync_frame=' "$status" | cut -d= -f2)
-    local desync_got; desync_got=$(grep -m1 '^desync_got=' "$status" | cut -d= -f2)
-    local desync_want; desync_want=$(grep -m1 '^desync_want=' "$status" | cut -d= -f2)
-    ram=$( [ -s "$dump" ] && sha1 "$dump" )
-    local probe=""
+    desync_got=$(grep -m1 '^desync_got=' "$status" | cut -d= -f2)
+    desync_want=$(grep -m1 '^desync_want=' "$status" | cut -d= -f2)
     if [ -n "$desync_frame" ] && [ "$desync_frame" != "-1" ]; then
       probe="; probe first differs at frame $desync_frame (got $desync_got, tier 1 had $desync_want)"
     elif [ "$desync_frame" = "-1" ]; then
       probe="; the trace compare itself failed in Lua (read API?), no frame number"
       desync_frame=""
     fi
+  fi
+  if [ $rc -eq 124 ]; then
+    verdict=error
+    notes="EmuHawk did not finish within ${TIMEOUT}s -- most likely a modal dialog. Last Lua status: frame ${frames:-none}$probe. Log: $(tail -3 "$work/emuhawk.log" | tr '\n' ' ')"
+  elif [ ! -s "$status" ]; then
+    verdict=error
+    notes="EmuHawk exited ($rc) without the Lua script reporting. Log: $(tail -3 "$work/emuhawk.log" | tr '\n' ' ')"
+  else
+    # The Lua side is the only thing that knows the movie actually played rather than merely
+    # loaded.
+    ram=$( [ -s "$dump" ] && sha1 "$dump" )
     if [ "$played" != "yes" ]; then
       verdict=error
       notes="the movie loaded but did not play to its end (stopped at frame ${frames:-?})$probe"
