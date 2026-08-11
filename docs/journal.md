@@ -29,6 +29,12 @@ Two observations worth keeping:
   is the artifact and it verifies -- but battle numbers are only comparable within one drive
   shape.
 
+**Answered while the sweep ran: the committed battle's one crit is ours.** Tracing
+`gCritMultiplier` and `gBattlerAttacker` over the replayed `09-battle-win` log shows a single
+crit window (multiplier 2 from battle frame 1488) with attacker 0, `B_POSITION_PLAYER_LEFT`
+(`decompiled/include/constants/battle.h:28`). The previous route ate a *rival* crit; this
+stream hands the crit to us. Luck found, not aimed for -- noted in `docs/route.md`.
+
 **Unverified.** Tier 2 for `route-10531f-e037421ddd87`: queued, not replayed. The `turn_hold`
 sweep on the final code is running as this is written; its result lands in the next entry.
 

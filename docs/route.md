@@ -235,9 +235,12 @@ first:
   adopted delay being worth ~1200 frames says the landscape is rugged enough to reward it. The
   search also still never varies *what* is pressed: move choice is untouched, and both crit
   rolls (live from Oak's "inflicting damage is key" line onwards, see the RNG section) and the
-  85-100% damage rolls are only reached through delays. Whether the current battle contains a
-  crit either way has not been checked; the previous route's battle demonstrably ate a rival
-  crit on the tier-2 recording.
+  85-100% damage rolls are only reached through delays. Measured on the committed battle
+  (`gCritMultiplier` and `gBattlerAttacker` traced over the replayed log): exactly one
+  critical hit, and it is *ours* -- attacker 0 is `B_POSITION_PLAYER_LEFT`
+  (`decompiled/include/constants/battle.h:28`) -- where the previous route's battle ate a
+  rival crit on the tier-2 recording. The search stumbled into the right side of that roll;
+  nothing yet aims for it.
 - **The intro's text, 3699 frames of `01`-`03`, still prints at MID.** The option menu hangs off
   the field start menu (`StartMenuOptionCallback`, `decompiled/src/start_menu.c:531`), and there
   is no field until the bedroom, so every box before `04-options` pays 4 frames a character no
