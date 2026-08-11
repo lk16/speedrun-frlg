@@ -42,8 +42,9 @@ if [ -n "${FRLG_ARTIFACTS:-}" ]; then
 fi
 
 # Docs and route notes cite paths as `decompiled/...`, but the checkout lives outside the
-# repo (it has to: an 81 MB tree inside the workspace hangs sandbox create -- see
-# docs/sandbox-validation.md) and the link is gitignored, so every sandbox starts without it.
+# repo (it has to: a mount nested inside the workspace hangs sandbox create -- see the note
+# on DECOMP_DEFAULT in tools/host-prep.sh) and the link is gitignored, so every sandbox
+# starts without it.
 # Recreating it here is idempotent and saves the citations from dangling.
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 if [ -n "${FRLG_DECOMP:-}" ] && [ -d "$FRLG_DECOMP" ]; then

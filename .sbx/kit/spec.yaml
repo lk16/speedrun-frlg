@@ -2,8 +2,9 @@
 # either baked into the sandbox image or prebuilt on the host by tools/host-prep.sh and
 # mounted read-only, so nothing here has to reach the network -- and the agent cannot
 # reach it either, which is the point: the route has to come out of decompiled/, not out
-# of a web search. Note that the image is not the stock one; run-sandbox.sh passes
-# --template, and on sbx's own claude image there is no compiler and nothing builds.
+# of a web search. Note that the image is not the stock one; the `template` in
+# .box/config.json names it, and on sbx's own claude image there is no compiler and
+# nothing builds.
 schemaVersion: "2"
 kind: mixin
 name: speedrun-frlg-network-policy
@@ -44,7 +45,7 @@ setup:
 
           if [ -z "$DEPS" ] || [ -z "$DECOMP" ] || [ -z "$ART" ]; then
             echo "frlg startup: mount not found (deps='$DEPS' decomp='$DECOMP' artifacts='$ART')" >&2
-            echo "frlg startup: run tools/host-prep.sh on the host, then tools/run-sandbox.sh --print" >&2
+            echo "frlg startup: run tools/host-prep.sh on the host, then box config" >&2
           fi
 
           # One place that says where everything is. Every script in this repo reads these

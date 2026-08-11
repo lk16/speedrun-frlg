@@ -14,8 +14,8 @@
 # and is mounted read-only into the sandbox as a single tree. It lives outside the
 # repository on purpose: it is a gigabyte of machine-local build output that can be
 # regenerated at any time, which is not something a source tree should carry.
-# tools/run-sandbox.sh reads the same two defaults; override with FRLG_DEPS_DIR
-# and FRLG_ARTIFACTS_DIR if you keep them elsewhere.
+# Override with FRLG_DEPS_DIR and FRLG_ARTIFACTS_DIR if you keep them elsewhere, and
+# point .box/mounts.json at wherever they ended up -- that file is what mounts them.
 #
 # The one exception is the `image` step, which builds the sandbox image and hands it
 # to the sandbox runtime's own image store. sbx's stock image ships no compiler, so
@@ -44,9 +44,9 @@ SCCACHE_VER="${SCCACHE_VER:-0.17.0}"      # musl release tarball, so it runs on 
 # LD_LIBRARY_PATH, where it shadows the image's own OpenSSL and curl. Deriving an image
 # instead is one apt-get, matches the image's own glibc exactly, and leaves
 # LD_LIBRARY_PATH clean. `sbx template load` puts it in the sandbox runtime's image
-# store; tools/run-sandbox.sh passes it with -t.
+# store; the `template` in .box/config.json is what names it at create time.
 IMAGE_BASE="${FRLG_IMAGE_BASE:-docker.io/docker/sandbox-templates:claude-code-docker}"
-IMAGE_TAG="${FRLG_IMAGE:-frlg-sandbox:1}" # tools/run-sandbox.sh reads FRLG_IMAGE too
+IMAGE_TAG="${FRLG_IMAGE:-frlg-sandbox:1}" # must match .box/config.json's `template`
 IMAGE_PKGS=(build-essential binutils-arm-none-eabi libpng-dev zlib1g-dev pkg-config cmake perl)
 
 # .deb packages extracted into a sysroot. This is host-side only now: build.sh in the
@@ -353,9 +353,15 @@ do_artifacts() {
 }
 
 # ------------------------------------------------------------------ run -------
+# The decomp must live outside the repository, and this is load-bearing rather than
+# tidiness: `sbx create --clone` mounts the workspace and clones it, and a second mount
+# that is a subdirectory of that same workspace wedges create. The sandbox is built, its
+# startup commands all finish, then the container disappears and the client blocks forever
+# having printed nothing. Verified by elimination: with deps or artifacts alone create
+# exits 0; with a nested path it hangs every time.
 [ -d "$DECOMP_DEFAULT/src" ] || die "$DECOMP_DEFAULT is not a pokefirered checkout.
   It must live outside the repository: a mount nested inside the workspace hangs
-  sbx create. See the note in tools/run-sandbox.sh."
+  sbx create, silently and forever."
 [ "$MODE" = check ] || need_host
 mkdir -p "$DEPS" "$WORK"
 : > "$DEPS/MANIFEST.new"
@@ -404,7 +410,9 @@ Next, on the host, once:
      not movie column order, and the real order lives in compiled CIL. The movie's
      own LogKey line states it outright.
 
-  3. tools/run-sandbox.sh
+  3. box config, then box run. The mounts this script filled in are named in
+     .box/config.json and given their paths on this machine in the gitignored
+     .box/mounts.json; box refuses to start unless the two match.
 
 Re-run `tools/host-prep.sh --force image` when sbx ships a new base image: the
 step is stamped on the package list, so it will not notice on its own.
