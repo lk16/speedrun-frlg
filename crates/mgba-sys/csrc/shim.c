@@ -9,6 +9,24 @@
  * with, and Rust only ever sees the flat functions below.
  */
 
+/* First on purpose: 0.11's common.h no longer includes flags.h (the mGBA build
+ * passes these as -D flags instead), but the installed flags.h still records
+ * what the .so was built with -- ENABLE_VFS in particular, which gates the
+ * VFileOpen declaration in mgba-util/vfs.h. */
+#include <mgba/flags.h>
+
+/* flags.h lies about exactly one flag at commit 94b1578f: CMakeLists.txt:869
+ * does `list(APPEND ENABLES VFS DIRECTORIES)` whenever ENABLE_VFS is on, so the
+ * library is compiled with -DENABLE_DIRECTORIES -- but no cmake *variable* of
+ * that name ever exists, so flags.h's `#cmakedefine ENABLE_DIRECTORIES` stays
+ * undefined. The flag gates `struct mDirectorySet dirs` (4152 bytes) embedded
+ * in struct mCore ahead of every function pointer, so omitting it shifts the
+ * entire vtable and the first call lands on a NULL slot. Found the hard way;
+ * verified by dumping the real vtable offset (4856) against offsetof. */
+#if defined(ENABLE_VFS) && !defined(ENABLE_DIRECTORIES)
+#define ENABLE_DIRECTORIES
+#endif
+
 #include <mgba/core/core.h>
 #include <mgba/core/interface.h>
 #include <mgba/core/log.h>
@@ -24,7 +42,7 @@
 
 struct FrlgCore {
 	struct mCore* core;
-	color_t* video;
+	mColor* video;
 	unsigned width;
 	unsigned height;
 };
@@ -83,8 +101,8 @@ struct FrlgCore* frlg_core_new(const char* rom_path) {
 
 	mCoreInitConfig(h->core, NULL);
 
-	h->core->desiredVideoDimensions(h->core, &h->width, &h->height);
-	h->video = calloc((size_t) h->width * h->height, sizeof(color_t));
+	h->core->baseVideoSize(h->core, &h->width, &h->height);
+	h->video = calloc((size_t) h->width * h->height, sizeof(mColor));
 	if (!h->video) {
 		mCoreConfigDeinit(&h->core->config);
 		h->core->deinit(h->core);
@@ -110,9 +128,9 @@ struct FrlgCore* frlg_core_new(const char* rom_path) {
 }
 
 /* Optional: a real GBA BIOS. mGBA falls back to an HLE BIOS when none is
- * loaded, and HLE-vs-real is a plausible divergence axis against another
- * emulator, so this stays reachable even though no BIOS ships here.
- * Must be called before the first frame; it resets the core. */
+ * loaded, and HLE-vs-real is a real divergence axis against BizHawk: its SWI
+ * handlers are not cycle-identical. Must be called before the first frame; it
+ * resets the core. */
 int frlg_core_load_bios(struct FrlgCore* h, const char* bios_path) {
 	struct VFile* vf = VFileOpen(bios_path, O_RDONLY);
 	if (!vf) {
@@ -122,6 +140,12 @@ int frlg_core_load_bios(struct FrlgCore* h, const char* bios_path) {
 		vf->close(vf);
 		return 0;
 	}
+	/* Boot the way BizHawk boots a movie: real BIOS loaded, intro skipped.
+	 * Its glue calls GBASkipBIOS right after reset (src/platform/bizhawk/
+	 * bizinterface.c:171-172 at commit 94b1578f, skipbios comes from the
+	 * movie's SyncSettings where SkipBios defaults to true); opts.skipBios
+	 * routes _GBACoreReset through that same call. */
+	h->core->opts.skipBios = true;
 	h->core->reset(h->core);
 	return 1;
 }
@@ -276,7 +300,7 @@ unsigned frlg_height(const struct FrlgCore* h) {
 	return h->height;
 }
 
-/* color_t is uint32_t here (flags.h leaves COLOR_16_BIT undefined), laid out
+/* mColor is uint32_t here (flags.h leaves COLOR_16_BIT undefined), laid out
  * red in bits 0-7, green 8-15, blue 16-23, alpha 24-31 -- i.e. R,G,B,A byte
  * order in memory on a little-endian host, which is PNG's RGBA8 directly. */
 const uint32_t* frlg_video_buffer(const struct FrlgCore* h) {
@@ -285,14 +309,27 @@ const uint32_t* frlg_video_buffer(const struct FrlgCore* h) {
 
 /* --- rom header --------------------------------------------------------- */
 
+/* mGBA 0.11 replaced getGameTitle/getGameCode with a single getGameInfo.
+ * The out16/out8 shapes and the "AGB-BPRE" code format are kept, so the Rust
+ * side did not have to change. */
+
 void frlg_game_title(const struct FrlgCore* h, char* out16) {
+	struct mGameInfo info;
+	h->core->getGameInfo(h->core, &info);
 	memset(out16, 0, 16);
-	h->core->getGameTitle(h->core, out16);
+	memcpy(out16, info.title, 15);
 }
 
 void frlg_game_code(const struct FrlgCore* h, char* out8) {
+	struct mGameInfo info;
+	h->core->getGameInfo(h->core, &info);
 	memset(out8, 0, 8);
-	h->core->getGameCode(h->core, out8);
+	/* "AGB-BPRE" is exactly 8 bytes, so like 0.10's getGameCode the buffer is
+	 * full and unterminated; the Rust side caps at the slice length. */
+	size_t n = strnlen(info.system, 3);
+	memcpy(out8, info.system, n);
+	out8[n] = '-';
+	memcpy(out8 + n + 1, info.code, strnlen(info.code, 8 - (n + 1)));
 }
 
 size_t frlg_rom_size(const struct FrlgCore* h) {

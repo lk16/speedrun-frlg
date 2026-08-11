@@ -127,6 +127,7 @@ have "bizhawk (ref)"    "${BIZHAWK_HOME:-/nonexistent}"
 manifest="${FRLG_DEPS:-/nonexistent}/MANIFEST"
 ours=$(sed -n 's/^mgba  *//p' "$manifest" 2>/dev/null | head -1)
 recorded=$(sed -n 's/.*bundled mGBA \([^,)]*\).*/\1/p' "$manifest" 2>/dev/null | head -1)
+submodule=$(sed -n 's/.*submodule \([0-9a-f]\{40\}\).*/\1/p' "$manifest" 2>/dev/null | head -1)
 actual=$(python3 - "${BIZHAWK_HOME:-/nonexistent}/dll/BizHawk.Emulation.Cores.dll" 2>/dev/null <<'PY'
 import re, sys
 blob = open(sys.argv[1], "rb").read()
@@ -144,8 +145,9 @@ if [ -z "$ours" ] || [ -z "$actual" ]; then
 elif [ -n "$recorded" ] && [ "$recorded" != "$actual" ]; then
   printf '  %s FAIL%s %-26s BizHawk now bundles mGBA %s, MANIFEST says %s -- deps tree is stale\n' \
     "$RED" "$OFF" "mgba pin" "$actual" "$recorded"; fail=1
-elif [ "$ours" = "$actual" ]; then
-  printf '  %s ok  %s %-26s %sboth tiers on mGBA %s%s\n' "$GREEN" "$OFF" "mgba pin" "$DIM" "$ours" "$OFF"
+elif [ "$ours" = "$actual" ] || { [ -n "$submodule" ] && [ "$ours" = "$submodule" ]; }; then
+  printf '  %s ok  %s %-26s %sboth tiers on mGBA %s (BizHawk reports %s)%s\n' \
+    "$GREEN" "$OFF" "mgba pin" "$DIM" "$ours" "$actual" "$OFF"
 else
   note "mgba pin" "tier 1 is mGBA $ours, tier 2 (BizHawk) is $actual -- known gap, not fixable here"
 fi
@@ -162,6 +164,24 @@ chk "rom matches firered.sha1" sh -c '
   [ "$want" = "$got" ] || { echo "$rom is $got, firered.sha1 wants $want"; exit 1; }
   echo "$got"'
 have "rom symbols"      "${FRLG_ARTIFACTS:-/nonexistent}/rom/pokefirered.sym"
+
+# Tier 1 boots from this file the moment it exists (frlg_emu::boot_with_default_bios),
+# and tier 2 cannot run at all without it, so its state is said every startup. The pin
+# is the World GBA BIOS, same as tools/verify-runner.sh's preflight.
+bios="${FRLG_GBA_BIOS:-${BIZHAWK_HOME:-/nonexistent}/Firmware/GBA_bios.rom}"
+bios_want=300c20df6731a33952ded8c436f7f186d25d3492
+if [ -f "$bios" ]; then
+  bios_got=$(sha1sum "$bios" 2>/dev/null | cut -d" " -f1)
+  if [ "$bios_got" = "$bios_want" ]; then
+    printf '  %s ok  %s %-26s %sWorld BIOS; tier 1 boots bios:%s...%s\n' \
+      "$GREEN" "$OFF" "gba bios" "$DIM" "${bios_got%????????????????????????????????}" "$OFF"
+  else
+    printf '  %s FAIL%s %-26s %s is sha1 %s, the World BIOS is %s\n' \
+      "$RED" "$OFF" "gba bios" "$bios" "${bios_got:-unreadable}" "$bios_want"; fail=1
+  fi
+else
+  note "gba bios" "none at $bios -- tier 1 boots HLE, tier 2 cannot run (docs/route.md)"
+fi
 
 # The copy carries no .git, so this stamp is the only thing that ties a citation to a revision of
 # pret/pokefirered. Written by the kit's startup step; a missing one means the copy predates it.

@@ -8,6 +8,7 @@
 //! Tier 2 does not run in this sandbox. A segment that passes here has been
 //! shown to work under mGBA and nothing more.
 
+pub mod bk2;
 pub mod ledger;
 pub mod nav;
 pub mod observe;

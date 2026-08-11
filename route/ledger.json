@@ -1,10 +1,11 @@
 {
   "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
+  "bios": "hle",
   "starter": "squirtle",
   "tuning": {
     "turn_hold": 8
   },
-  "total_frames": 11873,
+  "total_frames": 12209,
   "segments": [
     {
       "name": "01-boot",
@@ -14,9 +15,9 @@
       "digest": "01581377d2071902ab863097819d2c53e9570735",
       "frames": 347,
       "start_frame": 0,
-      "ram_hash": "d70509eed54ebdfbe9e324d47b3fde65ba633bbc",
+      "ram_hash": "63c40c08bf19aff7c627aa8497db26054b5cfe0f",
       "tier1": true,
-      "tier2": "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)"
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "02-intro-oak",
@@ -26,9 +27,9 @@
       "digest": "519a6e015b9a7fbb3a31c7a9505cadff462970ff",
       "frames": 1840,
       "start_frame": 347,
-      "ram_hash": "755ea7bb67ca650b2a572effe8bb3c7214da59fb",
+      "ram_hash": "2e2a484fa7848e310aca71aacbaff8a2bc7c1cb7",
       "tier1": true,
-      "tier2": "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)"
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "03-names",
@@ -38,9 +39,9 @@
       "digest": "2a020544c11c1020d26ee55a777998f528f41f03",
       "frames": 1442,
       "start_frame": 2187,
-      "ram_hash": "7327076e05ed5a1b4c13264e71e6c3ed0daf795b",
+      "ram_hash": "7cb38ea0db308cf78c14edafe8ae7699da44c4cc",
       "tier1": true,
-      "tier2": "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)"
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "04-house",
@@ -50,9 +51,9 @@
       "digest": "97cc3ad6cd56b58f2edd28b6aa067d3139422f12",
       "frames": 455,
       "start_frame": 3629,
-      "ram_hash": "8dea25b7e04f393663638de9f5475e3c253c9bcb",
+      "ram_hash": "f16c99805cc6376e7ea74dd6b3292cfe77d4a9b3",
       "tier1": true,
-      "tier2": "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)"
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "05-to-lab",
@@ -62,9 +63,9 @@
       "digest": "63541737f09360ad922c58547f013274af93945b",
       "frames": 1359,
       "start_frame": 4084,
-      "ram_hash": "7e479c3d77933bc48a397ad28a2e8f1a0718c34c",
+      "ram_hash": "0de40d4586e0b220c08a25dc2a98415754642a84",
       "tier1": true,
-      "tier2": "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)"
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "06-starter",
@@ -74,9 +75,9 @@
       "digest": "f2876d3d1239675fbcf77d7606fa23752ac3eb8a",
       "frames": 2496,
       "start_frame": 5443,
-      "ram_hash": "bf96b10e5749ea40e8073e54e5bbcd8d42e79b5b",
+      "ram_hash": "37ca37507bf921c556288f2cbf9061fd2ba73902",
       "tier1": true,
-      "tier2": "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)"
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "07-battle-start",
@@ -86,21 +87,21 @@
       "digest": "06ea57f322de9f16fc33753b98b5797f27faaf5f",
       "frames": 473,
       "start_frame": 7939,
-      "ram_hash": "81000592f9bfde91c9e270b6967e3d482d702763",
+      "ram_hash": "82a40e675f5d896fc66997c34aa4039fb05358e1",
       "tier1": true,
-      "tier2": "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)"
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "08-battle-win",
       "goal": "gBattleOutcome == B_OUTCOME_WON",
       "parent": "07-battle-start",
       "log": "route/logs/08-battle-win.ilog",
-      "digest": "7674723ae035ecd72b11b2f60da5a81fdf14509f",
-      "frames": 3461,
+      "digest": "bdff60bb0dfc254f255f3fdcbacf08f35d061961",
+      "frames": 3797,
       "start_frame": 8412,
-      "ram_hash": "884098b71ea9e75bd992894371f510ce4c1f5675",
+      "ram_hash": "16cc8fea10cd2366efdde8fe2431c819353314ce",
       "tier1": true,
-      "tier2": "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)"
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     }
   ]
 }

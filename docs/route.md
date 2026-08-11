@@ -1,8 +1,14 @@
 # The route: power-on to a beaten rival
 
-11873 frames (~3m18s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with Squirtle.
-Tier 1 only: mGBA agrees. BizHawk has not seen it, and cannot in this sandbox — see [Tier 2](#tier-2)
-for what is left before it can.
+12209 frames (~3m24s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with Squirtle.
+Tier 1 only: mGBA agrees. BizHawk has not seen it, and cannot until the host has a GBA BIOS — see
+[Tier 2](#tier-2) for what is left before it can.
+
+The count was 11873 until 2026-08-11, when tier 1 was re-pinned from mGBA 0.10.5 to the exact
+commit BizHawk bundles (`94b1578f`, see `docs/harness.md`). Segments 01–07 replay identically on
+the new core; the battle RNG stream does not, so `08-battle-win` re-searched its start delay and
+the chosen battle is now 336 frames longer. That is the pin surfacing a real emulation delta
+*before* tier 2 had to find it, which is the pin doing its job.
 
     frlg route build       # run the segments, write route/logs/*.ilog and route/ledger.json
     frlg route verify      # replay the committed logs from reset and check every claim
@@ -33,7 +39,7 @@ nothing here has to restate them and get one of them wrong.
 | `05-to-lab` | 1359 | 5443 | map is Oak's lab (4.3) |
 | `06-starter` | 2496 | 7939 | `gPlayerPartyCount == 1`, `VAR_STARTER_MON` set, lab scene var 3 |
 | `07-battle-start` | 473 | 8412 | `gMain.inBattle` |
-| `08-battle-win` | 3461 | 11873 | `gBattleOutcome == B_OUTCOME_WON` |
+| `08-battle-win` | 3797 | 12209 | `gBattleOutcome == B_OUTCOME_WON` |
 
 Map ids are `(group, number)` indices into `decompiled/data/maps/map_groups.json`.
 
@@ -93,7 +99,9 @@ merely happens to win goes on to happen to lose the moment anything upstream mov
 
 ## Which starter, measured
 
-All three win under the same mash. Built end-to-end, one build each:
+All three win under the same mash. Built end-to-end, one build each, **on mGBA 0.10.5** — the
+absolute totals predate the 2026-08-11 core re-pin (Squirtle is 12209 on the current core) and
+the battles would re-roll if remeasured, which does not change the conclusion below:
 
 | Starter | Battle | Total | Attacks that landed |
 | --- | ---: | ---: | ---: |
@@ -115,7 +123,8 @@ attacks. Net: 385 frames slower.
 
 So knobs like that one are not a segment's decision. They live in `Tuning`, are recorded in the
 ledger, and are swept end-to-end by `frlg route tune`, which builds the whole route per variant and
-scores it on total frames to the win. All eight values, each a complete build:
+scores it on total frames to the win. All eight values, each a complete build (measured on mGBA
+0.10.5; the sweep has not been redone since the 2026-08-11 core re-pin):
 
 | `turn_hold` | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -165,21 +174,36 @@ emit ten columns; the real GBA controller definition begins with Tilt X/Y/Z and 
 and `Power` trails the buttons rather than leading them. That is exactly the mistake the template
 exists to prevent.
 
-**Still missing, in order:**
+**Settled since (2026-08-11):**
 
-1. **No `.bk2` writer.** The `.ilog` files remain the canonical artifact. Writing one now costs a
-   re-export if it is wrong, not a re-route.
-2. **The host has no GBA BIOS.** This is the one that was not previously known. Loading a movie
-   sets `DeterministicEmulationRequested`, and `MGBAHawk`'s constructor then throws
-   `MissingFirmwareException("A BIOS is required for deterministic recordings!")` — read out of
-   `dll/BizHawk.Emulation.Cores.dll`, not guessed. EmuHawk turns that into the Firmware Manager
-   dialog, so an unattended run hangs rather than failing. Tier 2 needs
-   `$BIZHAWK_HOME/Firmware/GBA_bios.rom`, sha1 `300C20DF…D25D3492`, 16384 bytes.
-   **This also means tier 1 and tier 2 do not boot the same way**: tier 1 runs mGBA's HLE BIOS.
-   `Emu::load_bios` exists, so closing that gap is a config change, not a code change — but it
-   has not been done and no `.bk2` should be trusted until it is.
-3. **The cores differ.** Tier 1 is mGBA 0.10.5; BizHawk 2.11.1 bundles an untagged master commit
-   that reports 0.11.0. `bin/frlg-doctor` prints the delta every startup. See `docs/harness.md`.
+- **The `.bk2` writer exists**: `frlg route export` (`crates/frlg-route/src/bk2.rs`). It
+  concatenates the ledger's logs (refusing any whose digest the ledger does not vouch for),
+  copies every template entry verbatim except `Input Log.txt`, and **round-trips the result** —
+  the written movie is decoded back to key masks and compared before the export is reported;
+  a mismatch deletes the file. The button mnemonics (`U D L R S s B A l r P`) were read from
+  BizHawk's own `ControllerDefinition.MnemonicsCache` under mono, not guessed, and an exported
+  route reads back through BizHawk's own `Bk2Movie.Load` with the right frame count. The `.ilog`
+  files remain canonical; the `.bk2` is an export.
+- **The cores no longer differ.** Tier 1 is pinned to `94b1578f`, the exact commit BizHawk 2.11.1
+  bundles. `docs/harness.md` has what the port took; the re-pin moved the battle (route header
+  above).
+
+**Still missing — one thing, and it is the user's to place:**
+
+1. **The host has no GBA BIOS.** Loading a movie sets `DeterministicEmulationRequested`, and
+   `MGBAHawk`'s constructor then throws `MissingFirmwareException("A BIOS is required for
+   deterministic recordings!")` — read out of `dll/BizHawk.Emulation.Cores.dll`, not guessed.
+   EmuHawk turns that into the Firmware Manager dialog, so an unattended run hangs rather than
+   failing. Tier 2 needs `$BIZHAWK_HOME/Firmware/GBA_bios.rom`, sha1 `300C20DF…D25D3492`,
+   16384 bytes.
+
+   The tier-1 side of this is wired and waiting: the moment that file exists,
+   `frlg_emu::boot_with_default_bios` boots every core from it with the intro skipped — the same
+   `GBASkipBIOS` path BizHawk's own glue takes — and the ledger records the boot mode (`"hle"` or
+   `"bios:<sha1>"`). `frlg route verify` refuses to replay logs under a different boot than they
+   were built with, and `frlg route export` warns loudly when exporting an HLE-built route,
+   because BizHawk will boot it differently and desync. **After the BIOS lands: rebuild, verify,
+   re-export.** Until then, tier 2 remains requestable but unserviceable.
 
 ### Requesting a run, and reading the answer
 
@@ -199,7 +223,7 @@ lives here rather than in either script:
       "desync_frame":      null,
       "ram_hash":          "…",   "expected_ram_hash": "…",
       "finished_at":       "2026-08-11T18:04:00+02:00",
-      "notes":             "replayed 11873 frames; fingerprint matches"
+      "notes":             "replayed 12209 frames; fingerprint matches"
     }
 
 `ram_hash` is the same fingerprint tier 1 computes — sha1 over EWRAM then IWRAM

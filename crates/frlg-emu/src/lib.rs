@@ -65,6 +65,43 @@ pub fn default_sym_path() -> Option<PathBuf> {
     artifact_path("FRLG_SYM", "pokefirered.sym")
 }
 
+/// The World GBA BIOS, the one file both tiers must boot from. Same pin as
+/// tier 2's preflight (`tools/verify-runner.sh`), repeated here so tier 1
+/// cannot quietly boot from some other 16 KiB file.
+pub const GBA_BIOS_SHA1: &str = "300c20df6731a33952ded8c436f7f186d25d3492";
+
+/// `$FRLG_GBA_BIOS`, else `$BIZHAWK_HOME/Firmware/GBA_bios.rom`, if it
+/// exists. The BizHawk location on purpose: the same file serves both tiers,
+/// so there is exactly one place to put it (`docs/route.md`).
+pub fn default_bios_path() -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var("FRLG_GBA_BIOS") {
+        let path = PathBuf::from(explicit);
+        return path.is_file().then_some(path);
+    }
+    let bizhawk = std::env::var("BIZHAWK_HOME").ok()?;
+    let path = PathBuf::from(bizhawk).join("Firmware/GBA_bios.rom");
+    path.is_file().then_some(path)
+}
+
+/// Boots `emu` from the default BIOS when one is present (skip-intro, the way
+/// BizHawk boots a movie), HLE otherwise, and says which happened: `"hle"` or
+/// `"bios:<sha1>"`. The string is recorded in the route ledger, because a log
+/// is only evidence for the boot it was made with.
+pub fn boot_with_default_bios(emu: &mut Emu) -> Result<String, EmuError> {
+    let Some(bios) = default_bios_path() else {
+        return Ok("hle".to_string());
+    };
+    let sha1 = hex::encode(file_sha1(&bios)?);
+    if sha1 != GBA_BIOS_SHA1 {
+        return Err(EmuError::WrongBios {
+            path: bios.display().to_string(),
+            sha1,
+        });
+    }
+    emu.load_bios(&bios)?;
+    Ok(format!("bios:{sha1}"))
+}
+
 fn artifact_path(env_var: &str, file: &str) -> Option<PathBuf> {
     if let Ok(explicit) = std::env::var(env_var) {
         let path = PathBuf::from(explicit);

@@ -105,29 +105,37 @@ library, not assumed.
 Two of these used to be "plausible" and are now measured. Both are divergences the tier-1 loop is
 structurally incapable of noticing, which is what makes them worth carrying rather than filing.
 
-- **HLE BIOS, and it is not optional on the other side.** No GBA BIOS exists in this sandbox
-  (`$BIZHAWK_HOME/Firmware` is empty), so mGBA runs its HLE BIOS. BizHawk *cannot* do the same:
+- **HLE BIOS, and it is not optional on the other side.** As long as no GBA BIOS exists on the
+  host (`$BIZHAWK_HOME/Firmware` is empty), mGBA runs its HLE BIOS. BizHawk *cannot* do the same:
   loading a movie sets `DeterministicEmulationRequested`, and `MGBAHawk`'s constructor then throws
-  `MissingFirmwareException("A BIOS is required for deterministic recordings!")`. So tier 2 always
-  boots a real BIOS and tier 1 currently never does. `Emu::load_bios` exists, so closing the gap is
-  a config change rather than a code change -- but until the same file is on both sides, a `.bk2`
-  that desyncs early has an obvious suspect that has nothing to do with the route.
-- **The two tiers run different mGBA builds.** Tier 1 is 0.10.5. BizHawk 2.11.1 bundles an untagged
-  master commit (`94b1578f`, 2026-03-03) that reports 0.11.0. Pinning tier 1 to it is not a
-  one-liner: 0.11 dropped `getGameTitle`/`getGameCode` from `struct mCore` and moved `VFileOpen`,
-  so `crates/mgba-sys/csrc/shim.c` fails to compile against it -- measured, not assumed.
-  `bin/frlg-doctor` prints the delta at every startup so it stays visible.
-- **No `.bk2` writer yet.** The format question is now settled -- `route/template.bk2` carries the
-  real `LogKey` and `SyncSettings` (`docs/route.md`) -- so writing one is bounded work. The `.ilog`
-  stays canonical until it exists.
+  `MissingFirmwareException("A BIOS is required for deterministic recordings!")`. The tier-1 side
+  is wired (2026-08-11): `frlg_emu::boot_with_default_bios` boots from
+  `$FRLG_GBA_BIOS`/`$BIZHAWK_HOME/Firmware/GBA_bios.rom` the moment it exists, sha1-pinned to the
+  World BIOS, intro skipped via `opts.skipBios` -- the same `GBASkipBIOS` call BizHawk's glue
+  makes (`src/platform/bizhawk/bizinterface.c:171` at the pinned commit). The ledger records the
+  boot per build, and `frlg route verify` refuses to replay logs under the other boot. Until the
+  file exists, every log is HLE and a `.bk2` export of it must be expected to desync at tier 2.
+- **The two tiers run the same mGBA commit since 2026-08-11.** `MGBA_REF` is `94b1578f`, the exact
+  submodule gitlink BizHawk 2.11.1 ships (self-reported 0.11.0). The shim port this took:
+  `getGameTitle`/`getGameCode` became `getGameInfo`; `desiredVideoDimensions` became
+  `baseVideoSize`; `color_t` became `mColor`; and -- the sharp edge -- 0.11's headers no longer
+  include `flags.h`, and the installed `flags.h` *lies about `ENABLE_DIRECTORIES`* (upstream
+  `CMakeLists.txt:869` adds the define without a cmake variable behind it), which silently shifts
+  every function pointer in `struct mCore` by 4152 bytes. `csrc/shim.c` documents and corrects
+  both. `bin/frlg-doctor` confirms the pin at every startup; re-check the shim whenever the pin
+  moves. Re-pinning re-rolled the battle RNG (`docs/route.md`).
+- **The `.bk2` writer exists**: `frlg route export`, built on `route/template.bk2`, round-trip
+  checked on every export (`docs/route.md`). The `.ilog` stays canonical; a `.bk2` is an export
+  of it.
 
 ## Tests
 
-`cargo test --release` runs 24 unit tests (20 in `frlg-emu`, 4 in `frlg-route`) and 15 that drive
+`cargo test --release` runs 29 unit tests (20 in `frlg-emu`, 9 in `frlg-route`) and 15 that drive
 the real ROM (10 `harness.rs`, 4 `observe.rs`, 1 `route.rs`): boot, determinism across two replays,
 input actually reaching the game, savestate round trips in memory and on disk, the memory-block view
 agreeing with bus reads, split-replay equalling one pass, and the screenshot being the right shape
-and opaque. They need the ROM and fail loudly without it rather than skipping.
+and opaque. They need the ROM and fail loudly without it rather than skipping. The `frlg-route`
+unit tests include the `.bk2` round trip, which uses the committed `route/template.bk2` and no ROM.
 
 Note that `cargo test --release` does not relink `target/release/frlg`; run `cargo build --release`
 before trusting the CLI binary.

@@ -17,18 +17,25 @@ use crate::record::{Recorder, RouteError};
 use crate::segments::{self, Segment, Starter, Tuning};
 
 /// Tier 2 is a BizHawk replay on the host; nothing in this sandbox can do it.
-/// The format question is settled -- `route/template.bk2` now carries the Input
-/// Log column order and the mGBA `SyncSettings` blob -- but nothing writes a
-/// `.bk2` yet, and the host needs a GBA BIOS before BizHawk will replay one at
-/// all (`docs/route.md`). Every entry says so out loud rather than leaving the
-/// field empty and letting a reader assume.
+/// `frlg route export` writes the `.bk2` and queues it, but a queued request
+/// is not a result: this stays the recorded state until a verdict from
+/// `tools/verify-runner.sh` lands in `verify/results` and is written back.
+/// Every entry says so out loud rather than leaving the field empty and
+/// letting a reader assume.
 pub const TIER2_BLOCKED: &str =
-    "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)";
+    "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Ledger {
     /// The ROM every log below was routed against.
     pub rom_sha1: String,
+    /// How the core was booted when these logs were made: `"hle"` (mGBA's
+    /// high-level BIOS, the only option until a real BIOS exists on the
+    /// host), or `"bios:<sha1>"` (real BIOS, intro skipped, the way BizHawk
+    /// boots a movie). Deliberately not `#[serde(default)]`, like `tuning`:
+    /// the boot changes SWI timing, so logs replayed under the other boot are
+    /// not the same evidence. `verify` refuses a mismatch.
+    pub bios: String,
     pub starter: String,
     /// The route-level knobs this build used. Recorded so `verify` rebuilds the
     /// same segment definitions the logs were made against, and so a sweep's
@@ -167,6 +174,7 @@ pub fn build(
 
     let ledger = Ledger {
         rom_sha1: hex::encode(rec.log().rom_sha1),
+        bios: rec.boot().to_string(),
         starter: starter.name().to_string(),
         tuning,
         total_frames: rec.frames(),
@@ -206,6 +214,14 @@ pub fn verify(
     }
 
     let mut emu = Emu::new(rom)?;
+    let boot = frlg_emu::boot_with_default_bios(&mut emu)?;
+    if boot != ledger.bios {
+        return Err(LedgerError::Message(format!(
+            "ledger was built with boot {} but this replay would boot {} -- \
+             the logs are not evidence under a different boot; rebuild the route",
+            ledger.bios, boot
+        )));
+    }
     emu.reset();
     let mut checked: Vec<Entry> = Vec::new();
     let mut frame = 0usize;
@@ -237,6 +253,7 @@ pub fn verify(
 
     Ok(Ledger {
         rom_sha1: ledger.rom_sha1.clone(),
+        bios: ledger.bios.clone(),
         starter: ledger.starter.clone(),
         tuning: ledger.tuning,
         total_frames: frame,

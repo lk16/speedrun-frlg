@@ -53,6 +53,30 @@ enum RouteCommand {
         #[arg(long, default_value = "route/ledger.json")]
         ledger: PathBuf,
     },
+    /// Export the committed logs as one BizHawk movie for tier 2.
+    ///
+    /// Concatenates the ledger's segment logs into a single .bk2 built on
+    /// route/template.bk2, round-trips it back to key masks, and by default
+    /// drops it in $FRLG_ARTIFACTS/verify/queue with a request json for the
+    /// host-side runner. Writing the file is not verification: tier 2 has
+    /// only happened once a result lands in verify/results.
+    Export(ExportArgs),
+}
+
+#[derive(Args)]
+struct ExportArgs {
+    #[arg(long, default_value = "route/ledger.json")]
+    ledger: PathBuf,
+
+    /// The BizHawk-written movie whose container and settings are copied
+    /// verbatim; only the input log is replaced.
+    #[arg(long, default_value = "route/template.bk2")]
+    template: PathBuf,
+
+    /// Explicit output path. When absent the movie is queued in
+    /// $FRLG_ARTIFACTS/verify/queue/<id>.bk2 alongside <id>.json.
+    #[arg(long)]
+    out: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -283,6 +307,7 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
         RouteCommand::Status { ledger: path } => {
             let led = ledger::read(&path).with_context(|| format!("reading {}", path.display()))?;
             println!("rom     {}", led.rom_sha1);
+            println!("boot    {}", led.bios);
             println!("starter {}", led.starter);
             println!("tuning  turn_hold {}", led.tuning.turn_hold);
             println!("frames  {}", led.total_frames);
@@ -307,7 +332,101 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             );
             Ok(())
         }
+        RouteCommand::Export(args) => cmd_export(args),
     }
+}
+
+fn cmd_export(args: ExportArgs) -> Result<()> {
+    use sha1::{Digest, Sha1};
+
+    let led =
+        ledger::read(&args.ledger).with_context(|| format!("reading {}", args.ledger.display()))?;
+    let mut rom_sha1 = [0u8; 20];
+    hex::decode_to_slice(&led.rom_sha1, &mut rom_sha1)
+        .with_context(|| format!("ledger rom_sha1 {:?} is not sha1 hex", led.rom_sha1))?;
+
+    // Re-derive the movie from the committed logs, and only from logs the
+    // ledger vouches for: a digest mismatch means the logs on disk are not
+    // the ones the ledger describes, and exporting them would put an
+    // unverified movie behind a verified-looking id.
+    let mut frames = Vec::with_capacity(led.total_frames);
+    for entry in &led.segments {
+        let log = read_log(Path::new(&entry.log))?;
+        if log.digest() != entry.digest {
+            bail!(
+                "{}: digest {} does not match the ledger's {} -- rebuild or re-verify the route",
+                entry.log,
+                log.digest(),
+                entry.digest
+            );
+        }
+        check_log_rom(&log, rom_sha1)?;
+        frames.extend_from_slice(&log.frames);
+    }
+    if frames.len() != led.total_frames {
+        bail!(
+            "segments sum to {} frames, the ledger claims {}",
+            frames.len(),
+            led.total_frames
+        );
+    }
+    let combined = InputLog::new(rom_sha1, frames);
+    let ilog_sha1 = combined.digest();
+    let id = format!("route-{}f-{}", combined.len(), &ilog_sha1[..12]);
+
+    if led.bios == "hle" {
+        eprintln!(
+            "warning: this route was built on mGBA's HLE BIOS, but BizHawk replays \
+             movies from a real BIOS. Expect a desync: put the BIOS at \
+             $BIZHAWK_HOME/Firmware/GBA_bios.rom and rebuild the route first \
+             (docs/route.md). Exporting anyway -- the movie still exercises the \
+             tier-2 pipeline."
+        );
+    }
+
+    let (out, queued) = match &args.out {
+        Some(path) => (path.clone(), false),
+        None => {
+            let artifacts = std::env::var("FRLG_ARTIFACTS")
+                .context("no --out and $FRLG_ARTIFACTS is not set; nowhere to queue")?;
+            let queue = PathBuf::from(artifacts).join("verify/queue");
+            fs::create_dir_all(&queue).with_context(|| format!("creating {}", queue.display()))?;
+            (queue.join(format!("{id}.bk2")), true)
+        }
+    };
+
+    let written = frlg_route::bk2::export(&args.template, &combined, &out)
+        .with_context(|| format!("exporting {}", out.display()))?;
+    let bk2_sha1 = hex::encode(Sha1::digest(fs::read(&out)?));
+
+    if queued {
+        // The request half of the tier-2 contract (docs/route.md): what the
+        // sandbox expects of this movie, so the runner's verdict can say
+        // more than "it ran".
+        let request = serde_json::json!({
+            "id": id,
+            "frames": combined.len(),
+            "ilog_sha1": ilog_sha1,
+            "bk2_sha1": bk2_sha1,
+            "rom_sha1": led.rom_sha1,
+            "bios": led.bios,
+            "ram_hash": led.segments.last().map(|s| s.ram_hash.as_str()),
+            "goal": led.segments.last().map(|s| s.goal.as_str()),
+        });
+        let request_path = out.with_extension("json");
+        fs::write(&request_path, format!("{request:#}\n"))
+            .with_context(|| format!("writing {}", request_path.display()))?;
+        println!("queued {}", out.display());
+        println!("       {}", request_path.display());
+    } else {
+        println!("wrote {}", out.display());
+    }
+    println!("frames {written}");
+    println!("ilog   {ilog_sha1}");
+    println!("bk2    {bk2_sha1}");
+    println!("round-trip: the .bk2 decodes back to the exported frames");
+    println!("tier 2 is claimed by a result in verify/results, not by this command");
+    Ok(())
 }
 
 fn route_setup(args: &RouteArgs) -> Result<(PathBuf, PathBuf, Starter)> {
@@ -374,9 +493,11 @@ fn cmd_info(args: RomArgs) -> Result<()> {
     let rom = resolve_rom(&args)?;
     let sha1 = frlg_emu::file_sha1(&rom).with_context(|| format!("hashing {}", rom.display()))?;
     let mut emu = Emu::new(&rom)?;
+    let boot = frlg_emu::boot_with_default_bios(&mut emu)?;
 
     println!("rom          {}", rom.display());
     println!("sha1         {}", hex::encode(sha1));
+    println!("boot         {boot}");
     println!("title        {}", emu.game_title());
     println!("code         {}", emu.game_code());
     println!("rom size     {} bytes", emu.rom_size());
@@ -430,6 +551,7 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     }
 
     let mut emu = Emu::new(&rom)?;
+    frlg_emu::boot_with_default_bios(&mut emu)?;
     if let Some(state) = &args.load_state {
         emu.load_state_file(state)
             .with_context(|| format!("loading state {}", state.display()))?;

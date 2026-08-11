@@ -46,13 +46,13 @@ sources:
 | `FRLG_DECOMP` | `~/decomp`, your writable copy of it, agbcc already in `tools/` |
 | `FRLG_DEPS` | the prebuilt toolchain tree, read-only |
 | `FRLG_ARTIFACTS` | the one writable mount, and the only thing that outlives this sandbox |
-| `MGBA_PREFIX` | libmgba 0.10.5 — `lib/libmgba.so`, headers under `include/mgba` |
+| `MGBA_PREFIX` | libmgba at BizHawk's own commit (`94b1578f`, reports 0.11.0) — `lib/libmgba.so`, headers under `include/mgba` |
 | `BIZHAWK_HOME` | BizHawk 2.11.1, read-only, as reference material (see below) |
 | `FRLG_REPO` | this checkout; the kit resolves it the same way it resolves the mounts |
 
-BizHawk bundles a *different* mGBA (0.11.0, untagged) than the 0.10.5 tier 1 runs. That is a known
-gap, `bin/frlg-doctor` repeats it at every startup, and `docs/harness.md` says why it is not a
-one-line fix. Do not treat the two tiers as running the same emulator.
+Since 2026-08-11 both tiers run the *same* mGBA commit: `MGBA_REF` is pinned to the submodule
+gitlink BizHawk 2.11.1 ships, and `bin/frlg-doctor` confirms the pair at every startup.
+`docs/harness.md` records what the shim port took and what to re-check if the pin ever moves.
 
 `$FRLG_DEPS/MANIFEST` records what each of those was built from.
 

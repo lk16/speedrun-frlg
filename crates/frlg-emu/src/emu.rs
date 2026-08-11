@@ -26,6 +26,12 @@ pub enum EmuError {
     Create(String),
     #[error("libmgba could not load the BIOS at {0}")]
     Bios(String),
+    #[error(
+        "{path} is not the World GBA BIOS (sha1 {sha1}, wanted {}); \
+         refusing to boot from it",
+        crate::GBA_BIOS_SHA1
+    )]
+    WrongBios { path: String, sha1: String },
     #[error("libmgba refused to {op} a savestate")]
     State { op: &'static str },
     #[error("savestate is {actual} bytes, this core wants {expected}")]

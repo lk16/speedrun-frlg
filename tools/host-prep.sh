@@ -27,10 +27,11 @@ set -euo pipefail
 # Resolved refs are recorded in the deps tree's MANIFEST. Change a pin, re-run, and the
 # affected step rebuilds; every sandbox created afterwards gets the new tree.
 AGBCC_REF="${AGBCC_REF:-master}"          # pret/agbcc has no releases; the resolved SHA is recorded
-# A tag, or a full 40-hex commit. Deliberately not "newest 0.10.x": tier 1 and tier 2 have to be
-# pinned to each other by hand, and picking a moving target on our side hid that for a while. See
-# the note in do_mgba for why this is not BizHawk's own core yet.
-MGBA_REF="${MGBA_REF:-0.10.5}"
+# A tag, or a full 40-hex commit. This is BizHawk 2.11.1's own bundled core (its
+# submodules/mgba gitlink), so tier 1 and tier 2 finally run the same emulator.
+# crates/mgba-sys/csrc/shim.c is written against this revision's API (2026-08-11);
+# moving the pin means re-checking the shim compiles.
+MGBA_REF="${MGBA_REF:-94b1578f8545d8ad17bb4036dba908612d5731e2}"
 BIZHAWK_VER="${BIZHAWK_VER:-2.11.1}"      # must match the BizHawk you replay .bk2 files in
 # The mGBA revision BizHawk $BIZHAWK_VER bundles, recorded so the delta between the two tiers is a
 # written-down number rather than something a desync has to reveal. 2.11.1's submodules/mgba
@@ -230,13 +231,11 @@ do_agbcc() {
 }
 
 do_mgba() {
-  # Not pinned to BizHawk's own core, and this is a decision rather than an oversight.
-  # BizHawk 2.11.1 bundles an untagged mGBA master commit that reports 0.11.0, and 0.11 removed
-  # `getGameTitle`/`getGameCode` from `struct mCore` and moved `VFileOpen`, so
-  # crates/mgba-sys/csrc/shim.c does not compile against it. Building 0.11.0 and pointing the
-  # workspace at it fails in cc-rs at those three symbols -- measured, not assumed.
-  # Until the shim is ported, the two tiers run different cores; do_bizhawk records BizHawk's
-  # version and bin/frlg-doctor says the delta out loud on every startup.
+  # Pinned to BizHawk's own bundled core since 2026-08-11 (MGBA_REF defaults to
+  # BIZHAWK_MGBA_COMMIT's value). The shim was ported to the 0.11 API for this: 0.11 removed
+  # `getGameTitle`/`getGameCode` from `struct mCore` (game identity now comes from
+  # `mCoreGetGameInfo`) and the ROM header is read directly instead. If the pin moves,
+  # re-check crates/mgba-sys/csrc/shim.c compiles before trusting the tree.
   rm -rf "$WORK/mgba" "$DEPS/mgba"
   local ref="$MGBA_REF"
   mkdir -p "$WORK/mgba/src"
@@ -384,13 +383,12 @@ PY
   # Both halves of the pair on one line, because the number that matters is the delta.
   manifest bizhawk "$BIZHAWK_VER (bundled mGBA $core_ver, submodule $BIZHAWK_MGBA_COMMIT)"
   local ours; ours=$(cat "$DEPS/.resolved/mgba" 2>/dev/null || echo "$MGBA_REF")
-  if [ "$core_ver" = "$ours" ]; then
-    note "bundled mGBA $core_ver matches our pin"
+  if [ "$core_ver" = "$ours" ] || [ "$ours" = "$BIZHAWK_MGBA_COMMIT" ]; then
+    note "both tiers on the same core: ours is $ours, BizHawk bundles $core_ver"
   else
-    warn "tier-1/tier-2 core delta: ours is mGBA $ours, BizHawk $BIZHAWK_VER bundles $core_ver.
-  This is the known, recorded gap (see do_mgba); frlg-doctor repeats it every startup. It stops
-  being acceptable the moment a .bk2 desyncs -- port crates/mgba-sys/csrc/shim.c to 0.11 and set
-  MGBA_REF=$BIZHAWK_MGBA_COMMIT."
+    warn "tier-1/tier-2 core delta: ours is mGBA $ours, BizHawk $BIZHAWK_VER bundles $core_ver
+  (submodule $BIZHAWK_MGBA_COMMIT). frlg-doctor repeats it every startup. Set
+  MGBA_REF=$BIZHAWK_MGBA_COMMIT and re-check crates/mgba-sys/csrc/shim.c compiles."
   fi
 }
 

@@ -141,6 +141,9 @@ pub struct Recorder {
     emu: Emu,
     frames: Vec<u16>,
     rom_sha1: [u8; 20],
+    /// How the core was booted: `"hle"`, or `"bios:<sha1>"`. Goes in the
+    /// ledger -- a log is only evidence for the boot it was made with.
+    boot: String,
 }
 
 impl Recorder {
@@ -148,12 +151,19 @@ impl Recorder {
     /// the first frame after reset.
     pub fn from_reset(rom: &Path) -> Result<Self, RouteError> {
         let mut emu = Emu::new(rom)?;
+        let boot = frlg_emu::boot_with_default_bios(&mut emu)?;
         emu.reset();
         Ok(Self {
             rom_sha1: frlg_emu::file_sha1(rom).map_err(EmuError::from)?,
             emu,
             frames: Vec::new(),
+            boot,
         })
+    }
+
+    /// How the core was booted: `"hle"`, or `"bios:<sha1>"`.
+    pub fn boot(&self) -> &str {
+        &self.boot
     }
 
     /// Resume from a checkpoint. The log records only the frames this recorder
