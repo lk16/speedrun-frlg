@@ -134,8 +134,8 @@ structurally incapable of noticing, which is what makes them worth carrying rath
 
 ## Tests
 
-`cargo test --release` runs 29 unit tests (20 in `frlg-emu`, 9 in `frlg-route`) and 15 that drive
-the real ROM (10 `harness.rs`, 4 `observe.rs`, 1 `route.rs`): boot, determinism across two replays,
+`cargo test --release` runs 29 unit tests (20 in `frlg-emu`, 9 in `frlg-route`) and 17 that drive
+the real ROM (10 `harness.rs`, 6 `observe.rs`, 1 `route.rs`): boot, determinism across two replays,
 input actually reaching the game, savestate round trips in memory and on disk, the memory-block view
 agreeing with bus reads, split-replay equalling one pass, and the screenshot being the right shape
 and opaque. They need the ROM and fail loudly without it rather than skipping. The `frlg-route`

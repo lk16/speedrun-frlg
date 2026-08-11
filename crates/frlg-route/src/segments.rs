@@ -108,8 +108,11 @@ pub struct Tuning {
 
 impl Default for Tuning {
     fn default() -> Self {
-        // The value the swept build settled on; `frlg route tune` re-derives it.
-        Self { turn_hold: 8 }
+        // The value the 2026-08-12 sweep settled on (10085 frames; 8, the
+        // previous winner, scored 10531 and 7 could not win its battle at
+        // all); `frlg route tune` re-derives it, and the ledger's recorded
+        // value wins over this default whenever one exists.
+        Self { turn_hold: 2 }
     }
 }
 

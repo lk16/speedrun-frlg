@@ -3,9 +3,9 @@
   "bios": "bios+intro:300c20df6731a33952ded8c436f7f186d25d3492",
   "starter": "squirtle",
   "tuning": {
-    "turn_hold": 8
+    "turn_hold": 2
   },
-  "total_frames": 10531,
+  "total_frames": 10085,
   "segments": [
     {
       "name": "01-boot",
@@ -84,10 +84,10 @@
       "goal": "squirtle in the party, rival has his",
       "parent": "06-to-lab",
       "log": "route/logs/07-starter.ilog",
-      "digest": "b067354235a213141533f4d27ca94e045fd0e90d",
-      "frames": 1702,
+      "digest": "7c6259f899405085e5f1c2f762be3db571538ba8",
+      "frames": 1697,
       "start_frame": 5536,
-      "ram_hash": "b2f2e2f578bce893609d9e75ee130dd725c26c49",
+      "ram_hash": "137068bb162818b783ed68f8ffa56911d3c6846c",
       "tier1": true,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
@@ -98,8 +98,8 @@
       "log": "route/logs/08-battle-start.ilog",
       "digest": "07e132847263e07bb619d539e44d3b4e69e1876d",
       "frames": 386,
-      "start_frame": 7238,
-      "ram_hash": "a302899eb88454b0d9d5047ea0fe91e9cad7c4c5",
+      "start_frame": 7233,
+      "ram_hash": "1dbfc3a54b2e48580c1b8536ae89e912db3c68bf",
       "tier1": true,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
@@ -108,10 +108,10 @@
       "goal": "gBattleOutcome == B_OUTCOME_WON",
       "parent": "08-battle-start",
       "log": "route/logs/09-battle-win.ilog",
-      "digest": "596059f8311c0ad48d759d71fd265dc65899a36e",
-      "frames": 2907,
-      "start_frame": 7624,
-      "ram_hash": "0282fc278b634f900f0ddff775e42c7d38d25ecd",
+      "digest": "e1b0f9f9fb5056687c61092c6fee91e15dac3fdf",
+      "frames": 2466,
+      "start_frame": 7619,
+      "ram_hash": "e65e93b6712b408ed915f55e46c9a79f874016cd",
       "tier1": true,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     }

@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use frlg_emu::{check_log_rom, keys, Emu, InputLog, SymbolTable, Target};
 use frlg_route::segments::Tuning;
-use frlg_route::{ledger, Starter};
+use frlg_route::{ledger, RouteError, Starter};
 
 #[derive(Parser)]
 #[command(name = "frlg", about = "Headless mGBA harness for the FireRed TAS")]
@@ -291,11 +291,22 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
                     ledger: scratch.join("ledger.json"),
                     states: None,
                 };
-                let built = ledger::build(&rom, &sym, starter, tuning, &paths, |_| {})?;
-                let total = built.total_frames;
-                println!("turn_hold {:>2}  {total:>6} frames", tuning.turn_hold);
-                if best.as_ref().is_none_or(|(_, seen)| total < *seen) {
-                    best = Some((tuning, total));
+                // A variant whose stream cannot win its battle is an answer
+                // -- this knob value loses -- not a reason to abandon the
+                // sweep. turn_hold 7 on the 2026-08-12 route was exactly
+                // that: none of 64 start delays won.
+                match ledger::build(&rom, &sym, starter, tuning, &paths, |_| {}) {
+                    Ok(built) => {
+                        let total = built.total_frames;
+                        println!("turn_hold {:>2}  {total:>6} frames", tuning.turn_hold);
+                        if best.as_ref().is_none_or(|(_, seen)| total < *seen) {
+                            best = Some((tuning, total));
+                        }
+                    }
+                    Err(ledger::LedgerError::Route(RouteError::Timeout { what, .. })) => {
+                        println!("turn_hold {:>2}  loses ({what})", tuning.turn_hold);
+                    }
+                    Err(other) => return Err(other.into()),
                 }
             }
             let (tuning, total) = best.expect("Tuning::variants is not empty");
