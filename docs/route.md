@@ -1,16 +1,20 @@
 # The route: power-on to a beaten rival
 
-12713 frames (~3m33s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with
-Squirtle, on FireRed. **Tier 2 accepted (2026-08-11): BizHawk replayed the whole movie to the
-same fingerprint, frame for frame** — see [Tier 2](#tier-2). Both emulators now agree on this
-route from power-on to the win.
+10946 frames (~3m03s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with
+Squirtle, on FireRed. Tier 1 verified from reset; **tier 2 for this movie is queued
+(`route-10946f-b1a0875a77e9`), not yet replayed**. The 2026-08-11 tier-2 pass — BizHawk
+replaying the whole movie to the same fingerprint, frame for frame — belongs to the previous,
+12713-frame build of this same route; see [Tier 2](#tier-2). Rebuilding resets the tier-2
+stamp, and should.
 
 The route is rebuilt whenever the boot or the core moves, and the total has moved with it:
 11873 (mGBA 0.10.5, HLE BIOS) → 12209 (2026-08-11, tier 1 re-pinned to the exact mGBA commit
 BizHawk bundles, `94b1578f`, `docs/harness.md`) → 12222 (real-BIOS boot, intro skipped) →
-**12713** (2026-08-12: real-BIOS boot with the ~272-frame boot animation *played*, because that
-is the only boot BizHawk uses for a movie — the desync fix below). Segments survive these
-re-pins shifted but intact; the battle RNG stream never does, so `08-battle-win` re-searches its
+12713 (2026-08-12: real-BIOS boot with the ~272-frame boot animation *played*, because that
+is the only boot BizHawk uses for a movie — the desync fix below) → **10946** (2026-08-12:
+the first pure routing win — one-character player name, preset rival name, text speed FAST
+and battle animations off; nothing about the emulator moved). Segments survive core re-pins
+shifted but intact; the battle RNG stream never does, so `09-battle-win` re-searches its
 start delay each time. Each re-pin surfacing a real delta *before* tier 2 had to find it is the
 pinning doing its job.
 
@@ -42,16 +46,48 @@ nothing here has to restate them and get one of them wrong.
 | --- | ---: | ---: | --- |
 | `01-boot` | 619 | 619 | `CB2_NewGameScene` -- NEW GAME taken (includes the ~272-frame BIOS animation) |
 | `02-intro-oak` | 1842 | 2461 | `CB2_NamingScreen` -- Oak's speech and the boy/girl choice done |
-| `03-names` | 1450 | 3911 | `CB2_Overworld` in the bedroom, both names entered |
-| `04-house` | 455 | 4366 | map is Pallet Town (3.0) |
-| `05-to-lab` | 1359 | 5725 | map is Oak's lab (4.3) |
-| `06-starter` | 2496 | 8221 | `gPlayerPartyCount == 1`, `VAR_STARTER_MON` set, lab scene var 3 |
-| `07-battle-start` | 474 | 8695 | `gMain.inBattle` |
-| `08-battle-win` | 4018 | 12713 | `gBattleOutcome == B_OUTCOME_WON` (16/16 start delays win; delay 1 kept) |
+| `03-names` | 1238 | 3699 | `CB2_Overworld` in the bedroom, player name 1 char, rival name 3 (KAZ) |
+| `04-options` | 197 | 3896 | `optionsTextSpeed == FAST`, `optionsBattleSceneOff` set, back on the field |
+| `05-house` | 431 | 4327 | map is Pallet Town (3.0) |
+| `06-to-lab` | 1209 | 5536 | map is Oak's lab (4.3) |
+| `07-starter` | 1702 | 7238 | `gPlayerPartyCount == 1`, `VAR_STARTER_MON` set, lab scene var 3 |
+| `08-battle-start` | 386 | 7624 | `gMain.inBattle` |
+| `09-battle-win` | 3322 | 10946 | `gBattleOutcome == B_OUTCOME_WON` (8/16 start delays win; delay 1 kept) |
+
+Against the 12713-frame predecessor: `03-names` types one letter and takes START's shortcut to
+OK (`decompiled/src/naming_screen.c:1485`) instead of filling seven, and picks KAZ off the
+rival's preset menu (`sRivalNameChoices`, `decompiled/src/oak_speech.c:647`) instead of a second
+naming screen; `04-options` is new and costs 197 frames; and every segment after it is cheaper
+because its message boxes print at 1 frame per character instead of 4
+(`sTextSpeedFrameDelays`, `decompiled/src/new_menu_helpers.c:27-32`) and the battle plays no
+attack animations (`optionsBattleSceneOff` -> `HITMARKER_NO_ANIMATIONS`,
+`decompiled/src/battle_main.c:2259`). The detour repays itself about nine times over before the battle even starts
+(`07-starter` alone dropped 794 frames), and the battle — a fresh RNG stream, re-searched —
+came out 696 frames shorter on top.
 
 Map ids are `(group, number)` indices into `decompiled/data/maps/map_groups.json`.
 
-## The three things the route has to get right
+## The things the route has to get right
+
+**The player never gets a preset menu; the rival always does.** The intro's naming flow is
+asymmetric: `Task_OakSpeech_YourNameWhatIsIt` fades straight into the naming screen
+(`decompiled/src/oak_speech.c:1352-1379`) — the player's preset menu only exists on the
+say-NO re-ask path, which costs a round trip to reach. The rival's menu is the first thing
+asked (`Task_OakSpeech_MoveRivalDisplayNameOptions` → `PrintNameChoiceOptions`,
+`oak_speech.c:2117`), its rows are literal (`sRivalNameChoices` row 3 is KAZ), and it wraps,
+so two UPs reach KAZ from the top. On the naming screen itself, START jumps the cursor to OK
+(`HandleKeyboardEvent`, `decompiled/src/naming_screen.c:1485`) and a one-character name is
+accepted (`SaveInputText`, `:1851`). One letter, START, A: seven fewer characters than the
+old mash, paid back on every message box that prints the name.
+
+**Single-frame taps die in the start menu.** Measured on this core: while the start menu is
+up, `gMain.newKeys` goes stale for runs of 2-3 frames — the game skips input reads — so a
+1-frame press can land on a frame nobody reads and vanish. The same is true of the field for
+~20 frames after a walk-in transition (`Task_ExitNonDoor` still running when
+`gPlayerAvatar` first says the player can step). `04-options` therefore never taps: every
+press is a mash-until-effect — mash UP until `sStartMenuCursorPos` reads 3, mash RIGHT until
+the menu's working value reads FAST — which stops on the frame the effect lands and cannot
+overshoot, because the next registrable edge is frames away.
 
 **Oak's interruption is the way into the lab.** Walking to Pallet Town `(12,1)` fires
 `PalletTown_EventScript_OakTriggerLeft` (`decompiled/data/maps/PalletTown/map.json`, `coord_events`),
@@ -60,14 +96,14 @@ mashes A through the scene.
 
 **Two prompts want different answers.** `..._EventScript_ConfirmStarterChoice` asks YES/NO to the
 starter, and A takes YES. `EventScript_ChoseStarter` then asks YES/NO to a *nickname*, where YES
-costs an entire naming screen. So `06-starter` mashes A only until the mon is in the party -- the
+costs an entire naming screen. So `07-starter` mashes A only until the mon is in the party -- the
 `givemon` happens before the nickname prompt -- and switches to B for the rest, which answers no and
 still advances every message
 (`decompiled/data/maps/PalletTown_ProfessorOaksLab/scripts.inc`).
 
 **The battle trigger is inert until the rival has his.** The `coord_events` on row `y=8` only fire
 `..._EventScript_RivalBattleTrigger*` when the lab scene var is 3, which the rival taking his ball
-sets. `06-starter` therefore does not end when the player has a mon; it ends when the scene does.
+sets. `07-starter` therefore does not end when the player has a mon; it ends when the scene does.
 
 ## What the evidence is
 
@@ -77,15 +113,22 @@ predicate whether the game is where the segment says. It fills in `tier1` from w
 than copying what the builder claimed. `crates/frlg-route/tests/route.rs` is the same check as a
 test, and also compares every segment's RAM fingerprint against the ledger.
 
-The eight logs joined into one file (`frlg log cat`) replay to the same fingerprint as the
-segmented run, `73b329af5d561a864cc4b0d46e8d4c409ce1b6df`, ending on `gBattleOutcome = 1`,
+The nine logs joined into one file (`frlg log cat`) replay to the same fingerprint as the
+segmented run, `5f82b4e397ec072dfbcfe3648bd21d32b572da76`, ending on `gBattleOutcome = 1`,
 `gPlayerPartyCount = 1`. `frlg route export` re-proves that join on every export: it replays the
 combined movie from reset and refuses to queue one whose final fingerprint is not the ledger's.
 
 ## What the RNG does in this battle, and what it does not
 
 `Random()` is an LCG over `gRngValue`, returning the top 16 bits
-(`decompiled/src/random.c`). Three things in a normal battle consume it:
+(`decompiled/src/random.c`). Two seedings bracket the intro: the title screen seeds from
+timer 1 (`SeedRngAndSetTrainerId`, `decompiled/src/title_screen.c:735`,
+`decompiled/src/main.c:264`), and leaving the *player* naming screen seeds again from the
+same timer (`MainState_Exit`, `decompiled/src/naming_screen.c:722` — the player template
+only, not the rival's). Everything from the bedroom to the battle therefore runs on a stream
+whose seed is fixed at naming-screen exit and advanced once per frame
+(`decompiled/src/main.c:412`); manipulation upstream of that exit cannot reach the battle
+except by moving the exit itself. Three things in a normal battle consume the stream:
 
 - **Criticals**: `!(Random() % sCriticalHitChance[critChance])`, base chance 1 in 16
   (`decompiled/src/battle_script_commands.c:1199`, table at `:588`).
@@ -122,7 +165,7 @@ Two consequences for manipulation:
 
 **The battle is not luck-independent, and the route no longer pretends otherwise.** Delaying the
 same A mash by a single frame flipped it from a win to a loss and back, over twelve consecutive
-delays -- six wins, six losses, strictly alternating. `08-battle-win` therefore searches: it tries
+delays -- six wins, six losses, strictly alternating. `09-battle-win` therefore searches: it tries
 16 start delays, keeps the shortest one that wins, and prints how many of them won. A route that
 merely happens to win goes on to happen to lose the moment anything upstream moves by a frame.
 
@@ -145,7 +188,7 @@ comparison should be redone against manipulated battles rather than mashed ones.
 
 ## Frames saved locally can cost more than they save
 
-`06-starter` held UP for 8 frames to turn towards the ball. One frame is enough, and trimming the
+`07-starter` held UP for 8 frames to turn towards the ball. One frame is enough, and trimming the
 other seven saved 6 frames in that segment -- and cost **391** in the battle, because every frame
 before a battle moves `gRngValue` and the battle that came out of the new stream needed two more
 attacks. Net: 385 frames slower.
@@ -164,53 +207,33 @@ it -- it is not "shorter is worse", it is the battle re-rolling -- which is the 
 RNG-sensitive fight, local greed is not merely unhelpful, it is uninformative. Measure through the
 fight or do not measure.
 
+That sweep is now two route generations stale (it predates both the core re-pin and the 10946
+rebuild); `turn_hold = 8` is carried forward unre-derived, and re-running `frlg route tune` on the
+current route is cheap insurance nobody has bought yet.
+
 ## What is not optimised
 
-The battle is now chosen rather than lucky, and one knob has been swept. Everything else is
-untouched, and the frame counts above are the baseline the next route has to beat. Largest first:
+The 2026-08-12 rebuild routed out the three cheapest items this section used to carry: the
+seven-character names, MID text speed, and battle animations (197 frames of `04-options` bought
+all three; the section header above has the per-segment arithmetic). What remains, largest
+first:
 
-- **`08-battle-win`, 4018 frames.** The search only varies *when* the mash starts. It never varies
+- **`09-battle-win`, 3322 frames.** The search only varies *when* the mash starts. It never varies
   what the mash does -- move choice, or waiting a frame between turns to move the damage roll. A
-  turn-by-turn search over small delays is the obvious next machine, and it now has two levers
-  rather than one: the 85-100% damage roll, and the crit roll (see below).
-- **Battle animations are on, and nothing in the route ever turns them off.** `NewGameInitData`
-  sets `gSaveBlock2Ptr->optionsBattleSceneOff = FALSE` (`decompiled/src/new_game.c:66`), and that
-  field is the only thing standing between the battle and `HITMARKER_NO_ANIMATIONS`:
-  `BattleStartClearSetData` does `if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_POKEDUDE))
-  && gSaveBlock2Ptr->optionsBattleSceneOff) gHitMarker |= HITMARKER_NO_ANIMATIONS`
-  (`decompiled/src/battle_main.c:2259`), so the flag is available in this battle -- neither
-  excluded type applies. Every attack in `08-battle-win` therefore plays its full animation. The
-  switch is `MENUITEM_BATTLESCENE` in the options menu (`decompiled/src/option_menu.c:514`
-  writes it back), reachable in the overworld through START -> OPTION
-  (`decompiled/src/start_menu.c:531`, `StartMenuOptionCallback`). Unmeasured on both sides: the
-  cost of the detour, and what the animations are actually worth over the ~8-10 attacks of this
-  battle. Whatever it saves, it also re-rolls the battle -- measure through the fight.
-- **`02`/`03`, 3292 frames together: the name is seven characters long.** Mashing A on the naming
-  screen types whatever letter the cursor starts on **until the name fills up** -- watching the
-  2026-08-11 tier-2 replay made it visible just how bad that is: a full seven-character wall of
-  A's, typed one press at a time, *and paid again on every later text box that prints the player
-  or rival name*. That second cost is now a number rather than a worry: a character of a printed
-  message costs `sTextSpeedFrameDelays[optionsTextSpeed]` frames, which is **4 at the default
-  MEDIUM** and 1 at FAST (`decompiled/src/new_menu_helpers.c:27-32`, read by
-  `GetTextSpeedSetting` at `:663`). Six characters of surplus name is 24 frames *per message box
-  that prints it*, at the speed the route currently runs. Two unmeasured alternatives, cheapest
-  first: a **one-character name** (type one letter, then END), and a **preset name** (Options on
-  the naming screen are two D-pad presses away). Both have to be measured through the battle, per
-  the finding above.
-- **`06-starter`, 2496 frames: text speed is never set to FAST.** The route does not open OPTIONS,
-  so every message box in the run scrolls at MEDIUM -- 4 frames per character against FAST's 1
-  (same citation as above). Whether the OPTIONS detour pays for itself over ~40 message boxes
-  (plus the per-name-letter cost above) is arithmetic nobody has done here. Note that OPTIONS is
-  one screen: text speed and battle animations are the same detour, which is an argument for
-  pricing them together rather than one at a time.
-- **The rival's Bulbasaur crits us, and that is a roll the search could avoid.** Criticals are
-  live from Oak's "inflicting damage is key" line onwards (see the RNG section above), so a
-  critical hit landing on our Squirtle is not a fixed cost -- it is one `Random()` outcome in a
-  stream that `08-battle-win` already re-searches. It is expensive twice over: the extra damage
-  can add a turn, and the "A critical hit!" message is a message box the run did not have to pay
-  for. Nobody has yet measured what the current 4018-frame battle would cost without it.
-- **Starter choice.** Measured once each, mashed, not manipulated. Redo it against manipulated
-  battles before treating Squirtle as settled.
+  turn-by-turn search over small delays is the obvious next machine, and it has two levers:
+  the 85-100% damage roll, and the crit roll. Criticals are live from Oak's "inflicting damage
+  is key" line onwards (see the RNG section above), for both sides: a rival crit costs damage
+  and a message box, and an own crit saves a turn -- both are single `Random()` outcomes in a
+  stream the search already moves. Whether the current 3322-frame battle contains either has
+  not been checked; the previous battle demonstrably ate a rival crit on the tier-2 recording.
+- **The intro's text, 3699 frames of `01`-`03`, still prints at MID.** The option menu hangs off
+  the field start menu (`StartMenuOptionCallback`, `decompiled/src/start_menu.c:531`), and there
+  is no field until the bedroom, so every box before `04-options` pays 4 frames a character no
+  matter what. Shrinking that means fewer characters, not faster ones -- and the boxes are Oak's
+  speech, which no menu shortens. Structural, until someone finds a skip.
+- **Starter choice.** Measured once each, mashed, not manipulated, on mGBA 0.10.5 -- two route
+  generations ago. Redo it against manipulated battles before treating Squirtle as settled.
+- **`turn_hold` is carried forward unre-derived** -- see the tuning table above.
 - **LeafGreen is built and has never been raced.** The sandbox builds `pokeleafgreen.gba`
   byte-exact (`docs/sandbox.md`) and the harness only needs a ROM path and symbols, but every
   number in this file is FireRed. Version differences up to the rival fight are believed small
@@ -219,15 +242,22 @@ untouched, and the frame counts above are the baseline the next route has to bea
 
 ## Tier 2
 
-**Status (2026-08-11, host): `route-12713f-a4ad4280bbdc` PASSED.** BizHawk 2.11.1 replayed all
-12713 frames, ended on the same EWRAM+IWRAM fingerprint tier 1 computed
-(`73b329af5d561a864cc4b0d46e8d4c409ce1b6df`), and matched the per-frame `gRngValue` probe on
-**every single frame** — not one divergence anywhere in the run, which is a far stronger
-statement than the final hashes agreeing. The result is
+**Status (2026-08-12, sandbox): `route-10946f-b1a0875a77e9` is queued and has not been
+replayed.** The current 10946-frame movie exists only as tier-1 evidence plus a queue entry
+(with its `gRngValue` trace); a host run of `tools/verify-runner.sh` is what turns it into a
+result.
+
+**The previous build passed (2026-08-11, host): `route-12713f-a4ad4280bbdc`.** BizHawk 2.11.1
+replayed all 12713 frames of the pre-optimisation route, ended on the same EWRAM+IWRAM
+fingerprint tier 1 computed (`73b329af5d561a864cc4b0d46e8d4c409ce1b6df`), and matched the
+per-frame `gRngValue` probe on **every single frame** — not one divergence anywhere in the run,
+which is a far stronger statement than the final hashes agreeing. The result is
 `$FRLG_ARTIFACTS/verify/results/route-12713f-a4ad4280bbdc.json`. That closes the bedroom
-desync, and with it the only open question about whether this route exists on real hardware
-timing. Everything below about the desync is kept because the root cause is worth not
-rediscovering.
+desync, and with it the only open question about whether this route *family* exists on real
+hardware timing — the 10946 rebuild changes inputs, not boot, core, or format, so the plausible
+desync causes are all ones the 12713 pass already ruled out. Plausible is not proven: the new
+movie still has to replay. Everything below about the desync is kept because the root cause is
+worth not rediscovering.
 
 The desync was the boot: BizHawk *movie playback* never skips the BIOS intro. `MGBAHawk.cs:41` (2.11.1 sources,
 `$FRLG_ARTIFACTS/reference/bizhawk-2.11.1/`) passes
