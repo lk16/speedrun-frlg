@@ -34,9 +34,10 @@ One `u16` key mask per frame, in the decomp's bit order -- `A_BUTTON 0x0001` thr
 `L_BUTTON 0x0200`, `KEYS_MASK 0x03FF`, from `include/gba/io_reg.h`. That is what the game reads and
 what `setKeys` wants.
 
-It is **not** the `.bk2` Input Log column order, which is BizHawk's, lives in compiled CIL, and is
-not derivable from anything mounted here. So the raw log stays canonical and `.bk2` will be an
-export of it: a column-order mistake then costs a re-export, not a re-route.
+It is **not** the `.bk2` Input Log column order, which is BizHawk's and lives in compiled CIL.
+`route/template.bk2` now states that order outright (`docs/route.md`), but the raw log stays
+canonical and `.bk2` remains an export of it: a column-order mistake then costs a re-export, not a
+re-route.
 
 `.ilog` is a 40-byte header (magic, version, frame count, the sha1 of the ROM it was routed
 against) followed by the masks, little-endian. A log's ledger identity is
@@ -101,17 +102,32 @@ library, not assumed.
 
 ## Caveats worth carrying into tier 2
 
-- **HLE BIOS.** No GBA BIOS exists in this sandbox (`$BIZHAWK_HOME/Firmware` is empty), so mGBA runs
-  its HLE BIOS. Whether BizHawk's mGBA core does the same is unverified, and HLE-vs-real is a
-  plausible divergence axis. `Emu::load_bios` exists so testing that needs a file, not a code change.
-- **No `.bk2` writer yet**, deliberately -- see the column-order note above.
+Two of these used to be "plausible" and are now measured. Both are divergences the tier-1 loop is
+structurally incapable of noticing, which is what makes them worth carrying rather than filing.
+
+- **HLE BIOS, and it is not optional on the other side.** No GBA BIOS exists in this sandbox
+  (`$BIZHAWK_HOME/Firmware` is empty), so mGBA runs its HLE BIOS. BizHawk *cannot* do the same:
+  loading a movie sets `DeterministicEmulationRequested`, and `MGBAHawk`'s constructor then throws
+  `MissingFirmwareException("A BIOS is required for deterministic recordings!")`. So tier 2 always
+  boots a real BIOS and tier 1 currently never does. `Emu::load_bios` exists, so closing the gap is
+  a config change rather than a code change -- but until the same file is on both sides, a `.bk2`
+  that desyncs early has an obvious suspect that has nothing to do with the route.
+- **The two tiers run different mGBA builds.** Tier 1 is 0.10.5. BizHawk 2.11.1 bundles an untagged
+  master commit (`94b1578f`, 2026-03-03) that reports 0.11.0. Pinning tier 1 to it is not a
+  one-liner: 0.11 dropped `getGameTitle`/`getGameCode` from `struct mCore` and moved `VFileOpen`,
+  so `crates/mgba-sys/csrc/shim.c` fails to compile against it -- measured, not assumed.
+  `bin/frlg-doctor` prints the delta at every startup so it stays visible.
+- **No `.bk2` writer yet.** The format question is now settled -- `route/template.bk2` carries the
+  real `LogKey` and `SyncSettings` (`docs/route.md`) -- so writing one is bounded work. The `.ilog`
+  stays canonical until it exists.
 
 ## Tests
 
-`cargo test --release` runs 18 unit tests and 10 that drive the real ROM: boot, determinism across
-two replays, input actually reaching the game, savestate round trips in memory and on disk, the
-memory-block view agreeing with bus reads, split-replay equalling one pass, and the screenshot being
-the right shape and opaque. They need the ROM and fail loudly without it rather than skipping.
+`cargo test --release` runs 24 unit tests (20 in `frlg-emu`, 4 in `frlg-route`) and 15 that drive
+the real ROM (10 `harness.rs`, 4 `observe.rs`, 1 `route.rs`): boot, determinism across two replays,
+input actually reaching the game, savestate round trips in memory and on disk, the memory-block view
+agreeing with bus reads, split-replay equalling one pass, and the screenshot being the right shape
+and opaque. They need the ROM and fail loudly without it rather than skipping.
 
 Note that `cargo test --release` does not relink `target/release/frlg`; run `cargo build --release`
 before trusting the CLI binary.

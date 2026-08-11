@@ -27,8 +27,17 @@ set -euo pipefail
 # Resolved refs are recorded in the deps tree's MANIFEST. Change a pin, re-run, and the
 # affected step rebuilds; every sandbox created afterwards gets the new tree.
 AGBCC_REF="${AGBCC_REF:-master}"          # pret/agbcc has no releases; the resolved SHA is recorded
-MGBA_REF="${MGBA_REF:-auto}"              # auto = newest 0.10.x tag; see the note in step mgba
+# A tag, or a full 40-hex commit. Deliberately not "newest 0.10.x": tier 1 and tier 2 have to be
+# pinned to each other by hand, and picking a moving target on our side hid that for a while. See
+# the note in do_mgba for why this is not BizHawk's own core yet.
+MGBA_REF="${MGBA_REF:-0.10.5}"
 BIZHAWK_VER="${BIZHAWK_VER:-2.11.1}"      # must match the BizHawk you replay .bk2 files in
+# The mGBA revision BizHawk $BIZHAWK_VER bundles, recorded so the delta between the two tiers is a
+# written-down number rather than something a desync has to reveal. 2.11.1's submodules/mgba
+# gitlink is 94b1578f8545d8ad17bb4036dba908612d5731e2 (2026-03-03), an untagged master commit that
+# calls itself 0.11.0 -- there is no upstream 0.11 tag to pin to. do_bizhawk re-reads the version
+# from the shipped assembly rather than trusting this line.
+BIZHAWK_MGBA_COMMIT="${BIZHAWK_MGBA_COMMIT:-94b1578f8545d8ad17bb4036dba908612d5731e2}"
 RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}" # resolved version is recorded in MANIFEST
 # The minimal profile is cargo/rustc/rustdoc and nothing else, and `rustup component add`
 # needs the network -- which the sandbox does not have. Anything the agent is expected to
@@ -187,7 +196,11 @@ do_sysroot() {
   rm -rf "$WORK/sysroot"
   [ -x "$DEPS/sysroot/usr/bin/arm-none-eabi-as" ] \
     || die "sysroot has no arm-none-eabi-as; binutils-arm-none-eabi did not extract"
-  manifest sysroot "$(printf '%s ' "${SYSROOT_PKGS[@]}")"
+  # The package name alone does not tie this tree to an assembler, and agbcc's build.sh
+  # assembles libgcc1.a with it -- so the version belongs in the manifest next to the name.
+  local as_ver
+  as_ver=$("$DEPS/sysroot/usr/bin/arm-none-eabi-as" --version 2>/dev/null | head -1 | grep -oE '[0-9][0-9.]*$')
+  manifest sysroot "$(printf '%s ' "${SYSROOT_PKGS[@]}")${as_ver:-unknown}"
 }
 
 do_agbcc() {
@@ -217,16 +230,29 @@ do_agbcc() {
 }
 
 do_mgba() {
+  # Not pinned to BizHawk's own core, and this is a decision rather than an oversight.
+  # BizHawk 2.11.1 bundles an untagged mGBA master commit that reports 0.11.0, and 0.11 removed
+  # `getGameTitle`/`getGameCode` from `struct mCore` and moved `VFileOpen`, so
+  # crates/mgba-sys/csrc/shim.c does not compile against it. Building 0.11.0 and pointing the
+  # workspace at it fails in cc-rs at those three symbols -- measured, not assumed.
+  # Until the shim is ported, the two tiers run different cores; do_bizhawk records BizHawk's
+  # version and bin/frlg-doctor says the delta out loud on every startup.
   rm -rf "$WORK/mgba" "$DEPS/mgba"
   local ref="$MGBA_REF"
-  if [ "$ref" = auto ]; then
-    # Stay on the same minor line BizHawk's mGBA core is on: the closer the two are,
-    # the less the in-sandbox tier-1 check can disagree with the .bk2 acceptance run.
-    ref=$(git ls-remote --tags --refs https://github.com/mgba-emu/mgba \
-          | sed 's#.*/##' | grep -E '^0\.10\.[0-9]+$' | sort -V | tail -1)
-    [ -n "$ref" ] || die "could not resolve an mGBA 0.10.x tag; set MGBA_REF explicitly"
+  mkdir -p "$WORK/mgba/src"
+  if printf '%s' "$ref" | grep -qE '^[0-9a-f]{40}$'; then
+    # A gitlink, which is what a BizHawk submodule gives you: --branch cannot take one, and a
+    # shallow fetch of the single commit beats cloning the history to reach it.
+    ( cd "$WORK/mgba/src" \
+      && git init --quiet . \
+      && git remote add origin https://github.com/mgba-emu/mgba \
+      && git fetch --quiet --depth 1 origin "$ref" \
+      && git checkout --quiet FETCH_HEAD ) \
+      || die "could not fetch mGBA commit $ref"
+  else
+    git clone --quiet --depth 1 --branch "$ref" https://github.com/mgba-emu/mgba "$WORK/mgba/src" \
+      || die "could not clone mGBA at tag $ref"
   fi
-  git clone --quiet --depth 1 --branch "$ref" https://github.com/mgba-emu/mgba "$WORK/mgba/src"
   cmake -S "$WORK/mgba/src" -B "$WORK/mgba/build" \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$DEPS/mgba/prefix" \
@@ -313,17 +339,14 @@ do_vendor() {
   manifest vendor "$(sha1sum "$m/Cargo.lock" | cut -c1-12)"
 }
 
-do_wheels() {
-  rm -rf "$DEPS/wheels"; mkdir -p "$DEPS/wheels"
-  local r="$REPO/tools/requirements.txt"
-  if [ -s "$r" ]; then
-    python3 -m pip download -r "$r" -d "$DEPS/wheels" >/dev/null
-    note "wheels are built for this host's Python; if the sandbox Python differs, prefer stdlib"
-  else
-    note "no tools/requirements.txt -- empty wheelhouse, stdlib only"
-  fi
-  manifest wheels "$( [ -s "$r" ] && sha1sum "$r" | cut -c1-12 || echo empty )"
-}
+# There used to be a `wheels` step here, building $DEPS/wheels from tools/requirements.txt.
+# It was removed rather than filled in: the requirements file never existed, so the step only
+# ever created an empty directory, while the kit exported PIP_NO_INDEX and PIP_FIND_LINKS at it
+# and made the sandbox look like it had an offline install path. It does not -- `pip install X`
+# stops at PEP 668 before --no-index is consulted, and `python3 -m venv` yields an environment
+# with no pip. Python here is stdlib-only, which covers what the project needs (struct, zipfile,
+# hashlib, json, zlib, ctypes; a .bk2 is a zip). If that ever stops being true, add the step back
+# together with a real requirements.txt -- not before.
 
 do_bizhawk() {
   # Mounted read-only and never executed in the sandbox: BizHawk needs Mono "complete",
@@ -336,11 +359,39 @@ do_bizhawk() {
   # is the install root and does not move when the version does.
   curl -fsSL "$url" | tar -C "$DEPS/bizhawk" --strip-components=1 -xzf -
   [ -f "$DEPS/bizhawk/EmuHawkMono.sh" ] || die "BizHawk $BIZHAWK_VER did not extract as expected"
-  manifest bizhawk "$BIZHAWK_VER"
 
-  # Its mGBA core carries no version string, so this cannot be probed -- check the
-  # About dialog if the tier-1 and tier-2 checks ever disagree, and set MGBA_REF to match.
-  note "bundled core: $DEPS/bizhawk/dll/libmgba.dll.so (version not embedded; ours is $(cat "$DEPS/.resolved/mgba" 2>/dev/null))"
+  # dll/libmgba.dll.so is stripped of its version symbols, which is what made this look
+  # unknowable for a while. The version is not gone, it is just somewhere else: BizHawk tags the
+  # core with [PortedCore("mGBA", "endrift", "<version>")], and a custom-attribute blob stores
+  # those as length-prefixed UTF-8. That is what the About dialog reads, so this is the same
+  # answer without a GUI or a network.
+  local core_ver
+  core_ver=$(python3 - "$DEPS/bizhawk/dll/BizHawk.Emulation.Cores.dll" <<'PY'
+import re, sys
+blob = open(sys.argv[1], "rb").read()
+for m in re.finditer(rb"\x04mGBA", blob):
+    i, out = m.end(), []
+    for _ in range(2):                      # author, then ported version
+        n = blob[i]; out.append(blob[i + 1:i + 1 + n].decode("utf8", "replace")); i += 1 + n
+    if out[0] == "endrift":
+        print(out[1]); break
+PY
+) || core_ver=""
+  [ -n "$core_ver" ] || die "could not read the bundled mGBA version out of BizHawk $BIZHAWK_VER.
+  bin/frlg-doctor compares it against our own pin, so an unreadable one is a real failure --
+  check whether the [PortedCore] attribute moved in this release."
+
+  # Both halves of the pair on one line, because the number that matters is the delta.
+  manifest bizhawk "$BIZHAWK_VER (bundled mGBA $core_ver, submodule $BIZHAWK_MGBA_COMMIT)"
+  local ours; ours=$(cat "$DEPS/.resolved/mgba" 2>/dev/null || echo "$MGBA_REF")
+  if [ "$core_ver" = "$ours" ]; then
+    note "bundled mGBA $core_ver matches our pin"
+  else
+    warn "tier-1/tier-2 core delta: ours is mGBA $ours, BizHawk $BIZHAWK_VER bundles $core_ver.
+  This is the known, recorded gap (see do_mgba); frlg-doctor repeats it every startup. It stops
+  being acceptable the moment a .bk2 desyncs -- port crates/mgba-sys/csrc/shim.c to 0.11 and set
+  MGBA_REF=$BIZHAWK_MGBA_COMMIT."
+  fi
 }
 
 do_artifacts() {
@@ -375,7 +426,6 @@ step mgba      "$MGBA_REF"       do_mgba
 step rust      "$RUST_TOOLCHAIN+$(printf '%s,' "${RUST_COMPONENTS[@]}")" do_rust
 step sccache   "$SCCACHE_VER"    do_sccache
 step vendor    "$(sha1sum "$REPO/tools/vendor-manifest/Cargo.toml" 2>/dev/null | cut -c1-12)" do_vendor
-step wheels    "$(sha1sum "$REPO/tools/requirements.txt" 2>/dev/null | cut -c1-12 || echo empty)" do_wheels
 step bizhawk   "$BIZHAWK_VER"    do_bizhawk
 step artifacts "$ARTIFACTS_DEFAULT" do_artifacts
 
@@ -387,6 +437,9 @@ if [ "$MODE" = check ]; then
 fi
 
 mv "$DEPS/MANIFEST.new" "$DEPS/MANIFEST" 2>/dev/null || rm -f "$DEPS/MANIFEST.new"
+# Left by the removed `wheels` step. Always empty, and its only effect was to make the sandbox
+# look like it had an offline pip.
+rmdir "$DEPS/wheels" 2>/dev/null || true
 rmdir "$WORK" 2>/dev/null || true
 
 printf '\n%sdeps size%s  %s\n' "$DIM" "$OFF" "$(du -sh "$DEPS" | cut -f1)"
@@ -399,18 +452,23 @@ Next, on the host, once:
      BizHawk 2.11 needs Mono, not .NET. This is only needed on the host -- the
      sandbox never runs BizHawk.
 
-  2. Record a SyncSettings template. Open BizHawk, load the built ROM, record a
-     one-frame movie, save it as route/template.bk2 and commit it. The .bk2 writer
-     copies its Header and SyncSettings verbatim, so the movies the agent produces
-     are guaranteed to load in the BizHawk you actually watch them in. Guessing at
-     SyncSettings is the single most likely way to end up with a desyncing file.
+  2. tools/bk2-template.sh
+     Regenerates route/template.bk2 -- the Input Log column order and the mGBA
+     SyncSettings blob, taken out of the shipped assemblies and written with
+     BizHawk's own movie serialiser. Commit the result. It needs no GUI and no
+     BIOS. Re-run it whenever BIZHAWK_VER moves.
 
-     This is also the only way to settle the Input Log column order: it is not in
-     any file BizHawk ships -- defctrl.json gives button names and binding order,
-     not movie column order, and the real order lives in compiled CIL. The movie's
-     own LogKey line states it outright.
+  3. Put a GBA BIOS at deps/bizhawk/Firmware/GBA_bios.rom, if you want tier 2 to
+     run at all. Loading a movie sets DeterministicEmulationRequested, and MGBAHawk
+     then throws MissingFirmwareException("A BIOS is required for deterministic
+     recordings!") -- which surfaces as the Firmware Manager dialog, not as an exit
+     code, so tools/verify-runner.sh refuses to start without it.
+       sha1 300C20DF6731A33952DED8C436F7F186D25D3492, 16384 bytes
+     It is copyrighted and is not downloaded by this script. Note that tier 1 runs
+     mGBA's HLE BIOS, so the two tiers do not boot identically until frlg is given
+     the same file (Emu::load_bios) -- see docs/harness.md.
 
-  3. box config, then box run. The mounts this script filled in are named in
+  4. box config, then box run. The mounts this script filled in are named in
      .box/config.json and given their paths on this machine in the gitignored
      .box/mounts.json; box refuses to start unless the two match.
 

@@ -24,8 +24,13 @@ permissions:
 
 setup:
   startup:
-    - command: ["sudo", "rm", "-f", "/usr/local/bin/clipboard-bridge", "/usr/local/bin/sbx-clipboard"]
-      description: Remove the clipboard bridge binaries (no documented off-switch exists)
+    # xclip and wl-paste are shims that `exec sbx-clipboard`, so removing only the two binaries
+    # below left them on PATH failing with exit 127 instead of the exit 0 they were written to
+    # return. Anything that probes for a clipboard sees a broken tool rather than an absent one.
+    - command: ["sudo", "rm", "-f",
+                "/usr/local/bin/clipboard-bridge", "/usr/local/bin/sbx-clipboard",
+                "/usr/local/bin/xclip", "/usr/local/bin/wl-paste"]
+      description: Remove the clipboard bridge binaries and their shims (no documented off-switch exists)
 
     - command:
         - "sh"
@@ -35,12 +40,15 @@ setup:
 
           # A mount keeps the path it has on the host, and those differ per machine, so find
           # the three by what they contain rather than by where anyone happens to keep them.
-          DEPS=""; DECOMP=""; ART=""
+          DEPS=""; DECOMP=""; ART=""; REPO=""
           mounts=$(awk '$2 != "/" && $2 !~ "^/(proc|sys|dev|run|etc|var|usr|boot|tmp|snap)(/|$)" {print $2}' /proc/mounts)
           for m in $mounts; do
             if [ -f "$m/.frlg-deps" ]; then DEPS="$m"; fi
             if [ -f "$m/.frlg-artifacts" ]; then ART="$m"; fi
             if [ -f "$m/firered.sha1" ] && [ -d "$m/src" ]; then DECOMP="$m"; fi
+            # The cloned workspace, found the same way and for the same reason: `sbx create
+            # --clone` gives it the path it had on the host, which differs per machine.
+            if [ -f "$m/bin/frlg-doctor" ] && [ -f "$m/.box/config.json" ]; then REPO="$m"; fi
           done
 
           if [ -z "$DEPS" ] || [ -z "$DECOMP" ] || [ -z "$ART" ]; then
@@ -61,6 +69,7 @@ setup:
           export FRLG_DECOMP_RO="$DECOMP"
           export FRLG_DECOMP="\$HOME/decomp"
           export FRLG_ARTIFACTS="$ART"
+          export FRLG_REPO="$REPO"
           export MGBA_PREFIX="$DEPS/mgba/prefix"
           export BIZHAWK_HOME="$DEPS/bizhawk"
 
@@ -85,8 +94,10 @@ setup:
           export RUSTUP_HOME="$DEPS/rustup"
           export CARGO_HOME="\$HOME/.cargo"
           export CARGO_NET_OFFLINE=true
-          export PIP_NO_INDEX=1
-          export PIP_FIND_LINKS="$DEPS/wheels"
+          # No PIP_NO_INDEX / PIP_FIND_LINKS on purpose. They used to be exported at an empty
+          # <deps>/wheels and made the sandbox look like it had an offline install path; it does
+          # not. `pip install X` stops at PEP 668 before --no-index is ever consulted, and
+          # `python3 -m venv` gives an environment with no pip. Python here is stdlib-only.
 
           # sccache is the one build cache allowed to live in artifacts: it caps itself,
           # which is what makes it safe against the disk budget.
@@ -151,6 +162,17 @@ setup:
           # inside tools/, so the build gets a writable copy on the sandbox's own disk.
           # Ephemeral on purpose: nothing but /artifacts is writable, and a build tree is
           # exactly the kind of thing that should not survive a sandbox.
+          #
+          # ~/decomp is on the sandbox's own disk, which survives stop/start of the same
+          # sandbox, so "copy once if absent" let the copy go stale whenever the host updated
+          # its checkout and the sandbox was restarted rather than recreated. Nothing detected
+          # it, and since decompiled/ points here, every citation in the docs would then name a
+          # tree that no longer matches the host's. Stamp the source revision and re-copy when
+          # it moves. The copy drops .git, so this file is the only provenance it carries.
+          want=$(git -C "$FRLG_DECOMP_RO" rev-parse HEAD 2>/dev/null || echo unknown)
+          have=$(cat "$FRLG_DECOMP/.frlg-src" 2>/dev/null || echo none)
+          [ "$want" = "$have" ] || rm -rf "$FRLG_DECOMP"
+
           if [ -n "${FRLG_DECOMP_RO:-}" ] && [ ! -d "$FRLG_DECOMP" ]; then
             rm -rf "$FRLG_DECOMP.incoming"
             mkdir -p "$FRLG_DECOMP.incoming"
@@ -160,11 +182,21 @@ setup:
               mkdir -p "$FRLG_DECOMP.incoming/tools/agbcc"
               cp -a "$FRLG_DEPS/agbcc/." "$FRLG_DECOMP.incoming/tools/agbcc/"
             fi
+            printf '%s\n' "$want" > "$FRLG_DECOMP.incoming/.frlg-src"
             mv "$FRLG_DECOMP.incoming" "$FRLG_DECOMP"
           fi
+
+          # Every citation in docs/ and route notes is written `decompiled/...`. The link is
+          # gitignored (the target is outside the repo -- a mount nested inside the workspace
+          # hangs sbx create), so it has to be made here. bin/frlg-doctor recreates it too, as a
+          # backstop; making it only there meant a session that skipped doctor found every
+          # citation in the repo dangling.
+          if [ -n "${FRLG_REPO:-}" ] && [ -d "$FRLG_DECOMP" ]; then
+            ln -sfn "$FRLG_DECOMP" "$FRLG_REPO/decompiled"
+          fi
       description: >-
-        Copy the read-only decomp to ~/decomp and drop agbcc into its tools/,
-        so `make COMPARE=1` can run against a SHA1 check.
+        Copy the read-only decomp to ~/decomp when its revision moves, drop agbcc
+        into its tools/, and link it as decompiled/ for the citations.
 
     - command:
         - "sh"

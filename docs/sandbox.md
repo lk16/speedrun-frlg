@@ -48,6 +48,11 @@ sources:
 | `FRLG_ARTIFACTS` | the one writable mount, and the only thing that outlives this sandbox |
 | `MGBA_PREFIX` | libmgba 0.10.5 — `lib/libmgba.so`, headers under `include/mgba` |
 | `BIZHAWK_HOME` | BizHawk 2.11.1, read-only, as reference material (see below) |
+| `FRLG_REPO` | this checkout; the kit resolves it the same way it resolves the mounts |
+
+BizHawk bundles a *different* mGBA (0.11.0, untagged) than the 0.10.5 tier 1 runs. That is a known
+gap, `bin/frlg-doctor` repeats it at every startup, and `docs/harness.md` says why it is not a
+one-line fix. Do not treat the two tiers as running the same emulator.
 
 `$FRLG_DEPS/MANIFEST` records what each of those was built from.
 
@@ -96,42 +101,47 @@ network-less container is not worth it for something off the inner loop.
 Its `defctrl.json` and shipped config files give the real GBA button names and the SyncSettings
 schema. Read them instead of guessing at the format.
 
-To request a tier-2 run, drop the `.bk2` in `$FRLG_ARTIFACTS/verify/queue/`; results come back in
-`$FRLG_ARTIFACTS/verify/results/`. A human on the host drives that, so it is not instant and may
-not happen during your session. Never block on it — queue it, keep working, and check for results
-next time you look.
+To request a tier-2 run, drop the `.bk2` in `$FRLG_ARTIFACTS/verify/queue/` with a sibling
+`<id>.json` saying what you expect of it; results come back in `$FRLG_ARTIFACTS/verify/results/`.
+`docs/route.md` has the exact contract, and `bin/frlg-doctor` prints the newest verdicts at
+startup so you do not have to remember to look. A human on the host runs
+`tools/verify-runner.sh`, so it is not instant and may not happen during your session. Never
+block on it — queue it and keep working.
+
+Tier 2 has not yet completed a single run: BizHawk refuses a deterministic movie without a real
+GBA BIOS, which the host does not have. `docs/route.md` says what is left.
 
 ## The output format
 
-`.bk2`, because that is what gets watched. Two things reliably break a movie:
+`.bk2`, because that is what gets watched. Both of the things that reliably break a movie are now
+answered, in one committed file: **`route/template.bk2`**. Read it (`unzip -p`) rather than
+reasoning about it, and copy what it says verbatim.
 
-**SyncSettings.** If `route/template.bk2` exists, it is a real one-frame movie recorded in the
-BizHawk build that will replay your work. Copy its `Header` and `SyncSettings` verbatim into
-everything you emit. Inventing them is the single most likely way to produce a file that loads and
-then desyncs.
+**SyncSettings.** Its `SyncSettings.json` is the mGBA core's stock defaults, serialised by
+BizHawk's own `ConfigService`. Copy the blob whole. Inventing one is the single most likely way to
+produce a file that loads and then desyncs.
 
 **Column order.** The `Input Log` column order is not the game's key bit order.
 `decompiled/include/gba/io_reg.h` defines `A_BUTTON 0x0001`, `B_BUTTON 0x0002`,
 `SELECT_BUTTON 0x0004`, `START_BUTTON 0x0008`, … `R_BUTTON 0x0100`, `L_BUTTON 0x0200`,
-`KEYS_MASK 0x03FF` — that is what the *game* reads, and what tier 1 should feed libmgba. The `.bk2`
-ordering is BizHawk's, and it is **not derivable from anything mounted here** — a previous session
-spent a while confirming that, so do not spend another one:
+`KEYS_MASK 0x03FF` — that is what the *game* reads, and what tier 1 feeds libmgba. The `.bk2`
+ordering is BizHawk's, and the template's own `LogKey` line states it:
 
-- `$BIZHAWK_HOME/defctrl.json`, key `AllTrollers` → `"GBA Controller"`, is authoritative for the
-  *names*: `Up Down Left Right Start Select B A L R`, and the controller is called `GBA Controller`.
-  It gives a binding order, not a movie column order; those two coincide often enough to be a trap.
-- The real order is `ControllerDefinition.OrderedControlsFlat` for the mGBA core, which exists only
-  as compiled CIL in `dll/BizHawk.Emulation.Cores.dll`. The string heaps carry no ordering, no
-  `.bk2` ships with the release, and BizHawk must not be run here.
+    #Tilt X|Tilt Y|Tilt Z|Light Sensor|Up|Down|Left|Right|Start|Select|B|A|L|R|Power|
 
-So the order comes from a movie recorded on the host — its own `LogKey` line states it — which is
-the same file `route/template.bk2` that settles `SyncSettings`. Until that file exists, keep the raw
-per-frame `u16` log as the canonical artifact and treat `.bk2` as an export of it; a format mistake
-then costs a re-export, not a re-route. Do not invent a column order and do not infer one from
-`defctrl.json`.
+Four analogue columns first, `Power` last. `$BIZHAWK_HOME/defctrl.json` lists ten buttons in a
+different order; it is authoritative for the *names* and for nothing else, and a previous session
+spent a while establishing that binding order and movie column order coincide often enough to be a
+trap. Do not infer an order from it, and do not invent one.
 
-A `.bk2` is only real once the raw log it came from has passed tier 1 **and** the `.bk2` decodes
-back to that same log. Write that round-trip check early.
+The template is generated on the host by `tools/bk2-template.sh`, which asks the shipped
+assemblies directly and writes the file with BizHawk's own serialiser, so it can be regenerated
+rather than re-recorded when BizHawk moves.
+
+Keep the raw per-frame `u16` log as the canonical artifact and treat `.bk2` as an export of it; a
+format mistake then costs a re-export, not a re-route. A `.bk2` is only real once the raw log it
+came from has passed tier 1 **and** the `.bk2` decodes back to that same log. Write that
+round-trip check early.
 
 ## Rust
 
@@ -152,18 +162,21 @@ crate.
 
 ## Python
 
-Standard library only, and it covers what this project needs: `struct`, `zipfile` (a `.bk2` is a
-zip), `hashlib`, `json`, `zlib`. `$FRLG_DEPS/wheels` is the offline wheelhouse and is currently
-empty; pip is configured with `--no-index`, so an install of anything else fails by design — a
-plain `pip install X` stops even earlier, at PEP 668's "externally-managed-environment", which is
-not the interesting error. `python3 -m venv` works but produces an environment with no pip, since
-`ensurepip` cannot reach an index. Adding a wheel is the same host-side round trip as adding a
-crate.
+**Standard library only.** There is no offline install path and no wheelhouse — there used to be
+plumbing suggesting otherwise (`PIP_NO_INDEX`, `PIP_FIND_LINKS` at an always-empty
+`$FRLG_DEPS/wheels`) and it was removed rather than filled in, because it cost a turn to discover
+it was fake. `pip install X` stops at PEP 668's "externally-managed-environment" before
+`--no-index` is even consulted, and `python3 -m venv` produces an environment with no pip.
+
+The stdlib covers what this project needs: `struct`, `zipfile` (a `.bk2` is a zip), `hashlib`,
+`json`, `zlib`, `ctypes`. If something genuinely needs a third-party package, say which and why;
+adding one is a host-side round trip, the same as adding a crate.
 
 ## Disk
 
-The sandbox root is 24 GiB and carries `~/decomp` (81 MB unpacked, ~1 GB once built) and Rust's
-`target/`. That is not tight and has been measured, so do not go hunting for space there.
+The sandbox root is 24 GiB and carries `~/decomp` (245 MB with both FireRed and LeafGreen built)
+and Rust's `target/`. That is not tight and has been measured, so do not go hunting for space
+there.
 
 `$FRLG_ARTIFACTS` is a real directory on the host's disk and it is the one thing here that can eat
 it. `bin/frlg-artifacts-gc` enforces a per-directory budget — sccache 4G, runs 4G, states 3G,

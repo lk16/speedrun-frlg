@@ -1,7 +1,8 @@
 # The route: power-on to a beaten rival
 
 11873 frames (~3m18s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with Squirtle.
-Tier 1 only: mGBA agrees. BizHawk has not seen it, and cannot in this sandbox.
+Tier 1 only: mGBA agrees. BizHawk has not seen it, and cannot in this sandbox — see [Tier 2](#tier-2)
+for what is left before it can.
 
     frlg route build       # run the segments, write route/logs/*.ilog and route/ledger.json
     frlg route verify      # replay the committed logs from reset and check every claim
@@ -144,7 +145,69 @@ untouched, and the frame counts above are the baseline the next route has to bea
 
 ## Tier 2
 
-Blocked, and the ledger says so on every entry. A `.bk2` needs the Input Log column order and the
-`SyncSettings` block, neither of which is derivable from anything mounted here; both come from
-`route/template.bk2`, a movie recorded on the host, which does not exist yet (`docs/harness.md`).
-Until it does, the `.ilog` files are the artifact and no `.bk2` is written.
+Still blocked, and the ledger says so on every entry — but the reason has changed, and what is
+left is smaller.
+
+**Settled: the format.** `route/template.bk2` is committed. It is a real one-frame BizHawk 2.11.1
+movie, written by BizHawk's own `Bk2Movie` serialiser under mono, and it carries the two things
+that were not derivable from anything mounted in the sandbox:
+
+    LogKey  #Tilt X|Tilt Y|Tilt Z|Light Sensor|Up|Down|Left|Right|Start|Select|B|A|L|R|Power|
+    empty   |    0,    0,    0,    0,...........|
+
+and `SyncSettings.json`, the mGBA core's stock defaults (`SkipBios` true, `OverrideSaveType` -1,
+`OverridePokemonRomhackDetect` true, …). Copy both verbatim. Regenerate with
+`tools/bk2-template.sh` on the host whenever `BIZHAWK_VER` moves; it needs no GUI and no BIOS,
+because it never instantiates a core.
+
+Note the four leading analogue columns. `defctrl.json` lists ten buttons and the temptation is to
+emit ten columns; the real GBA controller definition begins with Tilt X/Y/Z and the light sensor,
+and `Power` trails the buttons rather than leading them. That is exactly the mistake the template
+exists to prevent.
+
+**Still missing, in order:**
+
+1. **No `.bk2` writer.** The `.ilog` files remain the canonical artifact. Writing one now costs a
+   re-export if it is wrong, not a re-route.
+2. **The host has no GBA BIOS.** This is the one that was not previously known. Loading a movie
+   sets `DeterministicEmulationRequested`, and `MGBAHawk`'s constructor then throws
+   `MissingFirmwareException("A BIOS is required for deterministic recordings!")` — read out of
+   `dll/BizHawk.Emulation.Cores.dll`, not guessed. EmuHawk turns that into the Firmware Manager
+   dialog, so an unattended run hangs rather than failing. Tier 2 needs
+   `$BIZHAWK_HOME/Firmware/GBA_bios.rom`, sha1 `300C20DF…D25D3492`, 16384 bytes.
+   **This also means tier 1 and tier 2 do not boot the same way**: tier 1 runs mGBA's HLE BIOS.
+   `Emu::load_bios` exists, so closing that gap is a config change, not a code change — but it
+   has not been done and no `.bk2` should be trusted until it is.
+3. **The cores differ.** Tier 1 is mGBA 0.10.5; BizHawk 2.11.1 bundles an untagged master commit
+   that reports 0.11.0. `bin/frlg-doctor` prints the delta every startup. See `docs/harness.md`.
+
+### Requesting a run, and reading the answer
+
+`tools/verify-runner.sh` drains the queue on the host. Both sides depend on this contract, so it
+lives here rather than in either script:
+
+    in   $FRLG_ARTIFACTS/verify/queue/<id>.bk2     the movie to replay
+         $FRLG_ARTIFACTS/verify/queue/<id>.json    optional, what the sandbox expects:
+                                                   {"ilog_sha1", "ram_hash", "frames"}
+    out  $FRLG_ARTIFACTS/verify/results/<id>.json
+
+    {
+      "id":                "08-battle-win",
+      "bk2_sha1":          "…",   "ilog_sha1":  "…",   "rom_sha1": "…",
+      "bizhawk_version":   "2.11.1",
+      "verdict":           "pass" | "desync" | "error",
+      "desync_frame":      null,
+      "ram_hash":          "…",   "expected_ram_hash": "…",
+      "finished_at":       "2026-08-11T18:04:00+02:00",
+      "notes":             "replayed 11873 frames; fingerprint matches"
+    }
+
+`ram_hash` is the same fingerprint tier 1 computes — sha1 over EWRAM then IWRAM
+(`docs/harness.md`) — which is what makes the two tiers comparable rather than merely both
+green. The runner always writes a result, including for its own failures, and always removes the
+queue entry: a request that died in a dialog must not look like one nobody has picked up yet.
+`bin/frlg-doctor` prints the newest verdicts at startup.
+
+The runner has **never completed a real replay** — it cannot, until the BIOS exists — so treat
+its BizHawk-side details (`tools/verify-runner.lua`, the memory-domain names in particular) as
+the least-tested code in this repository.

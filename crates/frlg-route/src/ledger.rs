@@ -16,12 +16,14 @@ use crate::observe::Observer;
 use crate::record::{Recorder, RouteError};
 use crate::segments::{self, Segment, Starter, Tuning};
 
-/// Tier 2 is a BizHawk replay on the host; nothing in this sandbox can do it,
-/// and until `route/template.bk2` exists no `.bk2` can even be written
-/// (`docs/harness.md`). Every entry says so out loud rather than leaving the
+/// Tier 2 is a BizHawk replay on the host; nothing in this sandbox can do it.
+/// The format question is settled -- `route/template.bk2` now carries the Input
+/// Log column order and the mGBA `SyncSettings` blob -- but nothing writes a
+/// `.bk2` yet, and the host needs a GBA BIOS before BizHawk will replay one at
+/// all (`docs/route.md`). Every entry says so out loud rather than leaving the
 /// field empty and letting a reader assume.
 pub const TIER2_BLOCKED: &str =
-    "blocked: no route/template.bk2 to take SyncSettings and the Input Log column order from";
+    "blocked: no .bk2 writer yet; format settled by route/template.bk2 (docs/route.md)";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Ledger {

@@ -25,6 +25,15 @@ have() { # have <label> <path>
   if [ -e "$2" ]; then printf '  %s ok  %s %-26s %s%s%s\n' "$GREEN" "$OFF" "$1" "$DIM" "$2" "$OFF"
   else printf '  %s FAIL%s %-26s missing: %s\n' "$RED" "$OFF" "$1" "$2"; fail=1; fi
 }
+# For things that are wrong but not this sandbox's fault and not fixable from in here. They must
+# still be said out loud on every startup -- a known gap that nobody is reminded of is a gap that
+# gets discovered by a desync three sessions later.
+note() { # note <label> <text...>
+  printf '  %s !! %s %-26s %s\n' "$YELLOW" "$OFF" "$1" "${*:2}"
+}
+info() { # info <label> <text...>
+  printf '  %s --  %s %-26s %s%s%s\n' "$DIM" "$OFF" "$1" "$DIM" "${*:2}" "$OFF"
+}
 
 echo
 echo "mounts"
@@ -93,6 +102,12 @@ chk "rustc"             rustc --version
 chk "cargo clippy"      cargo clippy --version
 chk "cargo fmt"         cargo fmt --version
 chk "sccache"           sccache --version
+# That the binary runs is not the question -- whether cargo is told to use it is. The wrapper
+# line is generated at startup into a file nothing commits, so it is easy to lose and its loss is
+# invisible: builds still work, they are just cold every time.
+chk "sccache is wired in" sh -c '
+  grep -q "^rustc-wrapper" "$HOME/.cargo/config.toml" 2>/dev/null || exit 1
+  sed -n "s/^rustc-wrapper = //p" "$HOME/.cargo/config.toml"'
 have "vendored crates"  "${FRLG_DEPS:-/nonexistent}/cargo-vendor"
 # dlopen, not stat: the whole point of the check is whether the loader can satisfy it,
 # and a libmgba.so with an unsatisfiable dependency passes every test but this one.
@@ -102,6 +117,78 @@ ctypes.CDLL(p)
 print(os.path.realpath(p))'
 have "mgba headers"     "${MGBA_PREFIX:-/nonexistent}/include/mgba/core/core.h"
 have "bizhawk (ref)"    "${BIZHAWK_HOME:-/nonexistent}"
+
+# The two tiers run independently chosen mGBA cores, and any emulation-behaviour delta between
+# them is a desync tier 1 is structurally incapable of seeing. Neither number is guessable at a
+# glance -- ours is in the deps MANIFEST, BizHawk's is a [PortedCore] attribute in compiled CIL --
+# so this reads both and says the delta every startup. It FAILS only on drift: if BizHawk's core
+# is no longer the one host-prep recorded, the deps tree and the sandbox disagree about what
+# tier 2 even is.
+manifest="${FRLG_DEPS:-/nonexistent}/MANIFEST"
+ours=$(sed -n 's/^mgba  *//p' "$manifest" 2>/dev/null | head -1)
+recorded=$(sed -n 's/.*bundled mGBA \([^,)]*\).*/\1/p' "$manifest" 2>/dev/null | head -1)
+actual=$(python3 - "${BIZHAWK_HOME:-/nonexistent}/dll/BizHawk.Emulation.Cores.dll" 2>/dev/null <<'PY'
+import re, sys
+blob = open(sys.argv[1], "rb").read()
+for m in re.finditer(rb"\x04mGBA", blob):
+    i, out = m.end(), []
+    for _ in range(2):
+        n = blob[i]; out.append(blob[i + 1:i + 1 + n].decode("utf8", "replace")); i += 1 + n
+    if out[0] == "endrift":
+        print(out[1]); break
+PY
+)
+if [ -z "$ours" ] || [ -z "$actual" ]; then
+  printf '  %s FAIL%s %-26s could not read both core versions (ours=%s bizhawk=%s)\n' \
+    "$RED" "$OFF" "mgba pin" "${ours:-?}" "${actual:-?}"; fail=1
+elif [ -n "$recorded" ] && [ "$recorded" != "$actual" ]; then
+  printf '  %s FAIL%s %-26s BizHawk now bundles mGBA %s, MANIFEST says %s -- deps tree is stale\n' \
+    "$RED" "$OFF" "mgba pin" "$actual" "$recorded"; fail=1
+elif [ "$ours" = "$actual" ]; then
+  printf '  %s ok  %s %-26s %sboth tiers on mGBA %s%s\n' "$GREEN" "$OFF" "mgba pin" "$DIM" "$ours" "$OFF"
+else
+  note "mgba pin" "tier 1 is mGBA $ours, tier 2 (BizHawk) is $actual -- known gap, not fixable here"
+fi
+
+echo
+echo "route inputs (what the citations and the replays are made of)"
+# A sha1 comparison, never a rebuild: the point is to answer "is the ROM the harness will pick up
+# the one everything was routed against", in a second, before anything else runs.
+chk "rom matches firered.sha1" sh -c '
+  rom="${FRLG_ROM:-$FRLG_ARTIFACTS/rom/pokefirered.gba}"
+  [ -f "$rom" ] || { echo "no ROM at $rom -- build it (docs/sandbox.md)"; exit 1; }
+  want=$(cut -d" " -f1 < "$FRLG_DECOMP_RO/firered.sha1")
+  got=$(sha1sum "$rom" | cut -d" " -f1)
+  [ "$want" = "$got" ] || { echo "$rom is $got, firered.sha1 wants $want"; exit 1; }
+  echo "$got"'
+have "rom symbols"      "${FRLG_ARTIFACTS:-/nonexistent}/rom/pokefirered.sym"
+
+# The copy carries no .git, so this stamp is the only thing that ties a citation to a revision of
+# pret/pokefirered. Written by the kit's startup step; a missing one means the copy predates it.
+if [ -f "${FRLG_DECOMP:-/nonexistent}/.frlg-src" ]; then
+  info "decomp revision" "$(cat "$FRLG_DECOMP/.frlg-src")"
+else
+  note "decomp revision" "no ~/decomp/.frlg-src -- this copy predates the revision stamp, so what it was copied from is unknown"
+fi
+
+# ~/decomp is writable and the build writes into it. An accidental edit there silently changes
+# what every `decompiled/foo.c:123` citation in the docs and the journal means, and citations are
+# this project's substitute for a network -- so it is the one class of corruption it cannot
+# afford. `Only in` lines are expected and must not fail this: the build generates headers
+# (map_groups.h, items.h, ...) that exist only in the copy and are legitimately citable.
+chk "decomp copy is faithful" sh -c '
+  for d in src include; do
+    diff -rq "$FRLG_DECOMP_RO/$d" "$FRLG_DECOMP/$d" 2>&1 | grep "differ" && exit 1
+  done
+  echo "no source file differs from the read-only mount"'
+
+repo_root=${FRLG_REPO:-$repo}
+if [ -f "$repo_root/route/template.bk2" ]; then
+  printf '  %s ok  %s %-26s %s%s%s\n' "$GREEN" "$OFF" "tier-2 template" "$DIM" \
+    "$(sha1sum "$repo_root/route/template.bk2" | cut -c1-12)" "$OFF"
+else
+  note "tier-2 template" "no route/template.bk2 -- regenerate it on the host (tools/bk2-template.sh)"
+fi
 
 echo
 echo "network (blocked is the point; api.anthropic.com is the one exception)"
@@ -132,6 +219,28 @@ netchk() { # netchk <host> <blocked|open>
 }
 for h in crates.io pypi.org github.com tasvideos.org; do netchk "$h" blocked; done
 netchk api.anthropic.com open
+
+echo
+echo "tier-2 queue (a human on the host drives this; never block on it)"
+# Answers come back into a directory nobody would think to look in. Say what is there at startup
+# so a new session sees the verdict without being told where to find it.
+if [ -d "${FRLG_ARTIFACTS:-/nonexistent}/verify" ]; then
+  queued=$(find "$FRLG_ARTIFACTS/verify/queue" -name '*.bk2' 2>/dev/null | wc -l)
+  results=$(find "$FRLG_ARTIFACTS/verify/results" -name '*.json' 2>/dev/null | wc -l)
+  info "queued" "$queued waiting to be replayed"
+  if [ "$results" -eq 0 ]; then
+    info "results" "none yet"
+  else
+    info "results" "$results (newest first, docs/route.md has the format)"
+    find "$FRLG_ARTIFACTS/verify/results" -name '*.json' -printf '%T@ %p\n' 2>/dev/null \
+      | sort -rn | head -5 | cut -d' ' -f2- | while read -r r; do
+        python3 -c 'import json,sys
+d = json.load(open(sys.argv[1]))
+print("      %-20s %-7s %s" % (d.get("id"), d.get("verdict"), (d.get("notes") or "")[:70]))' "$r" 2>/dev/null \
+          || printf '      %s (unreadable)\n' "$(basename "$r")"
+      done
+  fi
+fi
 
 echo
 echo "artifacts budget"
