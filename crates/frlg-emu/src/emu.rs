@@ -92,14 +92,19 @@ impl Emu {
     }
 
     /// Loads a real GBA BIOS and resets. Without this mGBA uses its HLE BIOS.
-    /// No BIOS ships in this sandbox; the entry point exists because HLE-vs-real
-    /// is a plausible divergence axis against another emulator at acceptance
-    /// time, and that experiment should not need a code change.
-    pub fn load_bios(&mut self, bios: &Path) -> Result<(), EmuError> {
+    ///
+    /// `skip_intro: false` runs the BIOS boot animation, which is the only
+    /// boot BizHawk uses for a movie: replaying a `.bk2` requests
+    /// deterministic emulation, and `MGBAHawk.cs:41` (2.11.1) overrides the
+    /// SyncSettings' `SkipBios: true` to false in exactly that case. `true`
+    /// exists for interactive experiments only; a log built on it is shifted
+    /// against tier 2 by the whole intro.
+    pub fn load_bios(&mut self, bios: &Path, skip_intro: bool) -> Result<(), EmuError> {
         let display = bios.display().to_string();
         let path =
             CString::new(display.as_bytes()).map_err(|_| EmuError::BadPath(display.clone()))?;
-        if unsafe { mgba_sys::frlg_core_load_bios(self.raw, path.as_ptr()) } == 0 {
+        if unsafe { mgba_sys::frlg_core_load_bios(self.raw, path.as_ptr(), skip_intro.into()) } == 0
+        {
             return Err(EmuError::Bios(display));
         }
         Ok(())

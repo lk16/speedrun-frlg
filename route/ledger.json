@@ -1,22 +1,22 @@
 {
   "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
-  "bios": "bios:300c20df6731a33952ded8c436f7f186d25d3492",
+  "bios": "bios+intro:300c20df6731a33952ded8c436f7f186d25d3492",
   "starter": "squirtle",
   "tuning": {
     "turn_hold": 8
   },
-  "total_frames": 12222,
+  "total_frames": 12713,
   "segments": [
     {
       "name": "01-boot",
       "goal": "NEW GAME selected (CB2_NewGameScene running)",
       "parent": null,
       "log": "route/logs/01-boot.ilog",
-      "digest": "63310d098a4b6077041aebf398b3599273f7fb84",
-      "frames": 349,
+      "digest": "485d5e5d3d9fca350be5e8313a59624412f9c90a",
+      "frames": 619,
       "start_frame": 0,
-      "ram_hash": "c243ae2802fdd6db4010b0ce02767a38c636b123",
-      "tier1": true,
+      "ram_hash": "9e11d6301e7e1103a391be2fa6d6970bd9b2fc1d",
+      "tier1": false,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
@@ -26,9 +26,9 @@
       "log": "route/logs/02-intro-oak.ilog",
       "digest": "dbd1f0cd200e2d6e7038cb63246c89d87765840d",
       "frames": 1842,
-      "start_frame": 349,
-      "ram_hash": "3e2633f49863f13915bf6e1529091acab3fd76c5",
-      "tier1": true,
+      "start_frame": 619,
+      "ram_hash": "6586a54b3e0155f0f3d9a49a9f7fbdf1208709e4",
+      "tier1": false,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
@@ -38,9 +38,9 @@
       "log": "route/logs/03-names.ilog",
       "digest": "ccb7f444a69de7d468542ada94bc0d84a4a4b277",
       "frames": 1450,
-      "start_frame": 2191,
-      "ram_hash": "3c0dd3bfd333547d01bfdffa0b35a780d9085940",
-      "tier1": true,
+      "start_frame": 2461,
+      "ram_hash": "175c5d711de55284e9986dde9724f4279c1be79f",
+      "tier1": false,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
@@ -50,9 +50,9 @@
       "log": "route/logs/04-house.ilog",
       "digest": "97cc3ad6cd56b58f2edd28b6aa067d3139422f12",
       "frames": 455,
-      "start_frame": 3641,
-      "ram_hash": "6b61b0a1618b6d2f18933415d787ee7805ae4522",
-      "tier1": true,
+      "start_frame": 3911,
+      "ram_hash": "10f6dcb37f826b608373ff6c57e078040b2f5a57",
+      "tier1": false,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
@@ -62,9 +62,9 @@
       "log": "route/logs/05-to-lab.ilog",
       "digest": "63541737f09360ad922c58547f013274af93945b",
       "frames": 1359,
-      "start_frame": 4096,
-      "ram_hash": "33bf4e88617ac43b922dc00482c4b5e1d7e25d1f",
-      "tier1": true,
+      "start_frame": 4366,
+      "ram_hash": "dc1c0b197c34418b6ca4663be27a0d4bf4c97a2b",
+      "tier1": false,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
@@ -74,9 +74,9 @@
       "log": "route/logs/06-starter.ilog",
       "digest": "f2876d3d1239675fbcf77d7606fa23752ac3eb8a",
       "frames": 2496,
-      "start_frame": 5455,
-      "ram_hash": "86b2892038ff90bc76dcabd1435fccddcc5e8813",
-      "tier1": true,
+      "start_frame": 5725,
+      "ram_hash": "aa7c9e7ceede2e86bc1125bad8b052ec41b0ffef",
+      "tier1": false,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
@@ -86,9 +86,9 @@
       "log": "route/logs/07-battle-start.ilog",
       "digest": "6bdfe5a51237ded62d1c79118035ca691fa47781",
       "frames": 474,
-      "start_frame": 7951,
-      "ram_hash": "e95373abc10c8bfa7cf6abe8ede9583681c9fbcb",
-      "tier1": true,
+      "start_frame": 8221,
+      "ram_hash": "299b859188c264798da2ac00917b3a6b9dc7b50e",
+      "tier1": false,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
@@ -96,11 +96,11 @@
       "goal": "gBattleOutcome == B_OUTCOME_WON",
       "parent": "07-battle-start",
       "log": "route/logs/08-battle-win.ilog",
-      "digest": "bdff60bb0dfc254f255f3fdcbacf08f35d061961",
-      "frames": 3797,
-      "start_frame": 8425,
-      "ram_hash": "cbf1e4b415ce1176ee38d060678b7a334cec15a6",
-      "tier1": true,
+      "digest": "b931504b2fe6cc3d3350f751581a72d2819d11b7",
+      "frames": 4018,
+      "start_frame": 8695,
+      "ram_hash": "73b329af5d561a864cc4b0d46e8d4c409ce1b6df",
+      "tier1": false,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     }
   ]

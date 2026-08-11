@@ -31,10 +31,14 @@ pub struct Ledger {
     pub rom_sha1: String,
     /// How the core was booted when these logs were made: `"hle"` (mGBA's
     /// high-level BIOS, the only option until a real BIOS exists on the
-    /// host), or `"bios:<sha1>"` (real BIOS, intro skipped, the way BizHawk
-    /// boots a movie). Deliberately not `#[serde(default)]`, like `tuning`:
-    /// the boot changes SWI timing, so logs replayed under the other boot are
-    /// not the same evidence. `verify` refuses a mismatch.
+    /// host), or `"bios+intro:<sha1>"` (real BIOS, boot animation played --
+    /// the only boot BizHawk uses for a movie, since replaying a `.bk2`
+    /// requests deterministic emulation and `MGBAHawk.cs:41` then overrides
+    /// `SkipBios`). The retired `"bios:<sha1>"` meant intro-skipped and is
+    /// refused like any other mismatch. Deliberately not `#[serde(default)]`,
+    /// like `tuning`: the boot changes both SWI timing and the intro length,
+    /// so logs replayed under another boot are not the same evidence.
+    /// `verify` refuses a mismatch.
     pub bios: String,
     pub starter: String,
     /// The route-level knobs this build used. Recorded so `verify` rebuilds the
