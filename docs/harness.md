@@ -105,16 +105,20 @@ library, not assumed.
 Two of these used to be "plausible" and are now measured. Both are divergences the tier-1 loop is
 structurally incapable of noticing, which is what makes them worth carrying rather than filing.
 
-- **HLE BIOS, and it is not optional on the other side.** As long as no GBA BIOS exists on the
-  host (`$BIZHAWK_HOME/Firmware` is empty), mGBA runs its HLE BIOS. BizHawk *cannot* do the same:
-  loading a movie sets `DeterministicEmulationRequested`, and `MGBAHawk`'s constructor then throws
-  `MissingFirmwareException("A BIOS is required for deterministic recordings!")`. The tier-1 side
-  is wired (2026-08-11): `frlg_emu::boot_with_default_bios` boots from
-  `$FRLG_GBA_BIOS`/`$BIZHAWK_HOME/Firmware/GBA_bios.rom` the moment it exists, sha1-pinned to the
-  World BIOS, intro skipped via `opts.skipBios` -- the same `GBASkipBIOS` call BizHawk's glue
-  makes (`src/platform/bizhawk/bizinterface.c:171` at the pinned commit). The ledger records the
-  boot per build, and `frlg route verify` refuses to replay logs under the other boot. Until the
-  file exists, every log is HLE and a `.bk2` export of it must be expected to desync at tier 2.
+- **The boot is the real BIOS *with the intro played*, because that is the only boot BizHawk
+  uses for a movie.** Loading a movie sets `DeterministicEmulationRequested`; without a BIOS
+  `MGBAHawk`'s constructor then throws
+  `MissingFirmwareException("A BIOS is required for deterministic recordings!")`, and *with* one
+  it overrides the SyncSettings' `SkipBios: true` to false (`MGBAHawk.cs:41`,
+  `skipBios: _syncSettings.SkipBios && !lp.DeterministicEmulationRequested`), so the ~272-frame
+  boot animation always runs with movie input already being consumed. Tier 1 booting
+  skip-intro was exactly the 2026-08-11 bedroom desync: the whole log ran ~272 frames early and
+  the first frame-exact walking died. `frlg_emu::boot_with_default_bios` boots from
+  `$FRLG_GBA_BIOS`/`$BIZHAWK_HOME/Firmware/GBA_bios.rom` the moment it exists, sha1-pinned to
+  the World BIOS, intro *not* skipped (`Emu::load_bios(_, false)`); the ledger records the boot
+  per build (`"hle"` or `"bios+intro:<sha1>"`, the retired `"bios:<sha1>"` meant skip-intro),
+  and `frlg route verify` refuses to replay logs under another boot. A log built HLE or
+  skip-intro must be expected to desync at tier 2.
 - **The two tiers run the same mGBA commit since 2026-08-11.** `MGBA_REF` is `94b1578f`, the exact
   submodule gitlink BizHawk 2.11.1 ships (self-reported 0.11.0). The shim port this took:
   `getGameTitle`/`getGameCode` became `getGameInfo`; `desiredVideoDimensions` became

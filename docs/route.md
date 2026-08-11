@@ -1,14 +1,21 @@
 # The route: power-on to a beaten rival
 
-12209 frames (~3m24s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with Squirtle.
-Tier 1 only: mGBA agrees. BizHawk has not seen it, and cannot until the host has a GBA BIOS — see
-[Tier 2](#tier-2) for what is left before it can.
+12713 frames (~3m33s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with
+Squirtle, on FireRed. Tier 1 only: mGBA agrees. BizHawk has played an earlier build of it and
+desynced for a reason that is now understood and fixed — see [Tier 2](#tier-2).
 
-The count was 11873 until 2026-08-11, when tier 1 was re-pinned from mGBA 0.10.5 to the exact
-commit BizHawk bundles (`94b1578f`, see `docs/harness.md`). Segments 01–07 replay identically on
-the new core; the battle RNG stream does not, so `08-battle-win` re-searched its start delay and
-the chosen battle is now 336 frames longer. That is the pin surfacing a real emulation delta
-*before* tier 2 had to find it, which is the pin doing its job.
+The route is rebuilt whenever the boot or the core moves, and the total has moved with it:
+11873 (mGBA 0.10.5, HLE BIOS) → 12209 (2026-08-11, tier 1 re-pinned to the exact mGBA commit
+BizHawk bundles, `94b1578f`, `docs/harness.md`) → 12222 (real-BIOS boot, intro skipped) →
+**12713** (2026-08-12: real-BIOS boot with the ~272-frame boot animation *played*, because that
+is the only boot BizHawk uses for a movie — the desync fix below). Segments survive these
+re-pins shifted but intact; the battle RNG stream never does, so `08-battle-win` re-searches its
+start delay each time. Each re-pin surfacing a real delta *before* tier 2 had to find it is the
+pinning doing its job.
+
+LeafGreen builds byte-exact in the same tree and the harness only needs a ROM path and symbols;
+the two versions are typically one speedrun category, so the plan is to route both and keep
+whichever is faster. Every number in this file is FireRed until a LeafGreen build exists.
 
     frlg route build       # run the segments, write route/logs/*.ilog and route/ledger.json
     frlg route verify      # replay the committed logs from reset and check every claim
@@ -32,14 +39,14 @@ nothing here has to restate them and get one of them wrong.
 
 | Segment | Frames | Ends | Observable |
 | --- | ---: | ---: | --- |
-| `01-boot` | 347 | 347 | `CB2_NewGameScene` -- NEW GAME taken |
-| `02-intro-oak` | 1840 | 2187 | `CB2_NamingScreen` -- Oak's speech and the boy/girl choice done |
-| `03-names` | 1442 | 3629 | `CB2_Overworld` in the bedroom, both names entered |
-| `04-house` | 455 | 4084 | map is Pallet Town (3.0) |
-| `05-to-lab` | 1359 | 5443 | map is Oak's lab (4.3) |
-| `06-starter` | 2496 | 7939 | `gPlayerPartyCount == 1`, `VAR_STARTER_MON` set, lab scene var 3 |
-| `07-battle-start` | 473 | 8412 | `gMain.inBattle` |
-| `08-battle-win` | 3797 | 12209 | `gBattleOutcome == B_OUTCOME_WON` |
+| `01-boot` | 619 | 619 | `CB2_NewGameScene` -- NEW GAME taken (includes the ~272-frame BIOS animation) |
+| `02-intro-oak` | 1842 | 2461 | `CB2_NamingScreen` -- Oak's speech and the boy/girl choice done |
+| `03-names` | 1450 | 3911 | `CB2_Overworld` in the bedroom, both names entered |
+| `04-house` | 455 | 4366 | map is Pallet Town (3.0) |
+| `05-to-lab` | 1359 | 5725 | map is Oak's lab (4.3) |
+| `06-starter` | 2496 | 8221 | `gPlayerPartyCount == 1`, `VAR_STARTER_MON` set, lab scene var 3 |
+| `07-battle-start` | 474 | 8695 | `gMain.inBattle` |
+| `08-battle-win` | 4018 | 12713 | `gBattleOutcome == B_OUTCOME_WON` (16/16 start delays win; delay 1 kept) |
 
 Map ids are `(group, number)` indices into `decompiled/data/maps/map_groups.json`.
 
@@ -70,8 +77,9 @@ than copying what the builder claimed. `crates/frlg-route/tests/route.rs` is the
 test, and also compares every segment's RAM fingerprint against the ledger.
 
 The eight logs joined into one file (`frlg log cat`) replay to the same fingerprint as the
-segmented run, `884098b71ea9e75bd992894371f510ce4c1f5675`, ending on `gBattleOutcome = 1`,
-`gPlayerPartyCount = 1`, Squirtle at level 6.
+segmented run, `73b329af5d561a864cc4b0d46e8d4c409ce1b6df`, ending on `gBattleOutcome = 1`,
+`gPlayerPartyCount = 1`. `frlg route export` re-proves that join on every export: it replays the
+combined movie from reset and refuses to queue one whose final fingerprint is not the ledger's.
 
 ## What the RNG does in this battle, and what it does not
 
@@ -165,17 +173,26 @@ untouched, and the frame counts above are the baseline the next route has to bea
 
 ## Tier 2
 
-**Status (2026-08-11, evening): the pipeline runs end to end, and the first watched replay
-desyncs.** The World BIOS is installed (sha1-verified), the route was rebuilt booting from it
-(12222 frames, ledger `bios: "bios:300c20df…"`, 16/16 battle delays win), the export queued, and
-EmuHawk actually played the movie on the host — power-on, menus, naming, into the bedroom. Then
-it stopped lining up: the player never walks downstairs and the run stalls in the bedroom, so the
-divergence is at or before the `03-names`→`04-house` movement. Observed by eye on the GUI; no
-frame number yet — the runner's Lua status/RAM-compare path has still never completed, so
-frame-level diagnosis is the open tier-2 item now. Two runner bugs were found and fixed on the
-way: `--lua` was passed relative (EmuHawkMono.sh cd's to its own directory first), and
-`--userdata` is not a data directory at all but movie metadata whose parser exits 1 on a bare
-path (`--config` is the right flag).
+**Status (2026-08-12): the 2026-08-11 bedroom desync is root-caused and fixed; the rebuilt
+movie is queued and waits for a host run.** The desync was the boot: BizHawk *movie playback*
+never skips the BIOS intro. `MGBAHawk.cs:41` (2.11.1 sources,
+`$FRLG_ARTIFACTS/reference/bizhawk-2.11.1/`) passes
+`skipBios: _syncSettings.SkipBios && !lp.DeterministicEmulationRequested`, and loading a movie
+requests deterministic emulation — that is precisely why line 30's `MissingFirmwareException`
+fired on the host until the BIOS existed. So the template's `SkipBios: true` is overridden to
+false for every replay, `bizinterface.c:171`'s `GBASkipBIOS` call never happens, and the
+~272-frame boot animation plays with movie input already being consumed. Tier 1 booted with
+`opts.skipBios = true`, so its whole log ran ~272 frames early on BizHawk: mash segments
+absorbed the shift, and the first frame-exact walking (the bedroom) died — exactly what was
+watched. Tier 1 now boots BIOS-with-intro (`Emu::load_bios(_, false)`, ledger marker
+`bios+intro:<sha1>`), the route is rebuilt (12713 frames, 16/16 battle delays win) and queued as
+`route-12713f-a4ad4280bbdc`. Not confirmed until a tier-2 result lands; the fix's reasoning is
+cited, its effect is not yet observed.
+
+Two runner bugs were found and fixed on the way to the first replay: `--lua` was passed
+relative (EmuHawkMono.sh cd's to its own directory first), and `--userdata` is not a data
+directory at all but movie metadata whose parser exits 1 on a bare path (`--config` is the
+right flag).
 
 **Settled: the format.** `route/template.bk2` is committed. It is a real one-frame BizHawk 2.11.1
 movie, written by BizHawk's own `Bk2Movie` serialiser under mono, and it carries the two things
@@ -219,18 +236,17 @@ sha1 at startup.
 
 **Still open, in order:**
 
-1. **The desync.** The first watched replay stalls in the bedroom (see Status above). Both tiers
-   run the same mGBA commit and the same BIOS boot, so the remaining suspects are BizHawk-side
-   core configuration (`SyncSettings` beyond `SkipBios`, RTC handling) and input-delivery timing
-   (when BizHawk latches a movie frame's keys vs. when `setKeys`+`runFrame` does). Getting the
-   runner's Lua reporting to complete would turn "stalls in the bedroom" into a frame number and
-   a RAM diff, which is the difference between suspecting and knowing. The BizHawk-side facts
-   are citable from inside the sandbox: `$FRLG_ARTIFACTS/reference/bizhawk-2.11.1/` holds the
-   2.11.1 sources for the frame loop, `SyncSettings`, and the movie latch path (see its README),
-   and `$FRLG_DEPS/mgba/src.tar.gz` carries the native glue (`src/platform/bizhawk/`).
+1. **A tier-2 result for `route-12713f-a4ad4280bbdc`.** The boot fix (Status above) predicts a
+   pass; nothing is claimed until the result lands. If it desyncs again, the per-frame probe
+   trace queued beside the movie should this time say at which frame, and the next suspects in
+   line are input-delivery timing (when BizHawk latches a movie frame's keys vs.
+   `setKeys`+`runFrame`) and the rest of `SyncSettings` — both citable from
+   `$FRLG_ARTIFACTS/reference/bizhawk-2.11.1/` and `$FRLG_DEPS/mgba/src.tar.gz`
+   (`src/platform/bizhawk/`).
 2. **The runner's Lua path is still unexercised end to end** (`tools/verify-runner.lua`,
    memory-domain names especially). It has loaded and played a movie but never written a
-   complete status/RAM report.
+   complete status/RAM report. It now also carries the trace compare (below), which is equally
+   unexercised.
 
 ### Requesting a run, and reading the answer
 
@@ -244,7 +260,16 @@ in either script:
 
     in   $FRLG_ARTIFACTS/verify/queue/<id>.bk2     the movie to replay
          $FRLG_ARTIFACTS/verify/queue/<id>.json    optional, what the sandbox expects:
-                                                   {"ilog_sha1", "ram_hash", "frames"}
+                                                   {"ilog_sha1", "ram_hash", "frames",
+                                                    "trace": {"file", "domain", "offset",
+                                                              "size", "symbol", "frames"}}
+         $FRLG_ARTIFACTS/verify/queue/<id>.trace   optional, the per-frame probe the request's
+                                                   "trace" describes: one little-endian u32 per
+                                                   frame, sampled by tier 1 at each frame's end.
+                                                   `frlg route export` writes gRngValue, which
+                                                   the game advances once per VBlank
+                                                   (decompiled/src/main.c:412), so the first
+                                                   mismatching frame *is* the divergence frame.
     out  $FRLG_ARTIFACTS/verify/results/<id>.json
 
     {
@@ -252,7 +277,7 @@ in either script:
       "bk2_sha1":          "…",   "ilog_sha1":  "…",   "rom_sha1": "…",
       "bizhawk_version":   "2.11.1",
       "verdict":           "pass" | "desync" | "error",
-      "desync_frame":      null,
+      "desync_frame":      null,      // first frame where the probe trace differed, when known
       "ram_hash":          "…",   "expected_ram_hash": "…",
       "finished_at":       "2026-08-11T18:04:00+02:00",
       "notes":             "replayed 12209 frames; fingerprint matches"
@@ -264,6 +289,6 @@ green. The runner always writes a result, including for its own failures, and al
 queue entry: a request that died in a dialog must not look like one nobody has picked up yet.
 `bin/frlg-doctor` prints the newest verdicts at startup.
 
-The runner has **never completed a real replay** — it cannot, until the BIOS exists — so treat
-its BizHawk-side details (`tools/verify-runner.lua`, the memory-domain names in particular) as
-the least-tested code in this repository.
+The runner has **played a movie but never written a complete Lua report**, so treat its
+BizHawk-side details (`tools/verify-runner.lua` — the memory-domain names and the trace-compare
+read API in particular) as the least-tested code in this repository.
