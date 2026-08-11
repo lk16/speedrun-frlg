@@ -3,6 +3,177 @@
 Newest first. Continuity is something you write down; a sandbox ends mid-thought. Anything
 unverified says so.
 
+## 2026-08-11 (host, night) -- TIER 2 PASSES: BizHawk replays the whole route frame for frame
+
+**The headline, for whoever picks this up in a sandbox: `route-12713f-a4ad4280bbdc` passed.**
+Luuk ran `tools/verify-runner.sh` on the host and the result is in
+`$FRLG_ARTIFACTS/verify/results/route-12713f-a4ad4280bbdc.json`:
+
+    "verdict": "pass"
+    "ram_hash": "73b329af5d561a864cc4b0d46e8d4c409ce1b6df"   (== expected_ram_hash)
+    "notes":   "replayed 12713 frames; fingerprint matches; probe trace matched every frame"
+
+Read the third line twice. The final fingerprints agreeing would have been a pass; the
+**`gRngValue` trace matching on all 12713 frames** means the two emulators never diverged for a
+single frame anywhere in the run. The boot fix was the whole desync, the 2026-08-12 audit that
+found no second cause was right, and the trace machinery that was built to name a desync frame
+instead got used to prove there was no desync to name.
+
+What this closes: the ledger's per-segment `tier2` no longer says "not replayed" (it names the
+passing run and the `ilog` digest it was built from); `docs/route.md`'s header no longer says
+"tier 1 only"; and `tools/verify-runner.lua`, three sessions old and never once having completed
+a report, has now completed one end to end -- status file, 288K RAM dump, per-frame compare.
+Rebuilding the route resets the tier-2 stamp, and should: a rebuilt movie has not been replayed.
+
+**One inconsistency worth knowing before it wastes someone's afternoon.** Re-exporting the same
+route produces the same `ilog_sha1` and a *different* `bk2_sha1` (`f60e7120…` then `4d947b73…`).
+The `.bk2` is a zip and its entry timestamps move; the input log is identical, which is why the
+re-exported movie replayed to the same fingerprint. The `.ilog` digest is the identity, the
+`.bk2` hash is not. Noted in `docs/route.md`.
+
+### Three inefficiencies, now written down with citations
+
+Luuk watched the run and named three. All three are real, and one of them contradicts something
+this journal has claimed since 2026-08-10.
+
+**Battle animations are on.** `NewGameInitData` sets `optionsBattleSceneOff = FALSE`
+(`decompiled/src/new_game.c:66`) and nothing in the route ever opens OPTIONS, so
+`BattleStartClearSetData` never sets `HITMARKER_NO_ANIMATIONS` (`decompiled/src/battle_main.c:2259`
+-- and neither of the two battle types that would block it, LINK and POKEDUDE, applies here).
+Every attack in the 4018-frame battle plays its animation. The switch is `MENUITEM_BATTLESCENE`
+(`decompiled/src/option_menu.c:514`), reached through START -> OPTION
+(`decompiled/src/start_menu.c:531`).
+
+**The name is seven characters, and each surplus character has a price now.** The naming screen
+mash types A until the name fills up, and every later message box that prints the name pays for
+all seven. The price: `sTextSpeedFrameDelays` is `{SLOW: 8, MID: 4, FAST: 1}` frames per
+character (`decompiled/src/new_menu_helpers.c:27-32`), and the route runs at the default MID. Six
+surplus characters is 24 frames per message box that prints the name. This also prices the text
+speed item that has been on the list since 2026-08-10: FAST is a 4x on every character in the
+run, and it is the *same* OPTIONS detour as the battle animations, so the two should be priced
+together rather than one at a time.
+
+**"Bulbasaur crits us" -- and this journal said that was impossible.** It was wrong, and the
+decomp says so plainly. The 2026-08-10 entry (and `docs/route.md`) claimed criticals are off for
+the whole first battle because of `BATTLE_TYPE_FIRST_BATTLE`. The actual condition is
+`&& (!(gBattleTypeFlags & BATTLE_TYPE_FIRST_BATTLE) || BtlCtrl_OakOldMan_TestState2Flag(1))`
+(`decompiled/src/battle_script_commands.c:1200`), and that second clause was never read.
+`BtlCtrl_OakOldMan_TestState2Flag(1)` tests `FIRST_BATTLE_MSG_FLAG_INFLICT_DMG`
+(`decompiled/src/battle_controller_oak_old_man.c:2228`, `decompiled/include/battle_controllers.h:287`),
+which `CompleteOnHealthbarDone` sets the first time an opponent's hit finishes draining the health
+bar, on its way to Oak's "inflicting damage is key" line
+(`decompiled/src/battle_controller_opponent.c:304-306`). So criticals are suppressed for the
+opening exchange only and are live for the rest of the battle, for both sides. Two things follow:
+the crit `Random()` call is consumed on every damaging hit regardless, because `&&` short-circuits
+left to right and the roll sits *before* the `FIRST_BATTLE` clause; and the rival's crit is a
+search target, not a fact of life -- it costs damage (possibly a turn) plus a message box, in a
+stream `08-battle-win` already re-searches. Nobody has measured the battle without it yet.
+
+The lesson is the boring one: a citation that stops at the first `&&` is not a citation. This one
+survived two sessions because it was *nearly* right.
+
+### The runner: 213s -> 31s, once it stopped talking to a real X server
+
+Replaying at 100% costs exactly what the TAS costs. `tools/verify-runner.sh` now seeds EmuHawk's
+`config.ini` (plain JSON) before each launch: `Unthrottled`, no clock/vsync/sound throttle,
+`DispSpeedupFeatures: 0` (its `MainForm::Render` returns immediately -- read from EmuHawk.exe IL,
+not guessed), sound off, and the dialog suppressors that keep an unattended run from parking on a
+modal window. `--realtime` puts the desk settings back, because watching a replay is what
+produced three of the findings above and must stay one flag away.
+
+**Determinism is checked, not assumed**: the same movie, replayed fast and silent, produced the
+same fingerprint *and* the same 12713-frame probe trace as the 100%-with-sound run. That is the
+pass quoted at the top of this entry -- it was replayed twice.
+
+Unthrottling on the desktop bought only 1.6x -- 134s, ~95 fps -- and the shape of the miss was
+the clue: 36s of CPU across 134s of wall clock, so the process was *waiting* ~8ms per frame
+rather than working. Luuk installed `xvfb`, and `--headless` (`xvfb-run`) answered it:
+
+    stock EmuHawk                      ~213s    59.7 fps, i.e. the movie's own length
+    seeded config, on the desktop       134s    ~95 fps
+    seeded config, --headless            31s    ~410 fps      <- default
+    --headless, DispSpeedupFeatures 1    47s    ~270 fps
+    --headless, DispSpeedupFeatures 2    47s    ~270 fps
+
+**6.9x, and the win is the X server rather than the throttle.** Headless is 32s of CPU across
+31s of wall -- the replay is finally CPU-bound, nothing waits. So the ~8ms/frame was the desktop
+X connection, most likely the per-frame `UpdateWindowTitle()` that `DispSpeedupFeatures == 0`
+switches on (`CalcFramerateAndUpdateDisplay`, EmuHawk.exe IL): a round trip per frame, cheap
+against a local Xvfb, expensive against a real desktop. The last two rows are the same
+experiment run the other way and they justify keeping `DispSpeedupFeatures: 0` -- letting
+EmuHawk render costs 16s even with nothing to display it on. All four replays passed with the
+identical fingerprint and trace, which is four more independent confirmations of the tier-2
+result at the top of this entry.
+
+`FRLG_VERIFY_CONFIG_EXTRA` (a JSON object applied on top of the seeded config) exists so the
+next person to doubt one of these settings can measure it instead of arguing with the IL.
+
+Note what headless is and is not: the sandbox still cannot run BizHawk (no mono, no installs),
+so this does not move tier 2 into the sandbox. What it buys is `--watch --headless` draining
+the queue on the host without taking over a screen.
+
+**Unverified.** Segment-level tier-2 requests, which have never been made -- only the whole
+route has ever been replayed. Everything else in this entry was measured.
+
+## 2026-08-11 (sandbox, late) -- hunted for a second desync cause and found none; hardened the thing that names the frame
+
+Task: find the desync and fix it. The desync on record is the tier-2 bedroom stall, root-caused
+last session to the skipped BIOS intro and fixed; the rebuilt `route-12713f-a4ad4280bbdc` sits
+in the queue unreplayed, and the only tier-2 result is the pre-fix runner error. So this session
+did the two things the sandbox can do: audit every remaining divergence axis against the mounted
+sources, and make sure the next host run cannot fail to produce a frame number again.
+
+**The audit came back empty -- no second desync cause.** Checked, with citations (BizHawk/mGBA
+claims cite the read-only mounts; this is tier-2 material, not routing):
+
+- *Input latch order*: `bizinterface.c:518` (`$FRLG_DEPS/mgba/src.tar.gz`) does
+  `core->setKeys(keys)` then runs the frame -- identical to our `frlg_run_frame` (`shim.c:182`).
+  The `keyCallback` BizHawk installs (`bizinterface.c:360`) returns the same per-frame mask
+  `setKeys` stored, so KEYINPUT reads see equal values on both tiers.
+- *Movie latch indexing*: `MovieSession.cs:96,322` latches input-log row `Emulator.Frame`
+  before each advance, and `MGBAHawk.IEmulator.cs:83` increments `Frame` after -- so row 0
+  drives the first advanced frame, exactly like tier 1's `log[0]`. Playback flips to FINISHED
+  at `Frame == FrameCount` (`MovieSession.cs:112`), no off-by-one.
+- *Savedata*: BizHawk hands mGBA a 0xFF-memset buffer (`bizinterface.c:347`); tier 1 attaches
+  no save VFile, and `GBASavedataInitFlash` (`savedata.c`) memsets the anonymous map to 0xFF in
+  that case. Same erased-flash bytes either way.
+- *Idle loop*: mGBA's default is `IDLE_LOOP_REMOVE` (`gba.c:120`), but removal needs a known
+  address and BPRE's override row says `GBA_IDLE_LOOP_NONE` (`overrides.c:134`), so it equals
+  BizHawk's forced `IDLE_LOOP_IGNORE`. Both sides also converge on FLASH1M + HW_NONE for retail
+  BPRE (`bizinterface.c:450`, crc `0xDD88761C` in the known-Pokémon table, so no romhack
+  compat), confirming last session's shorter check.
+- *`.bk2` decode*: `Bk2Controller.SetFromMnemonic` parses rows strictly in `LogKey` order, so
+  the template-copied key plus our column table is the whole story.
+
+**The queue entry re-verifies from scratch.** `frlg log cat` of the eight committed logs
+reproduces digest `a4ad4280…`; a cold tier-1 replay reproduces the request's
+`ram_hash 73b329af…` and matches the queued 12713-frame `gRngValue` trace byte-for-byte; an
+independent Python decoder (game key bits, not the exporter's code) decodes the queued `.bk2`
+to exactly those masks. Whatever tier 2 says, it will be about the emulators, not the artifact.
+
+**The Lua's assumptions are no longer guesses.** BizHawk ships typed Lua API docs
+(`$BIZHAWK_HOME/Lua/_docs_luacats/`) that the desync hunt had never opened:
+`memory.read_u32_le(addr, domain)` and `memory.readbyterange(addr, length, domain)` are the
+real signatures, `readbyterange` returns a zero-indexed table (its own doc string, extracted
+from `BizHawk.Client.Common.dll`), `movie.mode()` returns exactly
+`"PLAY"|"RECORD"|"FINISHED"|"INACTIVE"`, the mGBA domains are named `EWRAM`/`IWRAM`
+(`BizHawk.Emulation.Cores.dll`), and `event.onframeend`/`event.onexit`/`client.exit` all
+exist. Every assumption the script makes checked out as written.
+
+**The fix this session: the runner can no longer lose the frame number.** The watched
+2026-08-11 replay ran, desynced, was closed by hand -- and recorded nothing, because the Lua
+wrote its status only at a finish it never reached (`EmuHawkMono_last*.txt` in the deps tree
+shows it: Lua loaded, no report). Now `verify-runner.lua` writes the status file the moment
+the probe first mismatches, every 300 frames as a heartbeat, and from `event.onexit`; the
+shell's timeout branch reads the partial status into the result instead of discarding it. The
+new Lua is installed at `$FRLG_ARTIFACTS/verify/verify-runner.lua`, the override the runner
+prefers, so the next host run uses it even though the host checkout cannot see this commit.
+The shell half only lands when the host pulls.
+
+**Unverified.** Still the same one thing: no tier-2 result for `route-12713f-a4ad4280bbdc`.
+The audit narrows the space -- if it still desyncs, the trace frame number is the lead and
+there is no named suspect left -- but narrowing is not a pass.
+
 ## 2026-08-12 (sandbox) -- the bedroom desync was the boot: BizHawk never skips the BIOS intro for a movie
 
 **Root cause, cited.** `MGBAHawk.cs:41` (2.11.1 sources in

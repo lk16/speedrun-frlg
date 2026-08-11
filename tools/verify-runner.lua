@@ -13,13 +13,27 @@
 -- advances frames itself blocks forever when the emulator is paused, which is how EmuHawk sits
 -- when a movie fails to attach.
 --
--- NOT YET EXERCISED end to end. The domain names and the read API below are the parts most
--- likely to need a one-line fix on the first real run -- fix them here (or in the artifacts-side
--- override copy, which wins), do not work around them in the shell.
+-- The status file is not written once at the end: it is rewritten on the first probe mismatch,
+-- every few hundred frames as a heartbeat, and from event.onexit. The first watched replay
+-- (2026-08-11) ran, desynced, and was closed by hand -- and recorded nothing, because the only
+-- write was at a finish it never reached. A timeout or a closed window must still leave behind
+-- the frame it got to and any desync frame already found.
+--
+-- Not yet exercised end to end, but no longer guesswork either: every API this file uses is
+-- checked against BizHawk 2.11.1's own shipped Lua docs (`$BIZHAWK_HOME/Lua/_docs_luacats/`)
+-- and assemblies -- memory.read_u32_le(addr, domain); memory.readbyterange(addr, length,
+-- domain) returning a zero-indexed table; movie.mode() in {"PLAY","RECORD","FINISHED",
+-- "INACTIVE"}; domains "EWRAM"/"IWRAM" (BizHawk.Emulation.Cores.dll); event.onframeend /
+-- event.onexit; client.exit(). If something still fails, fix it here (or in the artifacts-side
+-- override copy, which wins), do not work around it in the shell.
 
 local dump_path   = assert(os.getenv("FRLG_VERIFY_DUMP"), "FRLG_VERIFY_DUMP is unset")
 local status_path = assert(os.getenv("FRLG_VERIFY_STATUS"), "FRLG_VERIFY_STATUS is unset")
 local want_frames = tonumber(os.getenv("FRLG_VERIFY_FRAMES") or "0") or 0
+
+-- How often the heartbeat rewrites the status file. 300 frames is ~5 emulated seconds; cheap
+-- against a 12k-frame replay, frequent enough that a killed run reports where it was.
+local HEARTBEAT = 300
 
 -- The per-frame probe trace, if the request shipped one: little-endian u32 per frame.
 local trace_domain = os.getenv("FRLG_VERIFY_TRACE_DOMAIN") or "IWRAM"
@@ -37,12 +51,16 @@ do
   end
 end
 local desync_frame, desync_got, desync_want = nil, nil, nil
+local finished = false
 
 local function status(played, frames, note)
+  -- movie.mode() behind pcall: status() is also called from event.onexit, where the movie
+  -- API may already be tearing down, and a failed mode read must not cost the whole report.
+  local mode_ok, mode = pcall(movie.mode)
   local f = assert(io.open(status_path, "w"))
   f:write("played=", played, "\n")
   f:write("frames=", tostring(frames), "\n")
-  f:write("mode=", tostring(movie.mode()), "\n")
+  f:write("mode=", mode_ok and tostring(mode) or "unknown", "\n")
   f:write("trace_frames=", tostring(trace_frames), "\n")
   if desync_frame then
     f:write("desync_frame=", tostring(desync_frame), "\n")
@@ -68,6 +86,9 @@ local function trace_check()
       + string.byte(trace, base + 4) * 0x1000000
   if got ~= want then
     desync_frame, desync_got, desync_want = idx, got, want
+    -- Write it down the moment it is known. The rest of the replay may hang,
+    -- time out, or be closed by hand; the frame number must survive that.
+    status("no", emu.framecount(), "still replaying; probe already diverged")
   end
 end
 
@@ -91,6 +112,7 @@ local function finish()
     dump_domain(out, "IWRAM", 0, 32 * 1024)
     out:close()
   end)
+  finished = true
   status(ok and "yes" or "no", frames, ok and nil or tostring(err))
   client.exit()
 end
@@ -108,7 +130,20 @@ event.onframeend(function()
   if want_frames > 0 and emu.framecount() >= want_frames then return finish() end
   -- Neither playing nor finished means the movie never attached -- report rather than spin.
   if mode ~= "PLAY" then
+    finished = true
     status("no", emu.framecount(), "movie mode is " .. tostring(mode) .. ", expected PLAY")
     client.exit()
+    return
+  end
+  if emu.framecount() % HEARTBEAT == 0 then
+    status("no", emu.framecount(), "still replaying (heartbeat)")
+  end
+end)
+
+-- A run that ends any way other than finish() -- window closed, EmuHawk killed by the
+-- runner's timeout -- still reports the frame it died at and any desync already found.
+event.onexit(function()
+  if not finished then
+    status("no", emu.framecount(), "emulator exited before the movie finished")
   end
 end)

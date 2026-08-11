@@ -1,8 +1,9 @@
 # The route: power-on to a beaten rival
 
 12713 frames (~3m33s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with
-Squirtle, on FireRed. Tier 1 only: mGBA agrees. BizHawk has played an earlier build of it and
-desynced for a reason that is now understood and fixed — see [Tier 2](#tier-2).
+Squirtle, on FireRed. **Tier 2 accepted (2026-08-11): BizHawk replayed the whole movie to the
+same fingerprint, frame for frame** — see [Tier 2](#tier-2). Both emulators now agree on this
+route from power-on to the win.
 
 The route is rebuilt whenever the boot or the core moves, and the total has moved with it:
 11873 (mGBA 0.10.5, HLE BIOS) → 12209 (2026-08-11, tier 1 re-pinned to the exact mGBA commit
@@ -92,12 +93,32 @@ combined movie from reset and refuses to queue one whose final fingerprint is no
   (`decompiled/src/battle_script_commands.c:1558`).
 - **Accuracy**: `(Random() % 100 + 1) > calc` (`:1093`).
 
-The first of those is switched off here. `gBattleTypeFlags` reads `0x1C` at the start of the rival
-battle -- `BATTLE_TYPE_IS_MASTER | BATTLE_TYPE_TRAINER | BATTLE_TYPE_FIRST_BATTLE`
-(`decompiled/include/constants/battle.h:45`) -- and the crit condition carries
-`&& (!(gBattleTypeFlags & BATTLE_TYPE_FIRST_BATTLE) || BtlCtrl_OakOldMan_TestState2Flag(1))`. So
-until that tutorial flag is set, this battle cannot crit at all, and its whole spread is the damage
-roll and accuracy.
+The first of those is switched off here **only for the opening turns, not for the battle**. This
+file used to say "criticals are off in this battle" flatly; watching the 2026-08-11 tier-2 replay
+disproved it — the rival's Bulbasaur lands a critical hit on us — and the decomp agrees with the
+screen. `gBattleTypeFlags` reads `0x1C` at the start of the rival battle
+(`BATTLE_TYPE_IS_MASTER | BATTLE_TYPE_TRAINER | BATTLE_TYPE_FIRST_BATTLE`,
+`decompiled/include/constants/battle.h:45`) and the crit condition carries
+`&& (!(gBattleTypeFlags & BATTLE_TYPE_FIRST_BATTLE) || BtlCtrl_OakOldMan_TestState2Flag(1))`
+(`decompiled/src/battle_script_commands.c:1200`). The second half of that `||` is the part that
+was missed: `BtlCtrl_OakOldMan_TestState2Flag(1)` reads
+`gBattleStruct->simulatedInputState[2] & FIRST_BATTLE_MSG_FLAG_INFLICT_DMG`
+(`decompiled/src/battle_controller_oak_old_man.c:2228`, constant `0x1` at
+`decompiled/include/battle_controllers.h:287`), and that flag is **set the first time an
+opponent's hit finishes draining the health bar** — `CompleteOnHealthbarDone` sets it and hands
+over to `PrintOakText_InflictingDamageIsKey`
+(`decompiled/src/battle_controller_opponent.c:304-306`). So the tutorial suppresses criticals
+until Oak has given his "inflicting damage is key" line, and from that moment on both sides can
+crit at the normal 1-in-16.
+
+Two consequences for manipulation:
+
+- **The crit roll always burns RNG**, suppressed or not. `&&` short-circuits left to right, and
+  `!(Random() % sCriticalHitChance[critChance])` sits *before* the `FIRST_BATTLE` clause in the
+  condition, so the call happens on every damaging hit even while the result is being thrown
+  away. Any model of this battle's stream has to count it.
+- **The rival's crit is a legitimate search target.** It is one `Random()` outcome in a stream
+  the route already re-searches; see "What is not optimised".
 
 **The battle is not luck-independent, and the route no longer pretends otherwise.** Delaying the
 same A mash by a single frame flipped it from a win to a loss and back, over twelve consecutive
@@ -148,21 +169,46 @@ fight or do not measure.
 The battle is now chosen rather than lucky, and one knob has been swept. Everything else is
 untouched, and the frame counts above are the baseline the next route has to beat. Largest first:
 
-- **`08-battle-win`, 3461 frames.** The search only varies *when* the mash starts. It never varies
-  what the mash does -- move choice, or waiting a frame between turns to move the damage roll. Since
-  criticals are off, the whole lever is the 85-100% roll, and a turn-by-turn search over small delays
-  is the obvious next machine.
-- **`02`/`03`, 3282 frames together.** Mashing A on the naming screen types whatever letter the
-  cursor starts on **until the name fills up** -- watching the 2026-08-11 tier-2 replay made it
-  visible just how bad that is: a full seven-character wall of A's, typed one press at a time,
-  *and paid again on every later text box that prints the player or rival name*. Two unmeasured
-  alternatives, cheapest first: a **one-character name** (type one letter, then END), and a
-  **preset name** (Options on the naming screen are two D-pad presses away). Both have to be
-  measured through the battle, per the finding above.
-- **`06-starter`, 2496 frames.** Text speed is never set; the route does not open OPTIONS. The
-  same replay-watching session makes this one look bigger than it did on paper: every message box
-  in the run scrolls at MEDIUM. Whether the OPTIONS detour pays for itself over ~40 message boxes
-  (plus the per-name-letter cost above) is arithmetic nobody has done here.
+- **`08-battle-win`, 4018 frames.** The search only varies *when* the mash starts. It never varies
+  what the mash does -- move choice, or waiting a frame between turns to move the damage roll. A
+  turn-by-turn search over small delays is the obvious next machine, and it now has two levers
+  rather than one: the 85-100% damage roll, and the crit roll (see below).
+- **Battle animations are on, and nothing in the route ever turns them off.** `NewGameInitData`
+  sets `gSaveBlock2Ptr->optionsBattleSceneOff = FALSE` (`decompiled/src/new_game.c:66`), and that
+  field is the only thing standing between the battle and `HITMARKER_NO_ANIMATIONS`:
+  `BattleStartClearSetData` does `if (!(gBattleTypeFlags & (BATTLE_TYPE_LINK | BATTLE_TYPE_POKEDUDE))
+  && gSaveBlock2Ptr->optionsBattleSceneOff) gHitMarker |= HITMARKER_NO_ANIMATIONS`
+  (`decompiled/src/battle_main.c:2259`), so the flag is available in this battle -- neither
+  excluded type applies. Every attack in `08-battle-win` therefore plays its full animation. The
+  switch is `MENUITEM_BATTLESCENE` in the options menu (`decompiled/src/option_menu.c:514`
+  writes it back), reachable in the overworld through START -> OPTION
+  (`decompiled/src/start_menu.c:531`, `StartMenuOptionCallback`). Unmeasured on both sides: the
+  cost of the detour, and what the animations are actually worth over the ~8-10 attacks of this
+  battle. Whatever it saves, it also re-rolls the battle -- measure through the fight.
+- **`02`/`03`, 3292 frames together: the name is seven characters long.** Mashing A on the naming
+  screen types whatever letter the cursor starts on **until the name fills up** -- watching the
+  2026-08-11 tier-2 replay made it visible just how bad that is: a full seven-character wall of
+  A's, typed one press at a time, *and paid again on every later text box that prints the player
+  or rival name*. That second cost is now a number rather than a worry: a character of a printed
+  message costs `sTextSpeedFrameDelays[optionsTextSpeed]` frames, which is **4 at the default
+  MEDIUM** and 1 at FAST (`decompiled/src/new_menu_helpers.c:27-32`, read by
+  `GetTextSpeedSetting` at `:663`). Six characters of surplus name is 24 frames *per message box
+  that prints it*, at the speed the route currently runs. Two unmeasured alternatives, cheapest
+  first: a **one-character name** (type one letter, then END), and a **preset name** (Options on
+  the naming screen are two D-pad presses away). Both have to be measured through the battle, per
+  the finding above.
+- **`06-starter`, 2496 frames: text speed is never set to FAST.** The route does not open OPTIONS,
+  so every message box in the run scrolls at MEDIUM -- 4 frames per character against FAST's 1
+  (same citation as above). Whether the OPTIONS detour pays for itself over ~40 message boxes
+  (plus the per-name-letter cost above) is arithmetic nobody has done here. Note that OPTIONS is
+  one screen: text speed and battle animations are the same detour, which is an argument for
+  pricing them together rather than one at a time.
+- **The rival's Bulbasaur crits us, and that is a roll the search could avoid.** Criticals are
+  live from Oak's "inflicting damage is key" line onwards (see the RNG section above), so a
+  critical hit landing on our Squirtle is not a fixed cost -- it is one `Random()` outcome in a
+  stream that `08-battle-win` already re-searches. It is expensive twice over: the extra damage
+  can add a turn, and the "A critical hit!" message is a message box the run did not have to pay
+  for. Nobody has yet measured what the current 4018-frame battle would cost without it.
 - **Starter choice.** Measured once each, mashed, not manipulated. Redo it against manipulated
   battles before treating Squirtle as settled.
 - **LeafGreen is built and has never been raced.** The sandbox builds `pokeleafgreen.gba`
@@ -173,9 +219,17 @@ untouched, and the frame counts above are the baseline the next route has to bea
 
 ## Tier 2
 
-**Status (2026-08-12): the 2026-08-11 bedroom desync is root-caused and fixed; the rebuilt
-movie is queued and waits for a host run.** The desync was the boot: BizHawk *movie playback*
-never skips the BIOS intro. `MGBAHawk.cs:41` (2.11.1 sources,
+**Status (2026-08-11, host): `route-12713f-a4ad4280bbdc` PASSED.** BizHawk 2.11.1 replayed all
+12713 frames, ended on the same EWRAM+IWRAM fingerprint tier 1 computed
+(`73b329af5d561a864cc4b0d46e8d4c409ce1b6df`), and matched the per-frame `gRngValue` probe on
+**every single frame** — not one divergence anywhere in the run, which is a far stronger
+statement than the final hashes agreeing. The result is
+`$FRLG_ARTIFACTS/verify/results/route-12713f-a4ad4280bbdc.json`. That closes the bedroom
+desync, and with it the only open question about whether this route exists on real hardware
+timing. Everything below about the desync is kept because the root cause is worth not
+rediscovering.
+
+The desync was the boot: BizHawk *movie playback* never skips the BIOS intro. `MGBAHawk.cs:41` (2.11.1 sources,
 `$FRLG_ARTIFACTS/reference/bizhawk-2.11.1/`) passes
 `skipBios: _syncSettings.SkipBios && !lp.DeterministicEmulationRequested`, and loading a movie
 requests deterministic emulation — that is precisely why line 30's `MissingFirmwareException`
@@ -185,9 +239,9 @@ false for every replay, `bizinterface.c:171`'s `GBASkipBIOS` call never happens,
 `opts.skipBios = true`, so its whole log ran ~272 frames early on BizHawk: mash segments
 absorbed the shift, and the first frame-exact walking (the bedroom) died — exactly what was
 watched. Tier 1 now boots BIOS-with-intro (`Emu::load_bios(_, false)`, ledger marker
-`bios+intro:<sha1>`), the route is rebuilt (12713 frames, 16/16 battle delays win) and queued as
-`route-12713f-a4ad4280bbdc`. Not confirmed until a tier-2 result lands; the fix's reasoning is
-cited, its effect is not yet observed.
+`bios+intro:<sha1>`), the route was rebuilt (12713 frames, 16/16 battle delays win), and that
+rebuild is what passed. One cited root cause, one fix, one clean replay: no second cause ever
+existed, which is what the 2026-08-12 audit predicted.
 
 Two runner bugs were found and fixed on the way to the first replay: `--lua` was passed
 relative (EmuHawkMono.sh cd's to its own directory first), and `--userdata` is not a data
@@ -234,19 +288,22 @@ BizHawk's own glue takes. The ledger records the boot per build (`"hle"` or `"bi
 `frlg route export` warns loudly on an HLE-built route. `bin/frlg-doctor` checks the file and its
 sha1 at startup.
 
+**Settled by the pass (2026-08-11): the whole pipeline.** Every piece of tier 2 has now done its
+job once, which is the difference between "written" and "working": the `.bk2` writer's output
+loads and plays, the `.ilog` -> movie join is frame-exact on a second emulator, the Lua reports
+(status file, 288K RAM dump, per-frame probe compare), and the shell turns all of that into a
+verdict. `tools/verify-runner.lua` was the least-exercised code in this repository for three
+sessions; it is not any more.
+
 **Still open, in order:**
 
-1. **A tier-2 result for `route-12713f-a4ad4280bbdc`.** The boot fix (Status above) predicts a
-   pass; nothing is claimed until the result lands. If it desyncs again, the per-frame probe
-   trace queued beside the movie should this time say at which frame, and the next suspects in
-   line are input-delivery timing (when BizHawk latches a movie frame's keys vs.
-   `setKeys`+`runFrame`) and the rest of `SyncSettings` — both citable from
-   `$FRLG_ARTIFACTS/reference/bizhawk-2.11.1/` and `$FRLG_DEPS/mgba/src.tar.gz`
-   (`src/platform/bizhawk/`).
-2. **The runner's Lua path is still unexercised end to end** (`tools/verify-runner.lua`,
-   memory-domain names especially). It has loaded and played a movie but never written a
-   complete status/RAM report. It now also carries the trace compare (below), which is equally
-   unexercised.
+1. **Only the whole route has a tier-2 result, never a segment.** The queue and the runner are
+   per-request, and one request has ever been made. A segment-level replay would localise a
+   future desync without a bisect, and costs nothing but export plumbing.
+2. **Nothing about the runner, for once.** A pass costs 31s headless against the movie's own
+   213s, and is CPU-bound rather than waiting on anything — see "Making a replay cheap" below.
+   Further speed would have to come out of BizHawk's frame loop or the Lua's per-frame probe
+   read, which is not worth doing at 31s.
 
 ### Requesting a run, and reading the answer
 
@@ -279,9 +336,15 @@ in either script:
       "verdict":           "pass" | "desync" | "error",
       "desync_frame":      null,      // first frame where the probe trace differed, when known
       "ram_hash":          "…",   "expected_ram_hash": "…",
+      "replay_mode":       "fast",    // fast | realtime, each optionally "+headless"
+      "duration_s":        134,       // wall clock, so a slow run is visible as one
       "finished_at":       "2026-08-11T18:04:00+02:00",
       "notes":             "replayed 12209 frames; fingerprint matches"
     }
+
+`bk2_sha1` identifies the bytes that were replayed, but do not expect it to be stable across
+exports: the `.bk2` is a zip and its entry timestamps move, so two exports of the same route
+have the same `ilog_sha1` and different `bk2_sha1`. The `.ilog` digest is the identity.
 
 `ram_hash` is the same fingerprint tier 1 computes — sha1 over EWRAM then IWRAM
 (`docs/harness.md`) — which is what makes the two tiers comparable rather than merely both
@@ -289,6 +352,63 @@ green. The runner always writes a result, including for its own failures, and al
 queue entry: a request that died in a dialog must not look like one nobody has picked up yet.
 `bin/frlg-doctor` prints the newest verdicts at startup.
 
-The runner has **played a movie but never written a complete Lua report**, so treat its
-BizHawk-side details (`tools/verify-runner.lua` — the memory-domain names and the trace-compare
-read API in particular) as the least-tested code in this repository.
+### Making a replay cheap
+
+A verification replay has no audience, so paying for one is waste. Out of the box EmuHawk
+replays at 100%: a 12713-frame movie costs the 3m33s the TAS itself costs, which is enough to
+make a person not bother. `tools/verify-runner.sh` therefore seeds `config.ini` (it is plain
+JSON) before every launch, rather than expecting anyone to click through a GUI it never opens:
+
+| Setting | Value | Why |
+| --- | --- | --- |
+| `Unthrottled` | `true` | run frames as fast as the host manages |
+| `ClockThrottle`, `VSyncThrottle`, `SoundThrottle` | `false` | the three things that would otherwise pace it |
+| `DispSpeedupFeatures` | `0` | `MainForm::Render` returns immediately without touching the video provider (EmuHawk.exe IL) |
+| `SoundEnabled` | `false` | nothing to listen to |
+| `SoundOutputMethod` | `3` = `ESoundOutputMethod.Dummy` | opens no audio device at all — verified with `monop` on `BizHawk.Client.Common.dll`. **BizHawk writes this back as `2` (OpenAL)**, so it is being overridden somewhere on Linux; `SoundEnabled: false` is what actually silences it |
+| `PauseWhenMenuActivated`, `SuppressAskSave`, `UpdateAutoCheckEnabled`, … | — | every modal dialog is a hang in an unattended runner |
+
+**None of this touches emulation**, and that is checked rather than assumed: every replay below
+produced the same fingerprint *and* the same 12713-frame probe trace as the original
+100%-with-sound run. `--realtime` puts the desk settings back for when a person does want to
+watch, which is not a luxury — watching the 2026-08-11 replay is what produced three of the
+route findings above.
+
+`--headless` runs EmuHawk under `xvfb-run` rather than on the desktop. EmuHawk is WinForms under
+mono and will not start without an X display, so a throwaway one is the only headless available;
+nothing is drawn on it. It needs `xvfb` on the host (`sudo apt install xvfb`) and the preflight
+says so when it is missing.
+
+The four measurements that set the defaults, same movie every time:
+
+| Run | Wall clock | Effective |
+| --- | ---: | ---: |
+| Stock EmuHawk (100%, sound, rendering) | ~213s | 59.7 fps — the movie's own length |
+| Seeded config, on the desktop | 134s | ~95 fps |
+| Seeded config, `--headless` | **31s** | ~410 fps |
+| `--headless`, `DispSpeedupFeatures` 1 or 2 | 47s | ~270 fps |
+
+**6.9x, and the win is mostly the X server, not the throttle.** Unthrottling alone bought 1.6x
+because something still waited ~8ms per frame; the process was idle for three quarters of that
+134s. Headless removed the wait entirely — 32s of CPU across 31s of wall clock is a replay that
+is finally CPU-bound. That fingers the desktop X connection rather than any emulator setting,
+and the most likely single culprit is the per-frame window title: with `DispSpeedupFeatures == 0`,
+`CalcFramerateAndUpdateDisplay` takes the branch that calls `FormBase::UpdateWindowTitle()` on
+*every* frame (EmuHawk.exe IL), which is an X11 round trip per frame under mono. Cheap on a
+local Xvfb, expensive against a real desktop.
+
+The last row is the same experiment run the other way, and it says the rendering setting is
+worth keeping: letting EmuHawk render (1 or 2) costs 16s even with nothing to display it on,
+while 0 makes `MainForm::Render` return immediately. Rerun any of these with
+`FRLG_VERIFY_CONFIG_EXTRA='{"DispSpeedupFeatures": 2}'`, which is applied on top of the seeded
+config for exactly this purpose.
+
+Further speed now has to come out of per-frame work, not configuration: tier 1 replays the same
+12713 frames in ~12s (~1070 fps), so BizHawk's frame loop plus the Lua's per-frame probe read
+costs about 2.6x what mGBA alone does. Nobody has tried to shrink that, and at 31s nobody needs
+to yet.
+
+The sandbox still cannot run tier 2 itself under any of this: BizHawk needs mono, and the
+sandbox has none and may not install one. What headless buys is an *unattended* runner —
+`tools/verify-runner.sh --watch --headless` on the host drains the queue without taking over a
+screen, which is as close to "the sandbox runs tier 2" as the closed network allows.
