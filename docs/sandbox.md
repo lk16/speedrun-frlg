@@ -71,6 +71,10 @@ There is no ROM anywhere. Build it:
 byte-for-byte against the retail cartridge. LeafGreen is `GAME_VERSION=LEAFGREEN`. The build writes
 `pokefirered.gba`, `pokefirered.map` (the link step) and `pokefirered.sym` (`make syms`).
 
+Both versions are in scope: FireRed and LeafGreen are typically one speedrun category, so a
+route may be built on whichever version measures faster (`docs/route.md`; every published
+number says which version it belongs to).
+
 Copy all three into `$FRLG_ARTIFACTS/rom/`. They are the one build output worth keeping, because
 the build tree itself does not survive this sandbox.
 

@@ -83,10 +83,15 @@ pub fn default_bios_path() -> Option<PathBuf> {
     path.is_file().then_some(path)
 }
 
-/// Boots `emu` from the default BIOS when one is present (skip-intro, the way
-/// BizHawk boots a movie), HLE otherwise, and says which happened: `"hle"` or
-/// `"bios:<sha1>"`. The string is recorded in the route ledger, because a log
-/// is only evidence for the boot it was made with.
+/// Boots `emu` from the default BIOS when one is present, HLE otherwise, and
+/// says which happened: `"hle"` or `"bios+intro:<sha1>"`. The string is
+/// recorded in the route ledger, because a log is only evidence for the boot
+/// it was made with.
+///
+/// The BIOS boot runs the intro animation, because that is the only boot
+/// BizHawk uses for a movie (`Emu::load_bios`). The marker deliberately
+/// differs from the retired `"bios:<sha1>"` (real BIOS, intro skipped) so a
+/// pre-2026-08-12 ledger can never pass for evidence about this boot.
 pub fn boot_with_default_bios(emu: &mut Emu) -> Result<String, EmuError> {
     let Some(bios) = default_bios_path() else {
         return Ok("hle".to_string());
@@ -98,8 +103,8 @@ pub fn boot_with_default_bios(emu: &mut Emu) -> Result<String, EmuError> {
             sha1,
         });
     }
-    emu.load_bios(&bios)?;
-    Ok(format!("bios:{sha1}"))
+    emu.load_bios(&bios, false)?;
+    Ok(format!("bios+intro:{sha1}"))
 }
 
 fn artifact_path(env_var: &str, file: &str) -> Option<PathBuf> {

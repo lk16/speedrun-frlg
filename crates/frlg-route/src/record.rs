@@ -141,8 +141,8 @@ pub struct Recorder {
     emu: Emu,
     frames: Vec<u16>,
     rom_sha1: [u8; 20],
-    /// How the core was booted: `"hle"`, or `"bios:<sha1>"`. Goes in the
-    /// ledger -- a log is only evidence for the boot it was made with.
+    /// How the core was booted: `"hle"`, or `"bios+intro:<sha1>"`. Goes in
+    /// the ledger -- a log is only evidence for the boot it was made with.
     boot: String,
 }
 
@@ -161,7 +161,7 @@ impl Recorder {
         })
     }
 
-    /// How the core was booted: `"hle"`, or `"bios:<sha1>"`.
+    /// How the core was booted: `"hle"`, or `"bios+intro:<sha1>"`.
     pub fn boot(&self) -> &str {
         &self.boot
     }
@@ -283,7 +283,10 @@ mod tests {
         let expected = rec.emu().ram_hash().unwrap();
         let log = rec.log();
 
+        // The replay must boot the way the recorder booted: with the intro
+        // boot, frame 400 of an HLE-booted core is a different world.
         let mut fresh = Emu::new(&rom()).unwrap();
+        frlg_emu::boot_with_default_bios(&mut fresh).unwrap();
         fresh.reset();
         fresh.replay(&log, |_, _| {});
         assert_eq!(fresh.ram_hash().unwrap(), expected);

@@ -36,12 +36,12 @@ fn to_overworld(obs: &Observer, rec: &mut Recorder) {
 #[test]
 fn callback2_resolves_to_the_screen_the_game_is_actually_on() {
     let (obs, mut rec) = setup();
-    // The copyright screen is the first thing `AgbMain` hands over to.
-    rec.idle(60).unwrap();
-    assert_eq!(
-        obs.callback2_name(rec.emu()),
-        "CB2_InitCopyrightScreenAfterBootup"
-    );
+    // The copyright screen is the first thing `AgbMain` hands over to -- after
+    // the BIOS boot animation (~272 frames on the intro boot) has played.
+    rec.wait_until("the copyright screen", 600, |emu| {
+        obs.callback2_is(emu, "CB2_InitCopyrightScreenAfterBootup")
+    })
+    .unwrap();
 
     to_overworld(&obs, &mut rec);
     assert_eq!(obs.callback2_name(rec.emu()), "CB2_Overworld");

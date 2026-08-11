@@ -77,6 +77,12 @@ struct ExportArgs {
     /// $FRLG_ARTIFACTS/verify/queue/<id>.bk2 alongside <id>.json.
     #[arg(long)]
     out: Option<PathBuf>,
+
+    #[command(flatten)]
+    rom: RomArgs,
+
+    #[arg(long)]
+    sym: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -399,6 +405,61 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
         .with_context(|| format!("exporting {}", out.display()))?;
     let bk2_sha1 = hex::encode(Sha1::digest(fs::read(&out)?));
 
+    // Replay the exported route once on tier 1, sampling gRngValue after
+    // every frame. The game advances it once per VBlank
+    // (decompiled/src/main.c:412 calls Random(); decompiled/src/random.c),
+    // so the trace lets tier 2 name the *first* divergent frame instead of
+    // reporting "the final fingerprint differs". The replay also re-proves
+    // the movie's frames reach the ledger's final fingerprint from reset.
+    let rom = resolve_rom(&args.rom)?;
+    let syms = resolve_syms(&args.sym)?;
+    let rng = syms
+        .get("gRngValue")
+        .context("gRngValue is not in the symbol table; pass --sym or set $FRLG_SYM")?;
+    let mut emu = Emu::new(&rom)?;
+    let boot = frlg_emu::boot_with_default_bios(&mut emu)?;
+    if boot != led.bios {
+        bail!(
+            "this machine boots {boot:?} but the ledger's logs were built on {:?}; \
+             the trace would describe a different run",
+            led.bios
+        );
+    }
+    let mut trace = Vec::with_capacity(combined.len() * 4);
+    emu.replay(&combined, |emu, _| {
+        trace.extend_from_slice(&emu.read32(rng.addr).to_le_bytes());
+    });
+    let final_ram = emu.ram_hash()?;
+    if let Some(expected) = led.segments.last().map(|s| s.ram_hash.as_str()) {
+        if final_ram != expected {
+            bail!(
+                "replaying the exported movie ends at fingerprint {final_ram}, \
+                 the ledger claims {expected}; the logs and ledger disagree"
+            );
+        }
+    }
+    let trace_path = out.with_extension("trace");
+    fs::write(&trace_path, &trace).with_context(|| format!("writing {}", trace_path.display()))?;
+
+    // Where the probe lives in BizHawk's memory-domain terms. gRngValue is in
+    // IWRAM (COMMON_DATA, decompiled/src/random.c:7); refuse to guess if a
+    // future symbol table moves it somewhere this arithmetic does not cover.
+    const IWRAM: std::ops::Range<u32> = 0x0300_0000..0x0300_8000;
+    if !IWRAM.contains(&rng.addr) {
+        bail!(
+            "gRngValue at {:#010x} is not in IWRAM; teach export its domain",
+            rng.addr
+        );
+    }
+    let trace_json = serde_json::json!({
+        "file": trace_path.file_name().and_then(|n| n.to_str()),
+        "symbol": "gRngValue",
+        "domain": "IWRAM",
+        "offset": rng.addr - IWRAM.start,
+        "size": 4,
+        "frames": combined.len(),
+    });
+
     if queued {
         // The request half of the tier-2 contract (docs/route.md): what the
         // sandbox expects of this movie, so the runner's verdict can say
@@ -412,6 +473,7 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
             "bios": led.bios,
             "ram_hash": led.segments.last().map(|s| s.ram_hash.as_str()),
             "goal": led.segments.last().map(|s| s.goal.as_str()),
+            "trace": trace_json,
         });
         let request_path = out.with_extension("json");
         fs::write(&request_path, format!("{request:#}\n"))

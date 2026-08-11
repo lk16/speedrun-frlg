@@ -130,8 +130,22 @@ struct FrlgCore* frlg_core_new(const char* rom_path) {
 /* Optional: a real GBA BIOS. mGBA falls back to an HLE BIOS when none is
  * loaded, and HLE-vs-real is a real divergence axis against BizHawk: its SWI
  * handlers are not cycle-identical. Must be called before the first frame; it
- * resets the core. */
-int frlg_core_load_bios(struct FrlgCore* h, const char* bios_path) {
+ * resets the core.
+ *
+ * skip_intro chooses whether the boot animation runs. BizHawk *movie playback*
+ * always runs it: MGBAHawk.cs:41 (2.11.1) passes
+ * `skipBios: _syncSettings.SkipBios && !lp.DeterministicEmulationRequested`,
+ * and loading a movie requests deterministic emulation (that is what makes
+ * line 30's MissingFirmwareException fire without a BIOS -- observed on the
+ * host, 2026-08-11). So the SyncSettings' `SkipBios: true` is overridden to
+ * false whenever a .bk2 is replayed, its glue never calls GBASkipBIOS
+ * (bizinterface.c:171, gated on ctx->skipbios), and the ~190-frame intro runs
+ * with movie input already being fed. A tier-1 boot that skips the intro is
+ * therefore shifted against tier 2 by the whole intro -- which is exactly the
+ * desync the first watched replay showed. Pass skip_intro = 0 to match a
+ * movie replay; 1 exists for interactive experiments only. */
+int frlg_core_load_bios(struct FrlgCore* h, const char* bios_path,
+                        int skip_intro) {
 	struct VFile* vf = VFileOpen(bios_path, O_RDONLY);
 	if (!vf) {
 		return 0;
@@ -140,12 +154,9 @@ int frlg_core_load_bios(struct FrlgCore* h, const char* bios_path) {
 		vf->close(vf);
 		return 0;
 	}
-	/* Boot the way BizHawk boots a movie: real BIOS loaded, intro skipped.
-	 * Its glue calls GBASkipBIOS right after reset (src/platform/bizhawk/
-	 * bizinterface.c:171-172 at commit 94b1578f, skipbios comes from the
-	 * movie's SyncSettings where SkipBios defaults to true); opts.skipBios
-	 * routes _GBACoreReset through that same call. */
-	h->core->opts.skipBios = true;
+	/* opts.skipBios routes _GBACoreReset through the same GBASkipBIOS call
+	 * BizHawk's glue makes when it does skip. */
+	h->core->opts.skipBios = skip_intro ? true : false;
 	h->core->reset(h->core);
 	return 1;
 }

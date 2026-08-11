@@ -24,8 +24,14 @@ extern "C" {
 
     /// Creates a core, loads `rom_path`, and resets. Returns null on failure.
     pub fn frlg_core_new(rom_path: *const c_char) -> *mut FrlgCore;
-    /// Returns nonzero on success. Resets the core.
-    pub fn frlg_core_load_bios(core: *mut FrlgCore, bios_path: *const c_char) -> c_int;
+    /// Returns nonzero on success. Resets the core. `skip_intro = 0` runs the
+    /// BIOS boot animation, which is how BizHawk plays back a movie; nonzero
+    /// skips it (interactive experiments only).
+    pub fn frlg_core_load_bios(
+        core: *mut FrlgCore,
+        bios_path: *const c_char,
+        skip_intro: c_int,
+    ) -> c_int;
     pub fn frlg_core_free(core: *mut FrlgCore);
     pub fn frlg_core_reset(core: *mut FrlgCore);
 
