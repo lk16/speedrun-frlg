@@ -1,8 +1,10 @@
 # speedrun-frlg
 
-A TAS of Pokémon FireRed, routed inside a closed sandbox. **Read `docs/sandbox.md` before doing
-anything** — it is also the sandbox's own prompt file, and almost nothing here is where a normal
-machine would put it.
+TASes of Pokémon FireRed and LeafGreen, routed inside a closed sandbox. The two versions are
+typically one speedrun category, so a route is free to pick whichever version is faster —
+measured, not assumed; `docs/route.md` tracks which version each number belongs to. **Read
+`docs/sandbox.md` before doing anything** — it is also the sandbox's own prompt file, and almost
+nothing here is where a normal machine would put it. `README.md` says what the project is *for*.
 
 Start every sandbox with `bin/frlg-doctor`. It is the fastest way to find out that a mount is
 missing, the image is the stock one, or the deps tree is stale.
@@ -11,7 +13,7 @@ missing, the image is the stock one, or the deps tree is stale.
 
 The network is closed on purpose. Every routing claim you write down **cites a path under
 `decompiled/`**. A claim you cannot cite is a guess and must be labelled one. You have FireRed
-knowledge from pretraining; the citation rule is what makes that harmless.
+and LeafGreen knowledge from pretraining; the citation rule is what makes that harmless.
 
 ## Two verification tiers
 
