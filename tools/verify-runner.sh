@@ -83,12 +83,14 @@ run_one() {
   mkdir -p "$USERDATA"
 
   # EmuHawk exits when the script calls client.exit(); the timeout is for the case where it
-  # does not get that far. --userdata keeps its config and savestates out of the deps tree.
+  # does not get that far. --config keeps its config out of the deps tree; --userdata is NOT
+  # a data directory (it is movie key:value metadata, and a bare path makes the flag parser
+  # throw "malformed userdata" and exit 1 -- found the hard way on the first real replay).
   FRLG_VERIFY_DUMP="$dump" FRLG_VERIFY_STATUS="$status" FRLG_VERIFY_FRAMES="${expect_frames:-0}" \
   timeout "$TIMEOUT" "$BIZHAWK/EmuHawkMono.sh" \
-    --userdata="$USERDATA" \
+    --config="$USERDATA/config.ini" \
     --movie="$bk2" \
-    --lua="$(dirname "${BASH_SOURCE[0]}")/verify-runner.lua" \
+    --lua="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/verify-runner.lua" \
     "$ROM" >"$work/emuhawk.log" 2>&1
   local rc=$?
 

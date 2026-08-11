@@ -145,17 +145,37 @@ untouched, and the frame counts above are the baseline the next route has to bea
   criticals are off, the whole lever is the 85-100% roll, and a turn-by-turn search over small delays
   is the obvious next machine.
 - **`02`/`03`, 3282 frames together.** Mashing A on the naming screen types whatever letter the
-  cursor starts on until the name fills up. Picking a preset name is the obvious alternative and is
-  still unmeasured -- and, per the finding above, it has to be measured through the battle.
-- **`06-starter`, 2496 frames.** Text speed is never set; the route does not open OPTIONS. Whether
-  the detour pays for itself over ~40 message boxes is arithmetic nobody has done here.
+  cursor starts on **until the name fills up** -- watching the 2026-08-11 tier-2 replay made it
+  visible just how bad that is: a full seven-character wall of A's, typed one press at a time,
+  *and paid again on every later text box that prints the player or rival name*. Two unmeasured
+  alternatives, cheapest first: a **one-character name** (type one letter, then END), and a
+  **preset name** (Options on the naming screen are two D-pad presses away). Both have to be
+  measured through the battle, per the finding above.
+- **`06-starter`, 2496 frames.** Text speed is never set; the route does not open OPTIONS. The
+  same replay-watching session makes this one look bigger than it did on paper: every message box
+  in the run scrolls at MEDIUM. Whether the OPTIONS detour pays for itself over ~40 message boxes
+  (plus the per-name-letter cost above) is arithmetic nobody has done here.
 - **Starter choice.** Measured once each, mashed, not manipulated. Redo it against manipulated
   battles before treating Squirtle as settled.
+- **LeafGreen is built and has never been raced.** The sandbox builds `pokeleafgreen.gba`
+  byte-exact (`docs/sandbox.md`) and the harness only needs a ROM path and symbols, but every
+  number in this file is FireRed. Version differences up to the rival fight are believed small
+  (label: guess -- nobody has cited or measured them); the RNG stream will differ regardless, so
+  the honest comparison is a full build-and-tune per version, same as the starter question.
 
 ## Tier 2
 
-Still blocked, and the ledger says so on every entry — but the reason has changed, and what is
-left is smaller.
+**Status (2026-08-11, evening): the pipeline runs end to end, and the first watched replay
+desyncs.** The World BIOS is installed (sha1-verified), the route was rebuilt booting from it
+(12222 frames, ledger `bios: "bios:300c20df…"`, 16/16 battle delays win), the export queued, and
+EmuHawk actually played the movie on the host — power-on, menus, naming, into the bedroom. Then
+it stopped lining up: the player never walks downstairs and the run stalls in the bedroom, so the
+divergence is at or before the `03-names`→`04-house` movement. Observed by eye on the GUI; no
+frame number yet — the runner's Lua status/RAM-compare path has still never completed, so
+frame-level diagnosis is the open tier-2 item now. Two runner bugs were found and fixed on the
+way: `--lua` was passed relative (EmuHawkMono.sh cd's to its own directory first), and
+`--userdata` is not a data directory at all but movie metadata whose parser exits 1 on a bare
+path (`--config` is the right flag).
 
 **Settled: the format.** `route/template.bk2` is committed. It is a real one-frame BizHawk 2.11.1
 movie, written by BizHawk's own `Bk2Movie` serialiser under mono, and it carries the two things
@@ -188,22 +208,26 @@ exists to prevent.
   bundles. `docs/harness.md` has what the port took; the re-pin moved the battle (route header
   above).
 
-**Still missing — one thing, and it is the user's to place:**
+**Settled (2026-08-11 evening): the BIOS.** The World BIOS
+(sha1 `300c20df6731a33952ded8c436f7f186d25d3492`, 16384 bytes) is at
+`$BIZHAWK_HOME/Firmware/GBA_bios.rom`. Tier 1 boots from it the moment it exists
+(`frlg_emu::boot_with_default_bios`): sha1-pinned, intro skipped — the same `GBASkipBIOS` path
+BizHawk's own glue takes. The ledger records the boot per build (`"hle"` or `"bios:<sha1>"`),
+`frlg route verify` refuses to replay logs under a different boot than they were built with, and
+`frlg route export` warns loudly on an HLE-built route. `bin/frlg-doctor` checks the file and its
+sha1 at startup.
 
-1. **The host has no GBA BIOS.** Loading a movie sets `DeterministicEmulationRequested`, and
-   `MGBAHawk`'s constructor then throws `MissingFirmwareException("A BIOS is required for
-   deterministic recordings!")` — read out of `dll/BizHawk.Emulation.Cores.dll`, not guessed.
-   EmuHawk turns that into the Firmware Manager dialog, so an unattended run hangs rather than
-   failing. Tier 2 needs `$BIZHAWK_HOME/Firmware/GBA_bios.rom`, sha1 `300C20DF…D25D3492`,
-   16384 bytes.
+**Still open, in order:**
 
-   The tier-1 side of this is wired and waiting: the moment that file exists,
-   `frlg_emu::boot_with_default_bios` boots every core from it with the intro skipped — the same
-   `GBASkipBIOS` path BizHawk's own glue takes — and the ledger records the boot mode (`"hle"` or
-   `"bios:<sha1>"`). `frlg route verify` refuses to replay logs under a different boot than they
-   were built with, and `frlg route export` warns loudly when exporting an HLE-built route,
-   because BizHawk will boot it differently and desync. **After the BIOS lands: rebuild, verify,
-   re-export.** Until then, tier 2 remains requestable but unserviceable.
+1. **The desync.** The first watched replay stalls in the bedroom (see Status above). Both tiers
+   run the same mGBA commit and the same BIOS boot, so the remaining suspects are BizHawk-side
+   core configuration (`SyncSettings` beyond `SkipBios`, RTC handling) and input-delivery timing
+   (when BizHawk latches a movie frame's keys vs. when `setKeys`+`runFrame` does). Getting the
+   runner's Lua reporting to complete would turn "stalls in the bedroom" into a frame number and
+   a RAM diff, which is the difference between suspecting and knowing.
+2. **The runner's Lua path is still unexercised end to end** (`tools/verify-runner.lua`,
+   memory-domain names especially). It has loaded and played a movie but never written a
+   complete status/RAM report.
 
 ### Requesting a run, and reading the answer
 
