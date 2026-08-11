@@ -142,6 +142,15 @@ except (OSError, ValueError):
 cfg.update(speed)
 cfg.update(quiet)
 
+# FRLG_VERIFY_CONFIG_EXTRA is a JSON object applied last, so any of the above can be overridden
+# for an experiment without editing this file: the settings here were chosen by measuring
+# replays against each other, and the next person to doubt one should be able to measure it too.
+#
+#   FRLG_VERIFY_CONFIG_EXTRA='{"DispSpeedupFeatures": 2}' tools/verify-runner.sh --headless
+extra = os.environ.get("FRLG_VERIFY_CONFIG_EXTRA", "").strip()
+if extra:
+    cfg.update(json.loads(extra))
+
 os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w") as f:
     json.dump(cfg, f, indent=2)

@@ -72,7 +72,7 @@ stream `08-battle-win` already re-searches. Nobody has measured the battle witho
 The lesson is the boring one: a citation that stops at the first `&&` is not a citation. This one
 survived two sessions because it was *nearly* right.
 
-### The runner: 213s -> 134s, and why that is not the 10x it should be
+### The runner: 213s -> 31s, once it stopped talking to a real X server
 
 Replaying at 100% costs exactly what the TAS costs. `tools/verify-runner.sh` now seeds EmuHawk's
 `config.ini` (plain JSON) before each launch: `Unthrottled`, no clock/vsync/sound throttle,
@@ -85,24 +85,35 @@ produced three of the findings above and must stay one flag away.
 same fingerprint *and* the same 12713-frame probe trace as the 100%-with-sound run. That is the
 pass quoted at the top of this entry -- it was replayed twice.
 
-It is 134s, ~95 fps, 1.6x. Unthrottling should buy much more, and the shape of the miss is a
-clue: 36s of CPU across 134s of wall clock, so the process is *waiting* ~8ms per frame rather
-than working. Best suspect, unconfirmed: with `DispSpeedupFeatures == 0`,
-`CalcFramerateAndUpdateDisplay` takes the branch that calls `FormBase::UpdateWindowTitle()` on
-**every frame** -- an X11 round trip per frame under mono. The cheap experiment is a truncated
-movie (the request json's `frames` makes the Lua stop early) replayed under each
-`DispSpeedupFeatures` value; ~20s per data point instead of two minutes.
+Unthrottling on the desktop bought only 1.6x -- 134s, ~95 fps -- and the shape of the miss was
+the clue: 36s of CPU across 134s of wall clock, so the process was *waiting* ~8ms per frame
+rather than working. Luuk installed `xvfb`, and `--headless` (`xvfb-run`) answered it:
 
-`--headless` (`xvfb-run`) is written and **has never run**: `xvfb` is not installed on the host,
-and the preflight says so rather than failing obscurely. EmuHawk is WinForms under mono, so it
-needs *an* X display even when it draws nothing on it; a throwaway one is the only headless
-there is. If OpenGL does not survive a software X server, try `DispMethod: 1` (GdiPlus) before
-concluding anything. Note what headless is and is not: the sandbox still cannot run BizHawk
-(no mono, no installs), so this does not move tier 2 into the sandbox. What it buys is
-`--watch --headless` draining the queue on the host without taking over a screen.
+    stock EmuHawk                      ~213s    59.7 fps, i.e. the movie's own length
+    seeded config, on the desktop       134s    ~95 fps
+    seeded config, --headless            31s    ~410 fps      <- default
+    --headless, DispSpeedupFeatures 1    47s    ~270 fps
+    --headless, DispSpeedupFeatures 2    47s    ~270 fps
 
-**Unverified.** Headless, entirely. The ~8ms/frame diagnosis. And segment-level tier-2 requests,
-which have never been made -- only the whole route has ever been replayed.
+**6.9x, and the win is the X server rather than the throttle.** Headless is 32s of CPU across
+31s of wall -- the replay is finally CPU-bound, nothing waits. So the ~8ms/frame was the desktop
+X connection, most likely the per-frame `UpdateWindowTitle()` that `DispSpeedupFeatures == 0`
+switches on (`CalcFramerateAndUpdateDisplay`, EmuHawk.exe IL): a round trip per frame, cheap
+against a local Xvfb, expensive against a real desktop. The last two rows are the same
+experiment run the other way and they justify keeping `DispSpeedupFeatures: 0` -- letting
+EmuHawk render costs 16s even with nothing to display it on. All four replays passed with the
+identical fingerprint and trace, which is four more independent confirmations of the tier-2
+result at the top of this entry.
+
+`FRLG_VERIFY_CONFIG_EXTRA` (a JSON object applied on top of the seeded config) exists so the
+next person to doubt one of these settings can measure it instead of arguing with the IL.
+
+Note what headless is and is not: the sandbox still cannot run BizHawk (no mono, no installs),
+so this does not move tier 2 into the sandbox. What it buys is `--watch --headless` draining
+the queue on the host without taking over a screen.
+
+**Unverified.** Segment-level tier-2 requests, which have never been made -- only the whole
+route has ever been replayed. Everything else in this entry was measured.
 
 ## 2026-08-11 (sandbox, late) -- hunted for a second desync cause and found none; hardened the thing that names the frame
 

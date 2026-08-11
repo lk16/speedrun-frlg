@@ -300,10 +300,10 @@ sessions; it is not any more.
 1. **Only the whole route has a tier-2 result, never a segment.** The queue and the runner are
    per-request, and one request has ever been made. A segment-level replay would localise a
    future desync without a bisect, and costs nothing but export plumbing.
-2. **The replay is slower than it should be, and cannot yet run without a desktop.** A pass
-   costs 134s of wall clock against the movie's own 213s — see "Making a replay cheap" below
-   for what was measured, what the remaining ~8ms/frame is suspected to be, and why headless
-   (`--headless`) is written but unverified.
+2. **Nothing about the runner, for once.** A pass costs 31s headless against the movie's own
+   213s, and is CPU-bound rather than waiting on anything — see "Making a replay cheap" below.
+   Further speed would have to come out of BizHawk's frame loop or the Lua's per-frame probe
+   read, which is not worth doing at 31s.
 
 ### Requesting a run, and reading the answer
 
@@ -368,28 +368,47 @@ JSON) before every launch, rather than expecting anyone to click through a GUI i
 | `SoundOutputMethod` | `3` = `ESoundOutputMethod.Dummy` | opens no audio device at all — verified with `monop` on `BizHawk.Client.Common.dll`. **BizHawk writes this back as `2` (OpenAL)**, so it is being overridden somewhere on Linux; `SoundEnabled: false` is what actually silences it |
 | `PauseWhenMenuActivated`, `SuppressAskSave`, `UpdateAutoCheckEnabled`, … | — | every modal dialog is a hang in an unattended runner |
 
-**None of this touches emulation**, and that is checked rather than assumed: the same movie
-replayed to the same fingerprint *and the same 12713-frame probe trace* fast-and-silent as it
-did at 100% with sound. `--realtime` puts the desk settings back for when a person does want to
+**None of this touches emulation**, and that is checked rather than assumed: every replay below
+produced the same fingerprint *and* the same 12713-frame probe trace as the original
+100%-with-sound run. `--realtime` puts the desk settings back for when a person does want to
 watch, which is not a luxury — watching the 2026-08-11 replay is what produced three of the
 route findings above.
 
-Measured: **213s → 134s**, about 1.6x, or ~95 fps. That is much less than unthrottling should
-buy, and the process is idle for most of it (36s of CPU across 134s of wall clock), so something
-is still waiting ~8ms per frame. The best current suspect is the window title: with
-`DispSpeedupFeatures == 0`, `CalcFramerateAndUpdateDisplay` takes the branch that calls
-`FormBase::UpdateWindowTitle()` *every frame* (EmuHawk.exe IL) — an X11 round trip per frame on
-mono. Untested; the cheap experiment is a short movie replayed under each
-`DispSpeedupFeatures` value.
+`--headless` runs EmuHawk under `xvfb-run` rather than on the desktop. EmuHawk is WinForms under
+mono and will not start without an X display, so a throwaway one is the only headless available;
+nothing is drawn on it. It needs `xvfb` on the host (`sudo apt install xvfb`) and the preflight
+says so when it is missing.
 
-`--headless` runs EmuHawk under `xvfb-run` instead of on the desktop. EmuHawk is WinForms under
-mono and will not start without an X display, so a throwaway one is the only way; nothing is
-drawn on it. **This path has never run** — `xvfb` is not installed on the host (`sudo apt
-install xvfb`; the preflight says so). If the display method turns out not to survive a
-software X server, `DispMethod: 1` (`EDispMethod.GdiPlus`) is the fallback to try before
-concluding anything.
+The four measurements that set the defaults, same movie every time:
+
+| Run | Wall clock | Effective |
+| --- | ---: | ---: |
+| Stock EmuHawk (100%, sound, rendering) | ~213s | 59.7 fps — the movie's own length |
+| Seeded config, on the desktop | 134s | ~95 fps |
+| Seeded config, `--headless` | **31s** | ~410 fps |
+| `--headless`, `DispSpeedupFeatures` 1 or 2 | 47s | ~270 fps |
+
+**6.9x, and the win is mostly the X server, not the throttle.** Unthrottling alone bought 1.6x
+because something still waited ~8ms per frame; the process was idle for three quarters of that
+134s. Headless removed the wait entirely — 32s of CPU across 31s of wall clock is a replay that
+is finally CPU-bound. That fingers the desktop X connection rather than any emulator setting,
+and the most likely single culprit is the per-frame window title: with `DispSpeedupFeatures == 0`,
+`CalcFramerateAndUpdateDisplay` takes the branch that calls `FormBase::UpdateWindowTitle()` on
+*every* frame (EmuHawk.exe IL), which is an X11 round trip per frame under mono. Cheap on a
+local Xvfb, expensive against a real desktop.
+
+The last row is the same experiment run the other way, and it says the rendering setting is
+worth keeping: letting EmuHawk render (1 or 2) costs 16s even with nothing to display it on,
+while 0 makes `MainForm::Render` return immediately. Rerun any of these with
+`FRLG_VERIFY_CONFIG_EXTRA='{"DispSpeedupFeatures": 2}'`, which is applied on top of the seeded
+config for exactly this purpose.
+
+Further speed now has to come out of per-frame work, not configuration: tier 1 replays the same
+12713 frames in ~12s (~1070 fps), so BizHawk's frame loop plus the Lua's per-frame probe read
+costs about 2.6x what mGBA alone does. Nobody has tried to shrink that, and at 31s nobody needs
+to yet.
 
 The sandbox still cannot run tier 2 itself under any of this: BizHawk needs mono, and the
-sandbox has none and may not install one. What headless buys is an *unattended* runner — 
+sandbox has none and may not install one. What headless buys is an *unattended* runner —
 `tools/verify-runner.sh --watch --headless` on the host drains the queue without taking over a
 screen, which is as close to "the sandbox runs tier 2" as the closed network allows.
