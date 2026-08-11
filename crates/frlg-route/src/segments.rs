@@ -14,7 +14,7 @@
 use frlg_emu::{keys, Emu};
 
 use crate::nav::{self, Goal};
-use crate::observe::{Observer, B_OUTCOME_WON, VAR_OAKS_LAB_SCENE, VAR_STARTER_MON};
+use crate::observe::{self, Observer, B_OUTCOME_WON, VAR_OAKS_LAB_SCENE, VAR_STARTER_MON};
 use crate::record::{Feed, Recorder, RouteError};
 use crate::search;
 
@@ -145,6 +145,7 @@ pub fn all(starter: Starter, tuning: Tuning) -> Vec<Segment> {
         boot(),
         intro_oak(),
         names(),
+        options(),
         house(),
         to_lab(),
         starter_segment(starter, tuning),
@@ -152,6 +153,11 @@ pub fn all(starter: Starter, tuning: Tuning) -> Vec<Segment> {
         battle_win(),
     ]
 }
+
+/// The task that owns both preset-name menus
+/// (`decompiled/src/oak_speech.c:1413`). Its name says "rival" but it handles
+/// the player's menu too -- `hasPlayerBeenNamed` is what distinguishes them.
+const NAME_MENU_TASK: &str = "Task_OakSpeech_HandleRivalNameInput";
 
 /// Reset -> title -> main menu -> NEW GAME.
 ///
@@ -174,9 +180,12 @@ fn boot() -> Segment {
 
 /// Oak's speech, up to and including the boy/girl choice.
 ///
-/// The choice is a menu, so mashing A takes the highlighted entry; reaching the
-/// naming screen at all proves the choice was made, since `CB2_LoadNamingScreen`
-/// is what the gender menu hands over to.
+/// The choice is a menu, so mashing A takes the highlighted entry (BOY);
+/// reaching the naming screen at all proves the choice was made. There is no
+/// preset menu on the way in -- `Task_OakSpeech_YourNameWhatIsIt` hands
+/// straight to the naming screen fade
+/// (`decompiled/src/oak_speech.c:1352-1379`); the presets only appear on the
+/// re-ask path the route never takes.
 fn intro_oak() -> Segment {
     Segment {
         name: "02-intro-oak",
@@ -193,15 +202,56 @@ fn intro_oak() -> Segment {
 
 /// Both names, then the rest of the intro, ending in the bedroom.
 ///
-/// Mashing A on the naming screen enters whatever letter the cursor starts on
-/// until the name is full and the screen accepts it. That is almost certainly
-/// not optimal -- picking a preset name is the obvious alternative -- and it is
-/// the first thing the optimisation pass should measure.
+/// The mashed version typed seven letters per name and cost 1450 frames; this
+/// one gets a one-character player name and a three-character rival name, and
+/// the difference is billed on every later message box that prints either --
+/// a printed character costs `sTextSpeedFrameDelays[speed]` frames
+/// (`decompiled/src/new_menu_helpers.c:27`).
+///
+/// The two names go through different machinery:
+///
+/// - **The player always gets the naming screen** --
+///   `Task_OakSpeech_YourNameWhatIsIt` fades straight into it
+///   (`decompiled/src/oak_speech.c:1352-1379`); the preset menu only exists
+///   on the say-NO re-ask path. So: one letter, then START, which is a
+///   shortcut to the OK button (`HandleKeyboardEvent`,
+///   `decompiled/src/naming_screen.c:1485`), then A. A one-character name is
+///   accepted -- `SaveInputText` (`naming_screen.c:1851`) copies anything
+///   with a non-space character in it.
+/// - **The rival's menu is real and its rows are literal**: NEW NAME on top,
+///   then `sRivalNameChoices` -- GREEN, GARY, KAZ, TORU on FireRed
+///   (`decompiled/src/oak_speech.c:647`, shown by `PrintNameChoiceOptions`,
+///   `:2117`). KAZ is the 3-character one, on row 3; the menu wraps
+///   (`Menu_MoveCursor`, `decompiled/src/menu.c:306`), so two UPs reach it
+///   from the top. Row `n` maps to `sRivalNameChoices[n - 1]`
+///   (`Task_OakSpeech_HandleRivalNameInput`, `oak_speech.c:1431`).
+///
+/// Both names land on a confirm box whose YES/NO menu starts on YES, so the
+/// A mash between the beats answers everything correctly.
 fn names() -> Segment {
     Segment {
         name: "03-names",
-        goal: "standing in the bedroom, both names entered".into(),
+        goal: "in the bedroom, 1-char player name and 3-char rival name".into(),
         run: Box::new(|rec, obs| {
+            // The naming screen drops input until its fade-in is done.
+            rec.wait_until("the naming screen to take input", 300, |emu| {
+                obs.naming_screen_accepting_input(emu)
+            })?;
+            rec.tap(keys::A)?; // one letter, wherever the cursor starts
+            rec.tap(keys::START)?; // cursor to OK
+            rec.tap(keys::A)?; // OK: save the name, leave
+
+            // Through the confirm box and the rival intro, to the rival's
+            // preset menu.
+            rec.mash_until("the rival name menu", keys::A, 3000, |emu| {
+                obs.task_active(emu, NAME_MENU_TASK)
+            })?;
+
+            // KAZ: wrap upwards to row 3, then take it.
+            rec.tap(keys::UP)?;
+            rec.tap(keys::UP)?;
+            rec.tap(keys::A)?;
+
             rec.mash_until("the overworld", keys::A, 6000, |emu| {
                 obs.callback2_is(emu, "CB2_Overworld") && obs.player_can_step(emu)
             })?;
@@ -211,6 +261,89 @@ fn names() -> Segment {
             obs.callback2_is(emu, "CB2_Overworld")
                 && obs.map(emu) == Some(PLAYERS_HOUSE_2F)
                 && obs.player_can_step(emu)
+                && obs.player_name_len(emu) == Some(1)
+                && obs.rival_name_len(emu) == Some(3)
+        }),
+    }
+}
+
+/// START -> OPTION in the bedroom: text speed FAST, battle animations off.
+///
+/// Both settings live behind the same detour, so they are priced together.
+/// What they buy, cited: a printed character costs
+/// `sTextSpeedFrameDelays[optionsTextSpeed]` frames -- 4 at the default MID, 1
+/// at FAST (`decompiled/src/new_menu_helpers.c:27-32`) -- on every message box
+/// from here to the win; and `BattleStartClearSetData` only sets
+/// `HITMARKER_NO_ANIMATIONS` when `gSaveBlock2Ptr->optionsBattleSceneOff` is
+/// set (`decompiled/src/battle_main.c:2259`), which skips every attack
+/// animation in the rival fight.
+///
+/// The menu order without dex or party is BAG, PLAYER, SAVE, OPTION, EXIT
+/// (`SetUpStartMenu_NormalField`, `decompiled/src/start_menu.c:213`); the
+/// cursor starts on top and wraps, so two UPs reach OPTION. In the option
+/// menu the cursor starts on TEXT SPEED; RIGHT moves MID -> FAST, DOWN lands
+/// on BATTLE SCENE, RIGHT moves ON -> OFF, and A saves and leaves
+/// (`OptionMenu_ProcessInput` returns 1 -> fade -> `CloseAndSaveOptionMenu`,
+/// `decompiled/src/option_menu.c:508`). Leaving re-opens the start menu --
+/// `gMain.savedCallback` is `CB2_ReturnToFieldWithOpenMenu`
+/// (`StartMenuOptionCallback`, `decompiled/src/start_menu.c:531`) -- so B
+/// closes it.
+fn options() -> Segment {
+    Segment {
+        name: "04-options",
+        goal: "text speed FAST and battle animations off, back in the bedroom".into(),
+        run: Box::new(|rec, obs| {
+            // Every press in here is a mash-until-effect, not a tap. Two
+            // things eat single-frame taps: the field swallows input for ~20
+            // frames after the walk-in transition (`Task_ExitNonDoor` still
+            // running when `player_can_step` first goes true), and the start
+            // menu lags -- measured on this core, `gMain.newKeys` goes stale
+            // for runs of 2-3 frames while it is up, so a 1-frame press can
+            // fall on a frame whose input is never read. Mashing until the
+            // *effect* is visible cannot overshoot: the mash stops on the
+            // frame the effect lands, and the next registrable edge is
+            // frames away.
+            rec.mash_until("the start menu", keys::START, 300, |emu| {
+                obs.start_menu_taking_input(emu)
+            })?;
+            // Two rows up, wrapping: BAG -> EXIT -> OPTION.
+            rec.mash_until("the cursor on OPTION", keys::UP, 120, |emu| {
+                obs.start_menu_cursor(emu) == 3
+            })?;
+            rec.mash_until("the option menu", keys::A, 300, |emu| {
+                obs.option_menu_accepting_input(emu)
+            })?;
+            // TEXT SPEED: MID -> FAST. RIGHT wraps forward through 3 values,
+            // and the mash stops the frame the working value reads FAST.
+            rec.mash_until("text speed FAST", keys::RIGHT, 120, |emu| {
+                obs.option_menu_setting(emu, observe::MENUITEM_TEXTSPEED)
+                    == Some(observe::TEXT_SPEED_FAST)
+            })?;
+            rec.mash_until("the cursor on BATTLE SCENE", keys::DOWN, 120, |emu| {
+                obs.option_menu_cursor(emu) == Some(observe::MENUITEM_BATTLESCENE as u16)
+            })?;
+            rec.mash_until("battle scene OFF", keys::RIGHT, 120, |emu| {
+                obs.option_menu_setting(emu, observe::MENUITEM_BATTLESCENE) == Some(1)
+            })?;
+            // A saves and leaves; the extra presses land during the fade,
+            // which `Task_OptionMenu` ignores. Back out of the re-opened
+            // start menu with B, whose registered press destroys the task.
+            rec.mash_until("the start menu back", keys::A, 300, |emu| {
+                obs.start_menu_taking_input(emu)
+            })?;
+            rec.mash_until("the start menu closed", keys::B, 120, |emu| {
+                !obs.task_active(emu, "Task_StartMenuHandleInput")
+            })?;
+            rec.wait_until("the overworld", 120, |emu| {
+                obs.callback2_is(emu, "CB2_Overworld") && obs.player_can_step(emu)
+            })?;
+            Ok(())
+        }),
+        reached: Box::new(|obs, emu| {
+            obs.options_text_speed(emu) == Some(observe::TEXT_SPEED_FAST)
+                && obs.options_battle_scene_off(emu) == Some(true)
+                && obs.map(emu) == Some(PLAYERS_HOUSE_2F)
+                && obs.player_can_step(emu)
         }),
     }
 }
@@ -218,7 +351,7 @@ fn names() -> Segment {
 /// Bedroom -> ground floor -> out the front door.
 fn house() -> Segment {
     Segment {
-        name: "04-house",
+        name: "05-house",
         goal: "outside, in Pallet Town".into(),
         run: Box::new(|rec, obs| {
             nav::walk_to(rec, obs, Goal::on_map(PALLET_TOWN), 4000)?;
@@ -233,7 +366,7 @@ fn house() -> Segment {
 /// `warp MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB`).
 fn to_lab() -> Segment {
     Segment {
-        name: "05-to-lab",
+        name: "06-to-lab",
         goal: "inside Oak's lab, after his interruption".into(),
         run: Box::new(|rec, obs| {
             nav::walk_to(
@@ -266,7 +399,7 @@ fn to_lab() -> Segment {
 /// `VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB` reaches 3.
 fn starter_segment(starter: Starter, tuning: Tuning) -> Segment {
     Segment {
-        name: "06-starter",
+        name: "07-starter",
         goal: format!("{} in the party, rival has his", starter.name()),
         run: Box::new(move |rec, obs| {
             // Entering the lab runs ChooseStarterScene off the on-frame table:
@@ -317,7 +450,7 @@ fn starter_segment(starter: Starter, tuning: Tuning) -> Segment {
 /// Walk onto the trigger row; the rival turns round and the battle starts.
 fn battle_start() -> Segment {
     Segment {
-        name: "07-battle-start",
+        name: "08-battle-start",
         goal: "the rival battle has started".into(),
         run: Box::new(|rec, obs| {
             nav::walk_to(
@@ -356,7 +489,7 @@ fn battle_win() -> Segment {
     const DELAYS: std::ops::Range<usize> = 0..16;
 
     Segment {
-        name: "08-battle-win",
+        name: "09-battle-win",
         goal: "gBattleOutcome == B_OUTCOME_WON".into(),
         run: Box::new(|rec, obs| {
             let mut wins = 0usize;
