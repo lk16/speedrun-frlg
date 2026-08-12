@@ -2,10 +2,10 @@
 
 9658 frames (~2m42s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with
 **Bulbasaur, on LeafGreen** — both picked by measurement, not preference; the tables below
-are the evidence. Tier 1 verified from reset; tier 2 for this movie is queued, not yet
-replayed. The 2026-08-12 tier-2 pass (`route-10085f-65ef20333a57`, every frame of the probe
-matching) belongs to the 10085-frame FireRed/Squirtle predecessor; see [Tier 2](#tier-2).
-Rebuilding resets the tier-2 stamp, and should.
+are the evidence. Tier 1 verified from reset; **tier 2 passed this movie** on 2026-08-12
+(`route-9658f-269d169cd6db`, BizHawk 2.11.1, every frame of the probe matching) — the first
+LeafGreen replay, so the version-aware header rewrite is now proven format knowledge and not
+just plumbing; see [Tier 2](#tier-2). Rebuilding resets the tier-2 stamp, and should.
 
 The route is rebuilt whenever the boot or the core moves, and the total has moved with it:
 11873 (mGBA 0.10.5, HLE BIOS) → 12209 (2026-08-11, tier 1 re-pinned to the exact mGBA commit
@@ -274,15 +274,24 @@ remains, largest first:
 
 ## Tier 2
 
-**Status (2026-08-12, sandbox): the 9658 LeafGreen movie is queued, not replayed.** It is
-also the first tier-2 request that is not FireRed, which two changes make possible:
-`frlg route export` now writes the movie's own ROM identity into `Header.txt` (the `SHA1`
+**PASSED (2026-08-12, host): the 9658 LeafGreen movie, `route-9658f-269d169cd6db`.** BizHawk
+2.11.1 replayed all 9658 frames to the ledger's fingerprint
+(`08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba`) and the per-frame `gRngValue` probe matched on
+every frame; result `$FRLG_ARTIFACTS/verify/results/route-9658f-269d169cd6db.json`
+(`realtime`, 177s — watched, not headless). The committed route — LeafGreen, Bulbasaur,
+`turn_hold` 4, `text_hold` 4, the fixpoint battle search — desynced nowhere against BizHawk,
+and every segment's `tier2` field is stamped.
+
+This was also the first tier-2 request that is not FireRed, which two changes made possible:
+`frlg route export` writes the movie's own ROM identity into `Header.txt` (the `SHA1`
 and `GameName` lines — everything else, `SyncSettings.json` above all, is still the
 template's, byte-for-byte), and `tools/verify-runner.sh` picks the ROM whose sha1 the movie
 header names out of `$FRLG_ARTIFACTS/rom` instead of playing everything on one configured
-ROM. Both versions' ROMs are in that directory. Until this movie replays, the LeafGreen
-header rewrite is tier-1-verified plumbing, not proven format knowledge — the first LG
-replay is the test.
+ROM. Both versions' ROMs are in that directory. The replay was the test of that rewrite, and
+it held: BizHawk loaded the BPGE ROM the header named and stayed in sync for the whole movie,
+so the header rewrite is proven format knowledge now, not tier-1-verified plumbing. Note the
+`.bk2` container's sha1 is not reproducible across exports (zip metadata); the `ilog` digest
+is the movie's identity, and the one that passed is `269d169cd6db…`.
 
 **The FireRed predecessor passed (2026-08-12, host): `route-10085f-65ef20333a57`.** BizHawk
 2.11.1 replayed all 10085 frames to the ledger's fingerprint

@@ -3,6 +3,36 @@
 Newest first. Continuity is something you write down; a sandbox ends mid-thought. Anything
 unverified says so.
 
+## 2026-08-12 (host) -- tier 2 passes the 9658 LeafGreen route, and with it the Header.txt rewrite
+
+`tools/verify-runner.sh` replayed `route-9658f-269d169cd6db` on the host (`--realtime`, 177s,
+watched): **pass** -- fingerprint `08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba` matches the
+ledger's `09-battle-win`, and the per-frame `gRngValue` probe matched all 9658 frames, no
+desync. Every segment's `tier2` field is stamped and `docs/route.md`'s status flips from
+"queued, not replayed" to passed.
+
+Two things it settles, the first of them the entry below's only open item:
+
+- **The first non-FireRed replay.** BizHawk loaded the ROM whose sha1 the movie's own
+  `Header.txt` names (`574fa542…`, BPGE) rather than a configured one, and stayed in sync for
+  the whole movie. The version-aware header rewrite is proven format knowledge now, not
+  tier-1-verified plumbing.
+- **The three route changes hold outside tier 1.** `text_hold`, the fixpoint battle search and
+  the six-cell sweep all re-rolled the battle RNG; the movie they produced desyncs nowhere
+  against BizHawk's core, so the 9658 has the same frame-for-frame evidence 10085 and 12713 had.
+
+Two notes for whoever queues the next one. The run used the artifacts-side Lua override
+(`$FRLG_ARTIFACTS/verify/verify-runner.lua`), which is byte-identical to `tools/verify-runner.lua`
+at `8e37210` -- verified by diff before stamping, since an override that had drifted would make
+the pass a verdict on some other runner. And the exported `.bk2`'s sha1 is *not* reproducible:
+two exports of the identical route gave `fd542690…` and `552449ba…` against the queued movie's
+`be798799…`, because the zip container carries timestamps. The `ilog` digest is the movie's
+identity -- re-exporting the committed logs reproduces `269d169cd6db…` exactly, which is what
+ties this result to the tree.
+
+**Unverified:** nothing new. The crit census still has not been re-run on the 9658 battle, and
+the sweep tables below remain tier-1 evidence.
+
 ## 2026-08-12 (sandbox, after the tier-2 pass) -- hold A, search to a fixpoint, race all six cells: 10085 -> 9658
 
 Three route changes landed together, because each re-rolls the battle and the honest score

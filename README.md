@@ -38,12 +38,14 @@ finding something they missed.
 
 ## Where it stands
 
-The first target is routed end to end: power-on to `gBattleOutcome == WON` in **12713 frames**
-(~3m33s), tier-1 verified, every segment's evidence recorded in `route/ledger.json`. The first
-BizHawk replay desynced — traced to a boot-timing difference between the two emulator setups,
-now fixed — and the rebuilt movie is queued for tier-2 confirmation. The battle itself is chosen
-from a searched set of RNG outcomes rather than lucky, but almost nothing is *optimised* yet;
-`docs/route.md` keeps the honest list of what is not.
+The first target is routed end to end: power-on to `gBattleOutcome == WON` in **9658 frames**
+(~2m42s) on LeafGreen with Bulbasaur, tier-1 verified, every segment's evidence recorded in
+`route/ledger.json`. An early BizHawk replay desynced — traced to a boot-timing difference
+between the two emulator setups, now fixed — and this movie has since passed tier 2
+(`route-9658f-269d169cd6db`: all 9658 frames replayed, probe matching every one). The battle
+itself is chosen from a searched set of RNG outcomes rather than lucky, and version, starter
+and the tuning knobs are swept rather than assumed — but plenty is still unoptimised, and
+`docs/route.md` keeps the honest list of what.
 
 ## Reading order
 

@@ -18,7 +18,7 @@
       "start_frame": 0,
       "ram_hash": "5716c3de66cf3b1bca8f47396ad9e79f908fb149",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
+      "tier2": "passed 2026-08-12 as part of route-9658f-269d169cd6db: BizHawk 2.11.1 replayed all 9658 frames to ram_hash 08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba with the per-frame gRngValue probe matching every frame (verify/results/route-9658f-269d169cd6db.json, realtime, 177s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "02-intro-oak",
@@ -30,7 +30,7 @@
       "start_frame": 615,
       "ram_hash": "adcd146c9ba4b0fdb85b722583b142301ef7b33e",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
+      "tier2": "passed 2026-08-12 as part of route-9658f-269d169cd6db: BizHawk 2.11.1 replayed all 9658 frames to ram_hash 08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba with the per-frame gRngValue probe matching every frame (verify/results/route-9658f-269d169cd6db.json, realtime, 177s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "03-names",
@@ -42,7 +42,7 @@
       "start_frame": 2180,
       "ram_hash": "4db58b2af23f2e0263533bd4529550c6b5df6124",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
+      "tier2": "passed 2026-08-12 as part of route-9658f-269d169cd6db: BizHawk 2.11.1 replayed all 9658 frames to ram_hash 08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba with the per-frame gRngValue probe matching every frame (verify/results/route-9658f-269d169cd6db.json, realtime, 177s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "04-options",
@@ -54,7 +54,7 @@
       "start_frame": 3223,
       "ram_hash": "246a7995d7e43110468b81159c49692d5018d270",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
+      "tier2": "passed 2026-08-12 as part of route-9658f-269d169cd6db: BizHawk 2.11.1 replayed all 9658 frames to ram_hash 08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba with the per-frame gRngValue probe matching every frame (verify/results/route-9658f-269d169cd6db.json, realtime, 177s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "05-house",
@@ -66,7 +66,7 @@
       "start_frame": 3420,
       "ram_hash": "0fa418bf7b7459aaca3bd8ab6ad4fc1a5f1e0c02",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
+      "tier2": "passed 2026-08-12 as part of route-9658f-269d169cd6db: BizHawk 2.11.1 replayed all 9658 frames to ram_hash 08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba with the per-frame gRngValue probe matching every frame (verify/results/route-9658f-269d169cd6db.json, realtime, 177s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "06-to-lab",
@@ -78,7 +78,7 @@
       "start_frame": 3851,
       "ram_hash": "6b9b7ee2d48ff530466710f5f8eb15f91daadd85",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
+      "tier2": "passed 2026-08-12 as part of route-9658f-269d169cd6db: BizHawk 2.11.1 replayed all 9658 frames to ram_hash 08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba with the per-frame gRngValue probe matching every frame (verify/results/route-9658f-269d169cd6db.json, realtime, 177s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "07-starter",
@@ -90,7 +90,7 @@
       "start_frame": 5062,
       "ram_hash": "2ff6be15963589d4d2e421b56cd54d5bc99ef0f2",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
+      "tier2": "passed 2026-08-12 as part of route-9658f-269d169cd6db: BizHawk 2.11.1 replayed all 9658 frames to ram_hash 08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba with the per-frame gRngValue probe matching every frame (verify/results/route-9658f-269d169cd6db.json, realtime, 177s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "08-battle-start",
@@ -102,7 +102,7 @@
       "start_frame": 6847,
       "ram_hash": "64b3834c49d5fb94d0a189e0c933969fb53530d6",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
+      "tier2": "passed 2026-08-12 as part of route-9658f-269d169cd6db: BizHawk 2.11.1 replayed all 9658 frames to ram_hash 08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba with the per-frame gRngValue probe matching every frame (verify/results/route-9658f-269d169cd6db.json, realtime, 177s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "09-battle-win",
@@ -114,7 +114,7 @@
       "start_frame": 7249,
       "ram_hash": "08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
+      "tier2": "passed 2026-08-12 as part of route-9658f-269d169cd6db: BizHawk 2.11.1 replayed all 9658 frames to ram_hash 08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba with the per-frame gRngValue probe matching every frame (verify/results/route-9658f-269d169cd6db.json, realtime, 177s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     }
   ]
 }
