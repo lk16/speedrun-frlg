@@ -349,6 +349,7 @@ pub fn search_best_effort(
 
     let mut expanded = 0usize;
     let mut battle_blocked = 0usize;
+    let mut battle_frontier: Vec<Place> = Vec::new();
     while let Some(Reverse(node)) = queue.pop() {
         let Some(state) = states.remove(&node.key) else {
             continue; // already expanded through a cheaper path
@@ -382,6 +383,7 @@ pub fn search_best_effort(
                 Edge::Took(fed) => fed,
                 Edge::Battle => {
                     battle_blocked += 1;
+                    battle_frontier.push(node.key);
                     continue;
                 }
                 Edge::Blocked => continue,
@@ -431,13 +433,20 @@ pub fn search_best_effort(
         }
     }
     // Exhausted without reaching the goal: hand back the closest approach.
-    // Only meaningful when the heuristic is (a Tile goal); otherwise this is
-    // the start itself and the caller learns only that no path was found.
-    let closest = best
+    // Nodes that had a battle-blocked edge come first -- when a search dies
+    // on an encounter belt, the useful place to stand is where taking one
+    // battle continues the route (the caller's force-step turns it into a
+    // fled battle plus a cooldown reset), not the heuristically-closest
+    // dead pocket the belt happens to wrap around.
+    let closest = battle_frontier
         .iter()
-        .min_by_key(|(place, (cost, _))| (heuristic(place), *cost))
-        .map(|(_, (cost, inputs))| (inputs.clone(), *cost));
-    let (inputs, _cost) = closest.unwrap_or_default();
+        .min_by_key(|place| (heuristic(place), best[*place].0))
+        .or_else(|| {
+            best.keys()
+                .min_by_key(|place| (heuristic(place), best[*place].0))
+        })
+        .map(|place| best[place].1.clone());
+    let inputs = closest.unwrap_or_default();
     Ok((
         Path {
             frames: inputs.len(),

@@ -140,6 +140,17 @@ fn flee_wild(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(), R
     back_to_field(rec, obs, tuning)
 }
 
+/// The direction that undoes `dir`.
+fn nav_opposite(dir: u16) -> u16 {
+    match dir {
+        keys::UP => keys::DOWN,
+        keys::DOWN => keys::UP,
+        keys::LEFT => keys::RIGHT,
+        keys::RIGHT => keys::LEFT,
+        _ => 0,
+    }
+}
+
 fn mash_with(key: u16, tuning: Tuning) -> Vec<u16> {
     let mut mash: Vec<u16> = vec![key; tuning.text_hold.max(1)];
     mash.push(0);
@@ -356,7 +367,7 @@ fn handle_battle(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(
 /// searches again from the far side.
 /// How a `walk_fleeing` leg states its destination.
 #[derive(Debug, Clone, Copy)]
-enum Leg {
+pub enum Leg {
     /// A specific tile.
     Tile((u8, u8), i16, i16),
     /// Any tile of a map, leaving the current map near a known connection
@@ -379,9 +390,17 @@ impl Leg {
             Leg::MapVia(map, _, _) => obs.map(emu) == Some(map),
         }
     }
+
+    /// The tile the leg is steering towards, for ordering forced steps.
+    fn hint(&self) -> (i16, i16) {
+        match *self {
+            Leg::Tile(_, x, y) => (x, y),
+            Leg::MapVia(_, _, via) => via,
+        }
+    }
 }
 
-fn walk_fleeing(
+pub fn walk_fleeing(
     rec: &mut Recorder,
     obs: &Observer,
     tuning: Tuning,
@@ -391,39 +410,64 @@ fn walk_fleeing(
 ) -> Result<(), RouteError> {
     const MAX_ROUNDS: usize = 40;
 
-    for _round in 0..MAX_ROUNDS {
+    for round in 0..MAX_ROUNDS {
         if leg.arrived(obs, rec.emu()) {
             return Ok(());
         }
+        // Escalate: a round that needed the force-step fallback left the
+        // search stuck on something (usually an encounter belt every
+        // explored index hits) -- later rounds search harder rather than
+        // repeating the same exhaustion.
+        let budget = max_nodes.saturating_mul(1 << round.min(4));
         let start = rec.save_state()?;
-        let (path, reached) =
-            nav::search_best_effort(rec.emu(), obs, &start, leg.goal(), max_nodes)?;
+        let (path, reached) = nav::search_best_effort(rec.emu(), obs, &start, leg.goal(), budget)?;
         rec.emu().load_state(&start)?;
         rec.play(&path.inputs)?;
+        eprintln!(
+            "      walk {leg:?} round {round}: search {} ({} frames), now {:?} {:?}",
+            if reached { "reached" } else { "best-effort" },
+            path.frames,
+            obs.map(rec.emu()),
+            obs.pos(rec.emu()),
+        );
         if reached {
             return Ok(());
         }
 
-        // Force progress: hold the bias direction (then its neighbours) for
-        // as many tiles as it gives, stopping at a battle, a map change, or
-        // a wall. A battle here is *the point*: fleeing it resets the
-        // encounter cooldown (`src/battle_setup.c:205`), which buys 6-7
-        // nearly-free grass steps -- often the rest of the belt the search
-        // could not cross.
+        // Force progress: try directions ordered by how much closer their
+        // first tile lands to the leg's hint, a few tiles each, stopping at
+        // a battle, a map change, or a wall. A battle here is *the point*:
+        // fleeing it resets the encounter cooldown
+        // (`src/battle_setup.c:205`), which buys 6-7 nearly-free grass
+        // steps -- often the rest of the belt the search could not cross.
+        // The walk is capped at a few tiles so a sideways escape cannot run
+        // to the far wall and oscillate (measured: the first Route 1 build
+        // ping-ponged (12,17) <-> (2,17) for 40 rounds).
+        const FORCE_TILES: usize = 4;
         let mut moved = false;
-        let dirs = [
-            bias,
-            rotate(bias),
-            rotate(rotate(rotate(bias))),
-            rotate(rotate(bias)),
+        let (hx, hy) = leg.hint();
+        let here_pos = obs.pos(rec.emu()).unwrap_or((0, 0));
+        let mut dirs = [
+            (keys::UP, (0i16, -1i16)),
+            (keys::LEFT, (-1i16, 0i16)),
+            (keys::RIGHT, (1, 0)),
+            (keys::DOWN, (0, 1)),
         ];
-        for dir in dirs {
+        dirs.sort_by_key(|(dir, (dx, dy))| {
+            let d =
+                (here_pos.0 + dx).abs_diff(hx) as usize + (here_pos.1 + dy).abs_diff(hy) as usize;
+            // Backward loses every tie -- it undoes the search's approach
+            // (measured: (12,17) -> forced DOWN -> (12,21), forever).
+            (d, (*dir == nav_opposite(bias)) as usize)
+        });
+        for (dir, _) in dirs {
             let here = rec.save_state()?;
             let mut trial = Trial::new(rec.emu());
             let start_place = (obs.map(trial.core()), obs.pos(trial.core()));
             let mut last_place = start_place;
             let mut frames_since_change = 0usize;
             let mut battled = false;
+            let mut tiles = 0usize;
             for _ in 0..1200 {
                 trial.step(dir)?;
                 if obs.in_battle(trial.core()) {
@@ -434,8 +478,9 @@ fn walk_fleeing(
                 if now != last_place {
                     last_place = now;
                     frames_since_change = 0;
-                    if now.0 != start_place.0 {
-                        break; // crossed into another map: stop and re-plan
+                    tiles += 1;
+                    if now.0 != start_place.0 || tiles >= FORCE_TILES {
+                        break; // another map, or far enough: re-plan
                     }
                 } else {
                     frames_since_change += 1;
@@ -455,9 +500,16 @@ fn walk_fleeing(
             rec.emu().load_state(&here)?;
             if progressed {
                 rec.play(&inputs)?;
-                if obs.in_battle(rec.emu()) {
+                let fought = obs.in_battle(rec.emu());
+                if fought {
                     handle_battle(rec, obs, tuning)?;
                 }
+                eprintln!(
+                    "      walk {leg:?} round {round}: forced dir {dir:#06x}{}, now {:?} {:?}",
+                    if fought { " into a battle" } else { "" },
+                    obs.map(rec.emu()),
+                    obs.pos(rec.emu()),
+                );
                 moved = true;
                 break;
             }
@@ -475,17 +527,6 @@ fn walk_fleeing(
         budget: MAX_ROUNDS,
         frames: rec.frames(),
     })
-}
-
-/// UP -> LEFT -> DOWN -> RIGHT -> UP: an arbitrary but fixed neighbour order
-/// for the force-step fallback.
-fn rotate(dir: u16) -> u16 {
-    match dir {
-        keys::UP => keys::LEFT,
-        keys::LEFT => keys::DOWN,
-        keys::DOWN => keys::RIGHT,
-        _ => keys::UP,
-    }
 }
 
 // ---------------------------------------------------------------------------
