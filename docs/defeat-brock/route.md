@@ -56,11 +56,27 @@ first ~7000 frames to look like rival-1's and refuse to assume they should.
 - **How expensive encounter dodging is** in delay frames per grass step, which prices path
   choices through the forest.
 
-## Evidence sections (to be filled)
+## Evidence so far
 
-### Story gates — pending decomp research
-### Wild encounters — pending decomp research
-### The starter — pending decomp research
-### Brock — pending decomp research
+The decomp research is done and lives in `research/` (every claim cited; geometry claims
+marked as decoded-from-binary lower bounds pending emulator confirmation):
+
+- **[story-gates.md](research/story-gates.md)** — the mandatory chain: lab battle → Route 1
+  (≥20 forced grass steps) → Viridian → **Oak's Parcel round trip (mandatory)** → **catching
+  tutorial (mandatory)** → Route 2 (0 forced grass) → Viridian Forest (≥48 forced grass,
+  **Bug Catcher Sammy forced** — one Weedle L9; four other trainers dodgeable) → Pewter →
+  gym (Camper Liam skippable, Brock interaction-only). Route 22's rival is off-path.
+  Defeat observables: `FLAG_DEFEATED_BROCK` / `FLAG_BADGE01_GET`.
+- **[wild-encounters.md](research/wild-encounters.md)** — the per-step pipeline. The
+  encounter-rate dice roll runs on a **second LCG** seeded once per new game and advanced
+  only per rate test, so its pass/fail sequence is step-count-indexed, not frame-indexed;
+  frame delays reach only the cooldown gate (first 6-7 steps per map entry) and the
+  behavior-change 60% roll. Dodging is path shaping against a precomputable sequence.
+- **[starter-and-brock.md](research/starter-and-brock.md)** — the starter is exactly 4
+  rolls at `givemon` (nature/IVs are a frame dial at the ball); Brock is Geodude L12
+  {Tackle, Defense Curl} + Onix L14 {Tackle, Bind, Rock Tomb}, IVs 0, no items; Grass and
+  Water hit both at 4×; Bulbasaur's Vine Whip unlocks at L10 (560 exp), Squirtle's Bubble
+  at L7, Charmander is resisted until L13. Exp math and stat formulas worked and cited.
+
 ### The segments — pending the semi-naive build
 ### Tier 2 — not attempted
