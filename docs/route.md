@@ -143,7 +143,56 @@ same timer (`MainState_Exit`, `decompiled/src/naming_screen.c:722` — the playe
 only, not the rival's). Everything from the bedroom to the battle therefore runs on a stream
 whose seed is fixed at naming-screen exit and advanced once per frame
 (`decompiled/src/main.c:412`); manipulation upstream of that exit cannot reach the battle
-except by moving the exit itself. Three things in a normal battle consume the stream:
+except by moving the exit itself.
+
+Since 2026-08-12 the stream has a Rust model (`crates/frlg-rng`: step, O(log n) jump, and
+the discrete log `distance_to`, so "how many `Random()` calls happened between these two
+observed states" is a 135 ns question instead of a replay). Its correctness is not argued
+from the constants: `frlg-rng`'s `tests/emulator.rs` replays the whole committed route and
+requires the model to reproduce `gRngValue` on every single frame, with only the two
+`SeedRng` events breaking stride. The `rng-trace` example narrates the route in
+"extra steps beyond the per-frame VBlank call", which is exactly the set of frames where
+some other consumer rolled.
+
+**Who consumes the stream in the field** — measured by that trace and by
+`field-experiments`, each claim also cited:
+
+- **The VBlank interrupt, once per displayed frame, unconditionally**
+  (`decompiled/src/main.c:412`, handler installed at `:52`; it does not depend on
+  `gMain.vblankCallback`). In battle this doubles: `VBlankCB_Battle` adds a second call
+  per frame (`decompiled/src/battle_main.c:1650`, installed at `:698`) — measured, every
+  frame of `09-battle-win` moves the stream by exactly 2.
+- **Pressing A: never.** No `Random()` anywhere on the text/menu/interaction path
+  (`src/text.c`, `src/menu.c`, `src/field_control_avatar.c`, `src/start_menu.c`,
+  `src/script.c` all have zero calls; `src/scrcmd.c:459` is the script `random` command,
+  unused by these maps). Measured: 600 frames idle, holding A, and mashing A from the same
+  state consume identically. A presses are free as far as the stream is concerned.
+- **Player walking and turning: never** (every `Random()` in `src/field_player_avatar.c`
+  is in the fishing minigame). Measured: two same-length paths to the same tile left
+  `gRngValue` identical at a common frame horizon.
+- **NPCs with rolling movement types.** `MovementType_WanderAround` rolls a delay and a
+  direction per cycle (`decompiled/src/event_object_movement.c:2716,2737`); the
+  look-around and wander-up/down variants likewise (`:3037,3061,3090,3110`); plain
+  `FACE_*` NPCs never roll. On this route: Pallet Town's sign lady (3,10) and fat man
+  (13,17) (`decompiled/data/maps/PalletTown/map.json`), and Oak's lab's three aides
+  (`.../PalletTown_ProfessorOaksLab/map.json`). Two gates matter: an object event
+  outside the spawn window around the player (live iff `px-9 <= tx <= px+10` and
+  `py-7 <= ty <= py+9`, `event_object_movement.c:1798-1801`) is despawned and rolls
+  nothing — which NPC is in the window at each point of this route is *derived*, not yet
+  confirmed against `gObjectEvents` — and
+  `lockall`/`lock` scripts freeze object events entirely (`:5117`,
+  `src/scrcmd.c:1195-1221`), so the aides stop rolling for the whole scripted rival
+  sequence. Measured idle rates per 600 frames: bedroom 2F (no object events) 0 extra
+  steps, Pallet Town 14-16.
+- **Map loads: 3 rolls each**, every warp and every battle entry — saveblock ASLR offset
+  (`decompiled/src/load_save.c:75`) plus a 2-roll encryption key (`:126`), reached from
+  `InitOverworldBgs` (`src/overworld.c:1337`) and from `CB2_InitBattle`
+  (`src/battle_main.c:614`).
+- **Ambient cries, outdoors only**: a species pick per map load and a delay roll every
+  1200-3600 unlocked frames (`decompiled/src/overworld.c:1141-1172`); indoors has no
+  wild-mon header and consumes nothing.
+
+Three things in a normal battle consume the stream beyond the per-frame pair:
 
 - **Criticals**: `!(Random() % sCriticalHitChance[critChance])`, base chance 1 in 16
   (`decompiled/src/battle_script_commands.c:1199`, table at `:588`).

@@ -51,7 +51,7 @@ impl BattleLab {
             self.emu.write8(self.rng_addr + i as u32, *byte);
         }
         let mut frames = 0u32;
-        let mut idle = |emu: &mut Emu, n: u32, frames: &mut u32| {
+        let idle = |emu: &mut Emu, n: u32, frames: &mut u32| {
             for _ in 0..n {
                 emu.step(0);
                 *frames += 1;
