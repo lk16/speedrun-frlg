@@ -84,6 +84,32 @@ impl Lab {
     }
 }
 
+/// The live object events: `gObjectEvents`, 16 slots of 0x24 bytes
+/// (`decompiled/include/global.fieldmap.h:212`, `OBJECT_EVENTS_COUNT` at
+/// `include/constants/global.h:41`). Returns (localId, movementType, x, y,
+/// frozen) for every active slot except the player (slot with isPlayer set).
+fn live_object_events(emu: &mut Emu, base: u32) -> Vec<(u8, u8, u8, i16, i16, bool)> {
+    const SIZE: u32 = 0x24;
+    let mut out = Vec::new();
+    for slot in 0..16u32 {
+        let addr = base + slot * SIZE;
+        let flags = emu.read32(addr);
+        let active = flags & 1 != 0;
+        let frozen = flags & (1 << 8) != 0;
+        let is_player = flags & (1 << 16) != 0;
+        if !active || is_player {
+            continue;
+        }
+        let local_id = emu.read8(addr + 0x08);
+        let graphics_id = emu.read8(addr + 0x05);
+        let movement_type = emu.read8(addr + 0x06);
+        let x = emu.read16(addr + 0x10) as i16;
+        let y = emu.read16(addr + 0x12) as i16;
+        out.push((local_id, graphics_id, movement_type, x, y, frozen));
+    }
+    out
+}
+
 fn main() {
     let root = repo_root();
     let ledger =
@@ -214,8 +240,16 @@ fn main() {
         }
         let map = lab.observer.map(&mut lab.emu);
         let pos = lab.pos();
+        let obj_base = lab
+            .observer
+            .symbols()
+            .get("gObjectEvents")
+            .expect("gObjectEvents")
+            .addr;
+        let live = live_object_events(&mut lab.emu, obj_base);
         let (extra, busy) = lab.run(N, |_| 0);
         let note = if blocked { " [walk blocked early]" } else { "" };
         println!("  {name:<28} at {map:?} {pos:?}: {extra} extra steps on {busy} frames{note}");
+        println!("      live NPCs (localId, gfx, movementType, x, y, frozen): {live:?}");
     }
 }

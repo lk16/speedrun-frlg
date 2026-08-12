@@ -173,13 +173,18 @@ some other consumer rolled.
 - **NPCs with rolling movement types.** `MovementType_WanderAround` rolls a delay and a
   direction per cycle (`decompiled/src/event_object_movement.c:2716,2737`); the
   look-around and wander-up/down variants likewise (`:3037,3061,3090,3110`); plain
-  `FACE_*` NPCs never roll. On this route: Pallet Town's sign lady (3,10) and fat man
-  (13,17) (`decompiled/data/maps/PalletTown/map.json`), and Oak's lab's three aides
+  `FACE_*` NPCs never roll. On this route the only field roller is Pallet Town's **fat
+  man** (13,17) (`decompiled/data/maps/PalletTown/map.json`) — the sign lady reads as a
+  wanderer in map.json but the map's on-load script parks her at (5,15) as
+  `MOVEMENT_TYPE_FACE_UP` until her scene plays
+  (`data/maps/PalletTown/scripts.inc:27-28`), confirmed against `gObjectEvents` by the
+  `who-rolls` example — plus Oak's lab's three aides
   (`.../PalletTown_ProfessorOaksLab/map.json`). Two gates matter: an object event
   outside the spawn window around the player (live iff `px-9 <= tx <= px+10` and
-  `py-7 <= ty <= py+9`, `event_object_movement.c:1798-1801`) is despawned and rolls
-  nothing — which NPC is in the window at each point of this route is *derived*, not yet
-  confirmed against `gObjectEvents` — and
+  `py-7 <= ty <= py+9` in template coords, `event_object_movement.c:1798-1801`) is
+  despawned and rolls nothing — the fat man is despawned at the house door and spawns as
+  the player moves south, which makes his roll count the route's one free stream lever —
+  and
   `lockall`/`lock` scripts freeze object events entirely (`:5117`,
   `src/scrcmd.c:1195-1221`), so the aides stop rolling for the whole scripted rival
   sequence. Measured idle rates per 600 frames: bedroom 2F (no object events) 0 extra
