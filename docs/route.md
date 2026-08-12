@@ -350,8 +350,11 @@ remains, largest first:
   battle streams at 1 frame each — the cheapest seed dial the route has, distinct from
   in-battle delays, which move *within* one seed at 2 steps per frame. The tuning sweeps
   only ever sampled it incidentally (any variant that moves the exit frame moves the
-  seed). A sampled seed wins if its searched battle beats 2409 by more than N; nobody has
-  run that search.
+  seed). A sampled seed wins if its searched battle beats 2409 by more than N. Sampled
+  2026-08-12 for N = 1..24 (`seed-sample`, full battle search per seed, anchored at N=0
+  reproducing the committed battle exactly): **no winner** -- best N=10 at total 9666
+  (+8), four seeds unwinnable outright. Deeper N stays open but each frame raises the
+  bar; the dial is real, this stream neighbourhood just does not pay.
 
 ## Tier 2
 

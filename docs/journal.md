@@ -29,6 +29,22 @@ idling N frames before the *naming-screen exit* press samples N fresh battle see
 frame each, which the sweeps only ever hit incidentally. A sampled seed wins if its
 searched battle beats 2409 by more than N.
 
+**And the dial was then sampled, N = 1..24 (`seed-sample` example): no winner.** Each
+variant replays the committed logs with N idles inserted at the start of `03-names` (all
+24 replay clean to the battle -- the downstream logs survive every stream) and runs the
+full two-stage battle search on the real stream, anchored at N=0 reproducing the
+committed 2409/`[4, 3, 3, 3]` bit-for-bit. Results: best is N=10, battle 2407 -- the
+first battle seen under 2409 -- but total 9666 (+8) against its bar of 2399; N=14 lands
++20; everything else is worse, and the seeds at N=11, 18, 20, 23 cannot win at all
+(13/64 to 64/64 stage-1 win rates across the wave says how wild the per-seed variance
+is). The committed route stands. Along the way the search got 1.8x faster (turn-menu
+checkpoint savestates + abort-at-current-best, adopted after the checkpointed anchor
+reproduced the committed battle exactly), and `battle-truth` now extracts the committed
+battle as a roll-by-roll dataset -- our Bulbasaur outspeeds the rival's Charmander (11
+vs 9, we act first), each turn shows a 6-roll AI block, our Tackle burns 2 rolls, the
+rival's move 4 -- which is the validation target for a pure-Rust battle model, the next
+distillation step.
+
 ## 2026-08-12 (sandbox, night) -- the RNG gets a Rust model, the consumers get names, the free levers get priced
 
 Task: model the RNG outside the emulator, verify it, and use it to ask whether the rival
