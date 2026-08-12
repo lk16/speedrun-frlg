@@ -61,6 +61,8 @@ filter differently.
     frlg log show seg.ilog
     frlg log cat a.ilog b.ilog -o whole.ilog    # join segments into one run
     frlg route build                            # run the route (docs/rival-1/route.md)
+    frlg route build --target defeat-brock      # a longer target: same builder, more segments,
+                                                #   paths default to route/<target>/
     frlg route verify                           # replay the committed logs and check the ledger
     frlg route tune                             # sweep the route knobs, score on total frames
 

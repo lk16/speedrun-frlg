@@ -1,5 +1,7 @@
-//! The route: segments that take FireRed from power-on to a won rival battle,
-//! written as code against the tier-1 harness.
+//! The routes: segments that take FireRed/LeafGreen from power-on to a
+//! target's observable (a won rival battle; Brock defeated), written as code
+//! against the tier-1 harness. [`segments::Target`] picks how far a build
+//! runs.
 //!
 //! - [`record::Recorder`] -- an `Emu` that records one mask per frame it
 //!   advances, so "wait until the menu appears" is still a replayable log.
