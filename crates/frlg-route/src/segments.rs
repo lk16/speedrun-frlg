@@ -104,23 +104,49 @@ impl Starter {
 pub struct Tuning {
     /// Frames of UP held to turn towards the starter's ball without walking.
     pub turn_hold: usize,
+    /// Frames A (or B) is *held* per one-frame release in every dialogue
+    /// mash. 1 is the plain `[keys, 0]` mash. Longer holds print text faster
+    /// -- `RenderText` zeroes the per-character delay on held frames once one
+    /// press has landed (`decompiled/src/text.c:639-650`), and both the
+    /// intro's boxes and the battle's enable that
+    /// (`decompiled/src/oak_speech.c:761-762`,
+    /// `decompiled/src/battle_message.c:2778-2785`) -- but register each
+    /// menu-advancing press up to `text_hold` frames later.
+    #[serde(default = "text_hold_compat")]
+    pub text_hold: usize,
+}
+
+/// What `text_hold` was before it existed: ledgers written without the field
+/// were built by drives that mashed `[keys, 0]`.
+fn text_hold_compat() -> usize {
+    1
 }
 
 impl Default for Tuning {
     fn default() -> Self {
-        // The value the 2026-08-12 sweep settled on (10085 frames; 8, the
-        // previous winner, scored 10531 and 7 could not win its battle at
-        // all); `frlg route tune` re-derives it, and the ledger's recorded
+        // turn_hold: the value the 2026-08-12 sweep settled on (10085 frames;
+        // 8, the previous winner, scored 10531 and 7 could not win its battle
+        // at all); `frlg route tune` re-derives it, and the ledger's recorded
         // value wins over this default whenever one exists.
-        Self { turn_hold: 2 }
+        Self {
+            turn_hold: 2,
+            text_hold: 1,
+        }
     }
 }
 
 impl Tuning {
-    /// The variants a tuning sweep tries. One knob so far, so this is a range;
-    /// a second knob makes it a product, and the sweep stays the same shape.
+    /// The variants a tuning sweep tries: the product of both knobs.
+    /// `text_hold`'s candidates are spread rather than exhaustive -- its
+    /// text-printing gain saturates fast (a hold of `n` prints `n/(n+1)`
+    /// characters per frame) while its menu-latency cost keeps growing.
     pub fn variants() -> impl Iterator<Item = Tuning> {
-        (1..=8).map(|turn_hold| Tuning { turn_hold })
+        (1..=8).flat_map(|turn_hold| {
+            [1usize, 2, 3, 7].into_iter().map(move |text_hold| Tuning {
+                turn_hold,
+                text_hold,
+            })
+        })
     }
 }
 
@@ -145,14 +171,14 @@ pub struct Segment {
 pub fn all(starter: Starter, tuning: Tuning) -> Vec<Segment> {
     vec![
         boot(),
-        intro_oak(),
-        names(),
+        intro_oak(tuning),
+        names(tuning),
         options(),
         house(),
-        to_lab(),
+        to_lab(tuning),
         starter_segment(starter, tuning),
         battle_start(),
-        battle_win(),
+        battle_win(tuning),
     ]
 }
 
@@ -188,14 +214,18 @@ fn boot() -> Segment {
 /// straight to the naming screen fade
 /// (`decompiled/src/oak_speech.c:1352-1379`); the presets only appear on the
 /// re-ask path the route never takes.
-fn intro_oak() -> Segment {
+fn intro_oak(tuning: Tuning) -> Segment {
     Segment {
         name: "02-intro-oak",
         goal: "the player naming screen is up (gender chosen)".into(),
-        run: Box::new(|rec, obs| {
-            rec.mash_until("the naming screen", keys::A, 4000, |emu| {
-                obs.callback2_is(emu, "CB2_NamingScreen")
-            })?;
+        run: Box::new(move |rec, obs| {
+            rec.hold_mash_until(
+                "the naming screen",
+                keys::A,
+                tuning.text_hold,
+                4000,
+                |emu| obs.callback2_is(emu, "CB2_NamingScreen"),
+            )?;
             Ok(())
         }),
         reached: Box::new(|obs, emu| obs.callback2_is(emu, "CB2_NamingScreen")),
@@ -230,11 +260,11 @@ fn intro_oak() -> Segment {
 ///
 /// Both names land on a confirm box whose YES/NO menu starts on YES, so the
 /// A mash between the beats answers everything correctly.
-fn names() -> Segment {
+fn names(tuning: Tuning) -> Segment {
     Segment {
         name: "03-names",
         goal: "in the bedroom, 1-char player name and 3-char rival name".into(),
-        run: Box::new(|rec, obs| {
+        run: Box::new(move |rec, obs| {
             // The naming screen drops input until its fade-in is done.
             rec.wait_until("the naming screen to take input", 300, |emu| {
                 obs.naming_screen_accepting_input(emu)
@@ -245,16 +275,20 @@ fn names() -> Segment {
 
             // Through the confirm box and the rival intro, to the rival's
             // preset menu.
-            rec.mash_until("the rival name menu", keys::A, 3000, |emu| {
-                obs.task_active(emu, NAME_MENU_TASK)
-            })?;
+            rec.hold_mash_until(
+                "the rival name menu",
+                keys::A,
+                tuning.text_hold,
+                3000,
+                |emu| obs.task_active(emu, NAME_MENU_TASK),
+            )?;
 
             // KAZ: wrap upwards to row 3, then take it.
             rec.tap(keys::UP)?;
             rec.tap(keys::UP)?;
             rec.tap(keys::A)?;
 
-            rec.mash_until("the overworld", keys::A, 6000, |emu| {
+            rec.hold_mash_until("the overworld", keys::A, tuning.text_hold, 6000, |emu| {
                 obs.callback2_is(emu, "CB2_Overworld") && obs.player_can_step(emu)
             })?;
             Ok(())
@@ -366,11 +400,11 @@ fn house() -> Segment {
 /// North to the route exit, where Oak stops the player and walks them to his
 /// lab (`PalletTown_EventScript_OakTrigger`, which ends in
 /// `warp MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB`).
-fn to_lab() -> Segment {
+fn to_lab(tuning: Tuning) -> Segment {
     Segment {
         name: "06-to-lab",
         goal: "inside Oak's lab, after his interruption".into(),
-        run: Box::new(|rec, obs| {
+        run: Box::new(move |rec, obs| {
             nav::walk_to(
                 rec,
                 obs,
@@ -379,9 +413,13 @@ fn to_lab() -> Segment {
             )?;
             // The scene talks, walks the player south and warps. A advances
             // its one msgbox; the rest is on a timer.
-            rec.mash_until("the warp into the lab", keys::A, 3000, |emu| {
-                obs.map(emu) == Some(OAKS_LAB)
-            })?;
+            rec.hold_mash_until(
+                "the warp into the lab",
+                keys::A,
+                tuning.text_hold,
+                3000,
+                |emu| obs.map(emu) == Some(OAKS_LAB),
+            )?;
             Ok(())
         }),
         reached: Box::new(|obs, emu| obs.map(emu) == Some(OAKS_LAB)),
@@ -408,7 +446,7 @@ fn starter_segment(starter: Starter, tuning: Tuning) -> Segment {
             // Oak walks the player up the room and offers the three balls. It
             // ends with `releaseall`, i.e. the player can move again, and with
             // the scene var at 2.
-            rec.mash_until("Oak's offer", keys::A, 4000, |emu| {
+            rec.hold_mash_until("Oak's offer", keys::A, tuning.text_hold, 4000, |emu| {
                 obs.var(emu, VAR_OAKS_LAB_SCENE) == Some(2) && obs.player_can_step(emu)
             })?;
 
@@ -431,14 +469,22 @@ fn starter_segment(starter: Starter, tuning: Tuning) -> Segment {
             // A opens the ball's script and answers YES to "so, you want it?".
             // Stop the moment the mon is in the party: the next prompt is the
             // nickname one, and A would say yes to that too.
-            rec.mash_until("the starter in the party", keys::A, 1200, |emu| {
-                obs.party_count(emu) == 1
-            })?;
+            rec.hold_mash_until(
+                "the starter in the party",
+                keys::A,
+                tuning.text_hold,
+                1200,
+                |emu| obs.party_count(emu) == 1,
+            )?;
             // B: no nickname, and it advances everything else up to the rival
             // taking his ball.
-            rec.mash_until("the rival to take his", keys::B, 4000, |emu| {
-                obs.var(emu, VAR_OAKS_LAB_SCENE) == Some(3) && obs.player_can_step(emu)
-            })?;
+            rec.hold_mash_until(
+                "the rival to take his",
+                keys::B,
+                tuning.text_hold,
+                4000,
+                |emu| obs.var(emu, VAR_OAKS_LAB_SCENE) == Some(3) && obs.player_can_step(emu),
+            )?;
             Ok(())
         }),
         reached: Box::new(move |obs, emu| {
@@ -498,7 +544,7 @@ fn battle_start() -> Segment {
 ///    measure-through-the-fight rule the `turn_hold` sweep taught. Adopting
 ///    an improvement re-rolls everything after it, so later turns are
 ///    searched on the improved stream.
-fn battle_win() -> Segment {
+fn battle_win(tuning: Tuning) -> Segment {
     const START_DELAYS: std::ops::Range<usize> = 0..64;
     const TURN_DELAYS: std::ops::Range<usize> = 1..16;
     /// More than any winning battle here has ever used; a plan that runs
@@ -508,8 +554,15 @@ fn battle_win() -> Segment {
     Segment {
         name: "09-battle-win",
         goal: "gBattleOutcome == B_OUTCOME_WON".into(),
-        run: Box::new(|rec, obs| {
+        run: Box::new(move |rec, obs| {
             let start = rec.save_state()?;
+
+            // The battle's own boxes take the held-A speed-up too
+            // (`decompiled/src/battle_message.c:2778-2785` sets
+            // `canABSpeedUpPrint` for B_WIN_MSG and the tutorial window), so
+            // the drive mashes at the route's text_hold duty cycle.
+            let mut mash: Vec<u16> = vec![keys::A; tuning.text_hold.max(1)];
+            mash.push(0);
 
             // One battle under a delay plan: plan[0] idle frames before any
             // input, plan[k] idle frames on arriving at the k-th turn's
@@ -526,7 +579,7 @@ fn battle_win() -> Segment {
                     // To this turn's selection state, or the end.
                     let to_menu = trial.advance_while(
                         "the battle menu or the end",
-                        &[keys::A, 0],
+                        &mash,
                         FRAME_BUDGET,
                         |emu| obs.battle_outcome(emu) != 0 || obs.battle_choosing_actions(emu),
                     );
@@ -540,12 +593,10 @@ fn battle_win() -> Segment {
                     turns += 1;
                     trial.idle(*plan.get(turns).unwrap_or(&0))?;
                     // Commit this turn's actions: mash until the state exits.
-                    let to_turn = trial.advance_while(
-                        "the turn to resolve",
-                        &[keys::A, 0],
-                        FRAME_BUDGET,
-                        |emu| obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu),
-                    );
+                    let to_turn =
+                        trial.advance_while("the turn to resolve", &mash, FRAME_BUDGET, |emu| {
+                            obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu)
+                        });
                     match to_turn {
                         Err(RouteError::Timeout { .. }) => break false,
                         other => other?,

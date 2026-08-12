@@ -134,6 +134,34 @@ pub trait Feed {
     {
         self.advance_while(what, &[keys, 0], budget, until)
     }
+
+    /// Mash `keys` hold-heavily: held for `on` frames, released for one,
+    /// repeated until `until` holds. `on = 1` is exactly [`Feed::mash_until`].
+    ///
+    /// The release frame is what lets the next press register at all -- the
+    /// game acts on `gMain.newKeys` (`decompiled/include/main.h:32`). Holding
+    /// between releases is for the text: once one press lands during a box,
+    /// `RenderText` zeroes the per-character delay on every frame A or B is
+    /// *held* (`decompiled/src/text.c:639-650`), so a plain `[keys, 0]` mash
+    /// prints at half the held rate. The right `on` is a route-level trade --
+    /// longer holds print faster but register menu presses later -- which is
+    /// why it arrives here as an argument (`Tuning::text_hold`) rather than a
+    /// constant.
+    fn hold_mash_until(
+        &mut self,
+        what: &str,
+        keys: u16,
+        on: usize,
+        budget: usize,
+        until: impl FnMut(&mut Emu) -> bool,
+    ) -> Result<usize, RouteError>
+    where
+        Self: Sized,
+    {
+        let mut pattern = vec![keys; on.max(1)];
+        pattern.push(0);
+        self.advance_while(what, &pattern, budget, until)
+    }
 }
 
 /// An emulator plus the log of what has been fed to it.

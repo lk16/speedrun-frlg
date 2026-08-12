@@ -118,6 +118,13 @@ struct RouteArgs {
     /// value if one is there, else the built-in default; `tune` sweeps it.
     #[arg(long)]
     turn_hold: Option<usize>,
+
+    /// Frames A/B is held per one-frame release in dialogue mashes (1 = the
+    /// plain press-release mash). Held frames print text at full speed
+    /// (decompiled/src/text.c:639-650). Defaults like --turn-hold; `tune`
+    /// sweeps it.
+    #[arg(long)]
+    text_hold: Option<usize>,
 }
 
 #[derive(Args)]
@@ -285,7 +292,10 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             for tuning in Tuning::variants() {
                 // Sweep into a scratch directory: a variant that loses must not
                 // leave its logs behind claiming to be the route.
-                let scratch = std::env::temp_dir().join(format!("frlg-tune-{}", tuning.turn_hold));
+                let scratch = std::env::temp_dir().join(format!(
+                    "frlg-tune-{}-{}",
+                    tuning.turn_hold, tuning.text_hold
+                ));
                 let paths = ledger::Paths {
                     logs: scratch.join("logs"),
                     ledger: scratch.join("ledger.json"),
@@ -298,19 +308,28 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
                 match ledger::build(&rom, &sym, starter, tuning, &paths, |_| {}) {
                     Ok(built) => {
                         let total = built.total_frames;
-                        println!("turn_hold {:>2}  {total:>6} frames", tuning.turn_hold);
+                        println!(
+                            "turn_hold {:>2}  text_hold {:>2}  {total:>6} frames",
+                            tuning.turn_hold, tuning.text_hold
+                        );
                         if best.as_ref().is_none_or(|(_, seen)| total < *seen) {
                             best = Some((tuning, total));
                         }
                     }
                     Err(ledger::LedgerError::Route(RouteError::Timeout { what, .. })) => {
-                        println!("turn_hold {:>2}  loses ({what})", tuning.turn_hold);
+                        println!(
+                            "turn_hold {:>2}  text_hold {:>2}  loses ({what})",
+                            tuning.turn_hold, tuning.text_hold
+                        );
                     }
                     Err(other) => return Err(other.into()),
                 }
             }
             let (tuning, total) = best.expect("Tuning::variants is not empty");
-            println!("\nbest: turn_hold {} at {total} frames", tuning.turn_hold);
+            println!(
+                "\nbest: turn_hold {} text_hold {} at {total} frames",
+                tuning.turn_hold, tuning.text_hold
+            );
 
             let paths = ledger::Paths {
                 logs: args.logs.clone(),
@@ -326,7 +345,10 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             println!("rom     {}", led.rom_sha1);
             println!("boot    {}", led.bios);
             println!("starter {}", led.starter);
-            println!("tuning  turn_hold {}", led.tuning.turn_hold);
+            println!(
+                "tuning  turn_hold {}  text_hold {}",
+                led.tuning.turn_hold, led.tuning.text_hold
+            );
             println!("frames  {}", led.total_frames);
             println!();
             for s in &led.segments {
@@ -528,6 +550,9 @@ fn tuning_for(args: &RouteArgs) -> Tuning {
         .unwrap_or_default();
     if let Some(turn_hold) = args.turn_hold {
         tuning.turn_hold = turn_hold;
+    }
+    if let Some(text_hold) = args.text_hold {
+        tuning.text_hold = text_hold;
     }
     tuning
 }
