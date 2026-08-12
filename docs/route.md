@@ -348,7 +348,13 @@ remains, largest first:
   is key" line onwards, see the RNG section) and the 85-100% damage rolls are only reached
   through delays. The search keeps stumbling into good crit rolls because they make battles
   short; nothing yet aims for them, and nobody has re-run the crit census on the current
-  battle.
+  battle. The joint search is no longer priced in emulator-hours, though: the battle engine
+  (`crates/frlg-battle`, 2026-08-12) plays whole battles from a `gRngValue` and a plan in
+  about a microsecond, enumerating the few input-gated frames it cannot decide as leaves,
+  and its pure-Rust sweep already names plans whose best leaf is 2405 (-4) — candidates for
+  emulator arbitration, not results. Two facts it measured on the way: start delays
+  collapse mod 5 (stage 1 is five battles, not 64), and delays 0..=3 carry the least gate
+  ambiguity.
 - **`02-intro-oak`'s boxes still wait on scripted beats.** Text now prints at one character
   per held frame, but the intro is also fades, sprite slides and timer waits that no input
   reaches; 1565 frames is the floor for this drive shape, not for the scene. Nobody has

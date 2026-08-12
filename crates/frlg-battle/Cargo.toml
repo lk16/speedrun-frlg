@@ -5,6 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+frlg-rng = { path = "../frlg-rng" }
 
 [dev-dependencies]
 frlg-emu = { path = "../frlg-emu" }

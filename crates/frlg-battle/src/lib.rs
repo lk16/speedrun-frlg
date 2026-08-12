@@ -2,16 +2,25 @@
 //! arithmetic, so a search can ask "what does this stream do to the fight"
 //! without paying ~1 ms per emulator frame.
 //!
-//! Scope, honestly stated: v1 models the *roll semantics* -- which
-//! `Random()` calls a move or the AI consumes, in what order, and what the
-//! damage arithmetic does with them. It does not model frame pacing
-//! (message boxes, HP-bar drain), so it cannot yet place the rolls in the
-//! stream by itself: between any two logic events the stream also advances
-//! 2 per rendered frame (`decompiled/src/main.c:412` +
-//! `src/battle_main.c:1650`), and where the logic lands depends on pacing
-//! the emulator still owns. Every formula here carries its decomp citation,
-//! and `tests/` validates the predictions against libmgba replays of the
-//! committed battle.
+//! Two layers:
+//!
+//! - **Roll semantics** (this file): which `Random()` calls a move or the AI
+//!   consumes, in what order, and what the damage arithmetic does with them.
+//!   Every formula carries its decomp citation.
+//! - **Pacing** ([`pacing`], [`engine`]): where in the stream those rolls
+//!   land -- between any two logic events the stream also advances 2 per
+//!   rendered frame (`decompiled/src/main.c:412` + `src/battle_main.c:1650`),
+//!   so predicting a battle means predicting its frames. The tables are
+//!   measured, not derived (`examples/fit-pacing.rs`), and the two spots the
+//!   measurement cannot pin down are enumerated as gates rather than
+//!   guessed; [`engine::simulate`] returns one leaf per gate combination.
+//!
+//! `tests/` validates both layers against libmgba replays: the committed
+//! battle roll for roll, and engine predictions leaf-for-leaf against fresh
+//! emulator runs on plans and stream shifts the fit never saw.
+
+pub mod engine;
+pub mod pacing;
 
 /// One battler's fighting numbers, as read from `gBattleMons`
 /// (`decompiled/include/pokemon.h:170`).
@@ -245,7 +254,9 @@ pub fn execute_move(
 /// `target` is the player's mon (the AI scores Growl against it). Returns
 /// the chosen move.
 pub fn rival_choose_move(target: &Mon, rival: &Mon, stream: &mut impl FnMut() -> u16) -> Move {
-    // BattleAI_SetupAIData: 4 rolls, all 4 slots, even empty ones.
+    // BattleAI_SetupAIData: 4 rolls, all 4 slots, even empty ones
+    // (battle_ai_script_commands.c:299-311; empty slots score 0 via
+    // CheckMoveLimitations, so they never join a tie).
     let mut simulated = [0u16; 4];
     for slot in &mut simulated {
         *slot = 100 - (stream() % 16);
@@ -255,7 +266,7 @@ pub fn rival_choose_move(target: &Mon, rival: &Mon, stream: &mut impl FnMut() ->
     // (EFFECT_HIT absent from its dispatch; AttackDown path has no score op
     // and no reachable roll -- both mons' second ability is NONE so
     // get_ability never rolls, battle_ai_script_commands.c:1169-1173).
-    let scratch_score = 100i32;
+    let mut scratch_score = 100i32;
     let mut growl_score = 100i32;
 
     // AI_CheckViability, AI_CV_AttackDown (battle_ai_scripts.s:1129-1150):
@@ -284,10 +295,20 @@ pub fn rival_choose_move(target: &Mon, rival: &Mon, stream: &mut impl FnMut() ->
         growl_score -= 2; // :1150
     }
 
-    // AI_TryToFaint: Scratch is the most powerful move, no change; Growl is
-    // not -> score -1 (battle_ai_scripts.s:2767-2771, :604-606). The
-    // can-faint check uses the precomputed simulatedRNG, no fresh rolls.
-    growl_score -= 1;
+    // AI_TryToFaint (battle_ai_scripts.s:2767-2782): if Scratch's simulated
+    // damage -- AI_CalcDmg with no crit (battle_script_commands.c:1225-1235)
+    // scaled by simulatedRNG for its slot, minimum 1
+    // (battle_ai_script_commands.c:1475-1500) -- would faint us, score +4.
+    // Otherwise it is the most powerful move and unchanged. Growl's power is
+    // < 2, so if_can_faint falls through and get_how_powerful_move_is
+    // returns MOVE_POWER_DISCOURAGED (not NOT_MOST_POWERFUL,
+    // battle_ai_script_commands.c:1022-1025): Growl is NOT penalised here.
+    // The AI's Scratch slot is 0 (moves [SCRATCH, GROWL]).
+    let sim_damage =
+        (base_damage(rival, target, Move::Scratch, false) * simulated[0] as i32 / 100).max(1);
+    if target.hp as i32 <= sim_damage {
+        scratch_score += 4;
+    }
 
     // Tie-break: Random() % numOfBestMoves, consumed even for one candidate
     // (battle_ai_script_commands.c:408).
@@ -362,5 +383,24 @@ mod tests {
             assert!((4..=5).contains(&out), "roll {roll} gave {out}");
         }
         assert_eq!(apply_variance(1, 15), 1, "85% of 1 floors to the minimum");
+    }
+
+    /// The committed battle, no emulator involved: from the battle-start
+    /// `gRngValue` the tier-1 replay reports (`examples/fit-pacing.rs`), the
+    /// engine's leaf set must contain the committed result -- 2409 frames,
+    /// won, with the commit gates resolving to 13 on all three turns.
+    #[test]
+    fn engine_reproduces_the_committed_battle() {
+        let leaves = crate::engine::simulate(
+            &[4, 3, 3, 3],
+            frlg_rng::Rng(0xed94271d),
+            bulbasaur(),
+            charmander(),
+        );
+        assert!(
+            leaves.iter().any(|l| l.commit_durs == [13, 13, 13]
+                && l.result == crate::engine::SimResult::Win { frames: 2409 }),
+            "committed leaf missing from {leaves:?}"
+        );
     }
 }

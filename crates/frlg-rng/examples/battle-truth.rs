@@ -1,10 +1,11 @@
 //! Ground truth for a battle model: replay the committed battle and log, per
 //! frame, every `Random()` consumed beyond the battle's 2-per-frame VBlank
-//! pair -- with the u16 values those calls returned (reconstructed from the
-//! RNG model: the game's rolls happen during the frame, the two VBlank rolls
-//! at its end) -- plus both mons' full battle stats, stat stages, and every
-//! HP change. This is the dataset `frlg-battle`'s predictions get checked
-//! against.
+//! pair -- with the u16 values those calls returned, reconstructed from the
+//! RNG model (within a busy frame the VBlank pair leads and the game's own
+//! rolls trail; established by matching damage arithmetic in both orders,
+//! `docs/journal.md` 2026-08-12) -- plus both mons' full battle stats, stat
+//! stages, and every HP change. This is the dataset `frlg-battle`'s
+//! predictions get checked against.
 //!
 //!     cargo run --release -p frlg-rng --example battle-truth [-- TSV_PATH]
 
