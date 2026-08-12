@@ -252,8 +252,9 @@ down), plus the stale single-sample starter table and the never-raced LeafGreen.
 remains, largest first:
 
 - **`09-battle-win`, 2409 frames.** The per-turn stage now repeats to a fixpoint, so
-  adoptions do revisit earlier turns — measured across the 144 sweep builds, a second pass
-  found further cuts in 12 of them and no build ever needed a third. What still never moves:
+  adoptions do revisit earlier turns — measured across the day's 146 builds, a second pass
+  found further cuts in 13 of them and one (a LeafGreen/Charmander re-run) kept adopting
+  into a third, so the fixpoint loop is not paranoia. What still never moves:
   the start delay after stage 1 (a joint start × turn search remains untried), and *what* is
   pressed — move choice is untouched, and both crit rolls (live from Oak's "inflicting damage
   is key" line onwards, see the RNG section) and the 85-100% damage rolls are only reached
