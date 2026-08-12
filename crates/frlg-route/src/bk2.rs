@@ -325,7 +325,9 @@ mod tests {
         let frames: Vec<u16> = (0..2048u16)
             .map(|i| {
                 // Every button bit pattern inside KEYS_MASK, plus quiet frames.
-                (i * 37) & keys::MASK
+                // wrapping_mul: i * 37 passes u16::MAX from i = 1772 on, and a
+                // debug build panics on the overflow where --release wraps.
+                i.wrapping_mul(37) & keys::MASK
             })
             .collect();
         let log = InputLog::new(rom_sha1_of_template(), frames.clone());
