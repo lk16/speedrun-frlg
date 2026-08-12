@@ -137,12 +137,14 @@ impl Default for Tuning {
 
 impl Tuning {
     /// The variants a tuning sweep tries: the product of both knobs.
-    /// `text_hold`'s candidates are spread rather than exhaustive -- its
-    /// text-printing gain saturates fast (a hold of `n` prints `n/(n+1)`
-    /// characters per frame) while its menu-latency cost keeps growing.
+    /// `text_hold`'s candidates are the top of the intro-only measurement
+    /// (`text_hold_on_the_intro_alone`, 2026-08-12: 1 -> 3699, 2 -> 3361,
+    /// 4 -> 3229 frames, with 3, 7 and above all worse) plus 1 as the
+    /// baseline; the landscape is phase-alignment, not a curve, so the sweep
+    /// re-tries the measured leaders rather than a spread.
     pub fn variants() -> impl Iterator<Item = Tuning> {
         (1..=8).flat_map(|turn_hold| {
-            [1usize, 2, 3, 7].into_iter().map(move |text_hold| Tuning {
+            [1usize, 2, 4].into_iter().map(move |text_hold| Tuning {
                 turn_hold,
                 text_hold,
             })
@@ -537,13 +539,17 @@ fn battle_start() -> Segment {
 ///    win to loss and back (`docs/route.md`), and winning battles on
 ///    adjacent delays differ by hundreds of frames -- while the widest delay
 ///    costs 63. Sampling widely is cheap expected profit.
-/// 2. **Per-turn delays, greedy.** For each turn of the stage-1 winner, try
-///    idling 1..16 frames at that turn's selection state, replaying the rest
-///    of the battle in full each time -- a shorter *battle* is the only
-///    accepted improvement, never a shorter turn, which is the same
-///    measure-through-the-fight rule the `turn_hold` sweep taught. Adopting
-///    an improvement re-rolls everything after it, so later turns are
-///    searched on the improved stream.
+/// 2. **Per-turn delays, greedy, repeated to a fixpoint.** For each turn of
+///    the current best battle, try idling 1..16 frames at that turn's
+///    selection state, replaying the rest of the battle in full each time --
+///    a shorter *battle* is the only accepted improvement, never a shorter
+///    turn, which is the same measure-through-the-fight rule the `turn_hold`
+///    sweep taught. Adopting an improvement re-rolls everything after it, so
+///    later turns are searched on the improved stream -- and *earlier* turns
+///    then deserve another look on the new stream too, which is why the pass
+///    repeats until one full pass adopts nothing (bounded, in case the
+///    landscape cycles). What still never moves: the start delay after stage
+///    1, and what is pressed -- move choice is untouched.
 fn battle_win(tuning: Tuning) -> Segment {
     const START_DELAYS: std::ops::Range<usize> = 0..64;
     const TURN_DELAYS: std::ops::Range<usize> = 1..16;
@@ -634,29 +640,53 @@ fn battle_win(tuning: Tuning) -> Segment {
                 best_inputs.len()
             );
 
-            // Stage 2: per-turn delays, greedy on the winning stream. The
-            // adopted plan's turn count can shrink as the battle shortens;
-            // stale turn indices past the end simply change nothing and
-            // cannot win, so iterating the stage-1 count is safe.
-            for turn in 1..=turns {
-                for delay in TURN_DELAYS {
-                    let mut candidate = plan.clone();
-                    candidate.resize(turn + 1, 0);
-                    candidate[turn] = delay;
-                    let (inputs, won, _) = run_plan(rec, &candidate)?;
-                    if won && inputs.len() < best_inputs.len() {
-                        eprintln!(
-                            "      battle stage 2: turn {turn} delay {delay} -> {} frames",
-                            inputs.len()
-                        );
-                        best_inputs = inputs;
-                        plan = candidate;
+            // Stage 2: per-turn delays, greedy on the winning stream,
+            // repeated until a pass adopts nothing. An adoption changes the
+            // stream for every later turn *and* invalidates what the pass
+            // already settled for earlier ones, so a single pass is only the
+            // first approximation. The adopted plan's turn count can move as
+            // the battle shortens; each pass iterates the current best
+            // battle's count, and stale indices past the end simply change
+            // nothing and cannot win. MAX_PASSES bounds a pathological
+            // adopt-one-frame-forever landscape, far above anything observed.
+            const MAX_PASSES: usize = 8;
+            let mut best_turns = turns;
+            for pass in 1..=MAX_PASSES {
+                let mut adopted = false;
+                // The pass walks the turn count the battle had when the pass
+                // started; an adoption mid-pass updates `best_turns` for the
+                // *next* pass.
+                let pass_turns = best_turns;
+                for turn in 1..=pass_turns {
+                    for delay in TURN_DELAYS {
+                        let mut candidate = plan.clone();
+                        if candidate.len() < turn + 1 {
+                            candidate.resize(turn + 1, 0);
+                        }
+                        if candidate[turn] == delay {
+                            continue; // the current best, already measured
+                        }
+                        candidate[turn] = delay;
+                        let (inputs, won, turns_seen) = run_plan(rec, &candidate)?;
+                        if won && inputs.len() < best_inputs.len() {
+                            eprintln!(
+                                "      battle stage 2 (pass {pass}): turn {turn} delay {delay} -> {} frames",
+                                inputs.len()
+                            );
+                            best_inputs = inputs;
+                            plan = candidate;
+                            best_turns = turns_seen;
+                            adopted = true;
+                        }
                     }
+                }
+                if !adopted {
+                    break;
                 }
             }
 
             eprintln!(
-                "      battle: plan {plan:?}, {} frames, {turns} turns",
+                "      battle: plan {plan:?}, {} frames, {best_turns} turns",
                 best_inputs.len()
             );
             rec.emu().load_state(&start)?;
