@@ -358,7 +358,7 @@ pub fn search_best_effort(
         if expanded > max_nodes {
             break;
         }
-        if expanded % 500 == 0 && std::env::var_os("FRLG_NAV_DEBUG").is_some() {
+        if expanded.is_multiple_of(500) && std::env::var_os("FRLG_NAV_DEBUG").is_some() {
             eprintln!(
                 "nav: {expanded} expansions, frontier {}, at map {:?} pos {:?} cost {cost}",
                 states.len(),
