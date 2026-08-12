@@ -76,13 +76,16 @@ fn the_committed_route_replays_from_reset_and_beats_the_rival() {
 #[test]
 #[ignore = "a measurement, minutes long; run explicitly with --ignored"]
 fn text_hold_on_the_intro_alone() {
-    use frlg_route::segments::{self, Tuning};
+    use frlg_route::segments::{self, Tuning, Version};
     use frlg_route::{Observer, Recorder};
 
     let rom = frlg_emu::default_rom_path().expect("no ROM: build it into $FRLG_ARTIFACTS/rom");
     let sym = frlg_emu::default_sym_path().expect("no pokefirered.sym in $FRLG_ARTIFACTS/rom");
     let syms = frlg_emu::SymbolTable::load(&sym).expect("loading symbols");
     let obs = Observer::new(syms).expect("building the observer");
+    let version = Version::of_rom(&rom)
+        .expect("reading the ROM header")
+        .expect("not a FireRed/LeafGreen ROM");
 
     println!("text_hold  01-boot  02-intro-oak  03-names  total(01-03)");
     for text_hold in [1usize, 2, 3, 4, 7, 15, 31] {
@@ -92,7 +95,10 @@ fn text_hold_on_the_intro_alone() {
         };
         let mut rec = Recorder::from_reset(&rom).expect("booting");
         let mut cells = Vec::new();
-        for segment in segments::all(Starter::Squirtle, tuning).into_iter().take(3) {
+        for segment in segments::all(version, Starter::Squirtle, tuning)
+            .into_iter()
+            .take(3)
+        {
             let before = rec.frames();
             (segment.run)(&mut rec, &obs).unwrap_or_else(|e| panic!("{}: {e}", segment.name));
             assert!(

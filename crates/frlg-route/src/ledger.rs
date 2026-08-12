@@ -110,6 +110,19 @@ fn observer(sym: &Path) -> Result<Observer, LedgerError> {
     Observer::new(syms).map_err(LedgerError::Message)
 }
 
+/// Which version the ROM is, from its header -- the route has one
+/// version-dependent beat (`segments::Version`), and guessing it from a
+/// filename would be exactly the kind of unforced error the header exists to
+/// prevent.
+fn version_of(rom: &Path) -> Result<segments::Version, LedgerError> {
+    segments::Version::of_rom(rom)?.ok_or_else(|| {
+        LedgerError::Message(format!(
+            "{} has a game code other than BPRE/BPGE; not a FireRed or LeafGreen ROM",
+            rom.display()
+        ))
+    })
+}
+
 /// Run the route, writing one log per segment plus the ledger.
 ///
 /// Segments run in sequence on one emulator, so each starts exactly where the
@@ -132,7 +145,7 @@ pub fn build(
 
     let mut entries: Vec<Entry> = Vec::new();
     let mut consumed = 0usize;
-    for segment in segments::all(starter, tuning) {
+    for segment in segments::all(version_of(rom)?, starter, tuning) {
         let start_frame = rec.frames();
         (segment.run)(&mut rec, &obs)?;
         if !(segment.reached)(&obs, rec.emu()) {
@@ -208,7 +221,7 @@ pub fn verify(
         )));
     }
 
-    let defined = segments::all(starter, ledger.tuning);
+    let defined = segments::all(version_of(rom)?, starter, ledger.tuning);
     if defined.len() != ledger.segments.len() {
         return Err(LedgerError::Message(format!(
             "ledger has {} segments but the route defines {}",

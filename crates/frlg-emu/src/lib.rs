@@ -27,6 +27,21 @@ use sha1::{Digest, Sha1};
 
 /// sha1 of a file, matching what `sha1sum` prints and what the ROM artifact is
 /// identified by.
+/// The 4-byte game code from the ROM header. Offset 0xAC: the header is a B
+/// instruction (4), the logo (0x9C) and the title (0xC), then `game_code`
+/// (`decompiled/tools/gbafix/gbafix.c:59-64`); the build stamps BPRE on
+/// FireRed and BPGE on LeafGreen (`decompiled/config.mk:29-57`,
+/// `decompiled/Makefile:391`).
+pub fn game_code(path: &Path) -> std::io::Result<[u8; 4]> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let mut file = std::fs::File::open(path)?;
+    file.seek(SeekFrom::Start(0xAC))?;
+    let mut code = [0u8; 4];
+    file.read_exact(&mut code)?;
+    Ok(code)
+}
+
 pub fn file_sha1(path: &Path) -> std::io::Result<[u8; 20]> {
     use std::io::Read;
 

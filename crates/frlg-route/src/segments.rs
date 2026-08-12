@@ -92,6 +92,33 @@ impl Starter {
     }
 }
 
+/// Which game the ROM is, read from its header
+/// ([`frlg_emu::game_code`]). The two versions are one route with one
+/// version-dependent beat: the rival's preset-name menu rows
+/// (`sRivalNameChoices`, `decompiled/src/oak_speech.c:649-658` -- GREEN,
+/// GARY, KAZ, TORU on FireRed; RED, ASH, KENE, GEKI on LeafGreen).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Version {
+    FireRed,
+    LeafGreen,
+}
+
+impl Version {
+    /// From the header's game code: BPRE is FireRed, BPGE is LeafGreen
+    /// (`decompiled/config.mk:29-57`).
+    pub fn from_game_code(code: [u8; 4]) -> Option<Version> {
+        match &code {
+            b"BPRE" => Some(Version::FireRed),
+            b"BPGE" => Some(Version::LeafGreen),
+            _ => None,
+        }
+    }
+
+    pub fn of_rom(rom: &std::path::Path) -> std::io::Result<Option<Version>> {
+        Ok(Self::from_game_code(frlg_emu::game_code(rom)?))
+    }
+}
+
 /// Knobs whose right value is not a local question.
 ///
 /// Measured the hard way: trimming `turn_hold` from 8 frames to the 1 that
@@ -170,11 +197,11 @@ pub struct Segment {
 }
 
 /// The whole route, in order.
-pub fn all(starter: Starter, tuning: Tuning) -> Vec<Segment> {
+pub fn all(version: Version, starter: Starter, tuning: Tuning) -> Vec<Segment> {
     vec![
         boot(),
         intro_oak(tuning),
-        names(tuning),
+        names(version, tuning),
         options(),
         house(),
         to_lab(tuning),
@@ -253,16 +280,18 @@ fn intro_oak(tuning: Tuning) -> Segment {
 ///   accepted -- `SaveInputText` (`naming_screen.c:1851`) copies anything
 ///   with a non-space character in it.
 /// - **The rival's menu is real and its rows are literal**: NEW NAME on top,
-///   then `sRivalNameChoices` -- GREEN, GARY, KAZ, TORU on FireRed
-///   (`decompiled/src/oak_speech.c:647`, shown by `PrintNameChoiceOptions`,
-///   `:2117`). KAZ is the 3-character one, on row 3; the menu wraps
-///   (`Menu_MoveCursor`, `decompiled/src/menu.c:306`), so two UPs reach it
-///   from the top. Row `n` maps to `sRivalNameChoices[n - 1]`
-///   (`Task_OakSpeech_HandleRivalNameInput`, `oak_speech.c:1431`).
+///   then `sRivalNameChoices` -- GREEN, GARY, KAZ, TORU on FireRed; RED,
+///   ASH, KENE, GEKI on LeafGreen (`decompiled/src/oak_speech.c:649-658`,
+///   shown by `PrintNameChoiceOptions`, `:2117`). Row `n` maps to
+///   `sRivalNameChoices[n - 1]` (`Task_OakSpeech_HandleRivalNameInput` ->
+///   `GetDefaultName(_, input - 1)`, `oak_speech.c:1431`), and the menu
+///   wraps (`Menu_MoveCursor`, `decompiled/src/menu.c:306`). The shortest
+///   name is 3 characters on both versions, but on a different row: KAZ is
+///   row 3 (two UPs, wrapping), RED is row 1 (one DOWN).
 ///
 /// Both names land on a confirm box whose YES/NO menu starts on YES, so the
 /// A mash between the beats answers everything correctly.
-fn names(tuning: Tuning) -> Segment {
+fn names(version: Version, tuning: Tuning) -> Segment {
     Segment {
         name: "03-names",
         goal: "in the bedroom, 1-char player name and 3-char rival name".into(),
@@ -285,9 +314,18 @@ fn names(tuning: Tuning) -> Segment {
                 |emu| obs.task_active(emu, NAME_MENU_TASK),
             )?;
 
-            // KAZ: wrap upwards to row 3, then take it.
-            rec.tap(keys::UP)?;
-            rec.tap(keys::UP)?;
+            // The shortest preset, then take it.
+            match version {
+                Version::FireRed => {
+                    // KAZ: wrap upwards to row 3.
+                    rec.tap(keys::UP)?;
+                    rec.tap(keys::UP)?;
+                }
+                Version::LeafGreen => {
+                    // RED: row 1.
+                    rec.tap(keys::DOWN)?;
+                }
+            }
             rec.tap(keys::A)?;
 
             rec.hold_mash_until("the overworld", keys::A, tuning.text_hold, 6000, |emu| {

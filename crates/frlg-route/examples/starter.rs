@@ -7,7 +7,7 @@ use frlg_emu::{keys, SymbolTable};
 use frlg_route::nav::{self, Goal};
 use frlg_route::observe::{Observer, VAR_OAKS_LAB_SCENE, VAR_STARTER_MON};
 use frlg_route::record::{Feed, Recorder};
-use frlg_route::segments::{self, Starter, Tuning};
+use frlg_route::segments::{self, Starter, Tuning, Version};
 
 const OAKS_LAB: (u8, u8) = (4, 3);
 
@@ -17,8 +17,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let obs = Observer::new(syms)?;
     let mut rec = Recorder::from_reset(&rom)?;
 
+    let version = Version::of_rom(&rom)?.ok_or("not a FireRed/LeafGreen ROM")?;
     // Everything up to standing in the lab is already routed.
-    for segment in segments::all(Starter::Squirtle, Tuning::default())
+    for segment in segments::all(version, Starter::Squirtle, Tuning::default())
         .into_iter()
         .take(5)
     {
