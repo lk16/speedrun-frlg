@@ -1,0 +1,12 @@
+[package]
+name = "frlg-battle"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+frlg-emu = { path = "../frlg-emu" }
+frlg-rng = { path = "../frlg-rng" }
+frlg-route = { path = "../frlg-route" }

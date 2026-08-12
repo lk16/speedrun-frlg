@@ -251,6 +251,21 @@ Two consequences for manipulation:
 - **The rival's crit is a legitimate search target.** It is one `Random()` outcome in a stream
   the route already re-searches; see "What is not optimised".
 
+**And one more tutorial quirk, found by the battle model (2026-08-12): the player never
+rolls accuracy in this battle.** `Cmd_accuracycheck` evaluates its FIRST_BATTLE skip on
+the raw script argument *before* substituting `ACC_CURR_MOVE -> gCurrentMove`
+(`decompiled/src/battle_script_commands.c:1005-1018` vs `:1035`), and `ACC_CURR_MOVE` is
+0 (`include/constants/battle_script_commands.h:67`) = `MOVE_NONE`, power 0 — so the
+"damaging move" disjunct is dead code and the power-0 disjunct applies to everything the
+player does. That disjunct is gated on `FIRST_BATTLE_MSG_FLAG_STAT_CHG`, which only the
+*player's own Growl* landing sets (`battle_controller_oak_old_man.c:1769-1771`); this
+route never uses Growl, so our 95-accuracy Tackle cannot miss anywhere in the battle,
+while the rival rolls accuracy on every move. (Verified against libmgba: turn 2's Tackle
+crits — INFLICT_DMG is set from the moment our first hit's HP bar drains, measured at
+battle frame 1185 — yet consumes no accuracy roll.) The full roll-by-roll model, with
+every formula cited and every prediction checked against the emulator, is
+`crates/frlg-battle`.
+
 **The battle is not luck-independent, and the route no longer pretends otherwise.** Delaying the
 same A mash by a single frame flipped it from a win to a loss and back, over twelve consecutive
 delays -- six wins, six losses, strictly alternating. `09-battle-win` therefore searches, in two

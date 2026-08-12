@@ -106,16 +106,18 @@ fn main() {
         let observed = Rng(observer.rng(&mut emu));
         let steps = model.distance_to(observed);
         assert!(steps >= 2, "battle frames roll twice in VBlank");
-        // The game's own rolls happen during the frame; the VBlank pair ends
-        // it. So the extra calls' return values are the first `steps - 2`
-        // outputs after the previous frame's state.
+        // ALL of this frame's outputs, in stream order. Which of them are
+        // the VBlank pair and which the game's own rolls is a question the
+        // consumer answers against known damage arithmetic -- printing the
+        // full window keeps that decidable from the data.
         let mut cursor = model;
-        let game_rolls: Vec<u16> = (0..steps - 2)
+        let game_rolls: Vec<u16> = (0..steps)
             .map(|_| {
                 cursor = cursor.next();
                 (cursor.0 >> 16) as u16
             })
             .collect();
+        let game_rolls = if steps > 2 { game_rolls } else { Vec::new() };
         model = observed;
 
         let ours_hp = emu.read16(mons_base + mon_off::HP);
