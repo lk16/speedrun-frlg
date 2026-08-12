@@ -199,6 +199,7 @@ pub struct Observer {
     g_move_selection_cursor: u32,
     g_action_selection_cursor: u32,
     s_wild_encounter_data: u32,
+    s_lock_field_controls: u32,
 }
 
 impl Observer {
@@ -227,6 +228,7 @@ impl Observer {
             g_move_selection_cursor: addr("gMoveSelectionCursor")?,
             g_action_selection_cursor: addr("gActionSelectionCursor")?,
             s_wild_encounter_data: addr("sWildEncounterData")?,
+            s_lock_field_controls: addr("sLockFieldControls")?,
             syms,
         })
     }
@@ -521,6 +523,16 @@ impl Observer {
     /// `gActionSelectionCursor[battler]` -- FIGHT/BAG/POKEMON/RUN, 0-3.
     pub fn action_cursor(&self, emu: &mut Emu, battler: u32) -> u8 {
         emu.read8(self.g_action_selection_cursor + battler)
+    }
+
+    /// `sLockFieldControls` (`decompiled/src/script.c:34,199-209`): true
+    /// while a script owns field input (`lockall`..`releaseall`). The
+    /// avatar can read as free mid-scene between forced moves, so
+    /// [`Observer::player_can_step`] alone does *not* prove a scene is over
+    /// -- measured on the parcel scene, whose reward text waits for a press
+    /// while the player stands "free" at the counter.
+    pub fn field_controls_locked(&self, emu: &mut Emu) -> bool {
+        emu.read8(self.s_lock_field_controls) != 0
     }
 
     /// `sWildEncounterData`'s decision-relevant fields, folded into one value:

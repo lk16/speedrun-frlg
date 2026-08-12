@@ -151,6 +151,13 @@ fn nav_opposite(dir: u16) -> u16 {
     }
 }
 
+/// A scripted scene is over only when the script lock is released *and* the
+/// avatar is controllable -- `player_can_step` alone reads true mid-scene
+/// between forced moves (`Observer::field_controls_locked`).
+fn scene_over(obs: &Observer, emu: &mut Emu) -> bool {
+    !obs.field_controls_locked(emu) && obs.player_can_step(emu)
+}
+
 fn mash_with(key: u16, tuning: Tuning) -> Vec<u16> {
     let mut mash: Vec<u16> = vec![key; tuning.text_hold.max(1)];
     mash.push(0);
@@ -337,7 +344,7 @@ fn back_to_field(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(
         keys::B,
         tuning.text_hold,
         3000,
-        |emu| obs.callback2_is(emu, "CB2_Overworld") && obs.player_can_step(emu),
+        |emu| obs.callback2_is(emu, "CB2_Overworld") && scene_over(obs, emu),
     )?;
     Ok(())
 }
@@ -409,6 +416,7 @@ pub fn walk_fleeing(
     max_nodes: usize,
 ) -> Result<(), RouteError> {
     const MAX_ROUNDS: usize = 40;
+    let mut stagnant = 0usize;
 
     for round in 0..MAX_ROUNDS {
         if leg.arrived(obs, rec.emu()) {
@@ -515,11 +523,20 @@ pub fn walk_fleeing(
             }
         }
         if !moved {
-            return Err(RouteError::Timeout {
-                what: format!("any progress towards {leg:?}"),
-                budget: MAX_ROUNDS,
-                frames: rec.frames(),
-            });
+            // Boxed in -- usually a wandering NPC standing on the only open
+            // tile (measured: the mart counter after the parcel scene).
+            // NPCs move on their own schedule; wait a beat and re-plan.
+            stagnant += 1;
+            if stagnant > 8 {
+                return Err(RouteError::Timeout {
+                    what: format!("any progress towards {leg:?}"),
+                    budget: MAX_ROUNDS,
+                    frames: rec.frames(),
+                });
+            }
+            rec.idle(64)?;
+        } else {
+            stagnant = 0;
         }
     }
     Err(RouteError::Timeout {
@@ -546,9 +563,16 @@ fn exit_lab(tuning: Tuning) -> Segment {
                 keys::B,
                 tuning.text_hold,
                 4000,
-                |emu| obs.var(emu, VAR_OAKS_LAB_SCENE) == Some(4) && obs.player_can_step(emu),
+                |emu| obs.var(emu, VAR_OAKS_LAB_SCENE) == Some(4) && scene_over(obs, emu),
             )?;
-            nav::walk_to(rec, obs, Goal::on_map(PALLET_TOWN), 4000)?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(PALLET_TOWN, OAKS_LAB, (6, 12)),
+                keys::DOWN,
+                1500,
+            )?;
             Ok(())
         }),
         reached: Box::new(|obs, emu| {
@@ -613,9 +637,16 @@ fn parcel(tuning: Tuning) -> Segment {
                 keys::B,
                 tuning.text_hold,
                 3000,
-                |emu| obs.var(emu, VAR_VIRIDIAN_MART) == Some(1) && obs.player_can_step(emu),
+                |emu| obs.var(emu, VAR_VIRIDIAN_MART) == Some(1) && scene_over(obs, emu),
             )?;
-            nav::walk_to(rec, obs, Goal::on_map(VIRIDIAN_CITY), 4000)?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(VIRIDIAN_CITY, VIRIDIAN_MART, (4, 8)),
+                keys::DOWN,
+                1500,
+            )?;
             Ok(())
         }),
         reached: Box::new(|obs, emu| {
@@ -649,12 +680,23 @@ fn deliver(tuning: Tuning) -> Segment {
                 keys::DOWN,
                 1000,
             )?;
-            nav::walk_to(rec, obs, Goal::on_map(OAKS_LAB), 6000)?;
-            nav::walk_to(
+            // The lab door in Pallet is at (16,5)-ish; entering is a warp
+            // like any other.
+            walk_fleeing(
                 rec,
                 obs,
-                Goal::tile(OAKS_LAB, OAK_TALK_TILE.0, OAK_TALK_TILE.1),
-                4000,
+                tuning,
+                Leg::MapVia(OAKS_LAB, PALLET_TOWN, (16, 6)),
+                keys::UP,
+                2000,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::Tile(OAKS_LAB, OAK_TALK_TILE.0, OAK_TALK_TILE.1),
+                keys::UP,
+                2000,
             )?;
             // Face Oak and talk; the scene has no yes/no prompts, so B/A
             // both only advance. A opens the dialogue.
@@ -665,7 +707,7 @@ fn deliver(tuning: Tuning) -> Segment {
                 keys::A,
                 tuning.text_hold,
                 8000,
-                |emu| obs.var(emu, VAR_VIRIDIAN_OLD_MAN) == Some(1) && obs.player_can_step(emu),
+                |emu| obs.var(emu, VAR_VIRIDIAN_OLD_MAN) == Some(1) && scene_over(obs, emu),
             )?;
             Ok(())
         }),
@@ -717,7 +759,7 @@ fn tutorial(tuning: Tuning) -> Segment {
                 keys::A,
                 tuning.text_hold,
                 12000,
-                |emu| obs.var(emu, VAR_VIRIDIAN_OLD_MAN) == Some(2) && obs.player_can_step(emu),
+                |emu| obs.var(emu, VAR_VIRIDIAN_OLD_MAN) == Some(2) && scene_over(obs, emu),
             )?;
             Ok(())
         }),
@@ -857,11 +899,13 @@ fn brock(starter: Starter, tuning: Tuning) -> Segment {
         name: "18-brock",
         goal: "FLAG_DEFEATED_BROCK set".into(),
         run: Box::new(move |rec, obs| {
-            nav::walk_to(
+            walk_fleeing(
                 rec,
                 obs,
-                Goal::tile(PEWTER_GYM, BROCK_TALK_TILE.0, BROCK_TALK_TILE.1),
-                8000,
+                tuning,
+                Leg::Tile(PEWTER_GYM, BROCK_TALK_TILE.0, BROCK_TALK_TILE.1),
+                keys::UP,
+                3000,
             )?;
             rec.hold(keys::UP, 2)?;
             rec.idle(1)?;
