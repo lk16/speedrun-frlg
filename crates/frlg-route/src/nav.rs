@@ -87,11 +87,21 @@ fn take_edge(emu: &mut Emu, obs: &Observer, dir: u16, budget: usize) -> Option<V
         emu.step(dir);
         fed.push(dir);
 
+        // A wild encounter fired on this step. The node this edge would
+        // create is a battle, not a place, and admitting it would let a
+        // cheap battle-bound path claim a tile's best-cost slot and wall it
+        // off from clean paths -- so the edge reads as blocked. Whoever
+        // *wants* the forced battle takes it outside the search
+        // (`brock::walk_fleeing`).
+        if obs.in_battle(emu) {
+            return None;
+        }
+
         // A script took the player (a trigger fired). Let it run, holding
         // nothing, so the direction does not leak into whatever it opens.
         if obs.prevent_step(emu) {
             settle(emu, obs, &mut fed, budget);
-            return Some(fed);
+            return (!obs.in_battle(emu)).then_some(fed);
         }
 
         match place(obs, emu) {
@@ -100,6 +110,9 @@ fn take_edge(emu: &mut Emu, obs: &Observer, dir: u16, budget: usize) -> Option<V
                 // otherwise hold a direction into a black screen.
                 if now.map != start.map {
                     settle(emu, obs, &mut fed, budget);
+                    if obs.in_battle(emu) {
+                        return None;
+                    }
                 }
                 return Some(fed);
             }
@@ -109,10 +122,11 @@ fn take_edge(emu: &mut Emu, obs: &Observer, dir: u16, budget: usize) -> Option<V
     None
 }
 
-/// Hold nothing until the player is standing free again.
+/// Hold nothing until the player is standing free again (or a battle owns
+/// the screen, which the caller checks for).
 fn settle(emu: &mut Emu, obs: &Observer, fed: &mut Vec<u16>, budget: usize) {
     for _ in 0..budget {
-        if obs.player_can_step(emu) {
+        if obs.player_can_step(emu) || obs.in_battle(emu) {
             return;
         }
         emu.step(0);
