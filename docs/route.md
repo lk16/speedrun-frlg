@@ -145,6 +145,25 @@ whose seed is fixed at naming-screen exit and advanced once per frame
 (`decompiled/src/main.c:412`); manipulation upstream of that exit cannot reach the battle
 except by moving the exit itself.
 
+**A delayed early press does not "start later in the stream", and it is not free.** The
+stream does advance before the first input ever lands (the VBlank call runs from boot;
+measured: 274 zeroed BIOS frames, then one step per frame from state 0), but both `SeedRng`
+calls overwrite all of it. What the seed actually encodes is *time spent on two screens*:
+timer 1 is started inside the title screen (`decompiled/src/title_screen.c:351`) and the
+naming screen (`decompiled/src/naming_screen.c:428`) and read into the seed at each
+screen's exit press (`SeedRngAndSetTrainerId` reads `REG_TM1CNT_L`,
+`decompiled/src/main.c:264-269`, register at `decompiled/include/gba/io_reg.h:471`).
+Measured stride: **18753 timer ticks per frame** (mod 2^16), so delaying an exit press by
+one frame picks an unrelated 16-bit seed rather than sliding along the old stream — the
+`seed-probe` example replays the committed movie with 1 and 2 idle frames prepended, and
+the naming seed goes `0xdf93 → 0x4d7b → 0x4cd2`, with the committed battle inputs losing
+on both shifted variants. Nor does the delay cost nothing: the run is scored in frames
+from power-on (this file's header; the ledger's `total_frames`; the `.bk2` tier 2 judges
+contains every frame from power-on including the BIOS intro), so a start delay is paid
+1:1 like any other. *Assumption, labelled:* that "movie time counts from power-on" is
+also how human TASes are judged is pretraining knowledge, not citable from this sandbox;
+this project's own committed metric is the one the numbers here rest on.
+
 Since 2026-08-12 the stream has a Rust model (`crates/frlg-rng`: step, O(log n) jump, and
 the discrete log `distance_to`, so "how many `Random()` calls happened between these two
 observed states" is a 135 ns question instead of a replay). Its correctness is not argued
@@ -325,6 +344,14 @@ remains, largest first:
 - **The player name is one fixed letter.** Which letter (and which of the naming screen's
   cursor-start letters is cheapest to take) has never been compared; the name prints in a
   handful of boxes.
+- **The naming-exit seed has never been sampled deliberately.** The battle seed is
+  `REG_TM1CNT_L` at the naming screen's exit press, moving 18753 per frame (the RNG
+  section above), so idling N frames right before that press buys N completely fresh
+  battle streams at 1 frame each — the cheapest seed dial the route has, distinct from
+  in-battle delays, which move *within* one seed at 2 steps per frame. The tuning sweeps
+  only ever sampled it incidentally (any variant that moves the exit frame moves the
+  seed). A sampled seed wins if its searched battle beats 2409 by more than N; nobody has
+  run that search.
 
 ## Tier 2
 

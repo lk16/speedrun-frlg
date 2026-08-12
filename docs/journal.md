@@ -3,6 +3,32 @@
 Newest first. Continuity is something you write down; a sandbox ends mid-thought. Anything
 unverified says so.
 
+## 2026-08-12 (sandbox, night, addendum) -- "delay the first press, start later in the stream": tested, and it does not work that way
+
+Question asked: the RNG moves before the first button press, so could the first press be
+delayed to start later in the stream for free? Three-part answer, all measured
+(`seed-probe` example):
+
+- **The stream does move before any input** -- the VBlank `Random()` runs from boot
+  (`decompiled/src/main.c:412`; 274 zeroed BIOS frames, then one step per frame from
+  state 0) -- but both `SeedRng` calls overwrite the state, so nothing of the pre-press
+  stream survives to the battle.
+- **A delayed press re-rolls the seed; it does not slide the stream.** The seed is timer
+  1 read at the title and naming screens' exit presses, and the timer starts *inside
+  those screens* (`title_screen.c:351`, `naming_screen.c:428`, seed read at `:735`/`:722`
+  via `main.c:264-269`). Measured stride 18753 ticks per frame: prepending 1 and 2 idle
+  frames to the committed movie moved the naming seed `0xdf93 -> 0x4d7b -> 0x4cd2`, and
+  the committed battle inputs lose on both. Unrelated seeds, not shifted ones.
+- **And the delay is not free.** The run is scored in frames from power-on (README,
+  `docs/route.md`, the ledger's `total_frames`; the tier-2 `.bk2` contains every frame
+  from power-on). "TAS time starts at the first press" is not this project's rule, and --
+  labelled as uncitable pretraining knowledge -- not how published TASes are timed either.
+
+The constructive residue is a new dial in `docs/route.md`'s "What is not optimised":
+idling N frames before the *naming-screen exit* press samples N fresh battle seeds at 1
+frame each, which the sweeps only ever hit incidentally. A sampled seed wins if its
+searched battle beats 2409 by more than N.
+
 ## 2026-08-12 (sandbox, night) -- the RNG gets a Rust model, the consumers get names, the free levers get priced
 
 Task: model the RNG outside the emulator, verify it, and use it to ask whether the rival
