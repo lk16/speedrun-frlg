@@ -426,9 +426,14 @@ have the same `ilog_sha1` and different `bk2_sha1`. The `.ilog` digest is the id
 
 `ram_hash` is the same fingerprint tier 1 computes — sha1 over EWRAM then IWRAM
 (`docs/harness.md`) — which is what makes the two tiers comparable rather than merely both
-green. The runner always writes a result, including for its own failures, and always removes the
-queue entry: a request that died in a dialog must not look like one nobody has picked up yet.
-`bin/frlg-doctor` prints the newest verdicts at startup.
+green. The runner always writes a result, including for its own failures, and removes the queue
+entry for every one of them: a request that died in a dialog must not look like one nobody has
+picked up yet. The single exception is a replay stopped by a signal — ctrl-c, closing the
+EmuHawk window, `kill` — which is not a verdict about the route: the result records
+`"interrupted by signal N at frame …"`, the request stays in the queue, and the runner exits
+rather than moving on, so running it again replays that same movie from the start. A crash is
+not an interruption and is still scored and consumed. `bin/frlg-doctor` prints the newest
+verdicts at startup.
 
 ### Making a replay cheap
 

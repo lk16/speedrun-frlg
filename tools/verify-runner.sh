@@ -240,7 +240,7 @@ run_one() {
   # "no matching ROM" sentinel, turned into an error result below instead of
   # letting EmuHawk warn-and-desync its way through the wrong version.
   local movie_rom; movie_rom=$(rom_for_movie "$bk2")
-  local t0=$SECONDS rc=0
+  local t0=$SECONDS rc=0 interrupted=0
   if [ -z "$movie_rom" ]; then
     rc=97
     : >"$work/emuhawk.log"
@@ -256,6 +256,15 @@ run_one() {
     rc=$?
   fi
   local duration=$((SECONDS - t0))
+
+  # Somebody stopped the run; the replay did not fail. A ctrl-c reaches the whole foreground
+  # process group, so EmuHawk (or the window manager, if you close the window) dies at whatever
+  # frame it had reached and this script carries on to score it -- which without this check
+  # reads exactly like a genuine "did not play to its end", complete with a FAIL result and a
+  # consumed queue entry. Only the stop signals count: a crash (139 SIGSEGV, 134 SIGABRT) is a
+  # real failure and must still be scored, or --watch would retry it every 10s forever.
+  #   129 HUP (terminal closed)  130 INT (ctrl-c)  131 QUIT (ctrl-\)  143 TERM (kill)
+  case $rc in 129|130|131|143) interrupted=1 ;; esac
 
   # The Lua rewrites the status file as it goes (first probe mismatch, heartbeat, onexit), so
   # even a timed-out or killed run usually leaves the frame it reached and any desync frame it
@@ -278,6 +287,9 @@ run_one() {
   if [ $rc -eq 97 ]; then
     verdict=error
     notes="no ROM in $ARTIFACTS/rom (or \$FRLG_ROM) matches the movie header's SHA1 $(movie_header_sha1 "$bk2"); build that version and copy it there"
+  elif [ $interrupted = 1 ]; then
+    verdict=error
+    notes="interrupted by signal $((rc - 128)) at frame ${frames:-?} of ${expect_frames:-?}$probe -- nothing was verified, and the request was left in the queue to be replayed again"
   elif [ $rc -eq 124 ]; then
     verdict=error
     notes="EmuHawk did not finish within ${TIMEOUT}s -- most likely a modal dialog. Last Lua status: frame ${frames:-none}$probe. Log: $(tail -3 "$work/emuhawk.log" | tr '\n' ' ')"
@@ -342,8 +354,13 @@ with open(out, "w") as f:
 PY
 
   rm -rf "$work"
-  rm -f "$bk2" "$req"
-  [ -n "$trace_path" ] && rm -f "$trace_path"
+  # The queue entry is consumed by a verdict, not by an interruption -- see INTERRUPTED below.
+  if [ $interrupted = 1 ]; then
+    INTERRUPTED=1
+  else
+    rm -f "$bk2" "$req"
+    [ -n "$trace_path" ] && rm -f "$trace_path"
+  fi
   case "$verdict" in
     pass)   printf '  %s ok  %s %-24s %s%s (%s, %ss)%s\n' "$GREEN" "$OFF" "$id" "$notes" "$DIM" "$mode" "$duration" "$OFF" ;;
     desync) printf '  %s !! %s %-24s %s%s (%s, %ss)%s\n' "$YELLOW" "$OFF" "$id" "$notes" "$DIM" "$mode" "$duration" "$OFF" ;;
@@ -380,13 +397,34 @@ fi
 preflight || die "refusing to run with the problems above -- a request that dies in a dialog
   looks identical to one nobody picked up, which is exactly what this runner exists to prevent."
 
+# Set by run_one when its EmuHawk was stopped by a signal rather than finishing. A ctrl-c means
+# "stop", so the runner stops -- and because that item is still in the queue, re-running picks it
+# up where it left off rather than needing a fresh `frlg route export`.
+INTERRUPTED=0
+
+# A --watch that has nothing to do is silent, which is indistinguishable from a hang -- and the
+# thing it is most likely to be doing when someone doubts it *is* nothing. So say so, once per
+# time the queue runs dry, rather than either staying quiet or printing a line every 10s.
+idle=0
+
 while :; do
   shopt -s nullglob
   items=("$QUEUE"/*.bk2)
   shopt -u nullglob
   if [ ${#items[@]} -gt 0 ]; then
+    idle=0
     say "${#items[@]} queued"
-    for f in "${items[@]}"; do run_one "$(basename "$f" .bk2)"; done
+    for f in "${items[@]}"; do
+      run_one "$(basename "$f" .bk2)"
+      if [ "$INTERRUPTED" = 1 ]; then
+        warn "stopped: the replay was interrupted. Its request is still queued -- run this
+  again to replay it from the start; nothing about the route has been verified either way."
+        exit 130
+      fi
+    done
+  elif [ "$WATCH" = 1 ] && [ "$idle" = 0 ]; then
+    say "waiting: the queue is empty, polling $QUEUE every 10s (ctrl-c to stop)"
+    idle=1
   fi
   [ "$WATCH" = 1 ] || break
   sleep 10
