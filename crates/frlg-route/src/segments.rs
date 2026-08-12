@@ -624,7 +624,10 @@ fn battle_start() -> Segment {
 ///    landscape cycles). What still never moves: the start delay after stage
 ///    1, and what is pressed -- move choice is untouched.
 fn battle_win(tuning: Tuning) -> Segment {
-    const START_DELAYS: std::ops::Range<usize> = 0..64;
+    // 0..64 until 2026-08-12, when a defeat-brock prefix (one frame shifted
+    // by nav changes) hit a stream family where all 64 lost; the wider
+    // range costs search time only.
+    const START_DELAYS: std::ops::Range<usize> = 0..128;
     const TURN_DELAYS: std::ops::Range<usize> = 1..16;
     /// More than any winning battle here has ever used; a plan that runs
     /// past it loses rather than aborting the build.
