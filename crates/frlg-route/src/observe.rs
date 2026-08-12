@@ -198,6 +198,7 @@ pub struct Observer {
     g_battler_controller_funcs: u32,
     g_move_selection_cursor: u32,
     g_action_selection_cursor: u32,
+    s_wild_encounter_data: u32,
 }
 
 impl Observer {
@@ -225,6 +226,7 @@ impl Observer {
             g_battler_controller_funcs: addr("gBattlerControllerFuncs")?,
             g_move_selection_cursor: addr("gMoveSelectionCursor")?,
             g_action_selection_cursor: addr("gActionSelectionCursor")?,
+            s_wild_encounter_data: addr("sWildEncounterData")?,
             syms,
         })
     }
@@ -519,6 +521,26 @@ impl Observer {
     /// `gActionSelectionCursor[battler]` -- FIGHT/BAG/POKEMON/RUN, 0-3.
     pub fn action_cursor(&self, emu: &mut Emu, battler: u32) -> u8 {
         emu.read8(self.g_action_selection_cursor + battler)
+    }
+
+    /// `sWildEncounterData`'s decision-relevant fields, folded into one value:
+    /// rngState (u32), encounterRateBuff and prevMetatileBehavior (u16 each),
+    /// stepsSinceLastEncounter (u8) (`decompiled/src/wild_encounter.c:24-34`).
+    /// Two field states with the same key make identical encounter decisions
+    /// on identical tiles, which is what lets a path search treat "same tile,
+    /// different rate-test index" as different nodes.
+    pub fn wild_key(&self, emu: &mut Emu) -> u64 {
+        let base = self.s_wild_encounter_data;
+        let rng_state = emu.read32(base) as u64;
+        // Behavior is a 9-bit attribute (`src/fieldmap.c:63-83`); steps
+        // saturates at the largest minSteps, 8 (`wild_encounter.c:749`), so
+        // 4 bits; the buff gets the remaining 19 (it grows by the map rate
+        // per failed test and resets on success/map load, so 2^19 is far
+        // beyond anything a route sees).
+        let prev_behavior = (emu.read16(base + 4) as u64) & 0x1FF;
+        let buff = (emu.read16(base + 6) as u64) & 0x7FFFF;
+        let steps = (emu.read8(base + 8) as u64).min(15);
+        rng_state | (prev_behavior << 32) | (steps << 41) | (buff << 45)
     }
 
     /// Everything at once, for logging a route's progress.

@@ -354,39 +354,62 @@ fn handle_battle(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(
 /// one step at a time in the `bias` direction (then its neighbours) until
 /// something gives -- usually a battle, which is handled and the loop
 /// searches again from the far side.
+/// How a `walk_fleeing` leg states its destination.
+#[derive(Debug, Clone, Copy)]
+enum Leg {
+    /// A specific tile.
+    Tile((u8, u8), i16, i16),
+    /// Any tile of a map, leaving the current map near a known connection
+    /// or warp tile -- the directed form every grass crossing uses
+    /// (`Goal::AnyOnVia`).
+    MapVia((u8, u8), (u8, u8), (i16, i16)),
+}
+
+impl Leg {
+    fn goal(&self) -> Goal {
+        match *self {
+            Leg::Tile(map, x, y) => Goal::tile(map, x, y),
+            Leg::MapVia(map, via_map, via) => Goal::on_map_via(map, via_map, via),
+        }
+    }
+
+    fn arrived(&self, obs: &Observer, emu: &mut Emu) -> bool {
+        match *self {
+            Leg::Tile(map, x, y) => obs.map(emu) == Some(map) && obs.pos(emu) == Some((x, y)),
+            Leg::MapVia(map, _, _) => obs.map(emu) == Some(map),
+        }
+    }
+}
+
 fn walk_fleeing(
     rec: &mut Recorder,
     obs: &Observer,
     tuning: Tuning,
-    goal_map: (u8, u8),
-    goal_tile: Option<(i16, i16)>,
+    leg: Leg,
     bias: u16,
     max_nodes: usize,
 ) -> Result<(), RouteError> {
     const MAX_ROUNDS: usize = 40;
-    let arrived = |obs: &Observer, emu: &mut Emu| -> bool {
-        obs.map(emu) == Some(goal_map)
-            && goal_tile.is_none_or(|(x, y)| obs.pos(emu) == Some((x, y)))
-    };
 
     for _round in 0..MAX_ROUNDS {
-        if arrived(obs, rec.emu()) {
+        if leg.arrived(obs, rec.emu()) {
             return Ok(());
         }
         let start = rec.save_state()?;
-        let goal = match goal_tile {
-            Some((x, y)) => Goal::tile(goal_map, x, y),
-            None => Goal::on_map(goal_map),
-        };
-        let (path, reached) = nav::search_best_effort(rec.emu(), obs, &start, goal, max_nodes)?;
+        let (path, reached) =
+            nav::search_best_effort(rec.emu(), obs, &start, leg.goal(), max_nodes)?;
         rec.emu().load_state(&start)?;
         rec.play(&path.inputs)?;
         if reached {
             return Ok(());
         }
 
-        // Force one step: bias first, then the others. An edge that starts
-        // a battle is progress here, not a blocked direction.
+        // Force progress: hold the bias direction (then its neighbours) for
+        // as many tiles as it gives, stopping at a battle, a map change, or
+        // a wall. A battle here is *the point*: fleeing it resets the
+        // encounter cooldown (`src/battle_setup.c:205`), which buys 6-7
+        // nearly-free grass steps -- often the rest of the belt the search
+        // could not cross.
         let mut moved = false;
         let dirs = [
             bias,
@@ -397,20 +420,37 @@ fn walk_fleeing(
         for dir in dirs {
             let here = rec.save_state()?;
             let mut trial = Trial::new(rec.emu());
-            let mut progressed = false;
-            let before = (obs.map(trial.core()), obs.pos(trial.core()));
-            for _ in 0..240 {
+            let start_place = (obs.map(trial.core()), obs.pos(trial.core()));
+            let mut last_place = start_place;
+            let mut frames_since_change = 0usize;
+            let mut battled = false;
+            for _ in 0..1200 {
                 trial.step(dir)?;
                 if obs.in_battle(trial.core()) {
-                    progressed = true;
+                    battled = true;
                     break;
                 }
                 let now = (obs.map(trial.core()), obs.pos(trial.core()));
-                if now != before && obs.player_can_step(trial.core()) {
-                    progressed = true;
-                    break;
+                if now != last_place {
+                    last_place = now;
+                    frames_since_change = 0;
+                    if now.0 != start_place.0 {
+                        break; // crossed into another map: stop and re-plan
+                    }
+                } else {
+                    frames_since_change += 1;
+                    // A wall (position changes mid-step come well within
+                    // this while walking). Requiring player_can_step here
+                    // was the first build's failure: never true mid-hold.
+                    if frames_since_change > 64 && last_place != start_place {
+                        break;
+                    }
+                    if frames_since_change > 96 {
+                        break;
+                    }
                 }
             }
+            let progressed = battled || last_place != start_place;
             let inputs = trial.into_inputs();
             rec.emu().load_state(&here)?;
             if progressed {
@@ -424,14 +464,14 @@ fn walk_fleeing(
         }
         if !moved {
             return Err(RouteError::Timeout {
-                what: format!("any progress towards map {goal_map:?} {goal_tile:?}"),
+                what: format!("any progress towards {leg:?}"),
                 budget: MAX_ROUNDS,
                 frames: rec.frames(),
             });
         }
     }
     Err(RouteError::Timeout {
-        what: format!("map {goal_map:?} {goal_tile:?} within the round budget"),
+        what: format!("{leg:?} within the round budget"),
         budget: MAX_ROUNDS,
         frames: rec.frames(),
     })
@@ -483,8 +523,25 @@ fn to_viridian(tuning: Tuning) -> Segment {
         name: "11-to-viridian",
         goal: "in Viridian City".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(rec, obs, tuning, ROUTE1, None, keys::UP, 3000)?;
-            walk_fleeing(rec, obs, tuning, VIRIDIAN_CITY, None, keys::UP, 4000)?;
+            // Connections (research/story-gates.md, map.json cites): Pallet's
+            // north exit is x=12/13 row 0; Route 1's top x=10..13 meets
+            // Viridian's bottom x=22..25.
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(ROUTE1, PALLET_TOWN, (12, 1)),
+                keys::UP,
+                600,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(VIRIDIAN_CITY, ROUTE1, (12, 1)),
+                keys::UP,
+                1000,
+            )?;
             Ok(())
         }),
         reached: Box::new(|obs, emu| obs.map(emu) == Some(VIRIDIAN_CITY)),
@@ -500,7 +557,16 @@ fn parcel(tuning: Tuning) -> Segment {
         name: "12-parcel",
         goal: "Oak's Parcel in the bag, back outside the mart".into(),
         run: Box::new(move |rec, obs| {
-            nav::walk_to(rec, obs, Goal::on_map(VIRIDIAN_MART), 6000)?;
+            // The mart door warp is at (36,19) (`data/maps/ViridianCity/
+            // map.json:194-200`).
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(VIRIDIAN_MART, VIRIDIAN_CITY, (36, 20)),
+                keys::UP,
+                1500,
+            )?;
             rec.hold_mash_until(
                 "the parcel handover",
                 keys::B,
@@ -526,8 +592,22 @@ fn deliver(tuning: Tuning) -> Segment {
         name: "13-deliver",
         goal: "Pokédex received, old man armed (his scene var 1)".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(rec, obs, tuning, ROUTE1, None, keys::DOWN, 3000)?;
-            walk_fleeing(rec, obs, tuning, PALLET_TOWN, None, keys::DOWN, 4000)?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(ROUTE1, VIRIDIAN_CITY, (23, 38)),
+                keys::DOWN,
+                1000,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(PALLET_TOWN, ROUTE1, (12, 38)),
+                keys::DOWN,
+                1000,
+            )?;
             nav::walk_to(rec, obs, Goal::on_map(OAKS_LAB), 6000)?;
             nav::walk_to(
                 rec,
@@ -561,16 +641,33 @@ fn tutorial(tuning: Tuning) -> Segment {
         name: "14-tutorial",
         goal: "catching tutorial done (old man var 2), road north open".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(rec, obs, tuning, ROUTE1, None, keys::UP, 3000)?;
-            walk_fleeing(rec, obs, tuning, VIRIDIAN_CITY, None, keys::UP, 4000)?;
             walk_fleeing(
                 rec,
                 obs,
                 tuning,
-                VIRIDIAN_CITY,
-                Some(TUTORIAL_TRIGGER_APPROACH),
+                Leg::MapVia(ROUTE1, PALLET_TOWN, (12, 1)),
                 keys::UP,
-                6000,
+                600,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(VIRIDIAN_CITY, ROUTE1, (12, 1)),
+                keys::UP,
+                1000,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::Tile(
+                    VIRIDIAN_CITY,
+                    TUTORIAL_TRIGGER_APPROACH.0,
+                    TUTORIAL_TRIGGER_APPROACH.1,
+                ),
+                keys::UP,
+                2000,
             )?;
             // One step up fires the coord event; the demo battle plays
             // itself with A advancing its text.
@@ -594,17 +691,33 @@ fn to_forest(tuning: Tuning) -> Segment {
         name: "15-to-forest",
         goal: "inside Viridian Forest".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(rec, obs, tuning, ROUTE2, None, keys::UP, 5000)?;
+            // Viridian's north exit x=19..23; the forest south-entrance
+            // warps sit at Route 2 (5,51)/(6,51); the entrance building's
+            // exit warp is (7,1) (research/story-gates.md).
             walk_fleeing(
                 rec,
                 obs,
                 tuning,
-                FOREST_SOUTH_ENTRANCE,
-                None,
+                Leg::MapVia(ROUTE2, VIRIDIAN_CITY, (21, 1)),
                 keys::UP,
-                5000,
+                1500,
             )?;
-            walk_fleeing(rec, obs, tuning, VIRIDIAN_FOREST, None, keys::UP, 3000)?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(FOREST_SOUTH_ENTRANCE, ROUTE2, (5, 52)),
+                keys::UP,
+                1000,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(VIRIDIAN_FOREST, FOREST_SOUTH_ENTRANCE, (7, 2)),
+                keys::UP,
+                400,
+            )?;
             Ok(())
         }),
         reached: Box::new(|obs, emu| obs.map(emu) == Some(VIRIDIAN_FOREST)),
@@ -621,14 +734,15 @@ fn forest(tuning: Tuning) -> Segment {
         name: "16-forest",
         goal: "out the forest's north side".into(),
         run: Box::new(move |rec, obs| {
+            // Forest exits at (4..6,9) into the north entrance building
+            // (research/story-gates.md).
             walk_fleeing(
                 rec,
                 obs,
                 tuning,
-                FOREST_NORTH_ENTRANCE,
-                None,
+                Leg::MapVia(FOREST_NORTH_ENTRANCE, VIRIDIAN_FOREST, (5, 10)),
                 keys::UP,
-                20000,
+                2000,
             )?;
             Ok(())
         }),
@@ -644,9 +758,33 @@ fn to_gym(tuning: Tuning) -> Segment {
         name: "17-to-gym",
         goal: "inside Pewter Gym".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(rec, obs, tuning, ROUTE2, None, keys::UP, 5000)?;
-            walk_fleeing(rec, obs, tuning, PEWTER_CITY, None, keys::UP, 6000)?;
-            nav::walk_to(rec, obs, Goal::on_map(PEWTER_GYM), 8000)?;
+            // North entrance exit warp (7,1); Route 2's top x=8..11 meets
+            // Pewter's bottom x=20..23; the gym warp is Pewter (15,16)
+            // (research/story-gates.md).
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(ROUTE2, FOREST_NORTH_ENTRANCE, (7, 2)),
+                keys::UP,
+                400,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(PEWTER_CITY, ROUTE2, (9, 1)),
+                keys::UP,
+                1000,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(PEWTER_GYM, PEWTER_CITY, (15, 17)),
+                keys::UP,
+                1500,
+            )?;
             Ok(())
         }),
         reached: Box::new(|obs, emu| obs.map(emu) == Some(PEWTER_GYM)),
