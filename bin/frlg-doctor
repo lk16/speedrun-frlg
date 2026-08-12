@@ -180,7 +180,7 @@ if [ -f "$bios" ]; then
       "$RED" "$OFF" "gba bios" "$bios" "${bios_got:-unreadable}" "$bios_want"; fail=1
   fi
 else
-  note "gba bios" "none at $bios -- tier 1 boots HLE, tier 2 cannot run (docs/route.md)"
+  note "gba bios" "none at $bios -- tier 1 boots HLE, tier 2 cannot run (docs/rival-1/route.md)"
 fi
 
 # The copy carries no .git, so this stamp is the only thing that ties a citation to a revision of
@@ -251,7 +251,7 @@ if [ -d "${FRLG_ARTIFACTS:-/nonexistent}/verify" ]; then
   if [ "$results" -eq 0 ]; then
     info "results" "none yet"
   else
-    info "results" "$results (newest first, docs/route.md has the format)"
+    info "results" "$results (newest first, docs/rival-1/route.md has the format)"
     find "$FRLG_ARTIFACTS/verify/results" -name '*.json' -printf '%T@ %p\n' 2>/dev/null \
       | sort -rn | head -5 | cut -d' ' -f2- | while read -r r; do
         python3 -c 'import json,sys

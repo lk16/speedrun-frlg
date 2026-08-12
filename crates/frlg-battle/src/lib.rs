@@ -246,7 +246,7 @@ pub fn execute_move(
 
 /// The rival AI picking its move for one turn, consuming exactly what
 /// `BattleAI_SetupAIData` + the three AI scripts + the tie-break consume
-/// (the cited walk in `docs/journal.md`): 4 simulatedRNG rolls
+/// (the cited walk in `docs/rival-1/journal/`): 4 simulatedRNG rolls
 /// (`src/battle_ai_script_commands.c:310`), the `AI_CV_AttackDown` rolls
 /// for the Growl slot (`data/battle_ai_scripts.s:1129-1150`), and the
 /// unconditional tie-break (`battle_ai_script_commands.c:408`).

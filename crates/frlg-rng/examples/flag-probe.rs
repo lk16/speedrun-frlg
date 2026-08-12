@@ -23,8 +23,8 @@ const WATCH: u32 = 0x300;
 
 fn main() {
     let root = repo_root();
-    let ledger =
-        frlg_route::ledger::read(&root.join("route/ledger.json")).expect("committed ledger");
+    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
+        .expect("committed ledger");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).expect("ROM");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");
     let struct_ptr_addr = syms.get("gBattleStruct").expect("gBattleStruct").addr;

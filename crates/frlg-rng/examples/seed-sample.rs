@@ -1,4 +1,4 @@
-//! The naming-exit seed dial, sampled for real (`docs/route.md`, "What is
+//! The naming-exit seed dial, sampled for real (`docs/rival-1/route.md`, "What is
 //! not optimised"): insert N idle frames at the start of `03-names` -- which
 //! delays the naming screen's exit press by N and therefore moves the
 //! timer-1 seed by 18753·N (mod 2^16) -- replay the committed logs to the
@@ -256,8 +256,8 @@ fn main() {
         .expect("N");
 
     let root = repo_root();
-    let ledger =
-        frlg_route::ledger::read(&root.join("route/ledger.json")).expect("committed ledger");
+    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
+        .expect("committed ledger");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).expect("ROM");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");
     let observer = Observer::new(syms).expect("observer");

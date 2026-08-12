@@ -574,7 +574,7 @@ fn battle_start() -> Segment {
 /// battle, wins only:
 ///
 /// 1. **Start delay, 0..64.** Delaying the first press by one frame flips
-///    win to loss and back (`docs/route.md`), and winning battles on
+///    win to loss and back (`docs/rival-1/route.md`), and winning battles on
 ///    adjacent delays differ by hundreds of frames -- while the widest delay
 ///    costs 63. Sampling widely is cheap expected profit.
 /// 2. **Per-turn delays, greedy, repeated to a fixpoint.** For each turn of

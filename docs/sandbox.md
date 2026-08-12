@@ -72,7 +72,7 @@ byte-for-byte against the retail cartridge. LeafGreen is `GAME_VERSION=LEAFGREEN
 `pokefirered.gba`, `pokefirered.map` (the link step) and `pokefirered.sym` (`make syms`).
 
 Both versions are in scope: FireRed and LeafGreen are typically one speedrun category, so a
-route may be built on whichever version measures faster (`docs/route.md`; every published
+route may be built on whichever version measures faster (`docs/rival-1/route.md`; every published
 number says which version it belongs to).
 
 Copy all three into `$FRLG_ARTIFACTS/rom/`. They are the one build output worth keeping, because
@@ -107,13 +107,13 @@ schema. Read them instead of guessing at the format.
 
 To request a tier-2 run, drop the `.bk2` in `$FRLG_ARTIFACTS/verify/queue/` with a sibling
 `<id>.json` saying what you expect of it; results come back in `$FRLG_ARTIFACTS/verify/results/`.
-`docs/route.md` has the exact contract, and `bin/frlg-doctor` prints the newest verdicts at
+`docs/rival-1/route.md` has the exact contract, and `bin/frlg-doctor` prints the newest verdicts at
 startup so you do not have to remember to look. A human on the host runs
 `tools/verify-runner.sh`, so it is not instant and may not happen during your session. Never
 block on it — queue it and keep working.
 
 Tier 2 has not yet completed a single run: BizHawk refuses a deterministic movie without a real
-GBA BIOS, which the host does not have. `docs/route.md` says what is left.
+GBA BIOS, which the host does not have. `docs/rival-1/route.md` says what is left.
 
 ## The output format
 

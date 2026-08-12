@@ -50,7 +50,7 @@ enum RouteCommand {
     Tune(RouteArgs),
     /// Print the ledger as it stands, without running anything.
     Status {
-        #[arg(long, default_value = "route/ledger.json")]
+        #[arg(long, default_value = "route/rival-1/ledger.json")]
         ledger: PathBuf,
     },
     /// Export the committed logs as one BizHawk movie for tier 2.
@@ -65,7 +65,7 @@ enum RouteCommand {
 
 #[derive(Args)]
 struct ExportArgs {
-    #[arg(long, default_value = "route/ledger.json")]
+    #[arg(long, default_value = "route/rival-1/ledger.json")]
     ledger: PathBuf,
 
     /// The BizHawk-written movie whose container and settings are copied
@@ -100,10 +100,10 @@ struct RouteArgs {
     starter: Option<String>,
 
     /// Where the per-segment input logs go.
-    #[arg(long, default_value = "route/logs")]
+    #[arg(long, default_value = "route/rival-1/logs")]
     logs: PathBuf,
 
-    #[arg(long, default_value = "route/ledger.json")]
+    #[arg(long, default_value = "route/rival-1/ledger.json")]
     ledger: PathBuf,
 
     /// Checkpoint savestates. Defaults to $FRLG_ARTIFACTS/states/route, and is
@@ -420,7 +420,7 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
             "warning: this route was built on mGBA's HLE BIOS, but BizHawk replays \
              movies from a real BIOS. Expect a desync: put the BIOS at \
              $BIZHAWK_HOME/Firmware/GBA_bios.rom and rebuild the route first \
-             (docs/route.md). Exporting anyway -- the movie still exercises the \
+             (docs/rival-1/route.md). Exporting anyway -- the movie still exercises the \
              tier-2 pipeline."
         );
     }
@@ -526,7 +526,7 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
     });
 
     if queued {
-        // The request half of the tier-2 contract (docs/route.md): what the
+        // The request half of the tier-2 contract (docs/rival-1/route.md): what the
         // sandbox expects of this movie, so the runner's verdict can say
         // more than "it ran".
         let request = serde_json::json!({

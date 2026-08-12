@@ -5,7 +5,7 @@
 //! the real state into `gRngValue` and runs the battle as a pure mash. The
 //! result is a map from (shift, delay) to battle length, which prices the
 //! free levers (NPC roll avoidance upstream shifts the stream without
-//! costing a frame, `docs/journal.md` 2026-08-12) against the committed
+//! costing a frame, `docs/rival-1/journal/` 2026-08-12) against the committed
 //! battle's 2409 frames (delay plan [4, 3, 3, 3]).
 //!
 //! The RNG write is exploratory, not evidence: a shift that wins fast still
@@ -63,8 +63,8 @@ fn main() {
     );
 
     let root = repo_root();
-    let ledger =
-        frlg_route::ledger::read(&root.join("route/ledger.json")).expect("committed ledger");
+    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
+        .expect("committed ledger");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).expect("ROM in $FRLG_ARTIFACTS/rom");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");
     let rng_addr = syms.get("gRngValue").expect("gRngValue").addr;

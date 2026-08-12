@@ -25,8 +25,9 @@ fn repo_root() -> PathBuf {
 #[test]
 fn the_committed_route_replays_from_reset_and_beats_the_rival() {
     let root = repo_root();
-    let ledger_path = root.join("route/ledger.json");
-    let recorded = ledger::read(&ledger_path).expect("route/ledger.json should be committed");
+    let ledger_path = root.join("route/rival-1/ledger.json");
+    let recorded =
+        ledger::read(&ledger_path).expect("route/rival-1/ledger.json should be committed");
 
     // The ledger pins its ROM by hash and either version may be current, so
     // the test looks the file up by that hash instead of assuming FireRed.
@@ -70,7 +71,7 @@ fn the_committed_route_replays_from_reset_and_beats_the_rival() {
 
 /// Measure what `Tuning::text_hold` is worth on the intro alone -- the
 /// MID-text stretch (`01-boot` through `03-names`) that no options menu can
-/// reach (`docs/route.md`). This is a measurement, not a regression test:
+/// reach (`docs/rival-1/route.md`). This is a measurement, not a regression test:
 /// run it by hand with
 ///
 ///     cargo test --release -p frlg-route --test route -- --ignored --nocapture text_hold

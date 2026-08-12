@@ -3,7 +3,7 @@
 //! pair -- with the u16 values those calls returned, reconstructed from the
 //! RNG model (within a busy frame the VBlank pair leads and the game's own
 //! rolls trail; established by matching damage arithmetic in both orders,
-//! `docs/journal.md` 2026-08-12) -- plus both mons' full battle stats, stat
+//! `docs/rival-1/journal/` 2026-08-12) -- plus both mons' full battle stats, stat
 //! stages, and every HP change. This is the dataset `frlg-battle`'s
 //! predictions get checked against.
 //!
@@ -64,8 +64,8 @@ fn dump_mon(emu: &mut Emu, base: u32, index: u32) -> String {
 fn main() {
     let tsv_path = std::env::args().nth(1).map(PathBuf::from);
     let root = repo_root();
-    let ledger =
-        frlg_route::ledger::read(&root.join("route/ledger.json")).expect("committed ledger");
+    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
+        .expect("committed ledger");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).expect("ROM");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");
     let mons_base = syms.get("gBattleMons").expect("gBattleMons").addr;

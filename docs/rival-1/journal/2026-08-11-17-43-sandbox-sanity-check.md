@@ -12,7 +12,7 @@
 >   it. `MGBA_REF` is now an explicit `0.10.5`, both versions are in the deps `MANIFEST`, and
 >   `bin/frlg-doctor` repeats the delta at every startup. Porting the shim is still open.
 >
-> `docs/journal.md` (2026-08-11) has the full account; `docs/route.md` has what tier 2 still needs.
+> `docs/rival-1/journal/` (2026-08-11) has the full account; `docs/rival-1/route.md` has what tier 2 still needs.
 
 A full pass over the sandbox: mounts, image, env wiring, toolchain, both ROM builds, the Rust
 workspace, the tier-1 harness end to end, the artifacts budget and the network policy. Run in
@@ -59,7 +59,7 @@ which has the network.
 **Severity: blocking.** This is the one that matters.
 
 `route/template.bk2` does not exist. All eight ledger entries say so verbatim
-(`route/ledger.json`, `"tier2": "blocked: no route/template.bk2 ..."`), there is no `.bk2` writer in
+(`route/rival-1/ledger.json`, `"tier2": "blocked: no route/template.bk2 ..."`), there is no `.bk2` writer in
 the codebase by design (`docs/harness.md`), and the file cannot be produced here -- it needs BizHawk,
 which needs Mono/OpenAL/Lua that this image does not have and should not get.
 
@@ -100,7 +100,7 @@ progress.
 - Make `bin/frlg-doctor` print a one-line summary of `verify/results` so a new session sees answers
   without being told to look.
 
-Until the runner exists, say so in `docs/route.md`: tier 2 is *requestable*, not *serviced*.
+Until the runner exists, say so in `docs/rival-1/route.md`: tier 2 is *requestable*, not *serviced*.
 
 ### 3. The tier-1 and tier-2 mGBA cores are not pinned to each other
 

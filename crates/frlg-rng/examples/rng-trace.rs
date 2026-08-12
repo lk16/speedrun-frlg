@@ -45,8 +45,8 @@ fn main() {
     }
 
     let root = repo_root();
-    let ledger =
-        frlg_route::ledger::read(&root.join("route/ledger.json")).expect("committed ledger");
+    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
+        .expect("committed ledger");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1)
         .expect("no ROM matching the ledger's rom_sha1 in $FRLG_ARTIFACTS/rom");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");

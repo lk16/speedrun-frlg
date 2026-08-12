@@ -50,8 +50,8 @@ fn steps_since_16bit_seed(state: Rng) -> Option<u32> {
 #[test]
 fn model_matches_grngvalue_on_every_frame_of_the_committed_route() {
     let root = repo_root();
-    let ledger =
-        frlg_route::ledger::read(&root.join("route/ledger.json")).expect("committed ledger");
+    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
+        .expect("committed ledger");
 
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1)
         .expect("no ROM matching the ledger's rom_sha1 in $FRLG_ARTIFACTS/rom");

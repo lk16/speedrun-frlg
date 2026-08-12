@@ -26,7 +26,7 @@ Both versions build byte-exact in the same tree, the route reads which one it is
 from the ROM header (BPRE/BPGE at 0xAC, `decompiled/config.mk:29-57`), and the two are one
 speedrun category — so every rebuild is free to re-pick the version, and this one did.
 
-    frlg route build       # run the segments, write route/logs/*.ilog and route/ledger.json
+    frlg route build       # run the segments, write route/rival-1/logs/*.ilog and route/rival-1/ledger.json
     frlg route verify      # replay the committed logs from reset and check every claim
     frlg route status      # print the ledger
     frlg route tune        # sweep the route-level knobs serially, scored on total frames
@@ -299,7 +299,7 @@ one-mashed-sample table this section used to carry (12194 on mGBA 0.10.5, agains
 11873), which is the measurement lesson in one line: an unmanipulated sample ranks nothing.
 The fragility is real, though: 10 of LeafGreen/Bulbasaur's 24 variants and 5 of
 FireRed/Bulbasaur's could not win their battle at all, the highest lose rates of any cell.
-The per-variant tables are in `docs/journal.md`.
+The per-variant tables are in `docs/rival-1/journal/`.
 
 ## Frames saved locally can cost more than they save
 
@@ -328,7 +328,7 @@ the same lesson the first `turn_hold` sweep taught, now in two dimensions: in fr
 RNG-sensitive fight, local greed is uninformative — measure through the fight or do not
 measure. A variant whose stream cannot win its battle at all is recorded as "loses" and is an
 answer, not an outage (turn_hold 7 on the 10085 route was the first; the Bulbasaur cells have
-several each). The older single-knob sweeps are in the git history and `docs/journal.md`.
+several each). The older single-knob sweeps are in the git history and `docs/rival-1/journal/`.
 
 ## What is not optimised
 

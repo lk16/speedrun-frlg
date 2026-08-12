@@ -11,7 +11,7 @@
 #   --headless    run EmuHawk on a throwaway X server (xvfb-run) instead of the desktop
 #   --realtime    replay at 100% with sound and video, the way a person would watch it
 #
-# The contract, which both sides depend on, is in docs/route.md ("Tier 2"). In short:
+# The contract, which both sides depend on, is in docs/rival-1/route.md ("Tier 2"). In short:
 #
 #   in    $FRLG_ARTIFACTS/verify/queue/<id>.bk2    the movie to replay
 #         $FRLG_ARTIFACTS/verify/queue/<id>.json   what the sandbox expects of it (optional)
@@ -114,7 +114,7 @@ preflight() {
 # frame; throttling, audio output and rendering are host-side presentation, which is the
 # premise every BizHawk movie already rests on. It is checked rather than assumed: the same
 # movie replays to the same EWRAM+IWRAM fingerprint and the same per-frame probe trace fast and
-# silent as it did at 100% with sound (docs/journal.md, 2026-08-11).
+# silent as it did at 100% with sound (docs/rival-1/journal/, 2026-08-11).
 #
 #   Unthrottled          run frames as fast as the host can; ClockThrottle/VSyncThrottle/
 #                        SoundThrottle are the three things that would otherwise pace it
@@ -198,7 +198,7 @@ run_one() {
     expect_ram=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("ram_hash") or "")' "$req" 2>/dev/null)
     expect_ilog=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("ilog_sha1") or "")' "$req" 2>/dev/null)
     # The per-frame probe trace `frlg route export` queues beside the movie
-    # (docs/route.md): lets the Lua turn "desync" into "desync at frame N".
+    # (docs/rival-1/route.md): lets the Lua turn "desync" into "desync at frame N".
     trace_file=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("trace") or {}).get("file") or "")' "$req" 2>/dev/null)
     trace_domain=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("trace") or {}).get("domain") or "")' "$req" 2>/dev/null)
     trace_offset=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("trace") or {}).get("offset") if (json.load(open(sys.argv[1])).get("trace") or {}).get("offset") is not None else "")' "$req" 2>/dev/null)

@@ -115,7 +115,7 @@ pub const GBA_BIOS_SHA1: &str = "300c20df6731a33952ded8c436f7f186d25d3492";
 
 /// `$FRLG_GBA_BIOS`, else `$BIZHAWK_HOME/Firmware/GBA_bios.rom`, if it
 /// exists. The BizHawk location on purpose: the same file serves both tiers,
-/// so there is exactly one place to put it (`docs/route.md`).
+/// so there is exactly one place to put it (`docs/rival-1/route.md`).
 pub fn default_bios_path() -> Option<PathBuf> {
     if let Ok(explicit) = std::env::var("FRLG_GBA_BIOS") {
         let path = PathBuf::from(explicit);

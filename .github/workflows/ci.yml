@@ -1,0 +1,72 @@
+# What CI can and cannot check: the workspace links against libmgba (built
+# here at the same commit both verification tiers are pinned to,
+# tools/host-prep.sh), so formatting, clippy and the unit tests all run. The
+# integration tests need the retail ROM, which cannot be committed or
+# downloaded -- those only run where the ROM exists: the routing sandbox and
+# the host (docs/sandbox.md).
+name: ci
+
+on:
+  push:
+  pull_request:
+
+env:
+  # BizHawk 2.11.1's bundled mGBA core; keep in step with MGBA_REF in
+  # tools/host-prep.sh and the pin recorded in docs/harness.md.
+  MGBA_REF: 94b1578f8545d8ad17bb4036dba908612d5731e2
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache libmgba
+        id: mgba-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/mgba-prefix
+          key: mgba-${{ env.MGBA_REF }}
+
+      - name: Build libmgba at the pinned commit
+        if: steps.mgba-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake libpng-dev zlib1g-dev
+          mkdir -p "$HOME/mgba-src"
+          cd "$HOME/mgba-src"
+          git init -q .
+          git remote add origin https://github.com/mgba-emu/mgba
+          git fetch -q --depth 1 origin "$MGBA_REF"
+          git checkout -q FETCH_HEAD
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$HOME/mgba-prefix" \
+            -DBUILD_QT=OFF -DBUILD_SDL=OFF -DBUILD_SHARED=ON -DBUILD_STATIC=ON \
+            -DUSE_FFMPEG=OFF -DUSE_DISCORD_RPC=OFF -DUSE_LUA=OFF -DBUILD_PYTHON=OFF \
+            -DUSE_LIBZIP=OFF -DUSE_MINIZIP=OFF -DUSE_SQLITE3=OFF -DUSE_ELF=OFF
+          cmake --build build -j"$(nproc)"
+          cmake --install build
+
+      - name: Point the workspace at it
+        run: echo "MGBA_PREFIX=$HOME/mgba-prefix" >> "$GITHUB_ENV"
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: pre-commit (fmt, clippy)
+        run: |
+          pipx install pre-commit || pip install --user pre-commit
+          pre-commit run --all-files --show-diff-on-failure
+
+      # Only the crates whose unit tests run without the retail ROM; the
+      # clippy pass above already compile-checks every target in the
+      # workspace, including the ROM-bound integration tests.
+      - name: Unit tests (ROM-free crates)
+        run: cargo test -p frlg-rng -p frlg-battle --lib

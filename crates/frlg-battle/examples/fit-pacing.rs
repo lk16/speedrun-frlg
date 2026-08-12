@@ -4,15 +4,15 @@
 //! training set of delay plans through the exact drive the route's search
 //! uses (`run_plan` in frlg-rng's battle-plan-scan). For every run it
 //! extracts the logic rolls (the window beyond the 2-per-frame VBlank pair,
-//! pair leading -- the established order, `docs/journal.md` 2026-08-12),
+//! pair leading -- the established order, `docs/rival-1/journal/` 2026-08-12),
 //! labels each roll with the v1 semantics from this crate, cross-checks the
 //! predicted damage against the observed `gBattleMons` HP writes, and emits
 //! (transition key -> frame gap) observations.
 //!
-//! The output is the evidence for `Pacing::measured()` in `src/pacing.rs`:
-//! every key is printed with every gap value seen and how often, so a key
-//! with two values is a key whose context is too coarse -- refine it here
-//! before trusting it there.
+//! The output is the evidence for the constants in `src/pacing.rs`: every
+//! key is printed with every gap value seen and how often, so a key with two
+//! values is either a gate or a key whose context is too coarse -- decide
+//! which here before trusting it there.
 //!
 //!     cargo run --release -p frlg-battle --example fit-pacing
 
@@ -122,7 +122,7 @@ impl<'a> Recorder<'a> {
         let steps = self.model.distance_to(observed);
         assert!(steps >= 2, "battle frames roll twice in VBlank");
         // The VBlank pair leads the frame's window; the game's own rolls
-        // trail (docs/journal.md 2026-08-12, proven by damage arithmetic).
+        // trail (docs/rival-1/journal/ 2026-08-12, proven by damage arithmetic).
         let mut cursor = self.model.jump(2);
         for _ in 0..steps - 2 {
             cursor = cursor.next();
@@ -536,8 +536,8 @@ fn observe_gaps(events: &[Ev], table: &mut GapTable) {
 
 fn main() {
     let root = repo_root();
-    let ledger =
-        frlg_route::ledger::read(&root.join("route/ledger.json")).expect("committed ledger");
+    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
+        .expect("committed ledger");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).expect("ROM in $FRLG_ARTIFACTS/rom");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");
     let rng_addr = syms.get("gRngValue").expect("gRngValue").addr;

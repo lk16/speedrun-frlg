@@ -23,7 +23,7 @@ use crate::segments::{self, Segment, Starter, Tuning};
 /// Every entry says so out loud rather than leaving the field empty and
 /// letting a reader assume.
 pub const TIER2_BLOCKED: &str =
-    "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)";
+    "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Ledger {
@@ -95,9 +95,9 @@ pub enum LedgerError {
 
 /// Where a build writes.
 pub struct Paths {
-    /// Directory for the committed input logs, e.g. `route/logs`.
+    /// Directory for the committed input logs, e.g. `route/rival-1/logs`.
     pub logs: PathBuf,
-    /// The ledger file, e.g. `route/ledger.json`.
+    /// The ledger file, e.g. `route/rival-1/ledger.json`.
     pub ledger: PathBuf,
     /// Checkpoint savestates. These do not survive the sandbox and are not
     /// committed, so a missing directory is not an error -- it just means no

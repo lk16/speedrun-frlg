@@ -49,8 +49,8 @@ fn read_mon(emu: &mut Emu, base: u32, index: u32) -> Mon {
 #[test]
 fn model_reproduces_every_roll_and_hp_change_of_the_committed_battle() {
     let root = repo_root();
-    let ledger =
-        frlg_route::ledger::read(&root.join("route/ledger.json")).expect("committed ledger");
+    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
+        .expect("committed ledger");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).expect("ROM");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");
     let mons_base = syms.get("gBattleMons").expect("gBattleMons").addr;

@@ -5,7 +5,7 @@
 //! shifts -10..=10, zero label failures), and none of it is derived from the
 //! decomp: these are measured properties of this route's rival battle under
 //! this route's drive (the `text_hold = 4` A-mash of `run_plan`, restarted at
-//! every stage, `route/ledger.json` tuning). Change the drive, the starter,
+//! every stage, `route/rival-1/ledger.json` tuning). Change the drive, the starter,
 //! or the opponent and the table must be re-fitted.
 //!
 //! The frame anatomy of one turn, verified against the marks the fitter
