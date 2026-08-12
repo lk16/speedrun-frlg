@@ -45,6 +45,33 @@ die()  { printf '%s !! %s %s\n' "$RED" "$OFF" "$*" >&2; exit 1; }
 
 sha1() { sha1sum "$1" 2>/dev/null | cut -d' ' -f1; }
 
+# The ROM hash the movie itself claims: Header.txt's SHA1 line, written by
+# `frlg route export` from the ledger's ROM (crates/frlg-route/src/bk2.rs).
+movie_header_sha1() {
+  python3 - "$1" 2>/dev/null <<'PY'
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    for line in z.read("Header.txt").decode().splitlines():
+        if line.startswith("SHA1 "):
+            print(line.split()[1].lower())
+            break
+PY
+}
+
+# Which ROM to play a movie on. FireRed and LeafGreen are one category and
+# both live in $ARTIFACTS/rom, so the movie's own header decides -- $ROM is
+# only the answer for a movie that does not name one. Prints nothing when no
+# ROM matches; the caller turns that into a result, not a guess.
+rom_for_movie() {
+  local want cand
+  want=$(movie_header_sha1 "$1")
+  if [ -z "$want" ]; then echo "$ROM"; return; fi
+  for cand in "$ROM" "$ARTIFACTS"/rom/*.gba; do
+    [ -f "$cand" ] || continue
+    if [ "$(sha1 "$cand")" = "$want" ]; then echo "$cand"; return; fi
+  done
+}
+
 # ------------------------------------------------------------------ preflight --
 # Every one of these is a way for a run to fail as a GUI dialog rather than an exit code, which
 # in an unattended runner means "hangs until the timeout kills it". Check them up front and say
@@ -209,16 +236,25 @@ run_one() {
   # does not get that far. --config keeps its config out of the deps tree; --userdata is NOT
   # a data directory (it is movie key:value metadata, and a bare path makes the flag parser
   # throw "malformed userdata" and exit 1 -- found the hard way on the first real replay).
-  local t0=$SECONDS
-  FRLG_VERIFY_DUMP="$dump" FRLG_VERIFY_STATUS="$status" FRLG_VERIFY_FRAMES="${expect_frames:-0}" \
-  FRLG_VERIFY_TRACE="$trace_path" FRLG_VERIFY_TRACE_DOMAIN="$trace_domain" \
-  FRLG_VERIFY_TRACE_OFFSET="$trace_offset" \
-  timeout -k 10 "$TIMEOUT" "${launcher[@]}" "$BIZHAWK/EmuHawkMono.sh" \
-    --config="$USERDATA/config.ini" \
-    --movie="$bk2" \
-    --lua="$lua" \
-    "$ROM" >"$work/emuhawk.log" 2>&1
-  local rc=$?
+  # The movie names its ROM; play it on that one. rc 97 is this runner's own
+  # "no matching ROM" sentinel, turned into an error result below instead of
+  # letting EmuHawk warn-and-desync its way through the wrong version.
+  local movie_rom; movie_rom=$(rom_for_movie "$bk2")
+  local t0=$SECONDS rc=0
+  if [ -z "$movie_rom" ]; then
+    rc=97
+    : >"$work/emuhawk.log"
+  else
+    FRLG_VERIFY_DUMP="$dump" FRLG_VERIFY_STATUS="$status" FRLG_VERIFY_FRAMES="${expect_frames:-0}" \
+    FRLG_VERIFY_TRACE="$trace_path" FRLG_VERIFY_TRACE_DOMAIN="$trace_domain" \
+    FRLG_VERIFY_TRACE_OFFSET="$trace_offset" \
+    timeout -k 10 "$TIMEOUT" "${launcher[@]}" "$BIZHAWK/EmuHawkMono.sh" \
+      --config="$USERDATA/config.ini" \
+      --movie="$bk2" \
+      --lua="$lua" \
+      "$movie_rom" >"$work/emuhawk.log" 2>&1
+    rc=$?
+  fi
   local duration=$((SECONDS - t0))
 
   # The Lua rewrites the status file as it goes (first probe mismatch, heartbeat, onexit), so
@@ -239,7 +275,10 @@ run_one() {
       desync_frame=""
     fi
   fi
-  if [ $rc -eq 124 ]; then
+  if [ $rc -eq 97 ]; then
+    verdict=error
+    notes="no ROM in $ARTIFACTS/rom (or \$FRLG_ROM) matches the movie header's SHA1 $(movie_header_sha1 "$bk2"); build that version and copy it there"
+  elif [ $rc -eq 124 ]; then
     verdict=error
     notes="EmuHawk did not finish within ${TIMEOUT}s -- most likely a modal dialog. Last Lua status: frame ${frames:-none}$probe. Log: $(tail -3 "$work/emuhawk.log" | tr '\n' ' ')"
   elif [ ! -s "$status" ]; then
@@ -278,7 +317,7 @@ run_one() {
   [ "$HEADLESS" = 1 ] && mode="$mode+headless"
 
   python3 - "$RESULTS/$id.json" "$id" "$verdict" "$notes" "$ram" \
-           "$(sha1 "$bk2")" "$(sha1 "$ROM")" "$BIZHAWK_VERSION" "$desync_frame" \
+           "$(sha1 "$bk2")" "$([ -n "$movie_rom" ] && sha1 "$movie_rom")" "$BIZHAWK_VERSION" "$desync_frame" \
            "$duration" "$mode" <<'PY'
 import json, os, sys, datetime
 out, id, verdict, notes, ram, bk2, rom, biz, desync, duration, mode = sys.argv[1:12]

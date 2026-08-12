@@ -67,8 +67,11 @@ pub enum Bk2Error {
          (BizHawk's controller definition moved; re-derive the column mapping)"
     )]
     LogKeyMismatch { found: String },
-    #[error("template Header.txt says SHA1 {template}, the log was routed against {log}")]
-    RomMismatch { template: String, log: String },
+    #[error(
+        "the log does not name the ROM it was routed against (all-zero \
+         rom_sha1); a movie header cannot be written from it"
+    )]
+    UnknownRom,
     #[error("frame {frame}: {message}")]
     Frame { frame: usize, message: String },
     #[error("{path}: {message}")]
@@ -169,9 +172,24 @@ fn template_err(path: &Path, message: impl Into<String>) -> Bk2Error {
 }
 
 /// Writes `log` as a `.bk2` at `out`, copying every entry of `template`
-/// verbatim except `Input Log.txt`, then decodes the result back and compares.
-/// On success returns the number of frames written.
-pub fn export(template: &Path, log: &InputLog, out: &Path) -> Result<usize, Bk2Error> {
+/// verbatim except `Input Log.txt` (the movie itself) and the two
+/// ROM-identity lines of `Header.txt`, then decodes the result back and
+/// compares. On success returns the number of frames written.
+///
+/// The header rewrite is what lets one committed template serve both
+/// versions: BizHawk stamps the loaded ROM's name and hash into a recorded
+/// movie's `Header.txt` (`GameName`, `SHA1` -- see `route/template.bk2`),
+/// and a replayed movie is checked against the loaded ROM by that hash. The
+/// log knows exactly which ROM it was routed against, so the export writes
+/// *that* identity rather than refusing anything the template was not
+/// recorded on. Everything else in the header -- and every other entry,
+/// SyncSettings.json above all -- is still copied byte-for-byte.
+pub fn export(
+    template: &Path,
+    log: &InputLog,
+    rom_name: &str,
+    out: &Path,
+) -> Result<usize, Bk2Error> {
     let mut archive = ZipArchive::new(
         fs::File::open(template)
             .map_err(|e| template_err(template, format!("cannot open: {e}")))?,
@@ -196,28 +214,41 @@ pub fn export(template: &Path, log: &InputLog, out: &Path) -> Result<usize, Bk2E
         }
     }
 
-    // The template was generated against a specific ROM; exporting a log
-    // routed against a different one would produce a movie whose header lies.
-    if log.rom_sha1 != [0u8; 20] {
+    // A movie header that names no ROM is a movie nobody can check; refuse
+    // to write one.
+    if log.rom_sha1 == [0u8; 20] {
+        return Err(Bk2Error::UnknownRom);
+    }
+    let header = {
         let mut entry = archive
             .by_name("Header.txt")
             .map_err(|_| template_err(template, "no Header.txt entry"))?;
         let mut text = String::new();
         entry.read_to_string(&mut text)?;
-        let header_sha1 = text
-            .lines()
-            .find_map(|l| l.strip_prefix("SHA1 "))
-            .map(str::trim)
-            .ok_or_else(|| template_err(template, "no SHA1 line in its Header.txt"))?
-            .to_lowercase();
-        let log_sha1 = hex::encode(log.rom_sha1);
-        if header_sha1 != log_sha1 {
-            return Err(Bk2Error::RomMismatch {
-                template: header_sha1,
-                log: log_sha1,
-            });
+        // Template sanity: both lines must exist to be replaced. BizHawk
+        // writes SHA1 in uppercase hex, so the rewrite does too.
+        for key in ["SHA1 ", "GameName "] {
+            if !text.lines().any(|l| l.starts_with(key)) {
+                return Err(template_err(
+                    template,
+                    format!("no {} line in its Header.txt", key.trim_end()),
+                ));
+            }
         }
-    }
+        text.lines()
+            .map(|l| {
+                if l.starts_with("SHA1 ") {
+                    format!("SHA1 {}", hex::encode_upper(log.rom_sha1))
+                } else if l.starts_with("GameName ") {
+                    format!("GameName {rom_name}")
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            + "\n"
+    };
 
     let input_log = render_input_log(log)?;
 
@@ -229,6 +260,8 @@ pub fn export(template: &Path, log: &InputLog, out: &Path) -> Result<usize, Bk2E
         writer.start_file(&*name, options)?;
         if name == INPUT_LOG_NAME {
             writer.write_all(input_log.as_bytes())?;
+        } else if name == "Header.txt" {
+            writer.write_all(header.as_bytes())?;
         } else {
             let mut bytes = Vec::new();
             entry.read_to_end(&mut bytes)?;
@@ -331,7 +364,7 @@ mod tests {
             })
             .collect();
         let log = InputLog::new(rom_sha1_of_template(), frames.clone());
-        let written = export(&template(), &log, &out).unwrap();
+        let written = export(&template(), &log, "pokefirered", &out).unwrap();
         assert_eq!(written, frames.len());
         assert_eq!(decode(&out).unwrap(), frames);
         std::fs::remove_file(&out).unwrap();
@@ -353,13 +386,45 @@ mod tests {
     }
 
     #[test]
-    fn a_wrong_rom_refuses_to_export() {
-        let dir = std::env::temp_dir().join("frlg-bk2-wrongrom");
+    fn the_header_carries_the_logs_rom_not_the_templates() {
+        use std::io::Read;
+
+        let dir = std::env::temp_dir().join("frlg-bk2-otherrom");
         std::fs::create_dir_all(&dir).unwrap();
-        let out = dir.join("wrongrom.bk2");
+        let out = dir.join("otherrom.bk2");
+        // A log routed against some other ROM than the template's: the
+        // written movie must carry *its* identity, uppercased like BizHawk
+        // writes it, with the given name.
         let log = InputLog::new([7u8; 20], vec![0, keys::A]);
-        let err = export(&template(), &log, &out).unwrap_err();
-        assert!(matches!(err, Bk2Error::RomMismatch { .. }), "{err}");
+        export(&template(), &log, "pokeleafgreen", &out).unwrap();
+        let mut archive = ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
+        let mut header = String::new();
+        archive
+            .by_name("Header.txt")
+            .unwrap()
+            .read_to_string(&mut header)
+            .unwrap();
+        assert!(
+            header
+                .lines()
+                .any(|l| l == format!("SHA1 {}", hex::encode_upper([7u8; 20]))),
+            "{header}"
+        );
+        assert!(
+            header.lines().any(|l| l == "GameName pokeleafgreen"),
+            "{header}"
+        );
+        std::fs::remove_file(&out).unwrap();
+    }
+
+    #[test]
+    fn a_log_without_a_rom_refuses_to_export() {
+        let dir = std::env::temp_dir().join("frlg-bk2-norom");
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("norom.bk2");
+        let log = InputLog::new([0u8; 20], vec![0, keys::A]);
+        let err = export(&template(), &log, "pokefirered", &out).unwrap_err();
+        assert!(matches!(err, Bk2Error::UnknownRom), "{err}");
         assert!(!out.exists());
     }
 

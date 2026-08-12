@@ -434,7 +434,27 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
         }
     };
 
-    let written = frlg_route::bk2::export(&args.template, &combined, &out)
+    // The ROM first: the movie's header carries its name and hash, and the
+    // trace replay below runs on it. It must be the ledger's ROM -- an
+    // export replayed against the wrong version would desync on frame 1 and
+    // the error should say why, not where.
+    let rom = resolve_rom(&args.rom)?;
+    let rom_file_sha1 = frlg_emu::file_sha1(&rom)?;
+    if rom_file_sha1 != rom_sha1 {
+        bail!(
+            "{} is sha1 {}, but the ledger's logs were routed against {}; \
+             pass the matching ROM with --rom",
+            rom.display(),
+            hex::encode(rom_file_sha1),
+            led.rom_sha1
+        );
+    }
+    let rom_name = rom
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .context("the ROM path has no printable file name for the movie header")?;
+
+    let written = frlg_route::bk2::export(&args.template, &combined, rom_name, &out)
         .with_context(|| format!("exporting {}", out.display()))?;
     let bk2_sha1 = hex::encode(Sha1::digest(fs::read(&out)?));
 
@@ -444,7 +464,6 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
     // so the trace lets tier 2 name the *first* divergent frame instead of
     // reporting "the final fingerprint differs". The replay also re-proves
     // the movie's frames reach the ledger's final fingerprint from reset.
-    let rom = resolve_rom(&args.rom)?;
     let syms = resolve_syms(&args.sym)?;
     let rng = syms
         .get("gRngValue")

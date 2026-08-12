@@ -28,8 +28,16 @@ fn the_committed_route_replays_from_reset_and_beats_the_rival() {
     let ledger_path = root.join("route/ledger.json");
     let recorded = ledger::read(&ledger_path).expect("route/ledger.json should be committed");
 
-    let rom = frlg_emu::default_rom_path().expect("no ROM: build it into $FRLG_ARTIFACTS/rom");
-    let sym = frlg_emu::default_sym_path().expect("no pokefirered.sym in $FRLG_ARTIFACTS/rom");
+    // The ledger pins its ROM by hash and either version may be current, so
+    // the test looks the file up by that hash instead of assuming FireRed.
+    let rom = frlg_emu::rom_path_for_sha1(&recorded.rom_sha1)
+        .expect("no ROM matching the ledger's rom_sha1: build it into $FRLG_ARTIFACTS/rom");
+    let sym = rom.with_extension("sym");
+    assert!(
+        sym.is_file(),
+        "{} exists but its .sym does not; `make syms` and copy it next to the ROM",
+        rom.display()
+    );
     let starter = match recorded.starter.as_str() {
         "bulbasaur" => Starter::Bulbasaur,
         "squirtle" => Starter::Squirtle,
