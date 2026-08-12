@@ -1,0 +1,11 @@
+[package]
+name = "frlg-rng"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+frlg-emu = { path = "../frlg-emu" }
+frlg-route = { path = "../frlg-route" }

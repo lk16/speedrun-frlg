@@ -1,6 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["crates/mgba-sys", "crates/frlg-emu", "crates/frlg-route", "crates/frlg-cli"]
+members = [
+    "crates/mgba-sys",
+    "crates/frlg-emu",
+    "crates/frlg-route",
+    "crates/frlg-cli",
+    "crates/frlg-rng",
+]
 
 [workspace.package]
 version = "0.1.0"
