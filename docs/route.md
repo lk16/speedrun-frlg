@@ -1,11 +1,10 @@
 # The route: power-on to a beaten rival
 
 10085 frames (~2m49s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with
-Squirtle, on FireRed. Tier 1 verified from reset; **tier 2 for this movie is queued
-(`route-10085f-65ef20333a57`), not yet replayed**. The 2026-08-11 tier-2 pass — BizHawk
-replaying the whole movie to the same fingerprint, frame for frame — belongs to the previous,
-12713-frame build of this same route; see [Tier 2](#tier-2). Rebuilding resets the tier-2
-stamp, and should.
+Squirtle, on FireRed. **Tier 1 and tier 2 verified**: BizHawk replayed the whole movie on the
+host (`route-10085f-65ef20333a57`, 2026-08-12) to the same fingerprint, with the per-frame
+`gRngValue` probe matching every one of the 10085 frames; see [Tier 2](#tier-2). Rebuilding
+resets the tier-2 stamp, and should.
 
 The route is rebuilt whenever the boot or the core moves, and the total has moved with it:
 11873 (mGBA 0.10.5, HLE BIOS) → 12209 (2026-08-11, tier 1 re-pinned to the exact mGBA commit
@@ -259,10 +258,14 @@ first:
 
 ## Tier 2
 
-**Status (2026-08-12, sandbox): `route-10085f-65ef20333a57` is queued and has not been
-replayed.** The current 10085-frame movie exists only as tier-1 evidence plus a queue entry
-(with its `gRngValue` trace); a host run of `tools/verify-runner.sh` is what turns it into a
-result. The same day's two earlier exports (`route-10946f-b1a0875a77e9`,
+**Status (2026-08-12, host): `route-10085f-65ef20333a57` passed.** BizHawk 2.11.1 replayed
+all 10085 frames to the ledger's fingerprint
+(`e65e93b6712b408ed915f55e46c9a79f874016cd`) and the per-frame `gRngValue` probe matched on
+every frame — the fully optimised route (short names, FAST text, no battle animations, the
+two-stage battle search, `turn_hold` 2) desyncs nowhere against BizHawk. The result is
+`$FRLG_ARTIFACTS/verify/results/route-10085f-65ef20333a57.json` (`realtime`, 172s — it was
+watched, which is where the observations about the intro's text speed and the untried
+starters came from). The same day's two earlier exports (`route-10946f-b1a0875a77e9`,
 `route-10531f-e037421ddd87`, each superseded before any replay) were withdrawn from the queue
 rather than left to burn a host run on a stale movie.
 
@@ -271,12 +274,10 @@ replayed all 12713 frames of the pre-optimisation route, ended on the same EWRAM
 fingerprint tier 1 computed (`73b329af5d561a864cc4b0d46e8d4c409ce1b6df`), and matched the
 per-frame `gRngValue` probe on **every single frame** — not one divergence anywhere in the run,
 which is a far stronger statement than the final hashes agreeing. The result is
-`$FRLG_ARTIFACTS/verify/results/route-12713f-a4ad4280bbdc.json`. That closes the bedroom
-desync, and with it the only open question about whether this route *family* exists on real
-hardware timing — the 10946 rebuild changes inputs, not boot, core, or format, so the plausible
-desync causes are all ones the 12713 pass already ruled out. Plausible is not proven: the new
-movie still has to replay. Everything below about the desync is kept because the root cause is
-worth not rediscovering.
+`$FRLG_ARTIFACTS/verify/results/route-12713f-a4ad4280bbdc.json`. That closed the bedroom
+desync; the 10085 pass above then confirmed the prediction that the rebuild — new inputs, same
+boot, core and format — had nothing left to desync on. Everything below about the desync is
+kept because the root cause is worth not rediscovering.
 
 The desync was the boot: BizHawk *movie playback* never skips the BIOS intro. `MGBAHawk.cs:41` (2.11.1 sources,
 `$FRLG_ARTIFACTS/reference/bizhawk-2.11.1/`) passes
