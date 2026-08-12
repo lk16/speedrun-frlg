@@ -39,87 +39,184 @@ struct BattleLab {
     mash: Vec<u16>,
 }
 
+/// A snapshot at one turn's action-selection arrival: the core state and how
+/// many battle frames it took to get there. Trials for that turn replay only
+/// the suffix -- in-memory savestates are a ~0.5 MB memcpy, so the prefix is
+/// paid once per adopted plan instead of once per candidate.
+struct Checkpoint {
+    state: SaveState,
+    frames: u32,
+}
+
+/// What one trial came back with. `Aborted` means it reached `abort_at`
+/// frames while still unresolved -- it cannot beat the current best, and
+/// whether it would eventually have won is deliberately unknown.
+enum Trial {
+    Done {
+        won: bool,
+        frames: u32,
+        turns: usize,
+    },
+    Aborted,
+}
+
 impl BattleLab {
-    /// One battle under `plan` from the real battle-start state. Same drive
-    /// shape as the route's search: the mash restarts at every stage.
-    fn run_plan(&mut self, plan: &[u32]) -> (bool, u32, usize) {
+    /// The drive from a turn menu onward: idle `plan[turn]`, commit the
+    /// turn, then alternate to-menu / commit stages for the later turns.
+    /// Same shape as the route's search: the mash restarts at every stage.
+    /// Aborts as unresolvable once `frames` reaches `abort_at`.
+    fn drive_from_menu(
+        &mut self,
+        plan: &[u32],
+        mut turns: usize,
+        mut frames: u32,
+        abort_at: u32,
+    ) -> Trial {
+        loop {
+            // Arrived at turn `turns + 1`'s menu: idle its delay, commit it.
+            turns += 1;
+            for _ in 0..plan.get(turns).copied().unwrap_or(0) {
+                self.emu.step(0);
+                frames += 1;
+            }
+            for stage in [false, true] {
+                // false: mash until the selection state exits (the turn is
+                // committed); true: mash to the next menu or the end.
+                let mut mash_phase = 0usize;
+                loop {
+                    self.emu.step(self.mash[mash_phase % self.mash.len()]);
+                    mash_phase += 1;
+                    frames += 1;
+                    let outcome = self.observer.battle_outcome(&mut self.emu);
+                    if outcome != 0 {
+                        return Trial::Done {
+                            won: outcome == WON,
+                            frames,
+                            turns,
+                        };
+                    }
+                    if self.observer.battle_choosing_actions(&mut self.emu) == stage {
+                        break;
+                    }
+                    if frames >= abort_at.min(FRAME_BUDGET) {
+                        return Trial::Aborted;
+                    }
+                }
+            }
+        }
+    }
+
+    /// One whole battle from the battle-start state under `plan`.
+    fn run_full(&mut self, plan: &[u32], abort_at: u32) -> Trial {
         self.emu.load_state(&self.start).expect("load");
         let mut frames = 0u32;
         for _ in 0..plan.first().copied().unwrap_or(0) {
             self.emu.step(0);
             frames += 1;
         }
+        // To the first turn's menu (or a pre-menu outcome).
+        let mut mash_phase = 0usize;
+        loop {
+            self.emu.step(self.mash[mash_phase % self.mash.len()]);
+            mash_phase += 1;
+            frames += 1;
+            let outcome = self.observer.battle_outcome(&mut self.emu);
+            if outcome != 0 {
+                return Trial::Done {
+                    won: outcome == WON,
+                    frames,
+                    turns: 0,
+                };
+            }
+            if self.observer.battle_choosing_actions(&mut self.emu) {
+                break;
+            }
+            if frames >= abort_at.min(FRAME_BUDGET) {
+                return Trial::Aborted;
+            }
+        }
+        self.drive_from_menu(plan, 0, frames, abort_at)
+    }
+
+    /// Replays `plan`'s battle once, capturing a checkpoint at every turn
+    /// menu arrival. The winning plan replays exactly as before -- the
+    /// captures are on the arrival frames, before any delay is applied.
+    fn checkpoints(&mut self, plan: &[u32]) -> Vec<Checkpoint> {
+        self.emu.load_state(&self.start).expect("load");
+        let mut frames = 0u32;
+        for _ in 0..plan.first().copied().unwrap_or(0) {
+            self.emu.step(0);
+            frames += 1;
+        }
+        let mut cps = Vec::new();
         let mut turns = 0usize;
-        let won = loop {
-            let mut over = false;
+        'battle: loop {
             let mut mash_phase = 0usize;
             loop {
                 self.emu.step(self.mash[mash_phase % self.mash.len()]);
                 mash_phase += 1;
                 frames += 1;
-                if self.observer.battle_outcome(&mut self.emu) != 0
-                    || self.observer.battle_choosing_actions(&mut self.emu)
-                {
-                    break;
+                if self.observer.battle_outcome(&mut self.emu) != 0 || frames >= FRAME_BUDGET {
+                    break 'battle;
                 }
-                if frames >= FRAME_BUDGET {
-                    over = true;
+                if self.observer.battle_choosing_actions(&mut self.emu) {
                     break;
                 }
             }
-            if over {
-                break false;
-            }
-            let outcome = self.observer.battle_outcome(&mut self.emu);
-            if outcome != 0 {
-                break outcome == WON;
-            }
+            cps.push(Checkpoint {
+                state: self.emu.save_state().expect("state"),
+                frames,
+            });
             turns += 1;
             for _ in 0..plan.get(turns).copied().unwrap_or(0) {
                 self.emu.step(0);
                 frames += 1;
             }
-            mash_phase = 0;
+            let mut mash_phase = 0usize;
             loop {
                 self.emu.step(self.mash[mash_phase % self.mash.len()]);
                 mash_phase += 1;
                 frames += 1;
-                if self.observer.battle_outcome(&mut self.emu) != 0
-                    || !self.observer.battle_choosing_actions(&mut self.emu)
-                {
-                    break;
+                if self.observer.battle_outcome(&mut self.emu) != 0 || frames >= FRAME_BUDGET {
+                    break 'battle;
                 }
-                if frames >= FRAME_BUDGET {
-                    over = true;
+                if !self.observer.battle_choosing_actions(&mut self.emu) {
                     break;
                 }
             }
-            if over {
-                break false;
-            }
-            let outcome = self.observer.battle_outcome(&mut self.emu);
-            if outcome != 0 {
-                break outcome == WON;
-            }
-        };
-        (won, frames, turns)
+        }
+        cps
+    }
+
+    /// A stage-2 trial: from the checkpoint at `turn`'s menu, run the rest
+    /// of the battle under `plan`.
+    fn run_from(&mut self, cp: &Checkpoint, plan: &[u32], turn: usize, abort_at: u32) -> Trial {
+        self.emu.load_state(&cp.state).expect("load");
+        self.drive_from_menu(plan, turn - 1, cp.frames, abort_at)
     }
 
     fn search(&mut self) -> Option<(Vec<u32>, u32, u32)> {
         let mut best: Option<(Vec<u32>, u32, usize)> = None;
         let mut wins = 0;
         for delay in START_DELAYS {
-            let (won, frames, turns) = self.run_plan(&[delay]);
-            wins += won as u32;
-            if won && best.as_ref().is_none_or(|&(_, b, _)| frames < b) {
-                best = Some((vec![delay], frames, turns));
+            // Anything at or past the current best cannot be adopted.
+            let bar = best.as_ref().map_or(FRAME_BUDGET, |&(_, b, _)| b);
+            if let Trial::Done { won, frames, turns } = self.run_full(&[delay], bar) {
+                wins += won as u32;
+                if won && frames < bar {
+                    best = Some((vec![delay], frames, turns));
+                }
             }
         }
         let (mut plan, mut best_frames, mut best_turns) = best?;
+        let mut cps = self.checkpoints(&plan);
         for _pass in 1..=MAX_PASSES {
             let mut adopted = false;
             let pass_turns = best_turns;
             for turn in 1..=pass_turns {
+                if turn > cps.len() {
+                    continue;
+                }
                 for delay in TURN_DELAYS {
                     let mut candidate = plan.clone();
                     if candidate.len() < turn + 1 {
@@ -129,12 +226,17 @@ impl BattleLab {
                         continue;
                     }
                     candidate[turn] = delay;
-                    let (won, frames, turns) = self.run_plan(&candidate);
-                    if won && frames < best_frames {
-                        plan = candidate;
-                        best_frames = frames;
-                        best_turns = turns;
-                        adopted = true;
+                    let cp = &cps[turn - 1];
+                    if let Trial::Done { won, frames, turns } =
+                        self.run_from(cp, &candidate, turn, best_frames)
+                    {
+                        if won && frames < best_frames {
+                            plan = candidate;
+                            best_frames = frames;
+                            best_turns = turns;
+                            adopted = true;
+                            cps = self.checkpoints(&plan);
+                        }
                     }
                 }
             }
@@ -219,7 +321,7 @@ fn main() {
             let total = battle_start + battle;
             println!(
                 "N {n}: seed {seed_state:#06x}, battle starts at {battle_start}, \
-                 {wins}/64 start delays win, best battle {battle} (plan {plan:?}), \
+                 {wins}/64 start delays won (early-pruned trials not counted), best battle {battle} (plan {plan:?}), \
                  total {total} ({:+} vs 9658)",
                 total as i64 - 9658
             );
