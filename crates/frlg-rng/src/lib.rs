@@ -33,6 +33,23 @@ pub const INC: u32 = 24_691;
 /// verified by a test, used to step the stream backwards.
 const MULT_INV: u32 = 4_005_161_829;
 
+/// The affine maps for 2^k steps, `k = 0..32`: `POW2[k] = (a, c)` with
+/// `jump(2^k)(x) = a·x + c`. Computed at compile time by squaring, so `jump`
+/// and `distance_to` pay no setup per call -- they are the inner loop of any
+/// stream search.
+const POW2: [(u32, u32); 32] = {
+    let mut table = [(0u32, 0u32); 32];
+    let (mut a, mut c) = (MULT, INC);
+    let mut k = 0;
+    while k < 32 {
+        table[k] = (a, c);
+        c = a.wrapping_mul(c).wrapping_add(c);
+        a = a.wrapping_mul(a);
+        k += 1;
+    }
+    table
+};
+
 /// One `gRngValue` state. Copy-cheap on purpose: a search forks these by the
 /// thousand.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -63,24 +80,30 @@ impl Rng {
         Rng(self.0.wrapping_sub(INC).wrapping_mul(MULT_INV))
     }
 
-    /// The state `n` steps ahead in O(log n): compose the affine map
-    /// `x ↦ MULT·x + INC` with itself by squaring.
+    /// The state `n` steps ahead in O(log n), applying the precomputed
+    /// power-of-two maps for the set bits of `n`.
     #[must_use]
     pub fn jump(self, n: u32) -> Self {
-        // (a, c) represents x ↦ a·x + c; squaring gives the doubled map.
-        let (mut a, mut c) = (MULT, INC);
-        let (mut ra, mut rc) = (1u32, 0u32); // identity
+        let mut x = self.0;
         let mut n = n;
         while n != 0 {
-            if n & 1 != 0 {
-                rc = a.wrapping_mul(rc).wrapping_add(c);
-                ra = ra.wrapping_mul(a);
-            }
-            c = a.wrapping_mul(c).wrapping_add(c);
-            a = a.wrapping_mul(a);
-            n >>= 1;
+            let k = n.trailing_zeros();
+            let (a, c) = POW2[k as usize];
+            x = a.wrapping_mul(x).wrapping_add(c);
+            n &= n - 1;
         }
-        Rng(ra.wrapping_mul(self.0).wrapping_add(rc))
+        Rng(x)
+    }
+
+    /// Fills `out` with successive `Random()` returns, advancing `self` by
+    /// `out.len()` steps: the bulk form for scans over candidate streams.
+    pub fn fill(&mut self, out: &mut [u16]) {
+        let mut x = self.0;
+        for slot in out {
+            x = x.wrapping_mul(MULT).wrapping_add(INC);
+            *slot = (x >> 16) as u16;
+        }
+        self.0 = x;
     }
 
     /// How many steps ahead `target` is: the unique `n` in `[0, 2^32)` with
@@ -91,20 +114,15 @@ impl Rng {
     /// pinned down by the low k bits of the states alone.
     pub fn distance_to(self, target: Rng) -> u32 {
         let mut n: u32 = 0;
-        let mut cur = self; // == self.jump(n)
-                            // Affine map for 2^k steps, squared as k grows.
-        let (mut a, mut c) = (MULT, INC);
-        for k in 0..32 {
-            let bit = 1u32 << k;
-            if (cur.0 ^ target.0) & bit != 0 {
+        let mut cur = self.0; // == self.jump(n)
+        for (k, &(a, c)) in POW2.iter().enumerate() {
+            if (cur ^ target.0) & (1 << k) != 0 {
                 // Low k bits already match and bit k does not: step 2^k.
-                cur = Rng(a.wrapping_mul(cur.0).wrapping_add(c));
-                n |= bit;
+                cur = a.wrapping_mul(cur).wrapping_add(c);
+                n |= 1 << k;
             }
-            c = a.wrapping_mul(c).wrapping_add(c);
-            a = a.wrapping_mul(a);
         }
-        debug_assert_eq!(cur, target);
+        debug_assert_eq!(cur, target.0);
         n
     }
 }
@@ -168,6 +186,46 @@ mod tests {
         let b = Rng(0x8765_4321);
         let d = a.distance_to(b);
         assert_eq!(a.jump(d), b);
+    }
+
+    #[test]
+    fn fill_equals_repeated_random() {
+        let mut bulk = Rng(0xBEEF);
+        let mut single = Rng(0xBEEF);
+        let mut buf = [0u16; 257];
+        bulk.fill(&mut buf);
+        for (index, &value) in buf.iter().enumerate() {
+            assert_eq!(value, single.random(), "output {index}");
+        }
+        assert_eq!(bulk, single);
+    }
+
+    /// Not a benchmark, a floor: the ops a search leans on must stay orders
+    /// of magnitude under an emulator frame (~1 ms). Run with
+    /// `cargo test --release -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "timing floor, run explicitly in release"]
+    fn ops_are_fast_enough_to_ignore() {
+        let rounds = 10_000_000u32;
+
+        let start = std::time::Instant::now();
+        let mut rng = Rng(1);
+        let mut acc = 0u16;
+        for _ in 0..rounds {
+            acc = acc.wrapping_add(rng.random());
+        }
+        let per_step = start.elapsed() / rounds;
+
+        let start = std::time::Instant::now();
+        let mut d = 0u32;
+        for n in 0..rounds {
+            d = d.wrapping_add(Rng(n).distance_to(Rng(acc as u32 ^ n)));
+        }
+        let per_distance = start.elapsed() / rounds;
+
+        println!("random(): {per_step:?}/op, distance_to(): {per_distance:?}/op (acc {acc} {d})");
+        assert!(per_step < std::time::Duration::from_nanos(50));
+        assert!(per_distance < std::time::Duration::from_nanos(1_000));
     }
 
     #[test]
