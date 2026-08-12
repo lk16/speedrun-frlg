@@ -28,6 +28,9 @@
 pub const MULT: u32 = 1_103_515_245;
 /// The `ISO_RANDOMIZE1` increment, `decompiled/include/random.h:19`.
 pub const INC: u32 = 24_691;
+/// The `ISO_RANDOMIZE2` increment, `decompiled/include/random.h:20` -- the
+/// wild-encounter RNG's own stream, see [`WildRng`].
+pub const INC2: u32 = 12_345;
 
 /// Multiplicative inverse of [`MULT`] mod 2^32 (`MULT` is odd, so it exists);
 /// verified by a test, used to step the stream backwards.
@@ -124,6 +127,41 @@ impl Rng {
         }
         debug_assert_eq!(cur, target.0);
         n
+    }
+}
+
+/// The wild-encounter RNG: a *second*, independent LCG the encounter-rate
+/// dice roll runs on, and nothing else does.
+///
+/// `WildEncounterRandom()` (`decompiled/src/wild_encounter.c:667-671`) applies
+/// `ISO_RANDOMIZE2` -- same multiplier, increment 12345
+/// (`decompiled/include/random.h:20`) -- to `sWildEncounterData.rngState` and
+/// returns the top 16 bits. The state is seeded exactly once per new game,
+/// `SeedWildEncounterRng(Random())` (`decompiled/src/new_game.c:103`,
+/// `src/wild_encounter.c:661-665`: the u16 seed zero-extended), lives in EWRAM
+/// outside the save, and advances only when a rate test actually rolls
+/// (`DoWildEncounterRateDiceRoll`, `src/wild_encounter.c:302-307`). So the
+/// pass/fail sequence of encounter-rate tests is a function of (seed, how many
+/// tests have run) -- frame timing cannot reach it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct WildRng(pub u32);
+
+impl WildRng {
+    /// The state after `SeedWildEncounterRng(seed)`.
+    pub fn seeded(seed: u16) -> Self {
+        WildRng(seed as u32)
+    }
+
+    /// `WildEncounterRandom()`: advance one step, return the top 16 bits.
+    pub fn random(&mut self) -> u16 {
+        self.0 = self.0.wrapping_mul(MULT).wrapping_add(INC2);
+        (self.0 >> 16) as u16
+    }
+
+    /// The state one step ahead, without mutating.
+    #[must_use]
+    pub fn next(self) -> Self {
+        WildRng(self.0.wrapping_mul(MULT).wrapping_add(INC2))
     }
 }
 

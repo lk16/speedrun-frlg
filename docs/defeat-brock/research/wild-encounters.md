@@ -12,9 +12,15 @@ where the source text alone cannot pin behaviour.
 - **`WildEncounterRandom()`**: its own LCG `x = 1103515245·x + 12345` over
   `sWildEncounterData.rngState` (`src/wild_encounter.c:667-671`, `include/random.h:20`),
   used **only** by the encounter-rate dice roll (`DoWildEncounterRateDiceRoll`,
-  `src/wild_encounter.c:302-307`). Seeded exactly once per new game:
-  `SeedWildEncounterRng(Random())` (`src/new_game.c:103`) — which also consumes one
-  `Random()`. The state lives in EWRAM, not the save (`src/wild_encounter.c:34`).
+  `src/wild_encounter.c:302-307`). Seeding: `SeedWildEncounterRng(Random())` runs from
+  `ResetMenuAndMonGlobals` (`src/new_game.c:103`), which a boot reaches **twice** — the
+  copyright screen (`src/intro.c:1004`) and the title-screen exit (`src/title_screen.c:737`,
+  immediately after `SeedRngAndSetTrainerId` at `:735`). *Measured on the committed rival-1
+  route (frlg-mon `tests/emulator.rs`): seeds at frames 447 and 594, the second on the same
+  frame as the main reseed.* So the live wild seed is one `Random()` output of the
+  just-timer-seeded main stream: **the title-exit press timing picks both streams at once**,
+  and the naming-screen reseed later does not touch the wild one. The state lives in EWRAM,
+  not the save (`src/wild_encounter.c:34`).
 
 **Consequence:** whether an *eligible* grass step passes the 21%/14% rate test depends only
 on (seed, number of rate tests so far) — not on frame timing. Frame delays reach only the
@@ -101,13 +107,14 @@ in Metapod↔Kakuna placement.
 
 ## What this means for routing (plan, to be measured)
 
-- The wild-LCG seed is fixed at NEW GAME confirm; its entire pass/fail sequence is
+- The wild-LCG seed is fixed at the title-exit press; its entire pass/fail sequence is
   computable. The count of eligible grass-step tests before each fated "pass" index is the
   budget the path has to live within — spent tests can be *skipped* only by the 5% cooldown
   gate (first 6-7 steps per map entry, which we *want* to fail and 95% does) or avoided by
   stepping on non-encounter tiles.
-- Dials that move the wild seed: any frame shift before `src/new_game.c:103` (1 frame ≈ one
-  LCG step of difference in the seeding `Random()` — cheap, upstream of everything).
+- The wild seed's dial is the title-screen exit frame — the same dial that picks the main
+  stream's seed and the trainer ID. One frame of title delay buys a completely fresh wild
+  pass/fail sequence *and* a fresh intro stream, at 1 frame each, upstream of everything.
 - Dials that move a *realized* encounter's mon (if we ever want one): frames before the
   triggering step move nature/PID/IVs at 1-2 rolls per frame.
 - A battle resets the cooldown (`src/battle_setup.c:205`), so each trainer fight buys 6-7
