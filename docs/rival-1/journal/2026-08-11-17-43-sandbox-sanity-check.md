@@ -1,0 +1,256 @@
+# Sandbox sanity check -- 2026-08-11
+
+> **Status, same day: all nine worked through on the host.** Left as written, because a snapshot
+> that gets edited to match what was done stops being evidence of what was found. Two of the fixes
+> turned out to be wrong about the world and the corrections matter more than the report:
+>
+> - **Problem 1** cannot be done by recording a movie in the GUI at all -- BizHawk refuses a
+>   deterministic movie without a GBA BIOS, which the host does not have. `route/template.bk2` is
+>   generated instead, by `tools/bk2-template.sh`, out of BizHawk's own assemblies.
+> - **Problem 3** has no tag to pin to: BizHawk 2.11.1 ships an *untagged* mGBA master commit
+>   (`94b1578f`, self-reported 0.11.0), and `crates/mgba-sys/csrc/shim.c` does not compile against
+>   it. `MGBA_REF` is now an explicit `0.10.5`, both versions are in the deps `MANIFEST`, and
+>   `bin/frlg-doctor` repeats the delta at every startup. Porting the shim is still open.
+>
+> `docs/rival-1/journal/` (2026-08-11) has the full account; `docs/rival-1/route.md` has what tier 2 still needs.
+
+A full pass over the sandbox: mounts, image, env wiring, toolchain, both ROM builds, the Rust
+workspace, the tier-1 harness end to end, the artifacts budget and the network policy. Run in
+sandbox `frlg-1` on image `frlg-sandbox:1`.
+
+**Headline: nothing is broken.** `bin/frlg-doctor` is green, both game versions build byte-exact,
+the whole test suite passes and the committed route replays. Everything below is either a *gap*
+(something the setup promises but has never been made to exist) or a *latent risk* (something that
+will only bite once tier 2 runs). They are ordered by what would cost the most to discover late.
+
+Every fix here is host-side, image-side or in-repo. **None needs a new allowlisted domain** -- the
+two that involve downloads (mGBA, BizHawk) are already done by `tools/host-prep.sh` on the host,
+which has the network.
+
+---
+
+## What passed (evidence)
+
+| Check | Result |
+| --- | --- |
+| `bin/frlg-doctor` | all green, exit 0 (mounts, image, env, toolchain, network, budget) |
+| FireRed `make COMPARE=1 && make syms` | exit 0, `41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc`, matches `firered.sha1` and the copy in `$FRLG_ARTIFACTS/rom` |
+| LeafGreen `make GAME_VERSION=LEAFGREEN COMPARE=1` | exit 0, `pokeleafgreen.gba: OK` -- the claim in `docs/sandbox.md` is now tested |
+| `cargo fmt --all --check` / `cargo clippy --all-targets` | clean, no warnings |
+| `cargo test --all` | 39 tests, 0 failures (20 + 4 unit, 15 driving the real ROM) |
+| `cargo build --release`, `frlg info` | ok; ROM/sym auto-discovery through `$FRLG_ARTIFACTS` works |
+| `frlg route verify` | 8/8 segments replay, 11873 frames, tier 1 ok, 11.3 s (~1050 frames/s) |
+| `frlg run --frames 3000 --png` | 240x160 PNG, visually the FireRed title screen |
+| sccache | wired via `~/.cargo/config.toml` `[build] rustc-wrapper`; 98.8% hit rate this session |
+| Vendored crates, `CARGO_NET_OFFLINE` | offline build works, no crates.io contact |
+| Writable decomp copy vs read-only mount | 0 files differ; only generated headers added (5 in `src/`) |
+| `$FRLG_DECOMP_RO` write attempt | refused, read-only as intended |
+| Network policy | crates.io / pypi.org / github.com / tasvideos.org all 403 by policy; api.anthropic.com reachable |
+| Artifacts budget | 91 MB total against a 20 GiB ceiling; `frlg-artifacts-gc` runs clean |
+| Disk | 22 GiB free on `/`; `~/decomp` is 245 MB with both versions built |
+| Git | no non-sample hooks, nothing to bypass |
+
+---
+
+## Problems
+
+### 1. Tier 2 has never been possible, and nothing in the sandbox can change that
+
+**Severity: blocking.** This is the one that matters.
+
+`route/template.bk2` does not exist. All eight ledger entries say so verbatim
+(`route/rival-1/ledger.json`, `"tier2": "blocked: no route/template.bk2 ..."`), there is no `.bk2` writer in
+the codebase by design (`docs/harness.md`), and the file cannot be produced here -- it needs BizHawk,
+which needs Mono/OpenAL/Lua that this image does not have and should not get.
+
+So the project has a fully verified tier 1 and an acceptance tier that has never run once. Every
+frame saved from here is provisional in exactly the same way, and the longer it goes the more route
+work rides on an unexercised export path.
+
+**Fix (host, one time, ~15 min).** `tools/host-prep.sh` already prints this as step 2 of its
+"next, on the host, once" block -- it has simply never been done:
+
+1. `sudo apt install mono-complete libopenal1 liblua5.4-0 lsb-release`
+2. Open BizHawk 2.11.1, load `$FRLG_ARTIFACTS/rom/pokefirered.gba`, record a one-frame movie,
+   save it as `route/template.bk2` **in the repo** and commit it.
+
+That single file settles both unknowns at once: `SyncSettings`/`Header` to copy verbatim, and the
+`Input Log` column order, which its own `LogKey` line states outright and which is otherwise only in
+compiled CIL. Once it is committed the `.bk2` writer can be built in-sandbox against it, with the
+round-trip check (`.bk2` decodes back to the canonical `.ilog`) that `docs/sandbox.md` asks for.
+
+### 2. The tier-2 request loop has a queue, a results dir, and no consumer
+
+**Severity: high.** `$FRLG_ARTIFACTS/verify/queue/` and `.../results/` are created by the kit startup
+and are both empty. Nothing on the host polls the queue; `tools/host-prep.sh` never mentions
+`verify/` except to `mkdir` it. There is also no agreed result format, so even if a human ran a
+replay by hand, the next session would have to guess how to read the answer.
+
+A queue nobody drains is worse than no queue: it makes "queue it and keep working" look like
+progress.
+
+**Fix (host).** A small runner on the host, plus a written contract in the repo:
+
+- `tools/verify-runner.sh` (runs on the host, not here): for each `queue/<id>.bk2`, replay it in
+  BizHawk 2.11.1 headless-ish via `EmuHawkMono.sh --movie=... --dump-frames=...` or a Lua script,
+  then write `results/<id>.json` and delete the queue entry.
+- The result contract, committed here so both sides agree:
+  `{"id", "bk2_sha1", "ilog_sha1", "rom_sha1", "bizhawk_version", "verdict": "pass|desync|error",
+  "desync_frame": <int|null>, "notes"}`.
+- Make `bin/frlg-doctor` print a one-line summary of `verify/results` so a new session sees answers
+  without being told to look.
+
+Until the runner exists, say so in `docs/rival-1/route.md`: tier 2 is *requestable*, not *serviced*.
+
+### 3. The tier-1 and tier-2 mGBA cores are not pinned to each other
+
+**Severity: high, silent.** Tier 1 runs mGBA **0.10.5** (`$FRLG_DEPS/MANIFEST`, `.resolved/mgba`,
+and the `0.10.5` string in `libmgba.so`). Tier 2 runs whatever mGBA BizHawk 2.11.1 bundles, and that
+version **cannot be determined in this sandbox**: `$BIZHAWK_HOME/dll/libmgba.dll.so` has its version
+symbols stripped -- 4500 strings, none of them a version, only a build path
+(`/home/vboxuser/Desktop/BizHawk/submodules/mgba/...`).
+
+`tools/host-prep.sh` resolves `MGBA_REF=auto` to "newest 0.10.x tag" and notes at line 343 that the
+bundled core's version is not embedded. So the two tiers are on independently chosen cores. Any
+emulation-behaviour delta between them is a desync that tier 1 is structurally incapable of seeing,
+and it would surface as "the movie diverges at frame N" with no way to attribute it.
+
+**Fix (host, needs a deps rebuild + fresh sandbox).** Read the core version off BizHawk's
+Help -> About / the mGBA core settings on the host (Mono is being installed for problem 1 anyway),
+then rebuild the dependency pinned to it:
+
+```sh
+MGBA_REF=0.10.x tools/host-prep.sh --force mgba     # the tag BizHawk 2.11.1 actually ships
+```
+
+The `MGBA_REF` knob already exists; only `auto` is wrong. Then record the BizHawk core version in
+`$FRLG_DEPS/MANIFEST` next to `bizhawk 2.11.1`, and have `bin/frlg-doctor` fail if the manifest's
+`mgba` line and the recorded BizHawk core version disagree -- so the mismatch is one red line at
+startup instead of an unexplained desync three sessions later.
+
+### 4. The auto-loaded parent `CLAUDE.md` contradicts this sandbox on nearly every point
+
+**Severity: medium, but it wastes turns on every single session.** There is no `CLAUDE.md` in this
+repository. What gets loaded is `/home/luuk/projects/CLAUDE.md` (19 KB of generic sbx boilerplate),
+and it instructs the agent to do things that are impossible or forbidden here:
+
+- "npm, pip and uv are already available for package management", "You have sudo permissions, so you
+  can install necessary packages" -- `apt` and any index-backed `pip install` are dead by design.
+- Long sections on `sbx policy allow network`, publishing ports, `host.docker.internal`, Docker
+  networks, .NET Aspire -- none apply; the closed network *is* the project.
+- Push/PR workflow with `gh` -- github.com is 403 here.
+- "Use cargo build/test/fmt/clippy" is right, but says nothing about the ROM, the two verification
+  tiers, or the citation rule.
+
+`docs/sandbox.md` (the `prompt_file`) says the opposite of most of it, so every session starts with
+two contradictory sets of instructions and has to work out which is real.
+
+**Fix (in-repo, 20 lines).** Add `speedrun-frlg/CLAUDE.md` -- the nearest file wins, and it is
+committed, so it survives. It should be short and mostly pointers: run `bin/frlg-doctor` first, read
+`docs/sandbox.md`, the network is closed on purpose, every routing claim cites `decompiled/`, and
+explicitly countermand the parent's install/push/port advice. Trimming the parent file on the host is
+the cleaner fix but it lives outside this repo, so it cannot be committed from here.
+
+### 5. `~/decomp` is copied once and never re-checked against the source
+
+**Severity: medium.** The kit startup copies the read-only checkout to `~/decomp` only
+`if [ ! -d "$FRLG_DECOMP" ]`. `~/decomp` is on the sandbox's own disk, which survives a stop/start
+of the same sandbox. If the host updates its pokefirered checkout (currently at `70b76a15d`) and the
+sandbox is restarted rather than recreated, the copy silently stays stale -- and since
+`decompiled/` symlinks to `~/decomp`, every citation would then point at a tree that no longer
+matches the host's. Nothing detects it: the copy also drops `.git`, so the tree carries no
+provenance at all.
+
+**Fix (host, kit spec).** In `.sbx/kit/spec.yaml`, stamp the source revision at copy time and re-copy
+when it moves:
+
+```sh
+want=$(git -C "$FRLG_DECOMP_RO" rev-parse HEAD 2>/dev/null || echo unknown)
+have=$(cat "$FRLG_DECOMP/.frlg-src" 2>/dev/null || echo none)
+[ "$want" = "$have" ] || rm -rf "$FRLG_DECOMP"      # then the existing copy block, ending with:
+printf '%s\n' "$want" > "$FRLG_DECOMP/.frlg-src"
+```
+
+and have `bin/frlg-doctor` print that revision, so a session can quote what it cited against.
+
+### 6. Nothing verifies the writable decomp copy is still faithful
+
+**Severity: medium.** Today it is: `diff -rq` over `src/` and `include/` shows **0 files differing**,
+only 5 generated headers added by the build (`map_groups.h`, `items.h`, ...). But `~/decomp` is
+writable, the build writes into it, and an accidental edit there would silently change what every
+`decompiled/foo.c:123` citation in the docs and journal means. That is the one class of corruption
+this project cannot afford, since citations are its substitute for a network.
+
+**Fix (in-repo, cheap).** Add to `bin/frlg-doctor`:
+
+```sh
+chk "decomp copy is faithful" sh -c '
+  diff -rq "$FRLG_DECOMP_RO/src" "$FRLG_DECOMP/src" 2>&1 | grep -q differ && exit 1
+  diff -rq "$FRLG_DECOMP_RO/include" "$FRLG_DECOMP/include" 2>&1 | grep -q differ && exit 1
+  echo "no source file differs from the read-only mount"'
+```
+
+It ran in about a second here. `Only in` lines are expected and must not fail it -- generated headers
+are legitimately citable and exist only in the copy.
+
+### 7. The Python wheelhouse is plumbing with nothing behind it
+
+**Severity: low, but it is a trap.** `$FRLG_DEPS/wheels` is empty, `MANIFEST` says `wheels empty`,
+and `tools/requirements.txt` -- the file `do_wheels()` reads -- does not exist. Meanwhile
+`PIP_NO_INDEX=1` and `PIP_FIND_LINKS` are exported into every shell, which makes it look like there
+is an offline install path. There is not: `pip install X` stops at PEP 668
+("externally-managed-environment") before `--no-index` is even consulted, and `python3 -m venv`
+produces an environment with no pip.
+
+The stdlib does cover what the project needs -- `struct`, `zipfile`, `hashlib`, `json`, `zlib`,
+`ctypes` all import fine, and a `.bk2` is a zip.
+
+**Fix (pick one, host).** Either commit a `tools/requirements.txt` and re-run
+`tools/host-prep.sh --force wheels` so the wheelhouse is real, or -- better, given nothing needs it --
+drop `PIP_NO_INDEX`/`PIP_FIND_LINKS` from the kit's `10-frlg.sh` and the `wheels` step from
+`host-prep.sh`, and state "Python is stdlib-only" in `docs/sandbox.md`. Half-built plumbing invites a
+session to spend a turn discovering it is fake.
+
+### 8. `bin/frlg-doctor` does not check the things that have actually gone wrong
+
+**Severity: low (it is the fix vehicle for most of the above).** It verifies mounts, the image, env
+wiring, the toolchain and the network -- but not: that a ROM exists in `$FRLG_ARTIFACTS/rom` and
+matches `firered.sha1`; that sccache is wired (it checks the binary runs, not that
+`~/.cargo/config.toml` names it as `rustc-wrapper` -- an easy thing to lose, since it is generated,
+not committed); that `route/template.bk2` exists; the mGBA pin from problem 3; the decomp revision
+from problem 5 and the faithfulness check from problem 6; and whether `verify/results` has anything
+new in it.
+
+**Fix (in-repo).** Add those seven checks. The ROM one should be `have` + a sha1 comparison, not a
+rebuild.
+
+### 9. Small stuff, worth a line each
+
+- **Dangling clipboard shims.** The kit's first startup step deletes `/usr/local/bin/clipboard-bridge`
+  and `sbx-clipboard`, but leaves `/usr/local/bin/xclip` and `wl-paste`, both of which `exec
+  sbx-clipboard`. They now fail with exit 127 instead of the exit 0 they were written to return.
+  *Fix (kit spec):* add both to the `rm -f` list.
+- **Doc drift in `docs/harness.md`.** "18 unit tests and 10 that drive the real ROM" -- the real
+  counts are 24 unit (20 in `frlg-emu`, 4 in `frlg-route`) and 15 ROM-driving (10 `harness.rs`,
+  4 `observe.rs`, 1 `route.rs`). *Fix (in-repo):* update the numbers, or stop quoting counts.
+- **Doc drift in `docs/sandbox.md`.** `~/decomp` is described as "81 MB unpacked, ~1 GB once built";
+  it is 245 MB with *both* FireRed and LeafGreen built. The disk headroom is larger than advertised.
+- **`MANIFEST` has an empty version field.** `sysroot binutils-arm-none-eabi ` records no version, so
+  the deps tree cannot be tied to an assembler (the image ships 2.45.50). *Fix (host):* stamp
+  `arm-none-eabi-as --version` into the manifest line in `host-prep.sh`.
+- **`decompiled/` exists only after doctor runs.** `bin/frlg-doctor` recreates the gitignored symlink,
+  which is fine as long as doctor is run first -- but a session that skips it finds every citation in
+  the docs dangling. *Fix (kit spec):* create the symlink in the startup step that copies the decomp,
+  and let doctor keep its idempotent recreate as a backstop.
+
+---
+
+## Suggested order
+
+1. Record and commit `route/template.bk2` (problem 1). Everything about tier 2 is downstream of it.
+2. Pin `MGBA_REF` to BizHawk's core and rebuild deps (problem 3) -- do it in the same host session,
+   since both need BizHawk open.
+3. Add the repo `CLAUDE.md` (problem 4) and the doctor checks (problems 6, 8). In-sandbox, cheap.
+4. Kit-spec changes: decomp revision stamp, symlink creation, clipboard shim cleanup (problems 5, 9).
+   These need `box config` and a fresh sandbox to take effect.
+5. Decide the Python question (problem 7) and write the tier-2 runner (problem 2).

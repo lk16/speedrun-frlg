@@ -336,6 +336,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "frlg-battle"
+version = "0.1.0"
+dependencies = [
+ "frlg-emu",
+ "frlg-rng",
+ "frlg-route",
+]
+
+[[package]]
 name = "frlg-cli"
 version = "0.1.0"
 dependencies = [
@@ -357,6 +366,14 @@ dependencies = [
  "png",
  "sha1",
  "thiserror",
+]
+
+[[package]]
+name = "frlg-rng"
+version = "0.1.0"
+dependencies = [
+ "frlg-emu",
+ "frlg-route",
 ]
 
 [[package]]

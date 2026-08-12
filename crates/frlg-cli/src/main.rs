@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use frlg_emu::{check_log_rom, keys, Emu, InputLog, SymbolTable, Target};
 use frlg_route::segments::Tuning;
-use frlg_route::{ledger, Starter};
+use frlg_route::{ledger, RouteError, Starter};
 
 #[derive(Parser)]
 #[command(name = "frlg", about = "Headless mGBA harness for the FireRed TAS")]
@@ -50,7 +50,7 @@ enum RouteCommand {
     Tune(RouteArgs),
     /// Print the ledger as it stands, without running anything.
     Status {
-        #[arg(long, default_value = "route/ledger.json")]
+        #[arg(long, default_value = "route/rival-1/ledger.json")]
         ledger: PathBuf,
     },
     /// Export the committed logs as one BizHawk movie for tier 2.
@@ -65,7 +65,7 @@ enum RouteCommand {
 
 #[derive(Args)]
 struct ExportArgs {
-    #[arg(long, default_value = "route/ledger.json")]
+    #[arg(long, default_value = "route/rival-1/ledger.json")]
     ledger: PathBuf,
 
     /// The BizHawk-written movie whose container and settings are copied
@@ -94,14 +94,16 @@ struct RouteArgs {
     sym: Option<PathBuf>,
 
     /// Which starter to route. The rival always takes the one that beats it.
-    #[arg(long, default_value = "squirtle")]
-    starter: String,
+    /// Defaults to what the ledger records, else squirtle -- so a bare
+    /// `frlg route verify` follows the committed route across starters.
+    #[arg(long)]
+    starter: Option<String>,
 
     /// Where the per-segment input logs go.
-    #[arg(long, default_value = "route/logs")]
+    #[arg(long, default_value = "route/rival-1/logs")]
     logs: PathBuf,
 
-    #[arg(long, default_value = "route/ledger.json")]
+    #[arg(long, default_value = "route/rival-1/ledger.json")]
     ledger: PathBuf,
 
     /// Checkpoint savestates. Defaults to $FRLG_ARTIFACTS/states/route, and is
@@ -118,6 +120,13 @@ struct RouteArgs {
     /// value if one is there, else the built-in default; `tune` sweeps it.
     #[arg(long)]
     turn_hold: Option<usize>,
+
+    /// Frames A/B is held per one-frame release in dialogue mashes (1 = the
+    /// plain press-release mash). Held frames print text at full speed
+    /// (decompiled/src/text.c:639-650). Defaults like --turn-hold; `tune`
+    /// sweeps it.
+    #[arg(long)]
+    text_hold: Option<usize>,
 }
 
 #[derive(Args)]
@@ -285,21 +294,44 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             for tuning in Tuning::variants() {
                 // Sweep into a scratch directory: a variant that loses must not
                 // leave its logs behind claiming to be the route.
-                let scratch = std::env::temp_dir().join(format!("frlg-tune-{}", tuning.turn_hold));
+                let scratch = std::env::temp_dir().join(format!(
+                    "frlg-tune-{}-{}",
+                    tuning.turn_hold, tuning.text_hold
+                ));
                 let paths = ledger::Paths {
                     logs: scratch.join("logs"),
                     ledger: scratch.join("ledger.json"),
                     states: None,
                 };
-                let built = ledger::build(&rom, &sym, starter, tuning, &paths, |_| {})?;
-                let total = built.total_frames;
-                println!("turn_hold {:>2}  {total:>6} frames", tuning.turn_hold);
-                if best.as_ref().is_none_or(|(_, seen)| total < *seen) {
-                    best = Some((tuning, total));
+                // A variant whose stream cannot win its battle is an answer
+                // -- this knob value loses -- not a reason to abandon the
+                // sweep. turn_hold 7 on the 2026-08-12 route was exactly
+                // that: none of 64 start delays won.
+                match ledger::build(&rom, &sym, starter, tuning, &paths, |_| {}) {
+                    Ok(built) => {
+                        let total = built.total_frames;
+                        println!(
+                            "turn_hold {:>2}  text_hold {:>2}  {total:>6} frames",
+                            tuning.turn_hold, tuning.text_hold
+                        );
+                        if best.as_ref().is_none_or(|(_, seen)| total < *seen) {
+                            best = Some((tuning, total));
+                        }
+                    }
+                    Err(ledger::LedgerError::Route(RouteError::Timeout { what, .. })) => {
+                        println!(
+                            "turn_hold {:>2}  text_hold {:>2}  loses ({what})",
+                            tuning.turn_hold, tuning.text_hold
+                        );
+                    }
+                    Err(other) => return Err(other.into()),
                 }
             }
             let (tuning, total) = best.expect("Tuning::variants is not empty");
-            println!("\nbest: turn_hold {} at {total} frames", tuning.turn_hold);
+            println!(
+                "\nbest: turn_hold {} text_hold {} at {total} frames",
+                tuning.turn_hold, tuning.text_hold
+            );
 
             let paths = ledger::Paths {
                 logs: args.logs.clone(),
@@ -315,7 +347,10 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             println!("rom     {}", led.rom_sha1);
             println!("boot    {}", led.bios);
             println!("starter {}", led.starter);
-            println!("tuning  turn_hold {}", led.tuning.turn_hold);
+            println!(
+                "tuning  turn_hold {}  text_hold {}",
+                led.tuning.turn_hold, led.tuning.text_hold
+            );
             println!("frames  {}", led.total_frames);
             println!();
             for s in &led.segments {
@@ -385,7 +420,7 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
             "warning: this route was built on mGBA's HLE BIOS, but BizHawk replays \
              movies from a real BIOS. Expect a desync: put the BIOS at \
              $BIZHAWK_HOME/Firmware/GBA_bios.rom and rebuild the route first \
-             (docs/route.md). Exporting anyway -- the movie still exercises the \
+             (docs/rival-1/route.md). Exporting anyway -- the movie still exercises the \
              tier-2 pipeline."
         );
     }
@@ -401,7 +436,33 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
         }
     };
 
-    let written = frlg_route::bk2::export(&args.template, &combined, &out)
+    // The ROM first: the movie's header carries its name and hash, and the
+    // trace replay below runs on it. It must be the ledger's ROM -- an
+    // export replayed against the wrong version would desync on frame 1 and
+    // the error should say why, not where. No --rom means the ledger's sha1
+    // finds it, same as `route verify`.
+    let rom = match &args.rom.rom {
+        Some(path) => path.clone(),
+        None => frlg_emu::rom_path_for_sha1(&led.rom_sha1)
+            .or_else(frlg_emu::default_rom_path)
+            .context("no ROM matching the ledger's rom_sha1: pass --rom or build it into $FRLG_ARTIFACTS/rom")?,
+    };
+    let rom_file_sha1 = frlg_emu::file_sha1(&rom)?;
+    if rom_file_sha1 != rom_sha1 {
+        bail!(
+            "{} is sha1 {}, but the ledger's logs were routed against {}; \
+             pass the matching ROM with --rom",
+            rom.display(),
+            hex::encode(rom_file_sha1),
+            led.rom_sha1
+        );
+    }
+    let rom_name = rom
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .context("the ROM path has no printable file name for the movie header")?;
+
+    let written = frlg_route::bk2::export(&args.template, &combined, rom_name, &out)
         .with_context(|| format!("exporting {}", out.display()))?;
     let bk2_sha1 = hex::encode(Sha1::digest(fs::read(&out)?));
 
@@ -411,8 +472,12 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
     // so the trace lets tier 2 name the *first* divergent frame instead of
     // reporting "the final fingerprint differs". The replay also re-proves
     // the movie's frames reach the ledger's final fingerprint from reset.
-    let rom = resolve_rom(&args.rom)?;
-    let syms = resolve_syms(&args.sym)?;
+    // Symbols follow the ROM: gRngValue's address differs per version.
+    let sym_path = args.sym.clone().or_else(|| {
+        let sibling = rom.with_extension("sym");
+        sibling.is_file().then_some(sibling)
+    });
+    let syms = resolve_syms(&sym_path)?;
     let rng = syms
         .get("gRngValue")
         .context("gRngValue is not in the symbol table; pass --sym or set $FRLG_SYM")?;
@@ -461,7 +526,7 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
     });
 
     if queued {
-        // The request half of the tier-2 contract (docs/route.md): what the
+        // The request half of the tier-2 contract (docs/rival-1/route.md): what the
         // sandbox expects of this movie, so the runner's verdict can say
         // more than "it ran".
         let request = serde_json::json!({
@@ -491,22 +556,56 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
     Ok(())
 }
 
+/// The ROM, symbols and starter a route command should use. Explicit flags
+/// win; otherwise the committed ledger decides -- it pins its ROM by sha1 and
+/// records its starter, and a bare `frlg route verify` must follow the route
+/// across versions and starters rather than assume FireRed/Squirtle. Only
+/// with no ledger at all do the FireRed defaults apply.
 fn route_setup(args: &RouteArgs) -> Result<(PathBuf, PathBuf, Starter)> {
-    let rom = resolve_rom(&args.rom)?;
+    let led = ledger::read(&args.ledger).ok();
+
+    let rom = match &args.rom.rom {
+        Some(path) => path.clone(),
+        None => led
+            .as_ref()
+            .and_then(|l| frlg_emu::rom_path_for_sha1(&l.rom_sha1))
+            .or_else(frlg_emu::default_rom_path)
+            .context(
+                "no ROM found: pass --rom, or set $FRLG_ROM, or build the ROM \
+                 and copy it to $FRLG_ARTIFACTS/rom",
+            )?,
+    };
     let sym = match &args.sym {
         Some(path) => path.clone(),
-        None => frlg_emu::default_sym_path().context(
-            "no pokefirered.sym found: pass --sym, or set $FRLG_SYM, or copy it \
-             into $FRLG_ARTIFACTS/rom",
-        )?,
+        None => {
+            let sibling = rom.with_extension("sym");
+            if sibling.is_file() {
+                sibling
+            } else {
+                frlg_emu::default_sym_path().context(
+                    "no .sym found next to the ROM or in $FRLG_ARTIFACTS/rom: \
+                     pass --sym or set $FRLG_SYM",
+                )?
+            }
+        }
     };
-    let starter = match args.starter.to_lowercase().as_str() {
-        "bulbasaur" => Starter::Bulbasaur,
-        "squirtle" => Starter::Squirtle,
-        "charmander" => Starter::Charmander,
+    let starter_name = match &args.starter {
+        Some(name) => name.clone(),
+        None => led
+            .as_ref()
+            .map(|l| l.starter.clone())
+            .unwrap_or_else(|| "squirtle".to_string()),
+    };
+    Ok((rom, sym, parse_starter(&starter_name)?))
+}
+
+fn parse_starter(name: &str) -> Result<Starter> {
+    match name.to_lowercase().as_str() {
+        "bulbasaur" => Ok(Starter::Bulbasaur),
+        "squirtle" => Ok(Starter::Squirtle),
+        "charmander" => Ok(Starter::Charmander),
         other => bail!("unknown starter {other:?}: bulbasaur, squirtle or charmander"),
-    };
-    Ok((rom, sym, starter))
+    }
 }
 
 /// The knobs a build should use: what was asked for, else what the ledger the
@@ -517,6 +616,9 @@ fn tuning_for(args: &RouteArgs) -> Tuning {
         .unwrap_or_default();
     if let Some(turn_hold) = args.turn_hold {
         tuning.turn_hold = turn_hold;
+    }
+    if let Some(text_hold) = args.text_hold {
+        tuning.text_hold = text_hold;
     }
     tuning
 }

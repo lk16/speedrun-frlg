@@ -21,6 +21,65 @@ mod main_off {
     pub const IN_BATTLE_BIT: u8 = 1 << 1;
 }
 
+/// `struct SaveBlock2`, `decompiled/include/global.h:327`, offsets from the
+/// members' own comments.
+mod sb2_off {
+    /// `/*0x000*/ u8 playerName[PLAYER_NAME_LENGTH + 1]` -- 7 chars + EOS.
+    pub const PLAYER_NAME: u32 = 0x000;
+    /// `/*0x014*/ u16` bitfield: `optionsTextSpeed:3` then
+    /// `optionsWindowFrameType:5`, `optionsSound:1`, `optionsBattleStyle:1`,
+    /// `optionsBattleSceneOff:1`. GCC allocates little-endian bitfields from
+    /// the least significant bit, so textSpeed is bits 0-2 and battleSceneOff
+    /// is bit 10 -- `tests/observe.rs` checks both against the running game.
+    pub const OPTIONS: u32 = 0x014;
+    pub const TEXT_SPEED_MASK: u16 = 0x0007;
+    pub const BATTLE_SCENE_OFF_BIT: u16 = 1 << 10;
+}
+
+/// `OPTIONS_TEXT_SPEED_FAST`, `decompiled/include/constants/global.h:101`.
+pub const TEXT_SPEED_FAST: u16 = 2;
+
+/// `EOS`, `decompiled/include/characters.h:182` -- names are EOS-terminated.
+pub const EOS: u8 = 0xFF;
+/// `PLAYER_NAME_LENGTH`, `decompiled/include/constants/global.h:64`.
+pub const PLAYER_NAME_LENGTH: u32 = 7;
+
+/// `struct Task`, `decompiled/include/task.h:15`: `TaskFunc func` at 0x0,
+/// `bool8 isActive` at 0x4, then prev/next/priority and `s16 data[16]` --
+/// 40 bytes a task, `NUM_TASKS 16` of them in `gTasks` (`task.h:10`).
+mod task_off {
+    pub const FUNC: u32 = 0x0;
+    pub const IS_ACTIVE: u32 = 0x4;
+    /// `s16 data[NUM_TASK_DATA]` -- `data[0]` is what the `#define tState
+    /// data[0]` convention across the decomp reads.
+    pub const DATA: u32 = 0x8;
+    pub const SIZE: u32 = 40;
+    pub const COUNT: u32 = 16;
+}
+
+/// The naming screen's input gate: `SetInputState` writes the input task's
+/// `tState` (`data[0]`, `decompiled/src/naming_screen.c:1554`), and only
+/// `INPUT_STATE_ENABLED` (= 1, the enum at `naming_screen.c:135`) routes
+/// presses to the keyboard -- `Input_Disabled` drops them.
+pub const NAMING_INPUT_ENABLED: i16 = 1;
+
+/// `struct OptionMenu`, `decompiled/src/option_menu.c:38`: `u16 option[7]`,
+/// `/*0x0E*/ u16 cursorPos`, `/*0x10*/ u8 loadState`. `Task_OptionMenu`
+/// (`option_menu.c:359`) only feeds input to `OptionMenu_ProcessInput` in
+/// `loadState` 2, after the fade-in -- presses before that are dropped.
+mod option_menu_off {
+    pub const OPTIONS: u32 = 0x00;
+    pub const CURSOR_POS: u32 = 0x0E;
+    pub const LOAD_STATE: u32 = 0x10;
+    pub const ACCEPTING_INPUT: u8 = 2;
+}
+
+/// `MENUITEM_TEXTSPEED` / `MENUITEM_BATTLESCENE`
+/// (`decompiled/src/option_menu.c:20`) -- rows of the option menu, and
+/// indices into its `option[]`.
+pub const MENUITEM_TEXTSPEED: u32 = 0;
+pub const MENUITEM_BATTLESCENE: u32 = 1;
+
 /// `struct SaveBlock1`, `decompiled/include/global.h:759`, whose members carry
 /// their own offsets in the comments. `struct WarpData` is
 /// `decompiled/include/global.h:392`: `s8 mapGroup; s8 mapNum; s8 warpId; s16 x, y;`.
@@ -40,6 +99,9 @@ mod sb1_off {
     /// `/*0x1000*/ u16 vars[VARS_COUNT]` -- the script variables, indexed from
     /// `VARS_START 0x4000` (`decompiled/include/constants/vars.h:4`).
     pub const VARS: u32 = 0x1000;
+    /// `/*0x3A4C*/ u8 rivalName[PLAYER_NAME_LENGTH + 1]`
+    /// (`decompiled/include/global.h:813`).
+    pub const RIVAL_NAME: u32 = 0x3A4C;
 }
 
 /// `VARS_START`, the id every `VAR_*` constant is an offset from.
@@ -97,10 +159,16 @@ pub struct Observer {
     g_save_block1_ptr: u32,
     g_battle_outcome: u32,
     g_battle_mons: u32,
+    g_battle_main_func: u32,
     g_battle_type_flags: u32,
     g_rng_value: u32,
     g_player_avatar: u32,
     g_player_party_count: u32,
+    g_save_block2_ptr: u32,
+    g_tasks: u32,
+    s_option_menu_ptr: u32,
+    s_start_menu_callback: u32,
+    s_start_menu_cursor_pos: u32,
 }
 
 impl Observer {
@@ -115,10 +183,16 @@ impl Observer {
             g_save_block1_ptr: addr("gSaveBlock1Ptr")?,
             g_battle_outcome: addr("gBattleOutcome")?,
             g_battle_mons: addr("gBattleMons")?,
+            g_battle_main_func: addr("gBattleMainFunc")?,
             g_battle_type_flags: addr("gBattleTypeFlags")?,
             g_rng_value: addr("gRngValue")?,
             g_player_avatar: addr("gPlayerAvatar")?,
             g_player_party_count: addr("gPlayerPartyCount")?,
+            g_save_block2_ptr: addr("gSaveBlock2Ptr")?,
+            g_tasks: addr("gTasks")?,
+            s_option_menu_ptr: addr("sOptionMenuPtr")?,
+            s_start_menu_callback: addr("sStartMenuCallback")?,
+            s_start_menu_cursor_pos: addr("sStartMenuCursorPos")?,
             syms,
         })
     }
@@ -164,6 +238,125 @@ impl Observer {
         // EWRAM only; anything else means "not allocated yet" rather than a
         // pointer worth dereferencing.
         (0x0200_0000..0x0204_0000).contains(&ptr).then_some(ptr)
+    }
+
+    /// `gSaveBlock2Ptr`, with the same not-yet-allocated guard as
+    /// [`Observer::save_block1`].
+    pub fn save_block2(&self, emu: &mut Emu) -> Option<u32> {
+        let ptr = emu.read32(self.g_save_block2_ptr);
+        (0x0200_0000..0x0204_0000).contains(&ptr).then_some(ptr)
+    }
+
+    /// Characters before the terminating `EOS` at `addr`, capped at
+    /// `PLAYER_NAME_LENGTH` -- the length of a player or rival name.
+    fn name_len_at(&self, emu: &mut Emu, addr: u32) -> u32 {
+        (0..PLAYER_NAME_LENGTH)
+            .take_while(|i| emu.read8(addr + i) != EOS)
+            .count() as u32
+    }
+
+    /// `gSaveBlock2Ptr->playerName`'s length. 0 until a name is set.
+    pub fn player_name_len(&self, emu: &mut Emu) -> Option<u32> {
+        let sb2 = self.save_block2(emu)?;
+        Some(self.name_len_at(emu, sb2 + sb2_off::PLAYER_NAME))
+    }
+
+    /// `gSaveBlock1Ptr->rivalName`'s length. 0 until a name is set.
+    pub fn rival_name_len(&self, emu: &mut Emu) -> Option<u32> {
+        let sb1 = self.save_block1(emu)?;
+        Some(self.name_len_at(emu, sb1 + sb1_off::RIVAL_NAME))
+    }
+
+    /// `gSaveBlock2Ptr->optionsTextSpeed` -- compare with [`TEXT_SPEED_FAST`].
+    pub fn options_text_speed(&self, emu: &mut Emu) -> Option<u16> {
+        let sb2 = self.save_block2(emu)?;
+        Some(emu.read16(sb2 + sb2_off::OPTIONS) & sb2_off::TEXT_SPEED_MASK)
+    }
+
+    /// `gSaveBlock2Ptr->optionsBattleSceneOff` -- true means no battle
+    /// animations (`decompiled/src/battle_main.c:2259`).
+    pub fn options_battle_scene_off(&self, emu: &mut Emu) -> Option<bool> {
+        let sb2 = self.save_block2(emu)?;
+        Some(emu.read16(sb2 + sb2_off::OPTIONS) & sb2_off::BATTLE_SCENE_OFF_BIT != 0)
+    }
+
+    /// True when some entry of `gTasks` is active and its `func` sits inside
+    /// the named function -- "is this screen's input handler running", for
+    /// menus whose state lives in a task rather than in `gMain.callback2`.
+    pub fn task_active(&self, emu: &mut Emu, name: &str) -> bool {
+        (0..task_off::COUNT).any(|i| {
+            let base = self.g_tasks + i * task_off::SIZE;
+            emu.read8(base + task_off::IS_ACTIVE) != 0
+                && matches!(
+                    self.syms.covering(emu.read32(base + task_off::FUNC)),
+                    Some((sym, _)) if sym == name
+                )
+        })
+    }
+
+    /// `data[0]` of the active task running the named function, if any -- the
+    /// decomp's `tState` convention. [`Observer::task_active`] with a state.
+    pub fn task_state(&self, emu: &mut Emu, name: &str) -> Option<i16> {
+        (0..task_off::COUNT).find_map(|i| {
+            let base = self.g_tasks + i * task_off::SIZE;
+            let active = emu.read8(base + task_off::IS_ACTIVE) != 0
+                && matches!(
+                    self.syms.covering(emu.read32(base + task_off::FUNC)),
+                    Some((sym, _)) if sym == name
+                );
+            active.then(|| emu.read16(base + task_off::DATA) as i16)
+        })
+    }
+
+    /// True once the naming screen routes presses to its keyboard: the input
+    /// task (`Task_HandleInput`, `decompiled/src/naming_screen.c:1582`) is in
+    /// `INPUT_STATE_ENABLED`, which `MainState_WaitFadeIn` switches on once
+    /// the fade-in is done (`naming_screen.c:655`).
+    pub fn naming_screen_accepting_input(&self, emu: &mut Emu) -> bool {
+        self.task_state(emu, "Task_HandleInput") == Some(NAMING_INPUT_ENABLED)
+    }
+
+    /// True once the start menu is drawn and taking input: `sStartMenuCallback`
+    /// has reached `StartCB_HandleInput`. `Task_StartMenuHandleInput` alone is
+    /// not enough -- the menu draws over several frames first
+    /// (`task50_startmenu` -> `DoDrawStartMenu`, `decompiled/src/start_menu.c:303`),
+    /// and presses during the draw are dropped.
+    pub fn start_menu_taking_input(&self, emu: &mut Emu) -> bool {
+        let cb = emu.read32(self.s_start_menu_callback);
+        matches!(self.syms.covering(cb), Some((sym, _)) if sym == "StartCB_HandleInput")
+    }
+
+    /// True once the options menu is taking input: `sOptionMenuPtr` is
+    /// allocated and its `loadState` has reached the input case of
+    /// `Task_OptionMenu` (`decompiled/src/option_menu.c:359`).
+    pub fn option_menu_accepting_input(&self, emu: &mut Emu) -> bool {
+        self.option_menu(emu).is_some_and(|ptr| {
+            emu.read8(ptr + option_menu_off::LOAD_STATE) == option_menu_off::ACCEPTING_INPUT
+        })
+    }
+
+    fn option_menu(&self, emu: &mut Emu) -> Option<u32> {
+        let ptr = emu.read32(self.s_option_menu_ptr);
+        (0x0200_0000..0x0204_0000).contains(&ptr).then_some(ptr)
+    }
+
+    /// `sStartMenuCursorPos` -- which row the start menu cursor is on.
+    pub fn start_menu_cursor(&self, emu: &mut Emu) -> u8 {
+        emu.read8(self.s_start_menu_cursor_pos)
+    }
+
+    /// `sOptionMenuPtr->cursorPos` -- which option row the cursor is on.
+    pub fn option_menu_cursor(&self, emu: &mut Emu) -> Option<u16> {
+        let ptr = self.option_menu(emu)?;
+        Some(emu.read16(ptr + option_menu_off::CURSOR_POS))
+    }
+
+    /// `sOptionMenuPtr->option[item]` -- the menu's *working* value for a row,
+    /// not yet written back to the save block; `CloseAndSaveOptionMenu` does
+    /// that on exit (`decompiled/src/option_menu.c:508`).
+    pub fn option_menu_setting(&self, emu: &mut Emu, item: u32) -> Option<u16> {
+        let ptr = self.option_menu(emu)?;
+        Some(emu.read16(ptr + option_menu_off::OPTIONS + item * 2))
     }
 
     /// `gSaveBlock1Ptr->location`: the map the player is standing on.
@@ -214,6 +407,17 @@ impl Observer {
 
     pub fn battle_type_flags(&self, emu: &mut Emu) -> u32 {
         emu.read32(self.g_battle_type_flags)
+    }
+
+    /// True while the battle is waiting for action selection:
+    /// `gBattleMainFunc` points inside `HandleTurnActionSelectionState`
+    /// (`decompiled/src/battle_main.c:3097`), which `BattleTurnPassed` re-arms
+    /// at the top of every turn (`battle_main.c:2998`). One visit to this
+    /// state is one turn, which is what makes it a per-turn decision point
+    /// for the battle search.
+    pub fn battle_choosing_actions(&self, emu: &mut Emu) -> bool {
+        let func = emu.read32(self.g_battle_main_func);
+        matches!(self.syms.covering(func), Some((sym, _)) if sym == "HandleTurnActionSelectionState")
     }
 
     /// `gBattleMons[i]` -- species, level, HP, max HP.

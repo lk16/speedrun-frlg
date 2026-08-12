@@ -25,11 +25,20 @@ fn repo_root() -> PathBuf {
 #[test]
 fn the_committed_route_replays_from_reset_and_beats_the_rival() {
     let root = repo_root();
-    let ledger_path = root.join("route/ledger.json");
-    let recorded = ledger::read(&ledger_path).expect("route/ledger.json should be committed");
+    let ledger_path = root.join("route/rival-1/ledger.json");
+    let recorded =
+        ledger::read(&ledger_path).expect("route/rival-1/ledger.json should be committed");
 
-    let rom = frlg_emu::default_rom_path().expect("no ROM: build it into $FRLG_ARTIFACTS/rom");
-    let sym = frlg_emu::default_sym_path().expect("no pokefirered.sym in $FRLG_ARTIFACTS/rom");
+    // The ledger pins its ROM by hash and either version may be current, so
+    // the test looks the file up by that hash instead of assuming FireRed.
+    let rom = frlg_emu::rom_path_for_sha1(&recorded.rom_sha1)
+        .expect("no ROM matching the ledger's rom_sha1: build it into $FRLG_ARTIFACTS/rom");
+    let sym = rom.with_extension("sym");
+    assert!(
+        sym.is_file(),
+        "{} exists but its .sym does not; `make syms` and copy it next to the ROM",
+        rom.display()
+    );
     let starter = match recorded.starter.as_str() {
         "bulbasaur" => Starter::Bulbasaur,
         "squirtle" => Starter::Squirtle,
@@ -58,4 +67,63 @@ fn the_committed_route_replays_from_reset_and_beats_the_rival() {
         assert_eq!(was.frames, now.frames, "{} changed length", now.name);
     }
     assert_eq!(checked.total_frames, recorded.total_frames);
+}
+
+/// Measure what `Tuning::text_hold` is worth on the intro alone -- the
+/// MID-text stretch (`01-boot` through `03-names`) that no options menu can
+/// reach (`docs/rival-1/route.md`). This is a measurement, not a regression test:
+/// run it by hand with
+///
+///     cargo test --release -p frlg-route --test route -- --ignored --nocapture text_hold
+///
+/// The intro is upstream of the naming-screen reseed
+/// (`decompiled/src/naming_screen.c:722`), so unlike everything after the
+/// bedroom, these numbers do not touch the battle's RNG stream and are
+/// comparable in isolation. The full-route answer still comes from
+/// `frlg route tune`, because downstream segments both gain (their text) and
+/// re-roll (their battle).
+#[test]
+#[ignore = "a measurement, minutes long; run explicitly with --ignored"]
+fn text_hold_on_the_intro_alone() {
+    use frlg_route::segments::{self, Tuning, Version};
+    use frlg_route::{Observer, Recorder};
+
+    let rom = frlg_emu::default_rom_path().expect("no ROM: build it into $FRLG_ARTIFACTS/rom");
+    let sym = frlg_emu::default_sym_path().expect("no pokefirered.sym in $FRLG_ARTIFACTS/rom");
+    let syms = frlg_emu::SymbolTable::load(&sym).expect("loading symbols");
+    let obs = Observer::new(syms).expect("building the observer");
+    let version = Version::of_rom(&rom)
+        .expect("reading the ROM header")
+        .expect("not a FireRed/LeafGreen ROM");
+
+    println!("text_hold  01-boot  02-intro-oak  03-names  total(01-03)");
+    for text_hold in [1usize, 2, 3, 4, 7, 15, 31] {
+        let tuning = Tuning {
+            text_hold,
+            ..Tuning::default()
+        };
+        let mut rec = Recorder::from_reset(&rom).expect("booting");
+        let mut cells = Vec::new();
+        for segment in segments::all(version, Starter::Squirtle, tuning)
+            .into_iter()
+            .take(3)
+        {
+            let before = rec.frames();
+            (segment.run)(&mut rec, &obs).unwrap_or_else(|e| panic!("{}: {e}", segment.name));
+            assert!(
+                (segment.reached)(&obs, rec.emu()),
+                "{} did not reach its goal under text_hold {text_hold}",
+                segment.name
+            );
+            cells.push(rec.frames() - before);
+        }
+        println!(
+            "{:>9}  {:>7}  {:>12}  {:>8}  {:>12}",
+            text_hold,
+            cells[0],
+            cells[1],
+            cells[2],
+            rec.frames()
+        );
+    }
 }

@@ -27,6 +27,21 @@ use sha1::{Digest, Sha1};
 
 /// sha1 of a file, matching what `sha1sum` prints and what the ROM artifact is
 /// identified by.
+/// The 4-byte game code from the ROM header. Offset 0xAC: the header is a B
+/// instruction (4), the logo (0x9C) and the title (0xC), then `game_code`
+/// (`decompiled/tools/gbafix/gbafix.c:59-64`); the build stamps BPRE on
+/// FireRed and BPGE on LeafGreen (`decompiled/config.mk:29-57`,
+/// `decompiled/Makefile:391`).
+pub fn game_code(path: &Path) -> std::io::Result<[u8; 4]> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    let mut file = std::fs::File::open(path)?;
+    file.seek(SeekFrom::Start(0xAC))?;
+    let mut code = [0u8; 4];
+    file.read_exact(&mut code)?;
+    Ok(code)
+}
+
 pub fn file_sha1(path: &Path) -> std::io::Result<[u8; 20]> {
     use std::io::Read;
 
@@ -60,6 +75,34 @@ pub fn default_rom_path() -> Option<PathBuf> {
     artifact_path("FRLG_ROM", "pokefirered.gba")
 }
 
+/// The ROM whose sha1 matches `sha1_hex`: `$FRLG_ROM` if it does, else the
+/// first match among `$FRLG_ARTIFACTS/rom/*.gba`. A ledger pins its ROM by
+/// hash, and both versions live in the rom dir side by side; this is the
+/// reverse lookup, so a LeafGreen ledger finds pokeleafgreen.gba without
+/// anything hardcoding a filename.
+pub fn rom_path_for_sha1(sha1_hex: &str) -> Option<PathBuf> {
+    let want = sha1_hex.to_lowercase();
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(explicit) = std::env::var("FRLG_ROM") {
+        candidates.push(PathBuf::from(explicit));
+    }
+    if let Ok(artifacts) = std::env::var("FRLG_ARTIFACTS") {
+        if let Ok(entries) = std::fs::read_dir(PathBuf::from(artifacts).join("rom")) {
+            let mut roms: Vec<PathBuf> = entries
+                .flatten()
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|x| x == "gba"))
+                .collect();
+            roms.sort();
+            candidates.extend(roms);
+        }
+    }
+    candidates
+        .into_iter()
+        .filter(|p| p.is_file())
+        .find(|p| file_sha1(p).map(hex::encode).is_ok_and(|got| got == want))
+}
+
 /// `$FRLG_SYM`, else `$FRLG_ARTIFACTS/rom/pokefirered.sym`, if it exists.
 pub fn default_sym_path() -> Option<PathBuf> {
     artifact_path("FRLG_SYM", "pokefirered.sym")
@@ -72,7 +115,7 @@ pub const GBA_BIOS_SHA1: &str = "300c20df6731a33952ded8c436f7f186d25d3492";
 
 /// `$FRLG_GBA_BIOS`, else `$BIZHAWK_HOME/Firmware/GBA_bios.rom`, if it
 /// exists. The BizHawk location on purpose: the same file serves both tiers,
-/// so there is exactly one place to put it (`docs/route.md`).
+/// so there is exactly one place to put it (`docs/rival-1/route.md`).
 pub fn default_bios_path() -> Option<PathBuf> {
     if let Ok(explicit) = std::env::var("FRLG_GBA_BIOS") {
         let path = PathBuf::from(explicit);

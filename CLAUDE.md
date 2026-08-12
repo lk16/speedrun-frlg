@@ -2,7 +2,7 @@
 
 TASes of Pokémon FireRed and LeafGreen, routed inside a closed sandbox. The two versions are
 typically one speedrun category, so a route is free to pick whichever version is faster —
-measured, not assumed; `docs/route.md` tracks which version each number belongs to. **Read
+measured, not assumed; `docs/rival-1/route.md` tracks which version each number belongs to. **Read
 `docs/sandbox.md` before doing anything** — it is also the sandbox's own prompt file, and almost
 nothing here is where a normal machine would put it. `README.md` says what the project is *for*.
 
@@ -20,9 +20,9 @@ and LeafGreen knowledge from pretraining; the citation rule is what makes that h
 - **Tier 1** — libmgba, in the sandbox, every iteration. `frlg route verify`.
 - **Tier 2** — BizHawk replaying a `.bk2`, on the host, for acceptance. Queue a request in
   `$FRLG_ARTIFACTS/verify/queue/`; answers land in `.../results/`. Never block on it.
-  `docs/route.md` says what tier 2 can and cannot currently do.
+  `docs/rival-1/route.md` says what tier 2 can and cannot currently do.
 
-Nothing is "accepted" on tier 1 alone, and the ledger (`route/ledger.json`) records which tier
+Nothing is "accepted" on tier 1 alone, and the ledger (`route/rival-1/ledger.json`) records which tier
 each segment has actually passed. Do not widen a claim past its evidence.
 
 ## What the generic advice gets wrong here
@@ -55,10 +55,11 @@ commit.
 | --- | --- |
 | `docs/sandbox.md` | the environment: mounts, image, network, disk, the two tiers |
 | `docs/harness.md` | the tier-1 emulator harness and the `.ilog` format |
-| `docs/route.md` | the route itself, its evidence, and what is not optimised |
-| `docs/journal.md` | what was tried, what failed, what is next |
-| `crates/` | `mgba-sys`, `frlg-emu`, `frlg-route`, `frlg-cli` |
-| `route/` | committed input logs, `ledger.json`, `template.bk2` |
+| `docs/<target>/route.md` | a target's route, its evidence, and what is not optimised |
+| `docs/<target>/journal/` | that target's lab notebook, one dated file per session entry |
+| `crates/` | `mgba-sys`, `frlg-emu`, `frlg-rng`, `frlg-battle`, `frlg-route`, `frlg-cli` |
+| `route/<target>/` | that target's committed input logs and `ledger.json` |
+| `route/template.bk2` | the BizHawk movie template (target-independent) |
 | `bin/`, `tools/` | sandbox-side helpers and host-side preparation |
 
 `tools/` is host-only — those scripts need the network, mono, or docker, and none of the three

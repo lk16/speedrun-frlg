@@ -13,7 +13,7 @@ sandbox and nothing here claims a route is accepted.
 | --- | --- |
 | `crates/mgba-sys` | `csrc/shim.c`, a flat C ABI over `struct mCore`, plus its `extern "C"` block |
 | `crates/frlg-emu` | `Emu`, the input-log format, the decomp's key bits, `pokefirered.sym` |
-| `crates/frlg-route` | the route: cited RAM probes, a recorder, path search, the ledger (`docs/route.md`) |
+| `crates/frlg-route` | the route: cited RAM probes, a recorder, path search, the ledger (`docs/rival-1/route.md`) |
 | `crates/frlg-cli` | the `frlg` binary |
 
 ### Why there is C in a Rust project
@@ -35,7 +35,7 @@ One `u16` key mask per frame, in the decomp's bit order -- `A_BUTTON 0x0001` thr
 what `setKeys` wants.
 
 It is **not** the `.bk2` Input Log column order, which is BizHawk's and lives in compiled CIL.
-`route/template.bk2` now states that order outright (`docs/route.md`), but the raw log stays
+`route/template.bk2` now states that order outright (`docs/rival-1/route.md`), but the raw log stays
 canonical and `.bk2` remains an export of it: a column-order mistake then costs a re-export, not a
 re-route.
 
@@ -60,7 +60,7 @@ filter differently.
     frlg sym Rng                                # search pokefirered.sym
     frlg log show seg.ilog
     frlg log cat a.ilog b.ilog -o whole.ilog    # join segments into one run
-    frlg route build                            # run the route (docs/route.md)
+    frlg route build                            # run the route (docs/rival-1/route.md)
     frlg route verify                           # replay the committed logs and check the ledger
     frlg route tune                             # sweep the route knobs, score on total frames
 
@@ -127,19 +127,22 @@ structurally incapable of noticing, which is what makes them worth carrying rath
   `CMakeLists.txt:869` adds the define without a cmake variable behind it), which silently shifts
   every function pointer in `struct mCore` by 4152 bytes. `csrc/shim.c` documents and corrects
   both. `bin/frlg-doctor` confirms the pin at every startup; re-check the shim whenever the pin
-  moves. Re-pinning re-rolled the battle RNG (`docs/route.md`).
+  moves. Re-pinning re-rolled the battle RNG (`docs/rival-1/route.md`).
 - **The `.bk2` writer exists**: `frlg route export`, built on `route/template.bk2`, round-trip
-  checked on every export (`docs/route.md`). The `.ilog` stays canonical; a `.bk2` is an export
+  checked on every export (`docs/rival-1/route.md`). The `.ilog` stays canonical; a `.bk2` is an export
   of it.
 
 ## Tests
 
-`cargo test --release` runs 29 unit tests (20 in `frlg-emu`, 9 in `frlg-route`) and 15 that drive
-the real ROM (10 `harness.rs`, 4 `observe.rs`, 1 `route.rs`): boot, determinism across two replays,
+`cargo test --release` runs 30 unit tests (20 in `frlg-emu`, 10 in `frlg-route`) and 17 that drive
+the real ROM (10 `harness.rs`, 6 `observe.rs`, 1 `route.rs`): boot, determinism across two replays,
 input actually reaching the game, savestate round trips in memory and on disk, the memory-block view
 agreeing with bus reads, split-replay equalling one pass, and the screenshot being the right shape
-and opaque. They need the ROM and fail loudly without it rather than skipping. The `frlg-route`
+and opaque. They need the ROM and fail loudly without it rather than skipping — `route.rs` looks
+its ROM up by the ledger's `rom_sha1`, so it follows the route across versions. The `frlg-route`
 unit tests include the `.bk2` round trip, which uses the committed `route/template.bk2` and no ROM.
+One more is `#[ignore]`d on purpose: `text_hold_on_the_intro_alone` is a minutes-long measurement,
+not a regression test (`docs/rival-1/route.md`).
 
 Note that `cargo test --release` does not relink `target/release/frlg`; run `cargo build --release`
 before trusting the CLI binary.

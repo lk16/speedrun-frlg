@@ -4,7 +4,7 @@
 //! is *manipulated*. The rival battle is the case that forced it into
 //! existence: mashing A through it wins or loses depending on nothing but which
 //! frame the mash starts on, so the route searches for a start that wins
-//! instead of accepting the roll it is handed (`docs/route.md`).
+//! instead of accepting the roll it is handed (`docs/rival-1/route.md`).
 
 use crate::record::{Recorder, RouteError, Trial};
 

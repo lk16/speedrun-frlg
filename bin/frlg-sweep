@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+#
+# Parallel tuning sweep: one `frlg route build` per (turn_hold, text_hold)
+# variant, each into its own scratch directory. The builds are single-threaded
+# emulator drives, so on a many-core sandbox running them side by side turns
+# `frlg route tune`'s serial hours into one wave's wall clock. The trade is
+# the same one `tune` makes -- every variant is a complete build through the
+# full battle search, scored on total frames to the win -- only the scheduling
+# differs.
+#
+#   bin/frlg-sweep <tag> <rom> <sym> <starter> ["<turn_holds>"] ["<text_holds>"] [maxjobs]
+#
+#   bin/frlg-sweep fr-squirtle $FRLG_ARTIFACTS/rom/pokefirered.gba \
+#       $FRLG_ARTIFACTS/rom/pokefirered.sym squirtle "1 2 3 4 5 6 7 8" "1 2 4" 12
+#
+# Results land in $FRLG_SWEEP_DIR (default: a sweep-<tag> dir under the
+# system temp dir), one subdir per variant with build.log, ledger.json and
+# logs/; the summary table prints when the last job exits, best first. A
+# variant whose battle cannot win is reported as "loses", which is an answer,
+# not an outage. Nothing here touches route/ -- adopting a winner is a
+# deliberate `frlg route build --turn-hold X --text-hold Y` afterwards.
+
+set -u
+
+if [ $# -lt 4 ]; then
+    sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+fi
+
+TAG=$1
+ROM=$2
+SYM=$3
+STARTER=$4
+TURNS=${5:-"1 2 3 4 5 6 7 8"}
+TEXTS=${6:-"1 2 4"}
+MAXJOBS=${7:-$(($(nproc) - 4))}
+[ "$MAXJOBS" -ge 1 ] || MAXJOBS=1
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BIN="$ROOT/target/release/frlg"
+[ -x "$BIN" ] || { echo "no $BIN -- cargo build --release first" >&2; exit 1; }
+
+SWEEP="${FRLG_SWEEP_DIR:-${TMPDIR:-/tmp}/frlg-sweep}/sweep-$TAG"
+mkdir -p "$SWEEP"
+echo "sweeping into $SWEEP ($MAXJOBS jobs at a time)"
+
+for th in $TURNS; do
+    for xh in $TEXTS; do
+        d="$SWEEP/th$th-xh$xh"
+        mkdir -p "$d"
+        (
+            "$BIN" route build \
+                --rom "$ROM" --sym "$SYM" --starter "$STARTER" \
+                --turn-hold "$th" --text-hold "$xh" \
+                --logs "$d/logs" --ledger "$d/ledger.json" --states "$d/states" \
+                >"$d/build.log" 2>&1
+            echo "$?" >"$d/exit"
+        ) &
+        while [ "$(jobs -r | wc -l)" -ge "$MAXJOBS" ]; do wait -n; done
+    done
+done
+wait
+
+echo "== sweep $TAG (total frames to the win; best first) =="
+for d in "$SWEEP"/th*-xh*; do
+    name=$(basename "$d")
+    if [ "$(cat "$d/exit" 2>/dev/null)" = "0" ]; then
+        total=$(python3 -c "import json;print(json.load(open('$d/ledger.json'))['total_frames'])" 2>/dev/null || echo "?")
+        echo "$name $total"
+    elif grep -q "timed out" "$d/build.log" 2>/dev/null; then
+        echo "$name loses ($(grep -o 'waiting for [^(]*' "$d/build.log" | tail -1))"
+    else
+        echo "$name error (see $d/build.log)"
+    fi
+done | sort -t' ' -k2 -n

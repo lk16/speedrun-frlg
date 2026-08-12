@@ -11,7 +11,7 @@
 #   --headless    run EmuHawk on a throwaway X server (xvfb-run) instead of the desktop
 #   --realtime    replay at 100% with sound and video, the way a person would watch it
 #
-# The contract, which both sides depend on, is in docs/route.md ("Tier 2"). In short:
+# The contract, which both sides depend on, is in docs/rival-1/route.md ("Tier 2"). In short:
 #
 #   in    $FRLG_ARTIFACTS/verify/queue/<id>.bk2    the movie to replay
 #         $FRLG_ARTIFACTS/verify/queue/<id>.json   what the sandbox expects of it (optional)
@@ -44,6 +44,33 @@ warn() { printf '%s !! %s %s\n' "$YELLOW" "$OFF" "$*" >&2; }
 die()  { printf '%s !! %s %s\n' "$RED" "$OFF" "$*" >&2; exit 1; }
 
 sha1() { sha1sum "$1" 2>/dev/null | cut -d' ' -f1; }
+
+# The ROM hash the movie itself claims: Header.txt's SHA1 line, written by
+# `frlg route export` from the ledger's ROM (crates/frlg-route/src/bk2.rs).
+movie_header_sha1() {
+  python3 - "$1" 2>/dev/null <<'PY'
+import sys, zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+    for line in z.read("Header.txt").decode().splitlines():
+        if line.startswith("SHA1 "):
+            print(line.split()[1].lower())
+            break
+PY
+}
+
+# Which ROM to play a movie on. FireRed and LeafGreen are one category and
+# both live in $ARTIFACTS/rom, so the movie's own header decides -- $ROM is
+# only the answer for a movie that does not name one. Prints nothing when no
+# ROM matches; the caller turns that into a result, not a guess.
+rom_for_movie() {
+  local want cand
+  want=$(movie_header_sha1 "$1")
+  if [ -z "$want" ]; then echo "$ROM"; return; fi
+  for cand in "$ROM" "$ARTIFACTS"/rom/*.gba; do
+    [ -f "$cand" ] || continue
+    if [ "$(sha1 "$cand")" = "$want" ]; then echo "$cand"; return; fi
+  done
+}
 
 # ------------------------------------------------------------------ preflight --
 # Every one of these is a way for a run to fail as a GUI dialog rather than an exit code, which
@@ -87,7 +114,7 @@ preflight() {
 # frame; throttling, audio output and rendering are host-side presentation, which is the
 # premise every BizHawk movie already rests on. It is checked rather than assumed: the same
 # movie replays to the same EWRAM+IWRAM fingerprint and the same per-frame probe trace fast and
-# silent as it did at 100% with sound (docs/journal.md, 2026-08-11).
+# silent as it did at 100% with sound (docs/rival-1/journal/, 2026-08-11).
 #
 #   Unthrottled          run frames as fast as the host can; ClockThrottle/VSyncThrottle/
 #                        SoundThrottle are the three things that would otherwise pace it
@@ -171,7 +198,7 @@ run_one() {
     expect_ram=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("ram_hash") or "")' "$req" 2>/dev/null)
     expect_ilog=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("ilog_sha1") or "")' "$req" 2>/dev/null)
     # The per-frame probe trace `frlg route export` queues beside the movie
-    # (docs/route.md): lets the Lua turn "desync" into "desync at frame N".
+    # (docs/rival-1/route.md): lets the Lua turn "desync" into "desync at frame N".
     trace_file=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("trace") or {}).get("file") or "")' "$req" 2>/dev/null)
     trace_domain=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("trace") or {}).get("domain") or "")' "$req" 2>/dev/null)
     trace_offset=$(python3 -c 'import json,sys; print((json.load(open(sys.argv[1])).get("trace") or {}).get("offset") if (json.load(open(sys.argv[1])).get("trace") or {}).get("offset") is not None else "")' "$req" 2>/dev/null)
@@ -209,17 +236,35 @@ run_one() {
   # does not get that far. --config keeps its config out of the deps tree; --userdata is NOT
   # a data directory (it is movie key:value metadata, and a bare path makes the flag parser
   # throw "malformed userdata" and exit 1 -- found the hard way on the first real replay).
-  local t0=$SECONDS
-  FRLG_VERIFY_DUMP="$dump" FRLG_VERIFY_STATUS="$status" FRLG_VERIFY_FRAMES="${expect_frames:-0}" \
-  FRLG_VERIFY_TRACE="$trace_path" FRLG_VERIFY_TRACE_DOMAIN="$trace_domain" \
-  FRLG_VERIFY_TRACE_OFFSET="$trace_offset" \
-  timeout -k 10 "$TIMEOUT" "${launcher[@]}" "$BIZHAWK/EmuHawkMono.sh" \
-    --config="$USERDATA/config.ini" \
-    --movie="$bk2" \
-    --lua="$lua" \
-    "$ROM" >"$work/emuhawk.log" 2>&1
-  local rc=$?
+  # The movie names its ROM; play it on that one. rc 97 is this runner's own
+  # "no matching ROM" sentinel, turned into an error result below instead of
+  # letting EmuHawk warn-and-desync its way through the wrong version.
+  local movie_rom; movie_rom=$(rom_for_movie "$bk2")
+  local t0=$SECONDS rc=0 interrupted=0
+  if [ -z "$movie_rom" ]; then
+    rc=97
+    : >"$work/emuhawk.log"
+  else
+    FRLG_VERIFY_DUMP="$dump" FRLG_VERIFY_STATUS="$status" FRLG_VERIFY_FRAMES="${expect_frames:-0}" \
+    FRLG_VERIFY_TRACE="$trace_path" FRLG_VERIFY_TRACE_DOMAIN="$trace_domain" \
+    FRLG_VERIFY_TRACE_OFFSET="$trace_offset" \
+    timeout -k 10 "$TIMEOUT" "${launcher[@]}" "$BIZHAWK/EmuHawkMono.sh" \
+      --config="$USERDATA/config.ini" \
+      --movie="$bk2" \
+      --lua="$lua" \
+      "$movie_rom" >"$work/emuhawk.log" 2>&1
+    rc=$?
+  fi
   local duration=$((SECONDS - t0))
+
+  # Somebody stopped the run; the replay did not fail. A ctrl-c reaches the whole foreground
+  # process group, so EmuHawk (or the window manager, if you close the window) dies at whatever
+  # frame it had reached and this script carries on to score it -- which without this check
+  # reads exactly like a genuine "did not play to its end", complete with a FAIL result and a
+  # consumed queue entry. Only the stop signals count: a crash (139 SIGSEGV, 134 SIGABRT) is a
+  # real failure and must still be scored, or --watch would retry it every 10s forever.
+  #   129 HUP (terminal closed)  130 INT (ctrl-c)  131 QUIT (ctrl-\)  143 TERM (kill)
+  case $rc in 129|130|131|143) interrupted=1 ;; esac
 
   # The Lua rewrites the status file as it goes (first probe mismatch, heartbeat, onexit), so
   # even a timed-out or killed run usually leaves the frame it reached and any desync frame it
@@ -239,7 +284,13 @@ run_one() {
       desync_frame=""
     fi
   fi
-  if [ $rc -eq 124 ]; then
+  if [ $rc -eq 97 ]; then
+    verdict=error
+    notes="no ROM in $ARTIFACTS/rom (or \$FRLG_ROM) matches the movie header's SHA1 $(movie_header_sha1 "$bk2"); build that version and copy it there"
+  elif [ $interrupted = 1 ]; then
+    verdict=error
+    notes="interrupted by signal $((rc - 128)) at frame ${frames:-?} of ${expect_frames:-?}$probe -- nothing was verified, and the request was left in the queue to be replayed again"
+  elif [ $rc -eq 124 ]; then
     verdict=error
     notes="EmuHawk did not finish within ${TIMEOUT}s -- most likely a modal dialog. Last Lua status: frame ${frames:-none}$probe. Log: $(tail -3 "$work/emuhawk.log" | tr '\n' ' ')"
   elif [ ! -s "$status" ]; then
@@ -278,7 +329,7 @@ run_one() {
   [ "$HEADLESS" = 1 ] && mode="$mode+headless"
 
   python3 - "$RESULTS/$id.json" "$id" "$verdict" "$notes" "$ram" \
-           "$(sha1 "$bk2")" "$(sha1 "$ROM")" "$BIZHAWK_VERSION" "$desync_frame" \
+           "$(sha1 "$bk2")" "$([ -n "$movie_rom" ] && sha1 "$movie_rom")" "$BIZHAWK_VERSION" "$desync_frame" \
            "$duration" "$mode" <<'PY'
 import json, os, sys, datetime
 out, id, verdict, notes, ram, bk2, rom, biz, desync, duration, mode = sys.argv[1:12]
@@ -303,8 +354,13 @@ with open(out, "w") as f:
 PY
 
   rm -rf "$work"
-  rm -f "$bk2" "$req"
-  [ -n "$trace_path" ] && rm -f "$trace_path"
+  # The queue entry is consumed by a verdict, not by an interruption -- see INTERRUPTED below.
+  if [ $interrupted = 1 ]; then
+    INTERRUPTED=1
+  else
+    rm -f "$bk2" "$req"
+    [ -n "$trace_path" ] && rm -f "$trace_path"
+  fi
   case "$verdict" in
     pass)   printf '  %s ok  %s %-24s %s%s (%s, %ss)%s\n' "$GREEN" "$OFF" "$id" "$notes" "$DIM" "$mode" "$duration" "$OFF" ;;
     desync) printf '  %s !! %s %-24s %s%s (%s, %ss)%s\n' "$YELLOW" "$OFF" "$id" "$notes" "$DIM" "$mode" "$duration" "$OFF" ;;
@@ -341,13 +397,34 @@ fi
 preflight || die "refusing to run with the problems above -- a request that dies in a dialog
   looks identical to one nobody picked up, which is exactly what this runner exists to prevent."
 
+# Set by run_one when its EmuHawk was stopped by a signal rather than finishing. A ctrl-c means
+# "stop", so the runner stops -- and because that item is still in the queue, re-running picks it
+# up where it left off rather than needing a fresh `frlg route export`.
+INTERRUPTED=0
+
+# A --watch that has nothing to do is silent, which is indistinguishable from a hang -- and the
+# thing it is most likely to be doing when someone doubts it *is* nothing. So say so, once per
+# time the queue runs dry, rather than either staying quiet or printing a line every 10s.
+idle=0
+
 while :; do
   shopt -s nullglob
   items=("$QUEUE"/*.bk2)
   shopt -u nullglob
   if [ ${#items[@]} -gt 0 ]; then
+    idle=0
     say "${#items[@]} queued"
-    for f in "${items[@]}"; do run_one "$(basename "$f" .bk2)"; done
+    for f in "${items[@]}"; do
+      run_one "$(basename "$f" .bk2)"
+      if [ "$INTERRUPTED" = 1 ]; then
+        warn "stopped: the replay was interrupted. Its request is still queued -- run this
+  again to replay it from the start; nothing about the route has been verified either way."
+        exit 130
+      fi
+    done
+  elif [ "$WATCH" = 1 ] && [ "$idle" = 0 ]; then
+    say "waiting: the queue is empty, polling $QUEUE every 10s (ctrl-c to stop)"
+    idle=1
   fi
   [ "$WATCH" = 1 ] || break
   sleep 10

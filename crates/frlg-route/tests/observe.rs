@@ -106,6 +106,40 @@ fn walking_moves_the_position_probe_by_one_tile_in_the_direction_pressed() {
 }
 
 #[test]
+fn the_options_and_name_probes_read_what_a_mashed_new_game_sets() {
+    let (obs, mut rec) = setup();
+    assert_eq!(obs.player_name_len(rec.emu()), None, "no save block yet");
+
+    to_overworld(&obs, &mut rec);
+    // `SetDefaultOptions` (`decompiled/src/new_game.c:60`): text speed MID,
+    // battle animations on. A wrong bitfield offset would misread both.
+    assert_eq!(obs.options_text_speed(rec.emu()), Some(1));
+    assert_eq!(obs.options_battle_scene_off(rec.emu()), Some(false));
+    // Mashing A types the cursor's letter until both names are full, so the
+    // name-length probes must see the maximum.
+    assert_eq!(obs.player_name_len(rec.emu()), Some(7));
+    assert_eq!(obs.rival_name_len(rec.emu()), Some(7));
+}
+
+#[test]
+fn the_task_scan_sees_the_start_menu_input_handler() {
+    let (obs, mut rec) = setup();
+    to_overworld(&obs, &mut rec);
+    assert!(!obs.task_active(rec.emu(), "Task_StartMenuHandleInput"));
+    assert!(!obs.start_menu_taking_input(rec.emu()));
+
+    // Mashed rather than tapped: the field swallows input for ~20 frames
+    // after the walk-in transition, exactly as the route's options segment
+    // found out.
+    rec.mash_until("the start menu", keys::START, 300, |emu| {
+        obs.start_menu_taking_input(emu)
+    })
+    .unwrap();
+    assert!(obs.task_active(rec.emu(), "Task_StartMenuHandleInput"));
+    assert!(!obs.option_menu_accepting_input(rec.emu()));
+}
+
+#[test]
 fn the_game_sees_the_keys_the_recorder_feeds() {
     let (obs, mut rec) = setup();
     to_overworld(&obs, &mut rec);

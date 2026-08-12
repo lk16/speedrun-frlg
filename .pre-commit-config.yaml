@@ -1,0 +1,20 @@
+# Local hooks only, on purpose: the sandbox this project is routed in has no
+# network (docs/sandbox.md), so hook repos fetched from GitHub can never run
+# there. Everything below shells out to tools that are already on PATH in the
+# sandbox, on the host, and in CI (.github/workflows/ci.yml runs this same
+# config). Note `cargo clippy` needs MGBA_PREFIX, like any build of mgba-sys.
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt --check
+        entry: cargo fmt --all -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy -D warnings
+        entry: cargo clippy --all-targets -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false

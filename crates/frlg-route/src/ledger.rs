@@ -23,7 +23,7 @@ use crate::segments::{self, Segment, Starter, Tuning};
 /// Every entry says so out loud rather than leaving the field empty and
 /// letting a reader assume.
 pub const TIER2_BLOCKED: &str =
-    "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)";
+    "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Ledger {
@@ -95,9 +95,9 @@ pub enum LedgerError {
 
 /// Where a build writes.
 pub struct Paths {
-    /// Directory for the committed input logs, e.g. `route/logs`.
+    /// Directory for the committed input logs, e.g. `route/rival-1/logs`.
     pub logs: PathBuf,
-    /// The ledger file, e.g. `route/ledger.json`.
+    /// The ledger file, e.g. `route/rival-1/ledger.json`.
     pub ledger: PathBuf,
     /// Checkpoint savestates. These do not survive the sandbox and are not
     /// committed, so a missing directory is not an error -- it just means no
@@ -108,6 +108,19 @@ pub struct Paths {
 fn observer(sym: &Path) -> Result<Observer, LedgerError> {
     let syms = SymbolTable::load(sym)?;
     Observer::new(syms).map_err(LedgerError::Message)
+}
+
+/// Which version the ROM is, from its header -- the route has one
+/// version-dependent beat (`segments::Version`), and guessing it from a
+/// filename would be exactly the kind of unforced error the header exists to
+/// prevent.
+fn version_of(rom: &Path) -> Result<segments::Version, LedgerError> {
+    segments::Version::of_rom(rom)?.ok_or_else(|| {
+        LedgerError::Message(format!(
+            "{} has a game code other than BPRE/BPGE; not a FireRed or LeafGreen ROM",
+            rom.display()
+        ))
+    })
 }
 
 /// Run the route, writing one log per segment plus the ledger.
@@ -132,7 +145,7 @@ pub fn build(
 
     let mut entries: Vec<Entry> = Vec::new();
     let mut consumed = 0usize;
-    for segment in segments::all(starter, tuning) {
+    for segment in segments::all(version_of(rom)?, starter, tuning) {
         let start_frame = rec.frames();
         (segment.run)(&mut rec, &obs)?;
         if !(segment.reached)(&obs, rec.emu()) {
@@ -208,7 +221,7 @@ pub fn verify(
         )));
     }
 
-    let defined = segments::all(starter, ledger.tuning);
+    let defined = segments::all(version_of(rom)?, starter, ledger.tuning);
     if defined.len() != ledger.segments.len() {
         return Err(LedgerError::Message(format!(
             "ledger has {} segments but the route defines {}",

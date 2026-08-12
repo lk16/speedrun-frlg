@@ -12,11 +12,13 @@ finding something they missed.
 
 ## The rules of the experiment
 
-- **The AI (Claude, in a sandbox) does the routing.** Sessions run inside a network-closed
-  sandbox: no TAS videos, no forums, no speedrun wikis, no downloads. The one reference is the
-  [pret/pokefirered](https://github.com/pret/pokefirered) decompilation, mounted read-only.
-  Every routing claim must cite a file in it; anything the model "remembers" but cannot cite is
-  labelled a guess. The run has to be *derived*, not recalled.
+- **The routing is a human/AI collaboration, with the derivation done blind.** The AI (Claude)
+  works inside a network-closed sandbox: no TAS videos, no forums, no speedrun wikis, no
+  downloads. The one reference is the [pret/pokefirered](https://github.com/pret/pokefirered)
+  decompilation, mounted read-only. Every routing claim must cite a file in it; anything the
+  model "remembers" but cannot cite is labelled a guess. The run has to be *derived*, not
+  recalled. A human directs the work between sessions, reviews it, and runs the host side
+  (tier-2 verification, toolchain preparation) — the sandbox cannot.
 - **Everything is verified twice.** Tier 1: a headless libmgba harness in the sandbox, replaying
   every input log from power-on and checking RAM against the claims (`docs/harness.md`). Tier 2:
   BizHawk on the host replaying the exported `.bk2` movie — the same format a human TAS is
@@ -34,24 +36,25 @@ finding something they missed.
 3. **A full glitchless run** — game start to Hall of Fame, the classic category.
 4. **A "round 2" run** — through the post-game rematch, which requires catching 60 Pokémon in
    the Pokédex along the way. Routing catches is a different discipline than routing battles.
-5. **Then back to the start:** rebuild the rival-1 TAS with everything learned on the way.
 
 ## Where it stands
 
-The first target is routed end to end: power-on to `gBattleOutcome == WON` in **12713 frames**
-(~3m33s), tier-1 verified, every segment's evidence recorded in `route/ledger.json`. The first
-BizHawk replay desynced — traced to a boot-timing difference between the two emulator setups,
-now fixed — and the rebuilt movie is queued for tier-2 confirmation. The battle itself is chosen
-from a searched set of RNG outcomes rather than lucky, but almost nothing is *optimised* yet;
-`docs/route.md` keeps the honest list of what is not.
+The first target is routed end to end: power-on to `gBattleOutcome == WON` in **9658 frames**
+(~2m42s) on LeafGreen with Bulbasaur, tier-1 verified, every segment's evidence recorded in
+`route/rival-1/ledger.json`. An early BizHawk replay desynced — traced to a boot-timing difference
+between the two emulator setups, now fixed — and this movie has since passed tier 2
+(`route-9658f-269d169cd6db`: all 9658 frames replayed, probe matching every one). The battle
+itself is chosen from a searched set of RNG outcomes rather than lucky, and version, starter
+and the tuning knobs are swept rather than assumed — but plenty is still unoptimised, and
+`docs/rival-1/route.md` keeps the honest list of what.
 
 ## Reading order
 
 | File | What it is |
 | --- | --- |
-| `docs/route.md` | the route, its evidence, and what is not yet optimised |
-| `docs/journal.md` | the lab notebook: what was tried, what failed, what is next |
+| `docs/<target>/route.md` | a target's route, its evidence, and what is not yet optimised |
+| `docs/<target>/journal/` | that target's lab notebook, one dated file per session entry |
 | `docs/harness.md` | the tier-1 emulator harness and the input-log format |
 | `docs/sandbox.md` | the sandbox environment the AI works in |
-| `crates/` | the Rust toolchain: emulator FFI, harness, route builder, CLI |
-| `route/` | the committed input logs, the ledger, the BizHawk movie template |
+| `crates/` | the Rust toolchain: emulator FFI, RNG and battle models, route builder, CLI |
+| `route/<target>/` | that target's committed input logs and ledger; `route/template.bk2` is the shared BizHawk movie template |
