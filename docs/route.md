@@ -1,10 +1,11 @@
 # The route: power-on to a beaten rival
 
-10085 frames (~2m49s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with
-Squirtle, on FireRed. **Tier 1 and tier 2 verified**: BizHawk replayed the whole movie on the
-host (`route-10085f-65ef20333a57`, 2026-08-12) to the same fingerprint, with the per-frame
-`gRngValue` probe matching every one of the 10085 frames; see [Tier 2](#tier-2). Rebuilding
-resets the tier-2 stamp, and should.
+9658 frames (~2m42s at 59.7275 Hz) from reset to `gBattleOutcome == B_OUTCOME_WON`, with
+**Bulbasaur, on LeafGreen** — both picked by measurement, not preference; the tables below
+are the evidence. Tier 1 verified from reset; tier 2 for this movie is queued, not yet
+replayed. The 2026-08-12 tier-2 pass (`route-10085f-65ef20333a57`, every frame of the probe
+matching) belongs to the 10085-frame FireRed/Squirtle predecessor; see [Tier 2](#tier-2).
+Rebuilding resets the tier-2 stamp, and should.
 
 The route is rebuilt whenever the boot or the core moves, and the total has moved with it:
 11873 (mGBA 0.10.5, HLE BIOS) → 12209 (2026-08-11, tier 1 re-pinned to the exact mGBA commit
@@ -13,20 +14,23 @@ BizHawk bundles, `94b1578f`, `docs/harness.md`) → 12222 (real-BIOS boot, intro
 is the only boot BizHawk uses for a movie — the desync fix below) → 10946 (2026-08-12:
 the first pure routing win — one-character player name, preset rival name, text speed FAST
 and battle animations off; nothing about the emulator moved) → 10531 (2026-08-12: the
-battle search grew a second stage, per-turn delays) → **10085** (2026-08-12: `turn_hold`
-re-swept on the new route; the stale 8 fell to 2). Segments survive core re-pins
-shifted but intact; the battle RNG stream never does, so `09-battle-win` re-searches its
-delays each time. Each re-pin surfacing a real delta *before* tier 2 had to find it is the
-pinning doing its job.
+battle search grew a second stage, per-turn delays) → 10085 (2026-08-12: `turn_hold`
+re-swept on the new route; the stale 8 fell to 2) → **9658** (2026-08-12: hold A through
+dialogue instead of mashing it (`text_hold`, below), repeat the battle search's per-turn
+stage to a fixpoint, then sweep all six version × starter cells — LeafGreen with Bulbasaur
+wins). Segments survive core re-pins shifted but intact; the battle RNG stream never does,
+so `09-battle-win` re-searches its delays each time. Each re-pin surfacing a real delta
+*before* tier 2 had to find it is the pinning doing its job.
 
-LeafGreen builds byte-exact in the same tree and the harness only needs a ROM path and symbols;
-the two versions are typically one speedrun category, so the plan is to route both and keep
-whichever is faster. Every number in this file is FireRed until a LeafGreen build exists.
+Both versions build byte-exact in the same tree, the route reads which one it is driving
+from the ROM header (BPRE/BPGE at 0xAC, `decompiled/config.mk:29-57`), and the two are one
+speedrun category — so every rebuild is free to re-pick the version, and this one did.
 
     frlg route build       # run the segments, write route/logs/*.ilog and route/ledger.json
     frlg route verify      # replay the committed logs from reset and check every claim
     frlg route status      # print the ledger
-    frlg route tune        # sweep the route-level knobs, scored on total frames
+    frlg route tune        # sweep the route-level knobs serially, scored on total frames
+    bin/frlg-sweep         # the same sweep as parallel builds -- hours become one wave
 
 ## How a segment is written
 
@@ -45,27 +49,33 @@ nothing here has to restate them and get one of them wrong.
 
 | Segment | Frames | Ends | Observable |
 | --- | ---: | ---: | --- |
-| `01-boot` | 619 | 619 | `CB2_NewGameScene` -- NEW GAME taken (includes the ~272-frame BIOS animation) |
-| `02-intro-oak` | 1842 | 2461 | `CB2_NamingScreen` -- Oak's speech and the boy/girl choice done |
-| `03-names` | 1238 | 3699 | `CB2_Overworld` in the bedroom, player name 1 char, rival name 3 (KAZ) |
-| `04-options` | 197 | 3896 | `optionsTextSpeed == FAST`, `optionsBattleSceneOff` set, back on the field |
-| `05-house` | 431 | 4327 | map is Pallet Town (3.0) |
-| `06-to-lab` | 1209 | 5536 | map is Oak's lab (4.3) |
-| `07-starter` | 1697 | 7233 | `gPlayerPartyCount == 1`, `VAR_STARTER_MON` set, lab scene var 3 |
-| `08-battle-start` | 386 | 7619 | `gMain.inBattle` |
-| `09-battle-win` | 2466 | 10085 | `gBattleOutcome == B_OUTCOME_WON` (delay plan `[1, 10, 0, 15]` over 5 turns) |
+| `01-boot` | 615 | 615 | `CB2_NewGameScene` -- NEW GAME taken (includes the ~272-frame BIOS animation) |
+| `02-intro-oak` | 1565 | 2180 | `CB2_NamingScreen` -- Oak's speech and the boy/girl choice done |
+| `03-names` | 1043 | 3223 | `CB2_Overworld` in the bedroom, player name 1 char, rival name 3 (RED) |
+| `04-options` | 197 | 3420 | `optionsTextSpeed == FAST`, `optionsBattleSceneOff` set, back on the field |
+| `05-house` | 431 | 3851 | map is Pallet Town (3.0) |
+| `06-to-lab` | 1211 | 5062 | map is Oak's lab (4.3) |
+| `07-starter` | 1785 | 6847 | `gPlayerPartyCount == 1`, `VAR_STARTER_MON` set, lab scene var 3 |
+| `08-battle-start` | 402 | 7249 | `gMain.inBattle` |
+| `09-battle-win` | 2409 | 9658 | `gBattleOutcome == B_OUTCOME_WON` (delay plan `[4, 3, 3, 3]`, 3 turns) |
 
-Against the 12713-frame predecessor: `03-names` types one letter and takes START's shortcut to
-OK (`decompiled/src/naming_screen.c:1485`) instead of filling seven, and picks KAZ off the
-rival's preset menu (`sRivalNameChoices`, `decompiled/src/oak_speech.c:647`) instead of a second
-naming screen; `04-options` is new and costs 197 frames; every segment after it is cheaper
-because its message boxes print at 1 frame per character instead of 4
-(`sTextSpeedFrameDelays`, `decompiled/src/new_menu_helpers.c:27-32`) and the battle plays no
-attack animations (`optionsBattleSceneOff` -> `HITMARKER_NO_ANIMATIONS`,
-`decompiled/src/battle_main.c:2259`); and the battle search grew a second, per-turn stage
-(below). The options detour repays itself about nine times over before the battle even starts
-(`07-starter` alone dropped 794 frames), and the searched battle came out 1111 frames shorter
-on top.
+Against the 10085-frame predecessor, three things changed:
+
+- **Dialogue is held, not mashed** (`Tuning::text_hold`, below): once one press lands during
+  a box, `RenderText` prints a character on *every* frame A or B is held
+  (`decompiled/src/text.c:639-650`), so the old `[A, 0]` mash printed at half the held rate
+  everywhere the route talks -- including Oak's speech, where no menu can reach the text-speed
+  option yet, and the battle's own message windows
+  (`decompiled/src/battle_message.c:2778-2785`). Holding 4 frames per 1-frame release cut the
+  pre-options intro from 3699 to 3223 frames on its own.
+- **The battle search repeats its per-turn stage until a pass adopts nothing**, instead of
+  walking the turns once and never revisiting an earlier turn on the stream a later adoption
+  changed.
+- **The version and the starter were both re-picked by a full sweep** (tables below):
+  LeafGreen with Bulbasaur, `turn_hold` 4, `text_hold` 4. LeafGreen boots 4 frames faster,
+  its 3-character rival preset (RED) is one DOWN instead of FireRed's two wrapping UPs
+  (`sRivalNameChoices`, `decompiled/src/oak_speech.c:649-658`), and its Bulbasaur stream
+  yields a 3-turn, 2409-frame battle.
 
 Map ids are `(group, number)` indices into `decompiled/data/maps/map_groups.json`.
 
@@ -76,11 +86,14 @@ asymmetric: `Task_OakSpeech_YourNameWhatIsIt` fades straight into the naming scr
 (`decompiled/src/oak_speech.c:1352-1379`) — the player's preset menu only exists on the
 say-NO re-ask path, which costs a round trip to reach. The rival's menu is the first thing
 asked (`Task_OakSpeech_MoveRivalDisplayNameOptions` → `PrintNameChoiceOptions`,
-`oak_speech.c:2117`), its rows are literal (`sRivalNameChoices` row 3 is KAZ), and it wraps,
-so two UPs reach KAZ from the top. On the naming screen itself, START jumps the cursor to OK
-(`HandleKeyboardEvent`, `decompiled/src/naming_screen.c:1485`) and a one-character name is
-accepted (`SaveInputText`, `:1851`). One letter, START, A: seven fewer characters than the
-old mash, paid back on every message box that prints the name.
+`oak_speech.c:2117`), its rows are literal and version-dependent (`sRivalNameChoices`,
+`oak_speech.c:649-658`: GREEN/GARY/KAZ/TORU on FireRed, RED/ASH/KENE/GEKI on LeafGreen), and
+it wraps (`Menu_MoveCursor`, `decompiled/src/menu.c:306`). The shortest name is 3 characters
+on both versions but on different rows: KAZ is row 3 (two UPs, wrapping), RED is row 1 (one
+DOWN). On the naming screen itself, START jumps the cursor to OK (`HandleKeyboardEvent`,
+`decompiled/src/naming_screen.c:1485`) and a one-character name is accepted (`SaveInputText`,
+`:1851`). One letter, START, A: seven fewer characters than the old mash, paid back on every
+message box that prints the name.
 
 **Single-frame taps die in the start menu.** Measured on this core: while the start menu is
 up, `gMain.newKeys` goes stale for runs of 2-3 frames — the game skips input reads — so a
@@ -180,22 +193,25 @@ seen (~1200 on the 10531 build's stream, ~400 on the current one): they move the
 damage-roll lineage, not a margin. A route that merely happens to win goes on to happen to
 lose the moment anything upstream moves by a frame.
 
-## Which starter, measured
+## Which version, which starter — measured, 2026-08-12
 
-All three win under the same mash. Built end-to-end, one build each, **on mGBA 0.10.5** — the
-absolute totals predate the 2026-08-11 core re-pin (Squirtle is 12209 on the current core) and
-the battles would re-roll if remeasured, which does not change the conclusion below:
+Every cell below is the best of a full 24-variant tuning sweep (`turn_hold` 1–8 ×
+`text_hold` {1, 2, 4}, `bin/frlg-sweep`), each variant a complete build from reset through
+the whole two-stage battle search, on the current core and boot. Total frames to the win:
 
-| Starter | Battle | Total | Attacks that landed |
+| | Squirtle | Charmander | Bulbasaur |
 | --- | ---: | ---: | ---: |
-| Squirtle | 3461 | 11873 | 4 on the rival, 4 back |
-| Charmander | 3681 | 12179 | 5 on the rival, 5 back |
-| Bulbasaur | 3700 | 12194 | 5 on the rival, 5 back |
+| FireRed | 9789 | 9749 | 9666 |
+| LeafGreen | 9747 | 9741 | **9658** |
 
-Read that as one sample each, not as a ranking. The rival always takes the counter to your pick, so
-none of the three has a type edge; what separates them here is which damage rolls the stream
-happened to hand out. Once the battle is manipulated properly the ordering can change, and the
-comparison should be redone against manipulated battles rather than mashed ones.
+The rival always takes the counter to your pick, so no starter has a type edge; what the
+table ranks is which RNG stream families produce short battles. Both Bulbasaur cells win
+with 3-turn, 2409-frame battles — and Bulbasaur was the *worst* starter in the old
+one-mashed-sample table this section used to carry (12194 on mGBA 0.10.5, against Squirtle's
+11873), which is the measurement lesson in one line: an unmanipulated sample ranks nothing.
+The fragility is real, though: 10 of LeafGreen/Bulbasaur's 24 variants and 5 of
+FireRed/Bulbasaur's could not win their battle at all, the highest lose rates of any cell.
+The per-variant tables are in `docs/journal.md`.
 
 ## Frames saved locally can cost more than they save
 
@@ -204,65 +220,74 @@ other seven saved 6 frames in that segment -- and cost **391** in the battle, be
 before a battle moves `gRngValue` and the battle that came out of the new stream needed two more
 attacks. Net: 385 frames slower.
 
-So knobs like that one are not a segment's decision. They live in `Tuning`, are recorded in the
-ledger, and are swept end-to-end by `frlg route tune`, which builds the whole route per variant and
-scores it on total frames to the win. All eight values, each a complete build with the full
-two-stage battle search, re-swept 2026-08-12 on the current route:
+So knobs like that one are not a segment's decision. They live in `Tuning`, are recorded in
+the ledger, and are swept end-to-end — `frlg route tune` serially, `bin/frlg-sweep` as
+parallel builds — with every variant a complete build scored on total frames to the win.
+There are two knobs now:
 
-| `turn_hold` | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| total frames | 10541 | **10085** | 10540 | 10386 | 10267 | 10087 | — | 10531 |
+- **`turn_hold`** — frames of UP held to face the starter's ball. Mechanically 1 frame is
+  enough; the value picks which RNG lineage the battle search fishes in, nothing more.
+- **`text_hold`** — frames A/B is held per one-frame release in every dialogue mash. Longer
+  holds print text faster (`decompiled/src/text.c:639-650`, one character per held frame once
+  a press has landed) but register each menu-advancing press later, and the release phase has
+  to line up with when boxes become ready, so the landscape is alignment, not a curve:
+  measured on the intro alone (upstream of the naming-screen reseed, so no battle re-roll
+  muddies it), 1 → 3699, 2 → 3361, 3 → 3584, 4 → 3229, 7 → 3591, 15 → 3719, 31 → 3988 frames.
+  The ignored test `text_hold_on_the_intro_alone` reruns that measurement.
 
-The spread still has no shape to it: 2 and 6 nearly tie 450 frames ahead of the pack, 8 (the
-previous sweep's winner, on mGBA 0.10.5) is mid-field, and **7 loses outright** -- not one of 64
-start delays produced a winning battle, which is why the sweep now records a variant's failure
-as "loses" instead of dying (a knob value that cannot win is an answer). It is not "shorter is
-worse", it is the battle re-rolling: in front of an RNG-sensitive fight, local greed is not
-merely unhelpful, it is uninformative. Measure through the fight or do not measure. The
-original 0.10.5 sweep (best 11873 at `turn_hold` 8) is in the git history; every number in it
-predates the core re-pin and both 2026-08-12 rebuilds.
+The winning combination differs per version × starter cell (see the table above), which is
+the same lesson the first `turn_hold` sweep taught, now in two dimensions: in front of an
+RNG-sensitive fight, local greed is uninformative — measure through the fight or do not
+measure. A variant whose stream cannot win its battle at all is recorded as "loses" and is an
+answer, not an outage (turn_hold 7 on the 10085 route was the first; the Bulbasaur cells have
+several each). The older single-knob sweeps are in the git history and `docs/journal.md`.
 
 ## What is not optimised
 
-The 2026-08-12 rebuild routed out the three cheapest items this section used to carry: the
-seven-character names, MID text speed, and battle animations (197 frames of `04-options` bought
-all three; the section header above has the per-segment arithmetic). What remains, largest
-first:
+The 2026-08-12 rebuilds routed out this section's cheapest items in two rounds: first the
+seven-character names, MID text speed and battle animations (197 frames of `04-options`
+bought all three), then the mash itself (`text_hold` — the intro was "structural, until
+someone finds a skip" here for exactly one route generation; the skip was holding the button
+down), plus the stale single-sample starter table and the never-raced LeafGreen. What
+remains, largest first:
 
-- **`09-battle-win`, 2466 frames.** The per-turn stage exists now, but it is *greedy and
-  single-pass*: turns are searched in order on whatever stream the previous adoptions left, and
-  nothing revisits an earlier turn (or the start delay) after a later one changes the stream. A
-  second pass over the turns, or a joint start x turn search, might find more -- single
-  adoptions being worth three-digit frame counts says the landscape is rugged enough to reward
-  it. The search also still never varies *what* is pressed: move choice is untouched, and both
-  crit rolls (live from Oak's "inflicting damage is key" line onwards, see the RNG section) and
-  the 85-100% damage rolls are only reached through delays. Measured on the committed battle
-  (`gCritMultiplier` and `gBattlerAttacker` traced over the replayed log): two critical hits,
-  both *ours* -- attacker 0 is `B_POSITION_PLAYER_LEFT`
-  (`decompiled/include/constants/battle.h:28`) -- where the 12713 route's battle ate a rival
-  crit on the tier-2 recording. The search keeps stumbling into good crit rolls because they
-  make battles short; nothing yet aims for them.
-- **The intro's text, 3699 frames of `01`-`03`, still prints at MID.** The option menu hangs off
-  the field start menu (`StartMenuOptionCallback`, `decompiled/src/start_menu.c:531`), and there
-  is no field until the bedroom, so every box before `04-options` pays 4 frames a character no
-  matter what. Shrinking that means fewer characters, not faster ones -- and the boxes are Oak's
-  speech, which no menu shortens. Structural, until someone finds a skip.
-- **Starter choice.** Measured once each, mashed, not manipulated, on mGBA 0.10.5 -- three
-  route generations ago. Redo it against manipulated battles before treating Squirtle as
-  settled.
-- **LeafGreen is built and has never been raced.** The sandbox builds `pokeleafgreen.gba`
-  byte-exact (`docs/sandbox.md`) and the harness only needs a ROM path and symbols, but every
-  number in this file is FireRed. Version differences up to the rival fight are believed small
-  (label: guess -- nobody has cited or measured them); the RNG stream will differ regardless, so
-  the honest comparison is a full build-and-tune per version, same as the starter question.
+- **`09-battle-win`, 2409 frames.** The per-turn stage now repeats to a fixpoint, so
+  adoptions do revisit earlier turns — measured across the 144 sweep builds, a second pass
+  found further cuts in 12 of them and no build ever needed a third. What still never moves:
+  the start delay after stage 1 (a joint start × turn search remains untried), and *what* is
+  pressed — move choice is untouched, and both crit rolls (live from Oak's "inflicting damage
+  is key" line onwards, see the RNG section) and the 85-100% damage rolls are only reached
+  through delays. The search keeps stumbling into good crit rolls because they make battles
+  short; nothing yet aims for them, and nobody has re-run the crit census on the current
+  battle.
+- **`02-intro-oak`'s boxes still wait on scripted beats.** Text now prints at one character
+  per held frame, but the intro is also fades, sprite slides and timer waits that no input
+  reaches; 1565 frames is the floor for this drive shape, not for the scene. Nobody has
+  audited which of those waits are input-gated versus timer-gated.
+- **`text_hold` is one global knob.** The winning duty cycle is a compromise across every
+  dialogue stretch in the route; per-segment (or per-box) hold values are strictly more
+  general and completely unexplored.
+- **The player name is one fixed letter.** Which letter (and which of the naming screen's
+  cursor-start letters is cheapest to take) has never been compared; the name prints in a
+  handful of boxes.
 
 ## Tier 2
 
-**Status (2026-08-12, host): `route-10085f-65ef20333a57` passed.** BizHawk 2.11.1 replayed
-all 10085 frames to the ledger's fingerprint
+**Status (2026-08-12, sandbox): the 9658 LeafGreen movie is queued, not replayed.** It is
+also the first tier-2 request that is not FireRed, which two changes make possible:
+`frlg route export` now writes the movie's own ROM identity into `Header.txt` (the `SHA1`
+and `GameName` lines — everything else, `SyncSettings.json` above all, is still the
+template's, byte-for-byte), and `tools/verify-runner.sh` picks the ROM whose sha1 the movie
+header names out of `$FRLG_ARTIFACTS/rom` instead of playing everything on one configured
+ROM. Both versions' ROMs are in that directory. Until this movie replays, the LeafGreen
+header rewrite is tier-1-verified plumbing, not proven format knowledge — the first LG
+replay is the test.
+
+**The FireRed predecessor passed (2026-08-12, host): `route-10085f-65ef20333a57`.** BizHawk
+2.11.1 replayed all 10085 frames to the ledger's fingerprint
 (`e65e93b6712b408ed915f55e46c9a79f874016cd`) and the per-frame `gRngValue` probe matched on
-every frame — the fully optimised route (short names, FAST text, no battle animations, the
-two-stage battle search, `turn_hold` 2) desyncs nowhere against BizHawk. The result is
+every frame — the then-current route (short names, FAST text, no battle animations, the
+two-stage battle search, `turn_hold` 2) desynced nowhere against BizHawk. The result is
 `$FRLG_ARTIFACTS/verify/results/route-10085f-65ef20333a57.json` (`realtime`, 172s — it was
 watched, which is where the observations about the intro's text speed and the untried
 starters came from). The same day's two earlier exports (`route-10946f-b1a0875a77e9`,
@@ -319,7 +344,9 @@ exists to prevent.
 
 - **The `.bk2` writer exists**: `frlg route export` (`crates/frlg-route/src/bk2.rs`). It
   concatenates the ledger's logs (refusing any whose digest the ledger does not vouch for),
-  copies every template entry verbatim except `Input Log.txt`, and **round-trips the result** —
+  copies every template entry verbatim except `Input Log.txt` and the two ROM-identity lines
+  of `Header.txt` (since 2026-08-12, so one template serves both versions — see Status
+  above), and **round-trips the result** —
   the written movie is decoded back to key masks and compared before the export is reported;
   a mismatch deletes the file. The button mnemonics (`U D L R S s B A l r P`) were read from
   BizHawk's own `ControllerDefinition.MnemonicsCache` under mono, not guessed, and an exported

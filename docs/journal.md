@@ -3,6 +3,52 @@
 Newest first. Continuity is something you write down; a sandbox ends mid-thought. Anything
 unverified says so.
 
+## 2026-08-12 (sandbox, after the tier-2 pass) -- hold A, search to a fixpoint, race all six cells: 10085 -> 9658
+
+Three route changes landed together, because each re-rolls the battle and the honest score
+is one full rebuild:
+
+1. **`text_hold`** -- every dialogue mash now *holds* A (or B) for N frames per one-frame
+   release instead of alternating. `RenderText` prints a character on every held frame once
+   one press lands in the box (`decompiled/src/text.c:639-650`); the `[A, 0]` mash only held
+   half the frames. Measured on the intro alone (upstream of the naming-screen reseed):
+   hold 4 = 3229 frames vs mash's 3699, non-monotonic across N because the release phase has
+   to line up with when boxes become ready (full table in `docs/route.md`).
+2. **The battle search's per-turn stage repeats until a pass adopts nothing** (bounded at 8).
+   Across the day's 144 sweep builds, pass 2 adopted further cuts in 12, pass 3 in none.
+3. **Version and starter are swept, not assumed.** `bin/frlg-sweep` runs a 24-variant tuning
+   sweep (`turn_hold` 1-8 x `text_hold` {1,2,4}) as parallel builds; six sweeps covered
+   every version x starter cell. Best of each, total frames:
+
+   |            | Squirtle | Charmander | Bulbasaur |
+   | ---        | ---:     | ---:       | ---:      |
+   | FireRed    | 9789     | 9749       | 9666      |
+   | LeafGreen  | 9747     | 9741       | **9658**  |
+
+   **LeafGreen with Bulbasaur wins at 9658** (`turn_hold` 4, `text_hold` 4, battle plan
+   `[4, 3, 3, 3]`, 3 turns, 2409 frames) and is now the committed route. Bulbasaur was the
+   *worst* starter in the old mashed table; both its cells win here with 3-turn battles, and
+   both are also the most fragile (10/24 and 5/24 variants lose outright). The `text_hold 1`
+   column of the FireRed/Squirtle sweep reproduced the previous sweep's totals exactly where
+   the stream was unchanged (10085 at th2, 10531 at th8, th7 loses), which is the
+   determinism check for free.
+
+   LeafGreen needed: the version read from the ROM header (BPRE/BPGE at 0xAC,
+   `decompiled/config.mk:29-57`) because the rival's preset rows differ
+   (`sRivalNameChoices`, `decompiled/src/oak_speech.c:649-658` -- RED is row 1 on LG, one
+   DOWN, where FR's KAZ was two wrapping UPs); the `.bk2` export writing the movie's own
+   ROM name and sha1 into `Header.txt` (everything else stays the template's bytes); and
+   `tools/verify-runner.sh` picking the ROM the movie header names out of
+   `$FRLG_ARTIFACTS/rom` instead of playing everything on FireRed.
+
+**Unverified:** the 9658 movie's tier-2 replay (queued), and with it the Header.txt rewrite
+-- the first LeafGreen replay is what proves that format move. The crit census has not been
+re-run on the new battle. The sweep tables above are tier-1 evidence.
+
+Sweep mechanics worth keeping: 12 parallel builds on 16 cores, ~12.5 min per build wall
+clock, six 24-variant sweeps in an afternoon. `frlg route tune` serially would have been
+~30 hours; `bin/frlg-sweep` exists because of that arithmetic.
+
 ## 2026-08-12 (host, then sandbox) -- tier 2 passes the 10085 route; three observations from watching it
 
 `tools/verify-runner.sh` replayed `route-10085f-65ef20333a57` on the host (`--realtime`, 172s):

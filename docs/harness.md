@@ -134,12 +134,15 @@ structurally incapable of noticing, which is what makes them worth carrying rath
 
 ## Tests
 
-`cargo test --release` runs 29 unit tests (20 in `frlg-emu`, 9 in `frlg-route`) and 17 that drive
+`cargo test --release` runs 30 unit tests (20 in `frlg-emu`, 10 in `frlg-route`) and 17 that drive
 the real ROM (10 `harness.rs`, 6 `observe.rs`, 1 `route.rs`): boot, determinism across two replays,
 input actually reaching the game, savestate round trips in memory and on disk, the memory-block view
 agreeing with bus reads, split-replay equalling one pass, and the screenshot being the right shape
-and opaque. They need the ROM and fail loudly without it rather than skipping. The `frlg-route`
+and opaque. They need the ROM and fail loudly without it rather than skipping — `route.rs` looks
+its ROM up by the ledger's `rom_sha1`, so it follows the route across versions. The `frlg-route`
 unit tests include the `.bk2` round trip, which uses the committed `route/template.bk2` and no ROM.
+One more is `#[ignore]`d on purpose: `text_hold_on_the_intro_alone` is a minutes-long measurement,
+not a regression test (`docs/route.md`).
 
 Note that `cargo test --release` does not relink `target/release/frlg`; run `cargo build --release`
 before trusting the CLI binary.

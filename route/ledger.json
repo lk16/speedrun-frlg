@@ -1,47 +1,48 @@
 {
-  "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
+  "rom_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e",
   "bios": "bios+intro:300c20df6731a33952ded8c436f7f186d25d3492",
-  "starter": "squirtle",
+  "starter": "bulbasaur",
   "tuning": {
-    "turn_hold": 2
+    "turn_hold": 4,
+    "text_hold": 4
   },
-  "total_frames": 10085,
+  "total_frames": 9658,
   "segments": [
     {
       "name": "01-boot",
       "goal": "NEW GAME selected (CB2_NewGameScene running)",
       "parent": null,
       "log": "route/logs/01-boot.ilog",
-      "digest": "485d5e5d3d9fca350be5e8313a59624412f9c90a",
-      "frames": 619,
+      "digest": "1bb03289b14f50fd97af1db78a2bb9a4325b22de",
+      "frames": 615,
       "start_frame": 0,
-      "ram_hash": "9e11d6301e7e1103a391be2fa6d6970bd9b2fc1d",
+      "ram_hash": "5716c3de66cf3b1bca8f47396ad9e79f908fb149",
       "tier1": true,
-      "tier2": "passed 2026-08-12 as part of route-10085f-65ef20333a57: BizHawk 2.11.1 replayed all 10085 frames to ram_hash e65e93b6712b408ed915f55e46c9a79f874016cd with the per-frame gRngValue probe matching every frame (verify/results/route-10085f-65ef20333a57.json, realtime, 172s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "02-intro-oak",
       "goal": "the player naming screen is up (gender chosen)",
       "parent": "01-boot",
       "log": "route/logs/02-intro-oak.ilog",
-      "digest": "dbd1f0cd200e2d6e7038cb63246c89d87765840d",
-      "frames": 1842,
-      "start_frame": 619,
-      "ram_hash": "6586a54b3e0155f0f3d9a49a9f7fbdf1208709e4",
+      "digest": "e9f12637ef72add5e9af1129a386fa99a0a21326",
+      "frames": 1565,
+      "start_frame": 615,
+      "ram_hash": "adcd146c9ba4b0fdb85b722583b142301ef7b33e",
       "tier1": true,
-      "tier2": "passed 2026-08-12 as part of route-10085f-65ef20333a57: BizHawk 2.11.1 replayed all 10085 frames to ram_hash e65e93b6712b408ed915f55e46c9a79f874016cd with the per-frame gRngValue probe matching every frame (verify/results/route-10085f-65ef20333a57.json, realtime, 172s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "03-names",
       "goal": "in the bedroom, 1-char player name and 3-char rival name",
       "parent": "02-intro-oak",
       "log": "route/logs/03-names.ilog",
-      "digest": "b7f7e28bc1fe61aae6d2691c4eb572eb51b696a7",
-      "frames": 1238,
-      "start_frame": 2461,
-      "ram_hash": "fe37bd39c9246c281a15150b6994bcb3ac2db37b",
+      "digest": "4ef8d9d11cbd3303dea71539af414015620a2675",
+      "frames": 1043,
+      "start_frame": 2180,
+      "ram_hash": "4db58b2af23f2e0263533bd4529550c6b5df6124",
       "tier1": true,
-      "tier2": "passed 2026-08-12 as part of route-10085f-65ef20333a57: BizHawk 2.11.1 replayed all 10085 frames to ram_hash e65e93b6712b408ed915f55e46c9a79f874016cd with the per-frame gRngValue probe matching every frame (verify/results/route-10085f-65ef20333a57.json, realtime, 172s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "04-options",
@@ -50,10 +51,10 @@
       "log": "route/logs/04-options.ilog",
       "digest": "3edaa5f94d9f7f111cd66453ddc2e40034ce37d5",
       "frames": 197,
-      "start_frame": 3699,
-      "ram_hash": "4eed5e4f1fafa151e769439c9fb3bb93b63a57e9",
+      "start_frame": 3223,
+      "ram_hash": "246a7995d7e43110468b81159c49692d5018d270",
       "tier1": true,
-      "tier2": "passed 2026-08-12 as part of route-10085f-65ef20333a57: BizHawk 2.11.1 replayed all 10085 frames to ram_hash e65e93b6712b408ed915f55e46c9a79f874016cd with the per-frame gRngValue probe matching every frame (verify/results/route-10085f-65ef20333a57.json, realtime, 172s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "05-house",
@@ -62,58 +63,58 @@
       "log": "route/logs/05-house.ilog",
       "digest": "7bb5d6b471995ba90abfff35c6c29854dad5c333",
       "frames": 431,
-      "start_frame": 3896,
-      "ram_hash": "1cb63f288a474be5ea6f92500369dbf912af7fb9",
+      "start_frame": 3420,
+      "ram_hash": "0fa418bf7b7459aaca3bd8ab6ad4fc1a5f1e0c02",
       "tier1": true,
-      "tier2": "passed 2026-08-12 as part of route-10085f-65ef20333a57: BizHawk 2.11.1 replayed all 10085 frames to ram_hash e65e93b6712b408ed915f55e46c9a79f874016cd with the per-frame gRngValue probe matching every frame (verify/results/route-10085f-65ef20333a57.json, realtime, 172s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "06-to-lab",
       "goal": "inside Oak's lab, after his interruption",
       "parent": "05-house",
       "log": "route/logs/06-to-lab.ilog",
-      "digest": "7da1f4a0fd363fb5d1ced6734d32ea4db38236eb",
-      "frames": 1209,
-      "start_frame": 4327,
-      "ram_hash": "e2aa51a9f993b666695a6915b0168b668665a2f7",
+      "digest": "84cd019128896fa333c67bfd7d96738c7812e800",
+      "frames": 1211,
+      "start_frame": 3851,
+      "ram_hash": "6b9b7ee2d48ff530466710f5f8eb15f91daadd85",
       "tier1": true,
-      "tier2": "passed 2026-08-12 as part of route-10085f-65ef20333a57: BizHawk 2.11.1 replayed all 10085 frames to ram_hash e65e93b6712b408ed915f55e46c9a79f874016cd with the per-frame gRngValue probe matching every frame (verify/results/route-10085f-65ef20333a57.json, realtime, 172s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "07-starter",
-      "goal": "squirtle in the party, rival has his",
+      "goal": "bulbasaur in the party, rival has his",
       "parent": "06-to-lab",
       "log": "route/logs/07-starter.ilog",
-      "digest": "7c6259f899405085e5f1c2f762be3db571538ba8",
-      "frames": 1697,
-      "start_frame": 5536,
-      "ram_hash": "137068bb162818b783ed68f8ffa56911d3c6846c",
+      "digest": "9c11c4b3945732343f498ec02cd28ea8db42c019",
+      "frames": 1785,
+      "start_frame": 5062,
+      "ram_hash": "2ff6be15963589d4d2e421b56cd54d5bc99ef0f2",
       "tier1": true,
-      "tier2": "passed 2026-08-12 as part of route-10085f-65ef20333a57: BizHawk 2.11.1 replayed all 10085 frames to ram_hash e65e93b6712b408ed915f55e46c9a79f874016cd with the per-frame gRngValue probe matching every frame (verify/results/route-10085f-65ef20333a57.json, realtime, 172s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "08-battle-start",
       "goal": "the rival battle has started",
       "parent": "07-starter",
       "log": "route/logs/08-battle-start.ilog",
-      "digest": "07e132847263e07bb619d539e44d3b4e69e1876d",
-      "frames": 386,
-      "start_frame": 7233,
-      "ram_hash": "1dbfc3a54b2e48580c1b8536ae89e912db3c68bf",
+      "digest": "87c0b0a0025946d7489cb0f8a932b164d71ea14a",
+      "frames": 402,
+      "start_frame": 6847,
+      "ram_hash": "64b3834c49d5fb94d0a189e0c933969fb53530d6",
       "tier1": true,
-      "tier2": "passed 2026-08-12 as part of route-10085f-65ef20333a57: BizHawk 2.11.1 replayed all 10085 frames to ram_hash e65e93b6712b408ed915f55e46c9a79f874016cd with the per-frame gRngValue probe matching every frame (verify/results/route-10085f-65ef20333a57.json, realtime, 172s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     },
     {
       "name": "09-battle-win",
       "goal": "gBattleOutcome == B_OUTCOME_WON",
       "parent": "08-battle-start",
       "log": "route/logs/09-battle-win.ilog",
-      "digest": "e1b0f9f9fb5056687c61092c6fee91e15dac3fdf",
-      "frames": 2466,
-      "start_frame": 7619,
-      "ram_hash": "e65e93b6712b408ed915f55e46c9a79f874016cd",
+      "digest": "28d5ce6ade68530b3ce90677d76ece9d1649146c",
+      "frames": 2409,
+      "start_frame": 7249,
+      "ram_hash": "08cf8de0a6a46f6df6bd322b4b51a80a3cbe93ba",
       "tier1": true,
-      "tier2": "passed 2026-08-12 as part of route-10085f-65ef20333a57: BizHawk 2.11.1 replayed all 10085 frames to ram_hash e65e93b6712b408ed915f55e46c9a79f874016cd with the per-frame gRngValue probe matching every frame (verify/results/route-10085f-65ef20333a57.json, realtime, 172s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/route.md)"
     }
   ]
 }
