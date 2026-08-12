@@ -50,8 +50,11 @@ enum RouteCommand {
     Tune(RouteArgs),
     /// Print the ledger as it stands, without running anything.
     Status {
-        #[arg(long, default_value = "route/rival-1/ledger.json")]
-        ledger: PathBuf,
+        /// Which TAS's ledger, when --ledger is not given.
+        #[arg(long, default_value = "rival-1")]
+        target: String,
+        #[arg(long)]
+        ledger: Option<PathBuf>,
     },
     /// Export the committed logs as one BizHawk movie for tier 2.
     ///
@@ -65,8 +68,11 @@ enum RouteCommand {
 
 #[derive(Args)]
 struct ExportArgs {
-    #[arg(long, default_value = "route/rival-1/ledger.json")]
-    ledger: PathBuf,
+    /// Which TAS's ledger, when --ledger is not given.
+    #[arg(long, default_value = "rival-1")]
+    target: String,
+    #[arg(long)]
+    ledger: Option<PathBuf>,
 
     /// The BizHawk-written movie whose container and settings are copied
     /// verbatim; only the input log is replaced.
@@ -93,18 +99,25 @@ struct RouteArgs {
     #[arg(long)]
     sym: Option<PathBuf>,
 
+    /// Which TAS to build or verify: "rival-1" or "defeat-brock". Picks the
+    /// segment list and the default `route/<target>/` paths.
+    #[arg(long, default_value = "rival-1")]
+    target: String,
+
     /// Which starter to route. The rival always takes the one that beats it.
     /// Defaults to what the ledger records, else squirtle -- so a bare
     /// `frlg route verify` follows the committed route across starters.
     #[arg(long)]
     starter: Option<String>,
 
-    /// Where the per-segment input logs go.
-    #[arg(long, default_value = "route/rival-1/logs")]
-    logs: PathBuf,
+    /// Where the per-segment input logs go. Defaults to
+    /// `route/<target>/logs`.
+    #[arg(long)]
+    logs: Option<PathBuf>,
 
-    #[arg(long, default_value = "route/rival-1/ledger.json")]
-    ledger: PathBuf,
+    /// The ledger file. Defaults to `route/<target>/ledger.json`.
+    #[arg(long)]
+    ledger: Option<PathBuf>,
 
     /// Checkpoint savestates. Defaults to $FRLG_ARTIFACTS/states/route, and is
     /// skipped when that is not set -- they are convenience, not evidence.
@@ -231,28 +244,52 @@ fn main() -> Result<()> {
     }
 }
 
+fn parse_target(name: &str) -> Result<frlg_route::Target> {
+    frlg_route::Target::parse(name)
+        .with_context(|| format!("unknown target {name:?}: rival-1 or defeat-brock"))
+}
+
+fn target_ledger(target: frlg_route::Target, explicit: &Option<PathBuf>) -> PathBuf {
+    explicit
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(format!("route/{}/ledger.json", target.name())))
+}
+
+fn target_logs(target: frlg_route::Target, explicit: &Option<PathBuf>) -> PathBuf {
+    explicit
+        .clone()
+        .unwrap_or_else(|| PathBuf::from(format!("route/{}/logs", target.name())))
+}
+
 fn cmd_route(command: RouteCommand) -> Result<()> {
     match command {
         RouteCommand::Build(args) => {
-            let (rom, sym, starter) = route_setup(&args)?;
+            let target = parse_target(&args.target)?;
+            let ledger_path = target_ledger(target, &args.ledger);
+            let (rom, sym, starter) = route_setup(&args, &ledger_path)?;
             let paths = ledger::Paths {
-                logs: args.logs.clone(),
-                ledger: args.ledger.clone(),
-                states: args.states.clone().or_else(default_states_dir),
+                logs: target_logs(target, &args.logs),
+                ledger: ledger_path.clone(),
+                states: args
+                    .states
+                    .clone()
+                    .or_else(|| default_states_dir(target.name())),
             };
-            let tuning = tuning_for(&args);
-            let built = ledger::build(&rom, &sym, starter, tuning, &paths, |line| {
+            let tuning = tuning_for(&args, &ledger_path);
+            let built = ledger::build(&rom, &sym, target, starter, tuning, &paths, |line| {
                 println!("{line}")
             })?;
             println!("\n{} frames total", built.total_frames);
-            println!("wrote {}", args.ledger.display());
+            println!("wrote {}", ledger_path.display());
             println!("tier 1 is claimed by `frlg route verify`, not by this command");
             Ok(())
         }
         RouteCommand::Verify(args) => {
-            let (rom, sym, starter) = route_setup(&args)?;
-            let recorded = ledger::read(&args.ledger)
-                .with_context(|| format!("reading {}", args.ledger.display()))?;
+            let target = parse_target(&args.target)?;
+            let ledger_path = target_ledger(target, &args.ledger);
+            let (rom, sym, starter) = route_setup(&args, &ledger_path)?;
+            let recorded = ledger::read(&ledger_path)
+                .with_context(|| format!("reading {}", ledger_path.display()))?;
             let checked =
                 ledger::verify(&rom, &sym, starter, &recorded, |line| println!("{line}"))?;
 
@@ -273,8 +310,8 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
                 .collect();
 
             if args.write {
-                ledger::write(&checked, &args.ledger)?;
-                println!("wrote {}", args.ledger.display());
+                ledger::write(&checked, &ledger_path)?;
+                println!("wrote {}", ledger_path.display());
             }
             for line in &drifted {
                 println!("DRIFT {line}");
@@ -289,7 +326,9 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             Ok(())
         }
         RouteCommand::Tune(args) => {
-            let (rom, sym, starter) = route_setup(&args)?;
+            let target = parse_target(&args.target)?;
+            let ledger_path = target_ledger(target, &args.ledger);
+            let (rom, sym, starter) = route_setup(&args, &ledger_path)?;
             let mut best: Option<(Tuning, usize)> = None;
             for tuning in Tuning::variants() {
                 // Sweep into a scratch directory: a variant that loses must not
@@ -307,7 +346,7 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
                 // -- this knob value loses -- not a reason to abandon the
                 // sweep. turn_hold 7 on the 2026-08-12 route was exactly
                 // that: none of 64 start delays won.
-                match ledger::build(&rom, &sym, starter, tuning, &paths, |_| {}) {
+                match ledger::build(&rom, &sym, target, starter, tuning, &paths, |_| {}) {
                     Ok(built) => {
                         let total = built.total_frames;
                         println!(
@@ -334,18 +373,23 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             );
 
             let paths = ledger::Paths {
-                logs: args.logs.clone(),
-                ledger: args.ledger.clone(),
-                states: args.states.clone().or_else(default_states_dir),
+                logs: target_logs(target, &args.logs),
+                ledger: ledger_path.clone(),
+                states: args
+                    .states
+                    .clone()
+                    .or_else(|| default_states_dir(target.name())),
             };
-            ledger::build(&rom, &sym, starter, tuning, &paths, |_| {})?;
-            println!("rebuilt {} with it", args.ledger.display());
+            ledger::build(&rom, &sym, target, starter, tuning, &paths, |_| {})?;
+            println!("rebuilt {} with it", ledger_path.display());
             Ok(())
         }
-        RouteCommand::Status { ledger: path } => {
+        RouteCommand::Status { target, ledger } => {
+            let path = target_ledger(parse_target(&target)?, &ledger);
             let led = ledger::read(&path).with_context(|| format!("reading {}", path.display()))?;
             println!("rom     {}", led.rom_sha1);
             println!("boot    {}", led.bios);
+            println!("target  {}", led.target);
             println!("starter {}", led.starter);
             println!(
                 "tuning  turn_hold {}  text_hold {}",
@@ -380,8 +424,9 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
 fn cmd_export(args: ExportArgs) -> Result<()> {
     use sha1::{Digest, Sha1};
 
+    let ledger_path = target_ledger(parse_target(&args.target)?, &args.ledger);
     let led =
-        ledger::read(&args.ledger).with_context(|| format!("reading {}", args.ledger.display()))?;
+        ledger::read(&ledger_path).with_context(|| format!("reading {}", ledger_path.display()))?;
     let mut rom_sha1 = [0u8; 20];
     hex::decode_to_slice(&led.rom_sha1, &mut rom_sha1)
         .with_context(|| format!("ledger rom_sha1 {:?} is not sha1 hex", led.rom_sha1))?;
@@ -561,8 +606,8 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
 /// records its starter, and a bare `frlg route verify` must follow the route
 /// across versions and starters rather than assume FireRed/Squirtle. Only
 /// with no ledger at all do the FireRed defaults apply.
-fn route_setup(args: &RouteArgs) -> Result<(PathBuf, PathBuf, Starter)> {
-    let led = ledger::read(&args.ledger).ok();
+fn route_setup(args: &RouteArgs, ledger_path: &Path) -> Result<(PathBuf, PathBuf, Starter)> {
+    let led = ledger::read(ledger_path).ok();
 
     let rom = match &args.rom.rom {
         Some(path) => path.clone(),
@@ -610,8 +655,8 @@ fn parse_starter(name: &str) -> Result<Starter> {
 
 /// The knobs a build should use: what was asked for, else what the ledger the
 /// build is about to overwrite already settled on, else the default.
-fn tuning_for(args: &RouteArgs) -> Tuning {
-    let mut tuning = ledger::read(&args.ledger)
+fn tuning_for(args: &RouteArgs, ledger_path: &Path) -> Tuning {
+    let mut tuning = ledger::read(ledger_path)
         .map(|led| led.tuning)
         .unwrap_or_default();
     if let Some(turn_hold) = args.turn_hold {
@@ -623,10 +668,15 @@ fn tuning_for(args: &RouteArgs) -> Tuning {
     tuning
 }
 
-fn default_states_dir() -> Option<PathBuf> {
-    std::env::var("FRLG_ARTIFACTS")
-        .ok()
-        .map(|dir| PathBuf::from(dir).join("states").join("route"))
+/// Per-target so a defeat-brock build cannot overwrite rival-1's checkpoint
+/// states. rival-1 keeps its historical directory name.
+fn default_states_dir(target: &str) -> Option<PathBuf> {
+    let dir = std::env::var("FRLG_ARTIFACTS").ok()?;
+    let sub = match target {
+        "rival-1" => "route".to_string(),
+        other => format!("route-{other}"),
+    };
+    Some(PathBuf::from(dir).join("states").join(sub))
 }
 
 fn resolve_rom(args: &RomArgs) -> Result<PathBuf> {

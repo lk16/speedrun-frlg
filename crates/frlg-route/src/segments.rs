@@ -211,6 +211,41 @@ pub fn all(version: Version, starter: Starter, tuning: Tuning) -> Vec<Segment> {
     ]
 }
 
+/// Which TAS this build is for. A target is a segment list and a home
+/// directory under `route/<name>/`; rival-1 is a strict prefix of
+/// defeat-brock, so the enum picks how far the build runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    Rival1,
+    DefeatBrock,
+}
+
+impl Target {
+    pub fn parse(name: &str) -> Option<Target> {
+        match name {
+            "rival-1" => Some(Target::Rival1),
+            "defeat-brock" => Some(Target::DefeatBrock),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Target::Rival1 => "rival-1",
+            Target::DefeatBrock => "defeat-brock",
+        }
+    }
+
+    /// The target's segments, in order.
+    pub fn segments(self, version: Version, starter: Starter, tuning: Tuning) -> Vec<Segment> {
+        let mut segments = all(version, starter, tuning);
+        if self == Target::DefeatBrock {
+            segments.extend(crate::brock::segments(starter, tuning));
+        }
+        segments
+    }
+}
+
 /// The task that owns both preset-name menus
 /// (`decompiled/src/oak_speech.c:1413`). Its name says "rival" but it handles
 /// the player's menu too -- `hasPlayerBeenNamed` is what distinguishes them.

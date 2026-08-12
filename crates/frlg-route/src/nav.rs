@@ -174,9 +174,31 @@ pub fn search(
     emu: &mut Emu,
     obs: &Observer,
     start: &SaveState,
-    mut goal: Goal,
+    goal: Goal,
     max_nodes: usize,
 ) -> Result<Path, RouteError> {
+    match search_best_effort(emu, obs, start, goal, max_nodes)? {
+        (path, true) => Ok(path),
+        (_, false) => Err(RouteError::Timeout {
+            what: format!("a path to the goal (search exhausted {max_nodes} nodes)"),
+            budget: max_nodes,
+            frames: 0,
+        }),
+    }
+}
+
+/// [`search`], but exhaustion is an answer rather than an error: returns the
+/// path to the node *closest to the goal* (by the Tile heuristic, ties on
+/// cost) and whether the goal itself was reached. This is what lets a walk
+/// through forced encounters make progress: commit the closest approach,
+/// deal with whatever stopped it there (a battle, usually), and search again.
+pub fn search_best_effort(
+    emu: &mut Emu,
+    obs: &Observer,
+    start: &SaveState,
+    mut goal: Goal,
+    max_nodes: usize,
+) -> Result<(Path, bool), RouteError> {
     emu.load_state(start)?;
     let start_place = place(obs, emu).ok_or_else(|| RouteError::Timeout {
         what: "a save block to walk from".into(),
@@ -242,10 +264,13 @@ pub fn search(
             next_inputs.extend_from_slice(&fed);
 
             if reached(emu, &next) {
-                return Ok(Path {
-                    frames: next_inputs.len(),
-                    inputs: next_inputs,
-                });
+                return Ok((
+                    Path {
+                        frames: next_inputs.len(),
+                        inputs: next_inputs,
+                    },
+                    true,
+                ));
             }
             if best.get(&next).is_some_and(|(seen, _)| *seen <= next_cost) {
                 continue;
@@ -259,9 +284,19 @@ pub fn search(
         }
     }
 
-    Err(RouteError::Timeout {
-        what: format!("a path from {start_place:?} (expanded {expanded} nodes)"),
-        budget: max_nodes,
-        frames: 0,
-    })
+    // Exhausted without reaching the goal: hand back the closest approach.
+    // Only meaningful when the heuristic is (a Tile goal); otherwise this is
+    // the start itself and the caller learns only that no path was found.
+    let closest = best
+        .iter()
+        .min_by_key(|(place, (cost, _))| (heuristic(place), *cost))
+        .map(|(_, (cost, inputs))| (inputs.clone(), *cost));
+    let (inputs, _cost) = closest.unwrap_or_default();
+    Ok((
+        Path {
+            frames: inputs.len(),
+            inputs,
+        },
+        false,
+    ))
 }

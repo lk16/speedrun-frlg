@@ -102,6 +102,8 @@ mod sb1_off {
     /// `/*0x3A4C*/ u8 rivalName[PLAYER_NAME_LENGTH + 1]`
     /// (`decompiled/include/global.h:813`).
     pub const RIVAL_NAME: u32 = 0x3A4C;
+    /// `/*0x0EE0*/ u8 flags[NUM_FLAG_BYTES]` (`decompiled/include/global.h:790`).
+    pub const FLAGS: u32 = 0x0EE0;
 }
 
 /// `VARS_START`, the id every `VAR_*` constant is an offset from.
@@ -116,6 +118,25 @@ pub const VAR_OAKS_LAB_SCENE: u16 = 0x4055;
 /// `VAR_STARTER_MON` (`decompiled/include/constants/vars.h:98`):
 /// 0 Bulbasaur, 1 Squirtle, 2 Charmander.
 pub const VAR_STARTER_MON: u16 = 0x4031;
+
+/// `VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN` (`decompiled/include/constants/vars.h`):
+/// 0 lying across the road, 1 standing (tutorial pending), 2+ done, road open
+/// (`data/maps/ViridianCity/scripts.inc:5-27`).
+pub const VAR_VIRIDIAN_OLD_MAN: u16 = 0x4051;
+
+/// `VAR_MAP_SCENE_VIRIDIAN_CITY_MART` (`decompiled/include/constants/vars.h`):
+/// 1 once the clerk has handed over Oak's Parcel
+/// (`data/maps/ViridianCity_Mart/scripts.inc:19-33`).
+pub const VAR_VIRIDIAN_MART: u16 = 0x4057;
+
+/// `FLAG_DEFEATED_BROCK 0x4B0` (`decompiled/include/constants/flags.h:1236`),
+/// set by `PewterCity_Gym_EventScript_DefeatedBrock`
+/// (`data/maps/PewterCity_Gym/scripts.inc:14`).
+pub const FLAG_DEFEATED_BROCK: u16 = 0x4B0;
+
+/// `FLAG_BADGE01_GET` = `SYS_FLAGS + 0x20` = 0x820
+/// (`decompiled/include/constants/flags.h:1324,1364`).
+pub const FLAG_BADGE01_GET: u16 = 0x820;
 
 /// `struct BattlePokemon`, `decompiled/include/pokemon.h:170`. Unlike a party
 /// `struct Pokemon`, its substructs are not encrypted, so species and HP can be
@@ -149,6 +170,11 @@ mod avatar_off {
 pub const B_OUTCOME_WON: u8 = 1;
 /// `B_OUTCOME_LOST`, `decompiled/include/constants/battle.h:77`.
 pub const B_OUTCOME_LOST: u8 = 2;
+/// `B_OUTCOME_RAN`, `decompiled/include/constants/battle.h:79`.
+pub const B_OUTCOME_RAN: u8 = 4;
+
+/// `BATTLE_TYPE_TRAINER` (`decompiled/include/constants/battle.h:45`).
+pub const BATTLE_TYPE_TRAINER: u32 = 0x8;
 
 /// The addresses the probes need, resolved once so a missing symbol is one
 /// clear error at startup rather than a zero read in the middle of a route.
@@ -169,6 +195,9 @@ pub struct Observer {
     s_option_menu_ptr: u32,
     s_start_menu_callback: u32,
     s_start_menu_cursor_pos: u32,
+    g_battler_controller_funcs: u32,
+    g_move_selection_cursor: u32,
+    g_action_selection_cursor: u32,
 }
 
 impl Observer {
@@ -193,6 +222,9 @@ impl Observer {
             s_option_menu_ptr: addr("sOptionMenuPtr")?,
             s_start_menu_callback: addr("sStartMenuCallback")?,
             s_start_menu_cursor_pos: addr("sStartMenuCursorPos")?,
+            g_battler_controller_funcs: addr("gBattlerControllerFuncs")?,
+            g_move_selection_cursor: addr("gMoveSelectionCursor")?,
+            g_action_selection_cursor: addr("gActionSelectionCursor")?,
             syms,
         })
     }
@@ -457,6 +489,36 @@ impl Observer {
     /// `gPlayerAvatar.preventStep` -- set while a script owns the player.
     pub fn prevent_step(&self, emu: &mut Emu) -> bool {
         emu.read8(self.g_player_avatar + avatar_off::PREVENT_STEP) != 0
+    }
+
+    /// `FlagGet(id)` for ordinary save-block flags:
+    /// `gSaveBlock1Ptr->flags[id / 8] & (1 << (id & 7))`
+    /// (`decompiled/src/event_data.c:257-309`, flags array at
+    /// `include/global.h:790`).
+    pub fn flag(&self, emu: &mut Emu, id: u16) -> Option<bool> {
+        let sb1 = self.save_block1(emu)?;
+        let byte = emu.read8(sb1 + sb1_off::FLAGS + (id as u32) / 8);
+        Some(byte & (1 << (id & 7)) != 0)
+    }
+
+    /// True when `gBattlerControllerFuncs[battler]` points inside the named
+    /// function -- "is this battler's controller waiting in state X", e.g.
+    /// `HandleInputChooseMove` for the move menu
+    /// (`decompiled/src/battle_controller_player.c`).
+    pub fn battle_controller_is(&self, emu: &mut Emu, battler: u32, name: &str) -> bool {
+        let func = emu.read32(self.g_battler_controller_funcs + battler * 4);
+        matches!(self.syms.covering(func), Some((sym, _)) if sym == name)
+    }
+
+    /// `gMoveSelectionCursor[battler]` -- which move slot the move menu's
+    /// cursor is on. Persists across turns within one battle.
+    pub fn move_cursor(&self, emu: &mut Emu, battler: u32) -> u8 {
+        emu.read8(self.g_move_selection_cursor + battler)
+    }
+
+    /// `gActionSelectionCursor[battler]` -- FIGHT/BAG/POKEMON/RUN, 0-3.
+    pub fn action_cursor(&self, emu: &mut Emu, battler: u32) -> u8 {
+        emu.read8(self.g_action_selection_cursor + battler)
     }
 
     /// Everything at once, for logging a route's progress.

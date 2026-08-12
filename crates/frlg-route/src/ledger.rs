@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::observe::Observer;
 use crate::record::{Recorder, RouteError};
-use crate::segments::{self, Segment, Starter, Tuning};
+use crate::segments::{self, Segment, Starter, Target, Tuning};
 
 /// Tier 2 is a BizHawk replay on the host; nothing in this sandbox can do it.
 /// `frlg route export` writes the `.bk2` and queues it, but a queued request
@@ -40,6 +40,11 @@ pub struct Ledger {
     /// so logs replayed under another boot are not the same evidence.
     /// `verify` refuses a mismatch.
     pub bios: String,
+    /// Which TAS these logs belong to (`segments::Target`). `#[serde(default)]`
+    /// to "rival-1" is safe here, unlike `tuning`: every ledger written before
+    /// the field existed *was* a rival-1 ledger.
+    #[serde(default = "target_compat")]
+    pub target: String,
     pub starter: String,
     /// The route-level knobs this build used. Recorded so `verify` rebuilds the
     /// same segment definitions the logs were made against, and so a sweep's
@@ -93,6 +98,10 @@ pub enum LedgerError {
     Message(String),
 }
 
+fn target_compat() -> String {
+    Target::Rival1.name().to_string()
+}
+
 /// Where a build writes.
 pub struct Paths {
     /// Directory for the committed input logs, e.g. `route/rival-1/logs`.
@@ -131,6 +140,7 @@ fn version_of(rom: &Path) -> Result<segments::Version, LedgerError> {
 pub fn build(
     rom: &Path,
     sym: &Path,
+    target: Target,
     starter: Starter,
     tuning: Tuning,
     paths: &Paths,
@@ -145,7 +155,7 @@ pub fn build(
 
     let mut entries: Vec<Entry> = Vec::new();
     let mut consumed = 0usize;
-    for segment in segments::all(version_of(rom)?, starter, tuning) {
+    for segment in target.segments(version_of(rom)?, starter, tuning) {
         let start_frame = rec.frames();
         (segment.run)(&mut rec, &obs)?;
         if !(segment.reached)(&obs, rec.emu()) {
@@ -192,6 +202,7 @@ pub fn build(
     let ledger = Ledger {
         rom_sha1: hex::encode(rec.log().rom_sha1),
         bios: rec.boot().to_string(),
+        target: target.name().to_string(),
         starter: starter.name().to_string(),
         tuning,
         total_frames: rec.frames(),
@@ -221,7 +232,10 @@ pub fn verify(
         )));
     }
 
-    let defined = segments::all(version_of(rom)?, starter, ledger.tuning);
+    let target = Target::parse(&ledger.target).ok_or_else(|| {
+        LedgerError::Message(format!("ledger names unknown target {:?}", ledger.target))
+    })?;
+    let defined = target.segments(version_of(rom)?, starter, ledger.tuning);
     if defined.len() != ledger.segments.len() {
         return Err(LedgerError::Message(format!(
             "ledger has {} segments but the route defines {}",
@@ -271,6 +285,7 @@ pub fn verify(
     Ok(Ledger {
         rom_sha1: ledger.rom_sha1.clone(),
         bios: ledger.bios.clone(),
+        target: ledger.target.clone(),
         starter: ledger.starter.clone(),
         tuning: ledger.tuning,
         total_frames: frame,

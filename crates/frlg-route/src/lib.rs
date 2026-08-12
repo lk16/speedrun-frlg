@@ -9,6 +9,7 @@
 //! shown to work under mGBA and nothing more.
 
 pub mod bk2;
+pub mod brock;
 pub mod ledger;
 pub mod nav;
 pub mod observe;
@@ -18,4 +19,4 @@ pub mod segments;
 
 pub use observe::{Observer, Snapshot};
 pub use record::{Feed, Recorder, RouteError};
-pub use segments::{Segment, Starter};
+pub use segments::{Segment, Starter, Target};
