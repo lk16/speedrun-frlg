@@ -422,7 +422,12 @@ fn back_to_field(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(
 /// `decompiled/include/constants/battle.h:45`).
 fn handle_battle(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(), RouteError> {
     if obs.battle_type_flags(rec.emu()) & BATTLE_TYPE_TRAINER != 0 {
-        win_battle(rec, obs, tuning, None, "trainer en route", 48)?;
+        // 192 start delays, not 48: on the committed Rick fight the optimum
+        // sat at delay 111 (3894 frames vs 4059 at width 48; fight-lab,
+        // 2026-08-13), and the checkpointed search makes the extra width
+        // cheap. Sammy's optimum (delay 12) was inside 48, so the width
+        // only ever helps.
+        win_battle(rec, obs, tuning, None, "trainer en route", 192)?;
         back_to_field(rec, obs, tuning)
     } else {
         flee_wild(rec, obs, tuning)
