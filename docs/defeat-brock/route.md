@@ -1,12 +1,13 @@
 # Defeat Brock: the route
 
-**Status: planning.** Nothing below is routed, measured, or verified yet. This file starts as
-the step plan and will become the evidence document the way `docs/rival-1/route.md` did — every
-claim cited from `decompiled/`, every number measured on tier 1, acceptance only from tier 2.
-Until a section says "measured", it is a plan.
+**Status: semi-naive run complete.** 49143 frames (~13m43s at 59.7275 Hz) from power-on to
+`FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 2, `text_hold` 4), tier-1
+verified from reset on 2026-08-13 (`route/defeat-brock/ledger.json`), tier-2 queued and not
+yet replayed. *Semi-naive* means: correctness first, measured but not optimised — the
+"What is not optimised" list below is long on purpose, and every number in it is a baseline
+to beat, not a claim of speed.
 
-The target: power-on to Brock defeated (observable to be pinned from the gym script — expected
-to be a badge/defeat flag; citation pending). This is a strict superset of the rival-1 target:
+The target: power-on to `FLAG_DEFEATED_BROCK` (`data/maps/PewterCity_Gym/scripts.inc:14`). This is a strict superset of the rival-1 target:
 the lab rival battle is on the way. **The rival-1 route is a baseline, not a prefix to reuse
 blindly** — that route optimised "frames to rival win" with no regard for what the starter is
 *for* afterwards. For this target the starter's species, nature and IVs fight Brock, so the
@@ -14,7 +15,7 @@ version × starter choice, the naming-exit seed, and the frames spent before `gi
 pick the starter's PID/IVs) all have to be re-decided against the new objective. Expect the
 first ~7000 frames to look like rival-1's and refuse to assume they should.
 
-## The plan, in steps
+## The plan, in steps (1-4 done; 5-6 in progress)
 
 1. **Scaffold** (this commit): target directories, this plan, the journal. rival-1 files are
    frozen — nothing under `docs/rival-1/` or `route/rival-1/` is touched by this effort.
@@ -78,5 +79,54 @@ marked as decoded-from-binary lower bounds pending emulator confirmation):
   Water hit both at 4×; Bulbasaur's Vine Whip unlocks at L10 (560 exp), Squirtle's Bubble
   at L7, Charmander is resisted until L13. Exp math and stat formulas worked and cited.
 
-### The segments — pending the semi-naive build
-### Tier 2 — not attempted
+## The segments — measured 2026-08-13
+
+The rival-1 prefix (01..09) plus the continuation. Segment code:
+`crates/frlg-route/src/brock.rs`; names are semantic, order lives in the ledger.
+
+| Segment | Frames | Ends | What happens |
+| --- | ---: | ---: | --- |
+| `01-boot`..`09-battle-win` | 9853 | 9853 | the rival-1 prefix on this seed (128/128 start delays win; battle 2675) |
+| `exit-lab` | 880 | 10733 | post-battle script, out to Pallet |
+| `to-viridian` | 2853 | 13586 | Route 1 north, one fled encounter |
+| `parcel` | 1260 | 14846 | mart scene, Oak's Parcel |
+| `deliver` | 5221 | 20067 | Route 1 south, lab, Pokédex scene |
+| `tutorial` | 6652 | 26719 | Route 1 north again, catching demo |
+| `to-forest` | 1161 | 27880 | Viridian north, Route 2, entrance building |
+| `forest` | 13764 | 41644 | the decoded-maze waypoint chain; Rick, Doug and Sammy fought, wilds fled |
+| `heal-pewter` | 1754 | 43398 | Route 2 north, Pewter Pokémon Center full heal |
+| `to-gym` | 921 | 44319 | the gym door |
+| `brock` | 4824 | 49143 | talk, 2-turn Bubble fight (plan `[129]`, 188/192 start delays win), `FLAG_DEFEATED_BROCK` |
+
+Route-shaping facts the build measured (all reproduced in `journal/`):
+
+- The **Pewter heal is load-bearing**: without it the run reaches Brock at 6/28 HP and
+  loses **all 192** start delays; with it, 188/192 win. Whether a better-manipulated run
+  can skip the heal is an optimisation fork (`heal-pewter` exists to be deleted).
+- **Sammy is forced** (the forest's column 1 is sealed except through his sight row);
+  **Rick and Doug were taken as ambushes** on the canonical corridor rather than dodged —
+  their exp is part of why Bubble carries Brock, so "dodge them" and "keep the exp" is a
+  real trade to measure, not an obvious cut.
+- The wild-encounter model's practical shape: clean paths exist when the search can vary
+  the rate-test index; where a belt is index-walled, one fled battle resets the cooldown
+  and opens 6-7 free steps (`research/wild-encounters.md`).
+
+## What is not optimised — everything, ranked
+
+1. **Fled-battle and walk bloat (~8-10k frames).** Every flee costs ~700-1000 frames;
+   the greedy walker commits bump frames and detours. A model-driven path search
+   (frlg-mon has the proven RNG model; the map decoder exists) should dodge most
+   encounters outright and walk near-optimal tiles.
+2. **The seed neighbourhood.** One seed family was tried (text_hold 4's). The naming-exit
+   and title-exit dials re-roll every battle and the whole wild pass/fail sequence.
+3. **Starter × version sweep.** Squirtle/FireRed won by default (Bubble at L7); Bulbasaur
+   needs the Liam detour but fights differently; LeafGreen un-raced.
+4. **Starter IVs/nature** are 4 rolls at the ball — a frame dial never turned.
+5. **Battle plans**: A-mash + delays only; move choice beyond the Bubble steer, and the
+   trainer fights' 48-delay searches, are all first-pass.
+6. **The tutorial/deliver/parcel text** runs at one global text_hold.
+
+### Tier 2 — queued 2026-08-13, not yet replayed
+
+The export follows rival-1's contract (`docs/rival-1/route.md`): `.ilog`s are canonical,
+the `.bk2` is an export, the queue is drained by a human on the host.
