@@ -34,6 +34,7 @@ pub const VIRIDIAN_FOREST: (u8, u8) = (1, 0);
 pub const FOREST_NORTH_ENTRANCE: (u8, u8) = (15, 3);
 pub const PEWTER_CITY: (u8, u8) = (3, 2);
 pub const PEWTER_GYM: (u8, u8) = (6, 2);
+pub const PEWTER_POKECENTER: (u8, u8) = (6, 5);
 
 /// Oak stands at (6,3) facing down (`data/maps/PalletTown_ProfessorOaksLab/
 /// map.json`, `OBJ_EVENT_GFX_PROF_OAK`); the delivery talk happens from the
@@ -60,6 +61,7 @@ pub fn segments(starter: Starter, tuning: Tuning) -> Vec<Segment> {
         tutorial(tuning),
         to_forest(tuning),
         forest(tuning),
+        heal(tuning),
         to_gym(tuning),
         brock(starter, tuning),
     ]
@@ -176,8 +178,9 @@ fn win_battle(
     tuning: Tuning,
     preferred_move: Option<u16>,
     label: &str,
+    start_delays: usize,
 ) -> Result<(), RouteError> {
-    const START_DELAYS: std::ops::Range<usize> = 0..48;
+    let start_delays = 0..start_delays;
     const TURN_DELAYS: std::ops::Range<usize> = 1..16;
     const MAX_PASSES: usize = 6;
 
@@ -271,7 +274,7 @@ fn win_battle(
     // Stage 1: start delay.
     let mut best: Option<(Vec<u16>, Vec<usize>, usize)> = None;
     let mut wins = 0usize;
-    for delay in START_DELAYS {
+    for delay in start_delays.clone() {
         let (inputs, won, turns) = run_plan(rec, &[delay])?;
         wins += won as usize;
         if won
@@ -284,12 +287,12 @@ fn win_battle(
     }
     let (mut best_inputs, mut plan, mut best_turns) = best.ok_or_else(|| RouteError::Timeout {
         what: format!("any start delay to win {label}"),
-        budget: START_DELAYS.end,
+        budget: start_delays.end,
         frames: rec.frames(),
     })?;
     eprintln!(
         "      {label} stage 1: {wins}/{} start delays win, delay {} at {} frames",
-        START_DELAYS.end,
+        start_delays.end,
         plan[0],
         best_inputs.len()
     );
@@ -354,7 +357,7 @@ fn back_to_field(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(
 /// `decompiled/include/constants/battle.h:45`).
 fn handle_battle(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(), RouteError> {
     if obs.battle_type_flags(rec.emu()) & BATTLE_TYPE_TRAINER != 0 {
-        win_battle(rec, obs, tuning, None, "trainer en route")?;
+        win_battle(rec, obs, tuning, None, "trainer en route", 48)?;
         back_to_field(rec, obs, tuning)
     } else {
         flee_wild(rec, obs, tuning)
@@ -919,17 +922,20 @@ fn forest(tuning: Tuning) -> Segment {
     }
 }
 
-/// Route 2's north half (grass bypassable), Pewter City (no wild header at
-/// all), and the gym door at (15,16). The gym-guide triggers live at x=42-43
-/// and are never approached (`research/story-gates.md`).
-fn to_gym(tuning: Tuning) -> Segment {
+/// Route 2's north half (grass bypassable) into Pewter City (no wild header
+/// at all), then the Pokémon Center: the run arrives from the forest's
+/// fights nearly dead (measured: 6/28 HP at the gym door, and every one of
+/// 192 Brock start delays lost), so the nurse's free full heal is the
+/// semi-naive answer. Door warp at Pewter (17,25), nurse at (7,2), spoken
+/// to from (7,3) (`data/maps/PewterCity/map.json`,
+/// `PewterCity_PokemonCenter_1F/map.json`).
+fn heal(tuning: Tuning) -> Segment {
     Segment {
-        name: "17-to-gym",
-        goal: "inside Pewter Gym".into(),
+        name: "17-heal",
+        goal: "party healed at the Pewter Pokémon Center, back outside".into(),
         run: Box::new(move |rec, obs| {
             // North entrance exit warp (7,1); Route 2's top x=8..11 meets
-            // Pewter's bottom x=20..23; the gym warp is Pewter (15,16)
-            // (research/story-gates.md).
+            // Pewter's bottom x=20..23 (research/story-gates.md).
             walk_fleeing(
                 rec,
                 obs,
@@ -946,6 +952,55 @@ fn to_gym(tuning: Tuning) -> Segment {
                 keys::UP,
                 1000,
             )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(PEWTER_POKECENTER, PEWTER_CITY, (17, 26)),
+                keys::UP,
+                1500,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::Tile(PEWTER_POKECENTER, 7, 3),
+                keys::UP,
+                1000,
+            )?;
+            rec.wait_until("the player to settle", 240, |emu| obs.player_can_step(emu))?;
+            rec.hold(keys::UP, 2)?;
+            rec.idle(6)?;
+            // A opens the nurse's dialogue and answers YES to the heal; the
+            // jingle and the goodbye advance on A too.
+            rec.hold_mash_until("the heal", keys::A, tuning.text_hold, 3000, |emu| {
+                let (hp, max) = obs.party_lead_hp(emu);
+                hp == max && scene_over(obs, emu)
+            })?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(PEWTER_CITY, PEWTER_POKECENTER, (7, 9)),
+                keys::DOWN,
+                1000,
+            )?;
+            Ok(())
+        }),
+        reached: Box::new(|obs, emu| {
+            let (hp, max) = obs.party_lead_hp(emu);
+            obs.map(emu) == Some(PEWTER_CITY) && hp == max
+        }),
+    }
+}
+
+/// The gym door at Pewter (15,16); the gym-guide triggers live at x=42-43
+/// and are never approached (`research/story-gates.md`).
+fn to_gym(tuning: Tuning) -> Segment {
+    Segment {
+        name: "18-to-gym",
+        goal: "inside Pewter Gym".into(),
+        run: Box::new(move |rec, obs| {
             walk_fleeing(
                 rec,
                 obs,
@@ -982,7 +1037,7 @@ fn brock(starter: Starter, tuning: Tuning) -> Segment {
     };
 
     Segment {
-        name: "18-brock",
+        name: "19-brock",
         goal: "FLAG_DEFEATED_BROCK set".into(),
         run: Box::new(move |rec, obs| {
             walk_fleeing(
@@ -1003,7 +1058,10 @@ fn brock(starter: Starter, tuning: Tuning) -> Segment {
             rec.mash_until("the battle to start", keys::A, 3000, |emu| {
                 obs.in_battle(emu)
             })?;
-            win_battle(rec, obs, tuning, Some(preferred), "brock")?;
+            // 2/48 delays won on one stream and 0/48 on its sibling: this
+            // fight is knife-edge at the semi-naive level, so it samples
+            // wide. 192 delays cover 384 stream steps.
+            win_battle(rec, obs, tuning, Some(preferred), "brock", 192)?;
             rec.hold_mash_until("the defeat flag", keys::B, tuning.text_hold, 3000, |emu| {
                 obs.flag(emu, FLAG_DEFEATED_BROCK) == Some(true)
             })?;

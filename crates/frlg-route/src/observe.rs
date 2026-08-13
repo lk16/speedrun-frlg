@@ -200,6 +200,7 @@ pub struct Observer {
     g_action_selection_cursor: u32,
     s_wild_encounter_data: u32,
     s_lock_field_controls: u32,
+    g_player_party: u32,
 }
 
 impl Observer {
@@ -229,6 +230,7 @@ impl Observer {
             g_action_selection_cursor: addr("gActionSelectionCursor")?,
             s_wild_encounter_data: addr("sWildEncounterData")?,
             s_lock_field_controls: addr("sLockFieldControls")?,
+            g_player_party: addr("gPlayerParty")?,
             syms,
         })
     }
@@ -523,6 +525,17 @@ impl Observer {
     /// `gActionSelectionCursor[battler]` -- FIGHT/BAG/POKEMON/RUN, 0-3.
     pub fn action_cursor(&self, emu: &mut Emu, battler: u32) -> u8 {
         emu.read8(self.g_action_selection_cursor + battler)
+    }
+
+    /// The lead party mon's `(hp, maxHP)` -- the computed stats at the tail
+    /// of `struct Pokemon` are not encrypted (`include/pokemon.h:126-138`:
+    /// box 80 bytes, status u32, level, mail, then `u16 hp` at 0x56 and
+    /// `u16 maxHP` at 0x58).
+    pub fn party_lead_hp(&self, emu: &mut Emu) -> (u16, u16) {
+        (
+            emu.read16(self.g_player_party + 0x56),
+            emu.read16(self.g_player_party + 0x58),
+        )
     }
 
     /// `sLockFieldControls` (`decompiled/src/script.c:34,199-209`): true
