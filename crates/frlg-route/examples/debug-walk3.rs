@@ -23,6 +23,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tuning = Tuning {
         turn_hold: 2,
         text_hold: 4,
+        seed_delay: 0,
     };
 
     brock::walk_fleeing(

@@ -29,6 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tuning = Tuning {
         turn_hold: 2,
         text_hold,
+        seed_delay: 0,
     };
 
     let keys_up = frlg_emu::keys::UP;

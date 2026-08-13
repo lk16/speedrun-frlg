@@ -141,6 +141,18 @@ pub struct Tuning {
     /// menu-advancing press up to `text_hold` frames later.
     #[serde(default = "text_hold_compat")]
     pub text_hold: usize,
+    /// Frames idled at power-on before the boot mash starts. Shifting the
+    /// mash shifts the title-exit press, and that press seeds *both* RNG
+    /// streams at once: `SeedRngAndSetTrainerId`
+    /// (`decompiled/src/title_screen.c:735`) reseeds `gRngValue` from the
+    /// frame timer, and `ResetMenuAndMonGlobals` -> `SeedWildEncounterRng`
+    /// (`decompiled/src/new_game.c:103`) derives the wild-encounter LCG from
+    /// it on the same frame (`docs/defeat-brock/research/wild-encounters.md`).
+    /// One frame here buys a completely fresh wild pass/fail sequence and a
+    /// fresh battle stream family, at a cost of one frame -- the cheapest
+    /// dial the route has.
+    #[serde(default)]
+    pub seed_delay: usize,
 }
 
 /// What `text_hold` was before it existed: ledgers written without the field
@@ -158,6 +170,7 @@ impl Default for Tuning {
         Self {
             turn_hold: 2,
             text_hold: 1,
+            seed_delay: 0,
         }
     }
 }
@@ -174,6 +187,7 @@ impl Tuning {
             [1usize, 2, 4].into_iter().map(move |text_hold| Tuning {
                 turn_hold,
                 text_hold,
+                seed_delay: 0,
             })
         })
     }
@@ -199,7 +213,7 @@ pub struct Segment {
 /// The whole route, in order.
 pub fn all(version: Version, starter: Starter, tuning: Tuning) -> Vec<Segment> {
     vec![
-        boot(),
+        boot(tuning),
         intro_oak(tuning),
         names(version, tuning),
         options(),
@@ -256,11 +270,22 @@ const NAME_MENU_TASK: &str = "Task_OakSpeech_HandleRivalNameInput";
 /// A is the whole segment: it dismisses the copyright screen, skips the intro
 /// movie, starts the title screen and picks the first main-menu entry, which
 /// with no save file is NEW GAME (`CB2_MainMenu`, `src/main_menu.c`).
-fn boot() -> Segment {
+///
+/// `seed_delay` idle frames are inserted *on the title screen* -- measured
+/// (2026-08-13): idles at power-on shift nothing but parity, because every
+/// mashed press before the title lands inside a slack window and the
+/// title-exit press stays put. Idling once `CB2_TitleScreenRun` is up moves
+/// the exit press frame for frame, and each frame reads back a distinct
+/// wild-encounter seed (`Tuning::seed_delay`).
+fn boot(tuning: Tuning) -> Segment {
     Segment {
         name: "01-boot",
         goal: "NEW GAME selected (CB2_NewGameScene running)".into(),
-        run: Box::new(|rec, obs| {
+        run: Box::new(move |rec, obs| {
+            rec.mash_until("the title screen", keys::A, 1200, |emu| {
+                obs.callback2_is(emu, "CB2_TitleScreenRun")
+            })?;
+            rec.idle(tuning.seed_delay)?;
             rec.mash_until("NEW GAME", keys::A, 2000, |emu| {
                 obs.callback2_is(emu, "CB2_NewGameScene")
             })?;

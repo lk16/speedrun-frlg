@@ -140,6 +140,14 @@ struct RouteArgs {
     /// sweeps it.
     #[arg(long)]
     text_hold: Option<usize>,
+
+    /// Frames idled at power-on before the boot mash. Shifts the title-exit
+    /// press, which seeds both gRngValue and the wild-encounter LCG
+    /// (decompiled/src/title_screen.c:735, src/new_game.c:103) -- one frame
+    /// buys a fresh battle-stream family and a fresh wild pass/fail
+    /// sequence. Defaults like --turn-hold.
+    #[arg(long)]
+    seed_delay: Option<usize>,
 }
 
 #[derive(Args)]
@@ -664,6 +672,9 @@ fn tuning_for(args: &RouteArgs, ledger_path: &Path) -> Tuning {
     }
     if let Some(text_hold) = args.text_hold {
         tuning.text_hold = text_hold;
+    }
+    if let Some(seed_delay) = args.seed_delay {
+        tuning.seed_delay = seed_delay;
     }
     tuning
 }
