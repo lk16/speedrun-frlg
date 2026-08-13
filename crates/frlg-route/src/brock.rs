@@ -61,7 +61,7 @@ pub fn segments(starter: Starter, tuning: Tuning) -> Vec<Segment> {
         tutorial(tuning),
         to_forest(tuning),
         forest(tuning),
-        heal(tuning),
+        to_pewter(tuning),
         to_gym(tuning),
         brock(starter, tuning),
     ]
@@ -993,19 +993,21 @@ fn forest(tuning: Tuning) -> Segment {
 }
 
 /// Route 2's north half (grass bypassable) into Pewter City (no wild header
-/// at all), then the Pokémon Center: the run arrives from the forest's
-/// fights nearly dead (measured: 6/28 HP at the gym door, and every one of
-/// 192 Brock start delays lost), so the nurse's free full heal is the
-/// semi-naive answer. Door warp at Pewter (17,25), nurse at (7,2), spoken
-/// to from (7,3) (`data/maps/PewterCity/map.json`,
-/// `PewterCity_PokemonCenter_1F/map.json`).
-fn heal(tuning: Tuning) -> Segment {
+/// at all). North entrance exit warp (7,1); Route 2's top x=8..11 meets
+/// Pewter's bottom x=20..23 (research/story-gates.md).
+///
+/// This used to be `heal-pewter`, which detoured through the Pokémon Center:
+/// the semi-naive run arrived from the forest's two fights at 6/28 HP and
+/// lost all 192 Brock start delays unhealed. The seed-38 run arrives at
+/// 20/23 (Rick dodged, one fight taken), the no-heal probe beat Brock from
+/// there (55/192 start delays win), and the 1794-frame detour was deleted --
+/// `git log route/defeat-brock` has the healed variant if a future stream
+/// arrives low again.
+fn to_pewter(tuning: Tuning) -> Segment {
     Segment {
-        name: "heal-pewter",
-        goal: "party healed at the Pewter Pokémon Center, back outside".into(),
+        name: "to-pewter",
+        goal: "in Pewter City".into(),
         run: Box::new(move |rec, obs| {
-            // North entrance exit warp (7,1); Route 2's top x=8..11 meets
-            // Pewter's bottom x=20..23 (research/story-gates.md).
             walk_fleeing(
                 rec,
                 obs,
@@ -1022,48 +1024,9 @@ fn heal(tuning: Tuning) -> Segment {
                 keys::UP,
                 1000,
             )?;
-            walk_fleeing(
-                rec,
-                obs,
-                tuning,
-                Leg::MapVia(PEWTER_POKECENTER, PEWTER_CITY, (17, 26)),
-                keys::UP,
-                1500,
-            )?;
-            // Row 3 is the counter (MB_COUNTER 0x80,
-            // `include/constants/metatile_behaviors.h:91` -- interaction
-            // reaches across it); the standing tile is (7,4).
-            walk_fleeing(
-                rec,
-                obs,
-                tuning,
-                Leg::Tile(PEWTER_POKECENTER, 7, 4),
-                keys::UP,
-                1000,
-            )?;
-            rec.wait_until("the player to settle", 240, |emu| obs.player_can_step(emu))?;
-            rec.hold(keys::UP, 2)?;
-            rec.idle(6)?;
-            // A opens the nurse's dialogue and answers YES to the heal; the
-            // jingle and the goodbye advance on A too.
-            rec.hold_mash_until("the heal", keys::A, tuning.text_hold, 3000, |emu| {
-                let (hp, max) = obs.party_lead_hp(emu);
-                hp == max && scene_over(obs, emu)
-            })?;
-            walk_fleeing(
-                rec,
-                obs,
-                tuning,
-                Leg::MapVia(PEWTER_CITY, PEWTER_POKECENTER, (7, 9)),
-                keys::DOWN,
-                1000,
-            )?;
             Ok(())
         }),
-        reached: Box::new(|obs, emu| {
-            let (hp, max) = obs.party_lead_hp(emu);
-            obs.map(emu) == Some(PEWTER_CITY) && hp == max
-        }),
+        reached: Box::new(|obs, emu| obs.map(emu) == Some(PEWTER_CITY)),
     }
 }
 
