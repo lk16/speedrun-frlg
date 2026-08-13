@@ -54,7 +54,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if let Ok(dir) = std::env::var("DEBUG_STATES") {
             std::fs::create_dir_all(&dir)?;
-            rec.save_state_file(std::path::Path::new(&dir).join(format!("{}.state", segment.name)).as_path())?;
+            rec.save_state_file(
+                std::path::Path::new(&dir)
+                    .join(format!("{}.state", segment.name))
+                    .as_path(),
+            )?;
         }
     }
     println!("done: {}", obs.snapshot(rec.emu()));

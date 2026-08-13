@@ -850,29 +850,43 @@ fn forest(tuning: Tuning) -> Segment {
         name: "16-forest",
         goal: "out the forest's north side".into(),
         run: Box::new(move |rec, obs| {
-            // The north-exit pocket (x=4..6, y=9..12) connects through the
-            // western corridor across Bug Catcher Sammy's sight row --
-            // approaching from the north-east dead-ends (measured: six
-            // hours of round-robin at (11,6..13)). So: waypoint south of
-            // Sammy at (7,24); then cross his row -- his approach fires and
-            // the trainer battle is won en route; then the exit warps at
-            // (4..6,9) (research/story-gates.md).
-            walk_fleeing(
-                rec,
-                obs,
-                tuning,
-                Leg::Near(VIRIDIAN_FOREST, 7, 24, 1),
-                keys::LEFT,
-                1500,
-            )?;
-            walk_fleeing(
-                rec,
-                obs,
-                tuning,
-                Leg::Near(VIRIDIAN_FOREST, 5, 20, 1),
-                keys::UP,
-                1000,
-            )?;
+            // The forest is a maze of walled grass columns; the decoded
+            // layout is committed as `research/forest-map.txt` (formats:
+            // `include/global.fieldmap.h:4-11`, `src/fieldmap.c:61-83`).
+            // The canonical path from the entrance (29,62): north up the
+            // x=42..44 clearing, the east grass column x=39..43 to the
+            // open north-east, west along the rows 15..17 grass corridor,
+            // down column 4 into the middle clearing, up column 3, west
+            // along the top corridor, down column 2, west at row 27, and
+            // up column 1 -- whose row 22 is Bug Catcher Sammy's sight
+            // line, the genuinely forced fight -- to the exit pocket at
+            // (4..6,9..11). The row 39..42 block is a dead end (sealed at
+            // rows 36..38); six hours of round-robin there taught us to
+            // decode the map instead of poking it.
+            let waypoints: [((i16, i16), u16, u16); 12] = [
+                ((41, 44), 2, keys::UP),
+                ((41, 30), 2, keys::UP),
+                ((45, 17), 2, keys::UP),
+                ((29, 16), 2, keys::LEFT),
+                ((29, 23), 2, keys::DOWN),
+                ((21, 23), 2, keys::LEFT),
+                ((21, 12), 1, keys::UP),
+                ((13, 11), 1, keys::LEFT),
+                ((13, 26), 1, keys::DOWN),
+                ((9, 27), 1, keys::LEFT),
+                ((5, 24), 1, keys::UP),
+                ((5, 18), 1, keys::UP),
+            ];
+            for ((x, y), tol, bias) in waypoints {
+                walk_fleeing(
+                    rec,
+                    obs,
+                    tuning,
+                    Leg::Near(VIRIDIAN_FOREST, x, y, tol),
+                    bias,
+                    1200,
+                )?;
+            }
             walk_fleeing(
                 rec,
                 obs,
