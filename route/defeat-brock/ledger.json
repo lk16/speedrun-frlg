@@ -8,7 +8,7 @@
     "text_hold": 4,
     "seed_delay": 38
   },
-  "total_frames": 45276,
+  "total_frames": 44464,
   "segments": [
     {
       "name": "01-boot",
@@ -203,26 +203,26 @@
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
-      "name": "heal-pewter",
-      "goal": "party healed at the Pewter Pokémon Center, back outside",
+      "name": "to-pewter",
+      "goal": "in Pewter City",
       "parent": "forest",
-      "log": "route/defeat-brock/logs/heal-pewter.ilog",
-      "digest": "748a133069501f6edd06068642ea568f8384b74b",
-      "frames": 1759,
+      "log": "route/defeat-brock/logs/to-pewter.ilog",
+      "digest": "f1c054cb21f410c9eba94a3ab6a6546e8e8ac57e",
+      "frames": 573,
       "start_frame": 37570,
-      "ram_hash": "c64a5a5b83a23a2ea45f425fb8721f18a40aeb49",
+      "ram_hash": "aa187085095c9ab46e05aa7ab030b7db508a67c8",
       "tier1": true,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "to-gym",
       "goal": "inside Pewter Gym",
-      "parent": "heal-pewter",
+      "parent": "to-pewter",
       "log": "route/defeat-brock/logs/to-gym.ilog",
-      "digest": "6a2130f3a35a229b93a4de594881d2561e18e8b5",
-      "frames": 921,
-      "start_frame": 39329,
-      "ram_hash": "8c28a55a2a659bedd45d52d72cb1b296cbb9300c",
+      "digest": "ceb803a0643d6fe0cf7bb5763bda975f1471a69f",
+      "frames": 962,
+      "start_frame": 38143,
+      "ram_hash": "50048854694db95b073aa802ced8568ac572bfba",
       "tier1": true,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
@@ -231,10 +231,10 @@
       "goal": "FLAG_DEFEATED_BROCK set",
       "parent": "to-gym",
       "log": "route/defeat-brock/logs/brock.ilog",
-      "digest": "d49bc112a0d7fba681e0e24a69db882c96adfeb2",
-      "frames": 5026,
-      "start_frame": 40250,
-      "ram_hash": "35fbbe6b275c43b2cdd5bb0eca4f477e696da22f",
+      "digest": "8c349cfe3fcb2fd09971f499ce04984e5711b502",
+      "frames": 5359,
+      "start_frame": 39105,
+      "ram_hash": "cf1b550bac83f27267f72ffb4ef40b3503a19ff1",
       "tier1": true,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     }
