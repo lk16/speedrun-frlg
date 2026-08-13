@@ -1,5 +1,5 @@
-//! Probe: walk to waypoint 1 in the forest, then hold each direction and
-//! narrate what the game does.
+//! Probe: from the 17-to-gym checkpoint, walk to Brock and narrate the
+//! A-mash.
 
 use frlg_route::brock::{self, Leg};
 use frlg_route::observe::Observer;
@@ -28,37 +28,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &mut rec,
         &obs,
         tuning,
-        Leg::Near(brock::VIRIDIAN_FOREST, 41, 44, 2),
+        Leg::Tile(brock::PEWTER_GYM, 6, 6),
         frlg_emu::keys::UP,
-        1200,
+        3000,
     )?;
-    println!("at wp1: {}", obs.snapshot(rec.emu()));
+    println!("at (6,6): {}", obs.snapshot(rec.emu()));
 
-    for dir in [
-        frlg_emu::keys::UP,
-        frlg_emu::keys::LEFT,
-        frlg_emu::keys::RIGHT,
-        frlg_emu::keys::DOWN,
-    ] {
-        let save = rec.save_state()?;
-        for i in 0..120 {
-            rec.hold(dir, 1)?;
-            let e = rec.emu();
-            if i % 30 == 29 || obs.in_battle(e) {
-                println!(
-                    "dir {dir:#06x} f{i}: pos {:?} battle {} lock {} can_step {} prevent {}",
-                    obs.pos(e),
-                    obs.in_battle(e),
-                    obs.field_controls_locked(e),
-                    obs.player_can_step(e),
-                    obs.prevent_step(e),
-                );
-            }
-            if obs.in_battle(e) {
-                break;
-            }
+    rec.hold(frlg_emu::keys::UP, 2)?;
+    rec.idle(1)?;
+    for i in 0..2000usize {
+        let key = if i % 2 == 0 { frlg_emu::keys::A } else { 0 };
+        rec.hold(key, 1)?;
+        let e = rec.emu();
+        if i % 200 == 0 || obs.in_battle(e) {
+            println!(
+                "f{i}: pos {:?} battle {} lock {} can_step {} cb2 {}",
+                obs.pos(e),
+                obs.in_battle(e),
+                obs.field_controls_locked(e),
+                obs.player_can_step(e),
+                obs.callback2_name(e),
+            );
         }
-        rec.emu().load_state(&save)?;
+        if obs.in_battle(e) {
+            println!("battle at f{i}");
+            break;
+        }
     }
     Ok(())
 }

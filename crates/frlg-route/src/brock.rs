@@ -744,9 +744,11 @@ fn deliver(tuning: Tuning) -> Segment {
                 2000,
             )?;
             // Face Oak and talk; the scene has no yes/no prompts, so B/A
-            // both only advance. A opens the dialogue.
+            // both only advance. A opens the dialogue. Settle first -- a
+            // turn pressed mid-step is swallowed.
+            rec.wait_until("the player to settle", 240, |emu| obs.player_can_step(emu))?;
             rec.hold(keys::UP, 2)?;
-            rec.idle(1)?;
+            rec.idle(6)?;
             rec.hold_mash_until(
                 "the delivery scene",
                 keys::A,
@@ -991,9 +993,14 @@ fn brock(starter: Starter, tuning: Tuning) -> Segment {
                 keys::UP,
                 3000,
             )?;
+            // Settle out of the arrival step first: a turn pressed into a
+            // running step animation is swallowed, and the A-mash then
+            // interrogates whatever the walk happened to face (measured:
+            // 2000 frames of A at the empty tile east of (6,6)).
+            rec.wait_until("the player to settle", 240, |emu| obs.player_can_step(emu))?;
             rec.hold(keys::UP, 2)?;
-            rec.idle(1)?;
-            rec.mash_until("the battle to start", keys::A, 2000, |emu| {
+            rec.idle(6)?;
+            rec.mash_until("the battle to start", keys::A, 3000, |emu| {
                 obs.in_battle(emu)
             })?;
             win_battle(rec, obs, tuning, Some(preferred), "brock")?;
