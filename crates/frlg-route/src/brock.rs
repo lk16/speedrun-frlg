@@ -603,7 +603,7 @@ pub fn walk_fleeing(
 /// var at 4 and control returned; then walk out the door.
 fn exit_lab(tuning: Tuning) -> Segment {
     Segment {
-        name: "10-exit-lab",
+        name: "exit-lab",
         goal: "back outside in Pallet Town, rival gone (lab scene var 4)".into(),
         run: Box::new(move |rec, obs| {
             rec.hold_mash_until(
@@ -633,7 +633,7 @@ fn exit_lab(tuning: Tuning) -> Segment {
 /// `research/story-gates.md`) into Viridian City.
 fn to_viridian(tuning: Tuning) -> Segment {
     Segment {
-        name: "11-to-viridian",
+        name: "to-viridian",
         goal: "in Viridian City".into(),
         run: Box::new(move |rec, obs| {
             // Connections (research/story-gates.md, map.json cites): Pallet's
@@ -667,7 +667,7 @@ fn to_viridian(tuning: Tuning) -> Segment {
 /// then back out.
 fn parcel(tuning: Tuning) -> Segment {
     Segment {
-        name: "12-parcel",
+        name: "parcel",
         goal: "Oak's Parcel in the bag, back outside the mart".into(),
         run: Box::new(move |rec, obs| {
             // The mart door warp is at (36,19) (`data/maps/ViridianCity/
@@ -709,7 +709,7 @@ fn parcel(tuning: Tuning) -> Segment {
 /// (`data/maps/PalletTown_ProfessorOaksLab/scripts.inc:576,598-684`).
 fn deliver(tuning: Tuning) -> Segment {
     Segment {
-        name: "13-deliver",
+        name: "deliver",
         goal: "Pokédex received, old man armed (his scene var 1)".into(),
         run: Box::new(move |rec, obs| {
             walk_fleeing(
@@ -771,7 +771,7 @@ fn deliver(tuning: Tuning) -> Segment {
 /// ends with his var at 2, which is what opens the road north.
 fn tutorial(tuning: Tuning) -> Segment {
     Segment {
-        name: "14-tutorial",
+        name: "tutorial",
         goal: "catching tutorial done (old man var 2), road north open".into(),
         run: Box::new(move |rec, obs| {
             walk_fleeing(
@@ -825,7 +825,7 @@ fn tutorial(tuning: Tuning) -> Segment {
 /// building -> Viridian Forest.
 fn to_forest(tuning: Tuning) -> Segment {
     Segment {
-        name: "15-to-forest",
+        name: "to-forest",
         goal: "inside Viridian Forest".into(),
         run: Box::new(move |rec, obs| {
             // Viridian's north exit x=19..23; the forest south-entrance
@@ -868,7 +868,7 @@ fn to_forest(tuning: Tuning) -> Segment {
 /// won by the search inside `handle_battle`.
 fn forest(tuning: Tuning) -> Segment {
     Segment {
-        name: "16-forest",
+        name: "forest",
         goal: "out the forest's north side".into(),
         run: Box::new(move |rec, obs| {
             // The forest is a maze of walled grass columns; the decoded
@@ -931,7 +931,7 @@ fn forest(tuning: Tuning) -> Segment {
 /// `PewterCity_PokemonCenter_1F/map.json`).
 fn heal(tuning: Tuning) -> Segment {
     Segment {
-        name: "17-heal",
+        name: "heal-pewter",
         goal: "party healed at the Pewter Pokémon Center, back outside".into(),
         run: Box::new(move |rec, obs| {
             // North entrance exit warp (7,1); Route 2's top x=8..11 meets
@@ -1001,7 +1001,7 @@ fn heal(tuning: Tuning) -> Segment {
 /// and are never approached (`research/story-gates.md`).
 fn to_gym(tuning: Tuning) -> Segment {
     Segment {
-        name: "18-to-gym",
+        name: "to-gym",
         goal: "inside Pewter Gym".into(),
         run: Box::new(move |rec, obs| {
             walk_fleeing(
@@ -1040,7 +1040,7 @@ fn brock(starter: Starter, tuning: Tuning) -> Segment {
     };
 
     Segment {
-        name: "19-brock",
+        name: "brock",
         goal: "FLAG_DEFEATED_BROCK set".into(),
         run: Box::new(move |rec, obs| {
             walk_fleeing(
