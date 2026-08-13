@@ -338,7 +338,7 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             let ledger_path = target_ledger(target, &args.ledger);
             let (rom, sym, starter) = route_setup(&args, &ledger_path)?;
             let mut best: Option<(Tuning, usize)> = None;
-            for tuning in Tuning::variants() {
+            for tuning in Tuning::variants(tuning_for(&args, &ledger_path)) {
                 // Sweep into a scratch directory: a variant that loses must not
                 // leave its logs behind claiming to be the route.
                 let scratch = std::env::temp_dir().join(format!(

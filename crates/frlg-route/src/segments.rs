@@ -176,18 +176,20 @@ impl Default for Tuning {
 }
 
 impl Tuning {
-    /// The variants a tuning sweep tries: the product of both knobs.
-    /// `text_hold`'s candidates are the top of the intro-only measurement
-    /// (`text_hold_on_the_intro_alone`, 2026-08-12: 1 -> 3699, 2 -> 3361,
-    /// 4 -> 3229 frames, with 3, 7 and above all worse) plus 1 as the
-    /// baseline; the landscape is phase-alignment, not a curve, so the sweep
-    /// re-tries the measured leaders rather than a spread.
-    pub fn variants() -> impl Iterator<Item = Tuning> {
-        (1..=8).flat_map(|turn_hold| {
+    /// The variants a tuning sweep tries: the product of the two hold knobs,
+    /// each carrying `base`'s `seed_delay` -- the seed is a route decision
+    /// the sweep must not silently reset. `text_hold`'s candidates are the
+    /// top of the intro-only measurement (`text_hold_on_the_intro_alone`,
+    /// 2026-08-12: 1 -> 3699, 2 -> 3361, 4 -> 3229 frames, with 3, 7 and
+    /// above all worse) plus 1 as the baseline; the landscape is
+    /// phase-alignment, not a curve, so the sweep re-tries the measured
+    /// leaders rather than a spread.
+    pub fn variants(base: Tuning) -> impl Iterator<Item = Tuning> {
+        (1..=8).flat_map(move |turn_hold| {
             [1usize, 2, 4].into_iter().map(move |text_hold| Tuning {
                 turn_hold,
                 text_hold,
-                seed_delay: 0,
+                ..base
             })
         })
     }
