@@ -93,7 +93,7 @@ The rival-1 prefix (01..09) plus the continuation. Segment code:
 | `deliver` | 5221 | 20067 | Route 1 south, lab, Pokédex scene |
 | `tutorial` | 6652 | 26719 | Route 1 north again, catching demo |
 | `to-forest` | 1161 | 27880 | Viridian north, Route 2, entrance building |
-| `forest` | 13764 | 41644 | the decoded-maze waypoint chain; Rick, Doug and Sammy fought, wilds fled |
+| `forest` | 13764 | 41644 | the decoded-maze waypoint chain; Rick and Sammy fought, wilds fled |
 | `heal-pewter` | 1754 | 43398 | Route 2 north, Pewter Pokémon Center full heal |
 | `to-gym` | 921 | 44319 | the gym door |
 | `brock` | 4824 | 49143 | talk, 2-turn Bubble fight (plan `[129]`, 188/192 start delays win), `FLAG_DEFEATED_BROCK` |
@@ -104,9 +104,12 @@ Route-shaping facts the build measured (all reproduced in `journal/`):
   loses **all 192** start delays; with it, 188/192 win. Whether a better-manipulated run
   can skip the heal is an optimisation fork (`heal-pewter` exists to be deleted).
 - **Sammy is forced** (the forest's column 1 is sealed except through his sight row);
-  **Rick and Doug were taken as ambushes** on the canonical corridor rather than dodged —
-  their exp is part of why Bubble carries Brock, so "dodge them" and "keep the exp" is a
-  real trade to measure, not an obvious cut.
+  **Rick was taken as an ambush** on the canonical corridor rather than dodged. Doug,
+  despite the first build report, was *not* fought — a `gBattleMons` trace over the
+  committed logs (2026-08-13) shows exactly two forest trainer fights, Rick
+  (Weedle/Caterpie L6, 4327 frames) and Sammy (Weedle L9, 2637 frames). Rick's and
+  Sammy's exp is what carries Squirtle to L7 Bubble for Brock, so "dodge Rick" and
+  "keep the exp" is a real trade to measure, not an obvious cut.
 - The wild-encounter model's practical shape: clean paths exist when the search can vary
   the rate-test index; where a belt is index-walled, one fled battle resets the cooldown
   and opens 6-7 free steps (`research/wild-encounters.md`).
