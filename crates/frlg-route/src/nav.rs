@@ -336,7 +336,12 @@ pub fn search_best_effort(
     let heuristic = move |p: &Place| -> usize {
         match target {
             H::Tile(map, x, y) if map == p.map => manhattan(p, x, y) * MIN_FRAMES_PER_TILE,
-            H::Tile(..) | H::None => 0,
+            // A tile goal names its map; leaving that map is never the way
+            // to a tile on it in this route's uses, and without the penalty
+            // an unreachable tile sends the search out the door and across
+            // the world (measured: the Pokémon Center counter).
+            H::Tile(..) => OFF_ROUTE_PENALTY,
+            H::None => 0,
             H::Via(goal_map, _, _) if p.map == goal_map => 0,
             H::Via(_, via_map, (x, y)) if p.map == via_map => manhattan(p, x, y) * VIA_SCALE,
             H::Via(..) => OFF_ROUTE_PENALTY,

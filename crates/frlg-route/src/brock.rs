@@ -960,11 +960,14 @@ fn heal(tuning: Tuning) -> Segment {
                 keys::UP,
                 1500,
             )?;
+            // Row 3 is the counter (MB_COUNTER 0x80,
+            // `include/constants/metatile_behaviors.h:91` -- interaction
+            // reaches across it); the standing tile is (7,4).
             walk_fleeing(
                 rec,
                 obs,
                 tuning,
-                Leg::Tile(PEWTER_POKECENTER, 7, 3),
+                Leg::Tile(PEWTER_POKECENTER, 7, 4),
                 keys::UP,
                 1000,
             )?;
