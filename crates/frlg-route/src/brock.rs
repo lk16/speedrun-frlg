@@ -172,7 +172,7 @@ fn mash_with(key: u16, tuning: Tuning) -> Vec<u16> {
 /// steers the *first* fight menu to that move id -- the cursor persists for
 /// the rest of the battle (`gMoveSelectionCursor`), so one navigation pays
 /// for every turn.
-fn win_battle(
+pub fn win_battle(
     rec: &mut Recorder,
     obs: &Observer,
     tuning: Tuning,
@@ -188,108 +188,161 @@ fn win_battle(
     let mash = mash_with(keys::A, tuning);
     let intro_mash = mash_with(keys::B, tuning);
 
+    // A checkpoint at a menu arrival: the emulator state and the inputs that
+    // got there from the battle's start, both taken *before* the plan's idle
+    // for that menu is spent. A candidate plan that differs from the current
+    // best only from menu k onwards resumes at checkpoint k instead of
+    // replaying the intro and the first k turns -- same trajectory, a
+    // fraction of the emulation. (Verified against the replay-from-start
+    // implementation on the committed Rick and Sammy fights: identical
+    // plans, identical frame counts.)
+    struct Menu {
+        state: frlg_emu::SaveState,
+        prefix: Vec<u16>,
+    }
+    /// What one candidate run establishes: the whole battle's inputs, whether
+    /// it won, how many menus the battle visited, and checkpoints for the
+    /// menus after the resume point.
+    type PlanOutcome = (Vec<u16>, bool, usize, Vec<Menu>);
+
+    // Drive to the first action menu once; every candidate resumes from it.
+    let menu0 = {
+        let mut trial = Trial::new(rec.emu());
+        to_first_menu(&mut trial, obs, &intro_mash)?;
+        let prefix = trial.into_inputs();
+        Menu {
+            state: rec.save_state()?,
+            prefix,
+        }
+    };
+
     // `plan[k]` is the idle spent on arriving at the k-th action menu
     // (k = 0 is the first menu, so plan[0] is stage 1's start delay).
-    let run_plan =
-        |rec: &mut Recorder, plan: &[usize]| -> Result<(Vec<u16>, bool, usize), RouteError> {
-            rec.emu().load_state(&start)?;
-            let mut trial = Trial::new(rec.emu());
-            let mut menu = 0usize;
-            let mut move_chosen = preferred_move.is_none();
-            to_first_menu(&mut trial, obs, &intro_mash)?;
-            trial.idle(plan.first().copied().unwrap_or(0))?;
-            let won = loop {
-                if !move_chosen {
-                    // A selects FIGHT (cursor starts there); wait for the move
-                    // menu, then steer the cursor to the wanted slot. Layout is
-                    // 2x2, slot = index into gBattleMons[0].moves: bit 1 is the
-                    // row (DOWN), bit 0 the column (RIGHT).
-                    let entered = trial.advance_while("the move menu", &mash, 600, |emu| {
-                        obs.battle_controller_is(emu, 0, "HandleInputChooseMove")
-                    });
-                    match entered {
-                        Err(RouteError::Timeout { .. }) => break false,
-                        other => other?,
-                    };
-                    let mv = preferred_move.unwrap();
-                    let slot = obs
-                        .battle_mon(trial.core(), 0)
-                        .moves
-                        .iter()
-                        .position(|&m| m == mv);
-                    let Some(slot) = slot else {
-                        // The mon does not know the move (yet): fall back to
-                        // whatever the cursor is on. The caller decided the
-                        // route wrongly; the battle search still gets a fair
-                        // shot with slot 0.
-                        move_chosen = true;
-                        continue;
-                    };
-                    if slot & 2 != 0 {
-                        trial.advance_while("cursor row", &[keys::DOWN, 0], 120, |emu| {
-                            obs.move_cursor(emu, 0) & 2 != 0
-                        })?;
-                    }
-                    if slot & 1 != 0 {
-                        trial.advance_while("cursor column", &[keys::RIGHT, 0], 120, |emu| {
-                            obs.move_cursor(emu, 0) & 1 != 0
-                        })?;
-                    }
+    // Run from menu `k` to the battle's end under `plan`, collecting a
+    // checkpoint at every later menu. Returns the whole battle's inputs
+    // (checkpoint prefix included), whether it won, how many menus the
+    // battle visited in total, and the checkpoints for menus k+1 onwards.
+    let continue_plan = |rec: &mut Recorder,
+                         from: &Menu,
+                         k: usize,
+                         plan: &[usize]|
+     -> Result<PlanOutcome, RouteError> {
+        rec.emu().load_state(&from.state)?;
+        let mut trial = Trial::new(rec.emu());
+        let mut menu = k;
+        // Move steering happens on the first menu only; the cursor then
+        // persists for the whole battle (`gMoveSelectionCursor`), so a
+        // resume at k > 0 never needs to steer.
+        let mut move_chosen = preferred_move.is_none() || k > 0;
+        // (state, inputs fed since the resume) per menu arrival.
+        let mut later: Vec<(frlg_emu::SaveState, usize)> = Vec::new();
+        trial.idle(plan.get(k).copied().unwrap_or(0))?;
+        let won = loop {
+            if !move_chosen {
+                // A selects FIGHT (cursor starts there); wait for the move
+                // menu, then steer the cursor to the wanted slot. Layout is
+                // 2x2, slot = index into gBattleMons[0].moves: bit 1 is the
+                // row (DOWN), bit 0 the column (RIGHT).
+                let entered = trial.advance_while("the move menu", &mash, 600, |emu| {
+                    obs.battle_controller_is(emu, 0, "HandleInputChooseMove")
+                });
+                match entered {
+                    Err(RouteError::Timeout { .. }) => break false,
+                    other => other?,
+                };
+                let mv = preferred_move.unwrap();
+                let slot = obs
+                    .battle_mon(trial.core(), 0)
+                    .moves
+                    .iter()
+                    .position(|&m| m == mv);
+                let Some(slot) = slot else {
+                    // The mon does not know the move (yet): fall back to
+                    // whatever the cursor is on. The caller decided the
+                    // route wrongly; the battle search still gets a fair
+                    // shot with slot 0.
                     move_chosen = true;
+                    continue;
+                };
+                if slot & 2 != 0 {
+                    trial.advance_while("cursor row", &[keys::DOWN, 0], 120, |emu| {
+                        obs.move_cursor(emu, 0) & 2 != 0
+                    })?;
                 }
+                if slot & 1 != 0 {
+                    trial.advance_while("cursor column", &[keys::RIGHT, 0], 120, |emu| {
+                        obs.move_cursor(emu, 0) & 1 != 0
+                    })?;
+                }
+                move_chosen = true;
+            }
 
-                // Commit this turn's actions: mash until the selection state
-                // exits.
-                let to_turn =
-                    trial.advance_while("the turn to resolve", &mash, BATTLE_FRAME_BUDGET, |emu| {
-                        obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu)
-                    });
-                match to_turn {
-                    Err(RouteError::Timeout { .. }) => break false,
-                    other => other?,
-                };
-                if obs.battle_outcome(trial.core()) != 0 {
-                    break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
-                }
-                // To the next turn's menu, or the end.
-                let to_menu = trial.advance_while(
-                    "the battle menu or the end",
-                    &mash,
-                    BATTLE_FRAME_BUDGET,
-                    |emu| obs.battle_outcome(emu) != 0 || obs.battle_choosing_actions(emu),
-                );
-                match to_menu {
-                    Err(RouteError::Timeout { .. }) => break false,
-                    other => other?,
-                };
-                if obs.battle_outcome(trial.core()) != 0 {
-                    break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
-                }
-                menu += 1;
-                trial.idle(*plan.get(menu).unwrap_or(&0))?;
+            // Commit this turn's actions: mash until the selection state
+            // exits.
+            let to_turn =
+                trial.advance_while("the turn to resolve", &mash, BATTLE_FRAME_BUDGET, |emu| {
+                    obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu)
+                });
+            match to_turn {
+                Err(RouteError::Timeout { .. }) => break false,
+                other => other?,
             };
-            Ok((trial.into_inputs(), won, menu + 1))
+            if obs.battle_outcome(trial.core()) != 0 {
+                break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
+            }
+            // To the next turn's menu, or the end.
+            let to_menu = trial.advance_while(
+                "the battle menu or the end",
+                &mash,
+                BATTLE_FRAME_BUDGET,
+                |emu| obs.battle_outcome(emu) != 0 || obs.battle_choosing_actions(emu),
+            );
+            match to_menu {
+                Err(RouteError::Timeout { .. }) => break false,
+                other => other?,
+            };
+            if obs.battle_outcome(trial.core()) != 0 {
+                break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
+            }
+            menu += 1;
+            later.push((trial.core().save_state()?, trial.fed()));
+            trial.idle(*plan.get(menu).unwrap_or(&0))?;
         };
+        let suffix = trial.into_inputs();
+        let mut inputs = from.prefix.clone();
+        inputs.extend_from_slice(&suffix);
+        let menus = later
+            .into_iter()
+            .map(|(state, len)| {
+                let mut prefix = from.prefix.clone();
+                prefix.extend_from_slice(&suffix[..len]);
+                Menu { state, prefix }
+            })
+            .collect();
+        Ok((inputs, won, menu + 1, menus))
+    };
 
-    // Stage 1: start delay.
-    let mut best: Option<(Vec<u16>, Vec<usize>, usize)> = None;
+    // Stage 1: start delay. The best winner's outcome, plus the plan that
+    // produced it.
+    let mut best: Option<(PlanOutcome, Vec<usize>)> = None;
     let mut wins = 0usize;
     for delay in start_delays.clone() {
-        let (inputs, won, turns) = run_plan(rec, &[delay])?;
+        let (inputs, won, turns, menus) = continue_plan(rec, &menu0, 0, &[delay])?;
         wins += won as usize;
         if won
             && best
                 .as_ref()
-                .is_none_or(|(seen, _, _)| inputs.len() < seen.len())
+                .is_none_or(|((seen, ..), _)| inputs.len() < seen.len())
         {
-            best = Some((inputs, vec![delay], turns));
+            best = Some(((inputs, won, turns, menus), vec![delay]));
         }
     }
-    let (mut best_inputs, mut plan, mut best_turns) = best.ok_or_else(|| RouteError::Timeout {
-        what: format!("any start delay to win {label}"),
-        budget: start_delays.end,
-        frames: rec.frames(),
-    })?;
+    let ((mut best_inputs, _, mut best_turns, best_menus), mut plan) =
+        best.ok_or_else(|| RouteError::Timeout {
+            what: format!("any start delay to win {label}"),
+            budget: start_delays.end,
+            frames: rec.frames(),
+        })?;
     eprintln!(
         "      {label} stage 1: {wins}/{} start delays win, delay {} at {} frames",
         start_delays.end,
@@ -297,21 +350,31 @@ fn win_battle(
         best_inputs.len()
     );
 
+    // The checkpoints along the current best trajectory: menus[k] is the
+    // arrival at menu k. On adoption, everything up to and including the
+    // changed turn's arrival is unchanged (the candidate differed only in
+    // the idle spent *after* arriving there), so only the tail is replaced.
+    let mut menus: Vec<Menu> = vec![menu0];
+    menus.extend(best_menus);
+
     // Stage 2: per-turn delays, greedy, repeated to a fixpoint.
     for pass in 1..=MAX_PASSES {
         let mut adopted = false;
-        let pass_turns = best_turns;
-        for turn in 1..=pass_turns {
+        for turn in 1..menus.len() {
+            if turn >= menus.len() {
+                break; // an adoption shrank the battle below this turn
+            }
             for delay in TURN_DELAYS {
+                if plan.get(turn) == Some(&delay) {
+                    continue;
+                }
                 let mut candidate = plan.clone();
                 if candidate.len() < turn + 1 {
                     candidate.resize(turn + 1, 0);
                 }
-                if candidate[turn] == delay {
-                    continue;
-                }
                 candidate[turn] = delay;
-                let (inputs, won, turns_seen) = run_plan(rec, &candidate)?;
+                let (inputs, won, turns_seen, new_menus) =
+                    continue_plan(rec, &menus[turn], turn, &candidate)?;
                 if won && inputs.len() < best_inputs.len() {
                     eprintln!(
                         "      {label} stage 2 (pass {pass}): turn {turn} delay {delay} -> {} frames",
@@ -320,6 +383,8 @@ fn win_battle(
                     best_inputs = inputs;
                     plan = candidate;
                     best_turns = turns_seen;
+                    menus.truncate(turn + 1);
+                    menus.extend(new_menus);
                     adopted = true;
                 }
             }
