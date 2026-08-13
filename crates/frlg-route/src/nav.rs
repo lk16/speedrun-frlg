@@ -92,6 +92,16 @@ pub enum Goal {
         via_map: (u8, u8),
         via: (i16, i16),
     },
+    /// Within `tol` tiles of `(x, y)` on `map`, driven by the same greedy
+    /// [`VIA_SCALE`] heuristic as [`Goal::AnyOnVia`] -- a waypoint in
+    /// encounter country, where the admissible Tile heuristic drowns in
+    /// wild-state alternates.
+    NearVia {
+        map: (u8, u8),
+        x: i16,
+        y: i16,
+        tol: u16,
+    },
     /// Anything else, checked against the emulator. Plain Dijkstra.
     Pred(Box<dyn FnMut(&mut Emu) -> bool>),
 }
@@ -107,6 +117,10 @@ impl Goal {
 
     pub fn on_map_via(map: (u8, u8), via_map: (u8, u8), via: (i16, i16)) -> Self {
         Goal::AnyOnVia { map, via_map, via }
+    }
+
+    pub fn near_via(map: (u8, u8), x: i16, y: i16, tol: u16) -> Self {
+        Goal::NearVia { map, x, y, tol }
     }
 
     pub fn when(pred: impl FnMut(&mut Emu) -> bool + 'static) -> Self {
@@ -303,6 +317,7 @@ pub fn search_best_effort(
         frames: 0,
     })?;
 
+    #[derive(Clone, Copy)]
     enum H {
         None,
         Tile((u8, u8), i16, i16),
@@ -311,6 +326,8 @@ pub fn search_best_effort(
     let target = match &goal {
         Goal::Tile { map, x, y } => H::Tile(*map, *x, *y),
         Goal::AnyOnVia { map, via_map, via } => H::Via(*map, *via_map, *via),
+        // The greedy Via heuristic aimed at the waypoint itself.
+        Goal::NearVia { map, x, y, .. } => H::Via((255, 255), *map, (*x, *y)),
         _ => H::None,
     };
     let manhattan = |p: &Place, x: i16, y: i16| -> usize {
@@ -329,6 +346,9 @@ pub fn search_best_effort(
         match &mut goal {
             Goal::Tile { map, x, y } => *map == p.map && (*x, *y) == p.pos,
             Goal::AnyOn { map } | Goal::AnyOnVia { map, .. } => *map == p.map,
+            Goal::NearVia { map, x, y, tol } => {
+                *map == p.map && p.pos.0.abs_diff(*x) + p.pos.1.abs_diff(*y) <= *tol
+            }
             Goal::Pred(f) => f(emu),
         }
     };
@@ -438,13 +458,25 @@ pub fn search_best_effort(
     // battle continues the route (the caller's force-step turns it into a
     // fled battle plus a cooldown reset), not the heuristically-closest
     // dead pocket the belt happens to wrap around.
+    // A Tile goal's heuristic reads 0 on *other* maps, which would rank a
+    // node that wandered off the goal map as "closest"; the frontier map
+    // term keeps best-effort approaches on the map that matters.
+    let frontier_map = match target {
+        H::Tile(map, _, _) => Some(map),
+        H::Via(_, via_map, _) => Some(via_map),
+        H::None => None,
+    };
+    let rank = |place: &Place| {
+        (
+            frontier_map.is_some_and(|m| place.map != m) as usize,
+            heuristic(place),
+            best[place].0,
+        )
+    };
     let closest = battle_frontier
         .iter()
-        .min_by_key(|place| (heuristic(place), best[*place].0))
-        .or_else(|| {
-            best.keys()
-                .min_by_key(|place| (heuristic(place), best[*place].0))
-        })
+        .min_by_key(|place| rank(place))
+        .or_else(|| best.keys().min_by_key(|place| rank(place)))
         .map(|place| best[place].1.clone());
     let inputs = closest.unwrap_or_default();
     Ok((

@@ -381,6 +381,9 @@ pub enum Leg {
     /// or warp tile -- the directed form every grass crossing uses
     /// (`Goal::AnyOnVia`).
     MapVia((u8, u8), (u8, u8), (i16, i16)),
+    /// Within `tol` tiles of a waypoint, greedily (`Goal::NearVia`) -- for
+    /// steering through a specific corridor in encounter country.
+    Near((u8, u8), i16, i16, u16),
 }
 
 impl Leg {
@@ -388,6 +391,7 @@ impl Leg {
         match *self {
             Leg::Tile(map, x, y) => Goal::tile(map, x, y),
             Leg::MapVia(map, via_map, via) => Goal::on_map_via(map, via_map, via),
+            Leg::Near(map, x, y, tol) => Goal::near_via(map, x, y, tol),
         }
     }
 
@@ -395,6 +399,12 @@ impl Leg {
         match *self {
             Leg::Tile(map, x, y) => obs.map(emu) == Some(map) && obs.pos(emu) == Some((x, y)),
             Leg::MapVia(map, _, _) => obs.map(emu) == Some(map),
+            Leg::Near(map, x, y, tol) => {
+                obs.map(emu) == Some(map)
+                    && obs
+                        .pos(emu)
+                        .is_some_and(|(px, py)| px.abs_diff(x) + py.abs_diff(y) <= tol)
+            }
         }
     }
 
@@ -403,6 +413,7 @@ impl Leg {
         match *self {
             Leg::Tile(_, x, y) => (x, y),
             Leg::MapVia(_, _, via) => via,
+            Leg::Near(_, x, y, _) => (x, y),
         }
     }
 }
@@ -426,7 +437,9 @@ pub fn walk_fleeing(
         // search stuck on something (usually an encounter belt every
         // explored index hits) -- later rounds search harder rather than
         // repeating the same exhaustion.
-        let budget = max_nodes.saturating_mul(1 << round.min(4));
+        // Cap the escalation low: a 32k-node search in the forest ran for
+        // most of an hour and answered nothing the 8k one had not.
+        let budget = max_nodes.saturating_mul(1 << round.min(2));
         let start = rec.save_state()?;
         let (path, reached) = nav::search_best_effort(rec.emu(), obs, &start, leg.goal(), budget)?;
         rec.emu().load_state(&start)?;
@@ -451,74 +464,90 @@ pub fn walk_fleeing(
         // The walk is capped at a few tiles so a sideways escape cannot run
         // to the far wall and oscillate (measured: the first Route 1 build
         // ping-ponged (12,17) <-> (2,17) for 40 rounds).
-        const FORCE_TILES: usize = 4;
+        const FORCE_TILES: usize = 6;
+        // After a fled battle the cooldown is fresh -- the very next steps
+        // are nearly encounter-free -- but a search's committed approach
+        // path re-walks grass and burns it before arriving. So once forcing
+        // starts, *keep* forcing across battles within the round (measured:
+        // searching between battles oscillated at (11,12) for ten rounds),
+        // and only hand back to the search after real tile progress.
+        const FORCE_BATTLES: usize = 4;
         let mut moved = false;
         let (hx, hy) = leg.hint();
-        let here_pos = obs.pos(rec.emu()).unwrap_or((0, 0));
-        let mut dirs = [
-            (keys::UP, (0i16, -1i16)),
-            (keys::LEFT, (-1i16, 0i16)),
-            (keys::RIGHT, (1, 0)),
-            (keys::DOWN, (0, 1)),
-        ];
-        dirs.sort_by_key(|(dir, (dx, dy))| {
-            let d =
-                (here_pos.0 + dx).abs_diff(hx) as usize + (here_pos.1 + dy).abs_diff(hy) as usize;
-            // Backward loses every tie -- it undoes the search's approach
-            // (measured: (12,17) -> forced DOWN -> (12,21), forever).
-            (d, (*dir == nav_opposite(bias)) as usize)
-        });
-        for (dir, _) in dirs {
-            let here = rec.save_state()?;
-            let mut trial = Trial::new(rec.emu());
-            let start_place = (obs.map(trial.core()), obs.pos(trial.core()));
-            let mut last_place = start_place;
-            let mut frames_since_change = 0usize;
-            let mut battled = false;
-            let mut tiles = 0usize;
-            for _ in 0..1200 {
-                trial.step(dir)?;
-                if obs.in_battle(trial.core()) {
-                    battled = true;
+        for _push in 0..FORCE_BATTLES {
+            let here_pos = obs.pos(rec.emu()).unwrap_or((0, 0));
+            let mut dirs = [
+                (keys::UP, (0i16, -1i16)),
+                (keys::LEFT, (-1i16, 0i16)),
+                (keys::RIGHT, (1, 0)),
+                (keys::DOWN, (0, 1)),
+            ];
+            dirs.sort_by_key(|(dir, (dx, dy))| {
+                let d = (here_pos.0 + dx).abs_diff(hx) as usize
+                    + (here_pos.1 + dy).abs_diff(hy) as usize;
+                // Backward loses every tie -- it undoes the search's
+                // approach (measured: (12,17) -> forced DOWN -> (12,21),
+                // forever).
+                (d, (*dir == nav_opposite(bias)) as usize)
+            });
+            let mut pushed = false;
+            for (dir, _) in dirs {
+                let here = rec.save_state()?;
+                let mut trial = Trial::new(rec.emu());
+                let start_place = (obs.map(trial.core()), obs.pos(trial.core()));
+                let mut last_place = start_place;
+                let mut frames_since_change = 0usize;
+                let mut battled = false;
+                let mut tiles = 0usize;
+                for _ in 0..1200 {
+                    trial.step(dir)?;
+                    if obs.in_battle(trial.core()) {
+                        battled = true;
+                        break;
+                    }
+                    let now = (obs.map(trial.core()), obs.pos(trial.core()));
+                    if now != last_place {
+                        last_place = now;
+                        frames_since_change = 0;
+                        tiles += 1;
+                        if now.0 != start_place.0 || tiles >= FORCE_TILES {
+                            break; // another map, or far enough: re-plan
+                        }
+                    } else {
+                        frames_since_change += 1;
+                        // A wall (position changes mid-step come well within
+                        // this while walking). Requiring player_can_step
+                        // here was the first build's failure: never true
+                        // mid-hold.
+                        if frames_since_change > 64 && last_place != start_place {
+                            break;
+                        }
+                        if frames_since_change > 96 {
+                            break;
+                        }
+                    }
+                }
+                let progressed = battled || last_place != start_place;
+                let inputs = trial.into_inputs();
+                rec.emu().load_state(&here)?;
+                if progressed {
+                    rec.play(&inputs)?;
+                    let fought = obs.in_battle(rec.emu());
+                    if fought {
+                        handle_battle(rec, obs, tuning)?;
+                    }
+                    eprintln!(
+                        "      walk {leg:?} round {round}: forced dir {dir:#06x}{}, now {:?} {:?}",
+                        if fought { " into a battle" } else { "" },
+                        obs.map(rec.emu()),
+                        obs.pos(rec.emu()),
+                    );
+                    moved = true;
+                    pushed = fought; // a clean multi-tile walk: back to the search
                     break;
                 }
-                let now = (obs.map(trial.core()), obs.pos(trial.core()));
-                if now != last_place {
-                    last_place = now;
-                    frames_since_change = 0;
-                    tiles += 1;
-                    if now.0 != start_place.0 || tiles >= FORCE_TILES {
-                        break; // another map, or far enough: re-plan
-                    }
-                } else {
-                    frames_since_change += 1;
-                    // A wall (position changes mid-step come well within
-                    // this while walking). Requiring player_can_step here
-                    // was the first build's failure: never true mid-hold.
-                    if frames_since_change > 64 && last_place != start_place {
-                        break;
-                    }
-                    if frames_since_change > 96 {
-                        break;
-                    }
-                }
             }
-            let progressed = battled || last_place != start_place;
-            let inputs = trial.into_inputs();
-            rec.emu().load_state(&here)?;
-            if progressed {
-                rec.play(&inputs)?;
-                let fought = obs.in_battle(rec.emu());
-                if fought {
-                    handle_battle(rec, obs, tuning)?;
-                }
-                eprintln!(
-                    "      walk {leg:?} round {round}: forced dir {dir:#06x}{}, now {:?} {:?}",
-                    if fought { " into a battle" } else { "" },
-                    obs.map(rec.emu()),
-                    obs.pos(rec.emu()),
-                );
-                moved = true;
+            if !pushed || leg.arrived(obs, rec.emu()) {
                 break;
             }
         }
@@ -752,8 +781,12 @@ fn tutorial(tuning: Tuning) -> Segment {
                 keys::UP,
                 2000,
             )?;
-            // One step up fires the coord event; the demo battle plays
-            // itself with A advancing its text.
+            // Step up into the trigger tile; the coord event grabs the
+            // player the moment the step lands.
+            rec.advance_while("the tutorial trigger to fire", &[keys::UP], 240, |emu| {
+                obs.field_controls_locked(emu)
+            })?;
+            // The demo battle plays itself with A advancing its text.
             rec.hold_mash_until(
                 "the catching tutorial",
                 keys::A,
@@ -817,15 +850,36 @@ fn forest(tuning: Tuning) -> Segment {
         name: "16-forest",
         goal: "out the forest's north side".into(),
         run: Box::new(move |rec, obs| {
-            // Forest exits at (4..6,9) into the north entrance building
-            // (research/story-gates.md).
+            // The north-exit pocket (x=4..6, y=9..12) connects through the
+            // western corridor across Bug Catcher Sammy's sight row --
+            // approaching from the north-east dead-ends (measured: six
+            // hours of round-robin at (11,6..13)). So: waypoint south of
+            // Sammy at (7,24); then cross his row -- his approach fires and
+            // the trainer battle is won en route; then the exit warps at
+            // (4..6,9) (research/story-gates.md).
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::Near(VIRIDIAN_FOREST, 7, 24, 1),
+                keys::LEFT,
+                1500,
+            )?;
+            walk_fleeing(
+                rec,
+                obs,
+                tuning,
+                Leg::Near(VIRIDIAN_FOREST, 5, 20, 1),
+                keys::UP,
+                1000,
+            )?;
             walk_fleeing(
                 rec,
                 obs,
                 tuning,
                 Leg::MapVia(FOREST_NORTH_ENTRANCE, VIRIDIAN_FOREST, (5, 10)),
                 keys::UP,
-                2000,
+                1500,
             )?;
             Ok(())
         }),
