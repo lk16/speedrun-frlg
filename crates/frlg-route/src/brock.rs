@@ -430,6 +430,22 @@ pub fn walk_fleeing(
     let mut stagnant = 0usize;
 
     for round in 0..MAX_ROUNDS {
+        // A trainer's sight line fires on its own: the script locks field
+        // controls and waits on its intro text (measured: Bug Catcher Rick
+        // at (42..46,45) freezing the walk at waypoint (41,44)). Drive any
+        // such ambush to its battle and win it before planning further.
+        if obs.field_controls_locked(rec.emu()) && !obs.in_battle(rec.emu()) {
+            rec.hold_mash_until(
+                "the ambush to become a battle",
+                keys::A,
+                tuning.text_hold,
+                2400,
+                |emu| obs.in_battle(emu) || !obs.field_controls_locked(emu),
+            )?;
+            if obs.in_battle(rec.emu()) {
+                handle_battle(rec, obs, tuning)?;
+            }
+        }
         if leg.arrived(obs, rec.emu()) {
             return Ok(());
         }
