@@ -103,9 +103,9 @@ fn flee_wild(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(), R
     let mut mash: Vec<u16> = vec![keys::B; tuning.text_hold.max(1)];
     mash.push(0);
 
-    let run_attempt = |rec: &mut Recorder, delay: usize| -> Result<(Vec<u16>, bool), RouteError> {
-        rec.emu().load_state(&start)?;
-        let mut trial = Trial::new(rec.emu());
+    let run_attempt = |emu: &mut Emu, delay: usize| -> Result<(Vec<u16>, bool), RouteError> {
+        emu.load_state(&start)?;
+        let mut trial = Trial::new(emu);
         to_first_menu(&mut trial, obs, &mash)?;
         trial.idle(delay)?;
         trial.advance_while("cursor on POKEMON", &[keys::DOWN, 0], 120, |emu| {
@@ -130,13 +130,13 @@ fn flee_wild(rec: &mut Recorder, obs: &Observer, tuning: Tuning) -> Result<(), R
         }
     };
 
-    let mut best: Option<Vec<u16>> = None;
-    for delay in 0..16 {
-        let (inputs, fled) = run_attempt(rec, delay)?;
-        if fled && best.as_ref().is_none_or(|b| inputs.len() < b.len()) {
-            best = Some(inputs);
-        }
-    }
+    let delays: Vec<usize> = (0..16).collect();
+    let outcomes = parallel_search(rec, &delays, run_attempt)?;
+    let best = outcomes
+        .into_iter()
+        .filter(|(_, (_, fled))| *fled)
+        .min_by_key(|(delay, (inputs, _))| (inputs.len(), *delay))
+        .map(|(_, (inputs, _))| inputs);
     let best = best.ok_or_else(|| RouteError::Timeout {
         what: "any delay to flee the wild battle".into(),
         budget: 16,
