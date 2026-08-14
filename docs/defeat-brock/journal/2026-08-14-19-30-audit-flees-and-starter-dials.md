@@ -122,6 +122,26 @@ Two independent lessons, both worth keeping:
    is real, its ~150-frame value is just an order of magnitude below the
    ~1000-frame cost of abandoning the tuned streams.
 
+## The pre-idle sweep: both committed fights survive a 5x wider search
+
+`FRLG_PRE_SWEEP="P[,D]"` (new, committed) widens `win_battle`'s stage 1
+with in-battle pre-idle families 1..=P — the rival solver's `plan[0]`
+dial, unreachable by segment-head waits (the overworld press grid
+quantizes those to one family) because every in-battle frame moves the
+stream by 2 (`decompiled/src/battle_main.c:1650`). Off by default; a
+no-env `--from brock` rebuild reproduces the committed segment digest
+exactly.
+
+- **Brock probe** (`--from brock`, pre 1..24 x 64 delays + the full 384):
+  13/1920 candidates win; the best is *still* the committed plan [164]
+  at 3305. The crit double-one-shot survives 24 fresh families.
+- **Sammy probe** (`--from forest`, same env): 36/1728 win; the best is
+  still the committed plan [13] at 2603. Its downstream rebuild lacked
+  the committed `FRLG_WAIT_TO_GYM=1` head-wait, arrived at Brock one
+  frame earlier, and the best that arrival offered — across its own 24
+  pre families — was 3580 (+275): an independent re-demonstration of
+  why that 1-frame dial was adopted. Total 39136, discarded.
+
 **Adoption: none. The committed 38862 stands.** The starter-stat and
 seed dials are now *measured shut*, not assumed shut: to beat 38862 via
 either, a candidate would need its own solver pass plus wait-dial

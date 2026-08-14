@@ -148,6 +148,13 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
 
 ## What is not optimised — the backlog after the sweep sessions
 
+0. **Both remaining fights survived a 5× wider search (2026-08-14).**
+   `FRLG_PRE_SWEEP` lets stage 1 search in-battle pre-idle families (the
+   rival solver's `plan[0]` dial); Sammy's committed 2603 held against
+   1728 candidates and Brock's 3305 against 1920, including 24 fresh
+   families each (`journal/2026-08-14-19-30`). The 3157-class Brock
+   family remains unreachable from this arrival, which sharpens item 1's
+   price tag: only the fight model can say whether *any* dial reaches it.
 1. **The battle model for Sammy/Brock** (`frlg-battle` now covers *both*
    lab rival fights -- rival-1's and this route's Squirtle one, fitted and
    arbitrated 2026-08-14, worth −165 at the battle -- but not Sammy or
