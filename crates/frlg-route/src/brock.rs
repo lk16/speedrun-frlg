@@ -390,8 +390,11 @@ pub fn win_battle(
     start_delays: usize,
 ) -> Result<(), RouteError> {
     let start_delays = 0..start_delays;
-    const TURN_DELAYS: std::ops::Range<usize> = 1..16;
-    const MAX_PASSES: usize = 6;
+    // 1..16 originally; widened to reach more per-turn RNG streams (crit
+    // and damage-roll manipulation) now that a batch runs on the worker
+    // pool -- the delay itself is scored, so a wasteful crit never wins.
+    const TURN_DELAYS: std::ops::Range<usize> = 1..24;
+    const MAX_PASSES: usize = 8;
 
     let start = rec.save_state()?;
     let intro_mash = mash_with(keys::B, tuning);
