@@ -21,6 +21,16 @@ exact counts. Results (best-leaf per anchor, i.e. gates optimistic):
 - With the wider plan grid, 100% of anchors have *some* winning leaf.
 - Committed 2409 sits at roughly the median of the best-leaf distribution.
 
+The floor is a sampled minimum, but a rarer unsampled class cannot sit
+below it: a 3-turn kill is forced (max first hit 5 with crits suppressed
+until it lands, then 5 + 10 + anything — `rhp_drain_first`, the crit
+suppression in the route.md RNG section), exactly one crit pays (each
+costs +79 at its secondary, `HP_TO_SEC_CRIT`, and zero crits cannot reach
+18 HP in 3 hits), and `RHP_DRAIN` is near-linear in HP lost, so every
+delta recombination of the same kill ties within a frame or two rather
+than beating it — the sampled classes already cover all combinations of
+the per-event minimums.
+
 Two consequences, both permanent for this fight (mons fixed — see §5 for
 why creation manipulation cannot move the damage numbers):
 
