@@ -171,12 +171,216 @@ fn mash_with(key: u16, tuning: Tuning) -> Vec<u16> {
     mash
 }
 
+/// A checkpoint at a menu arrival: the emulator state and the inputs that
+/// got there from the battle's start, both taken *before* the plan's idle
+/// for that menu is spent. A candidate plan that differs from the current
+/// best only from menu k onwards resumes at checkpoint k instead of
+/// replaying the intro and the first k turns -- same trajectory, a
+/// fraction of the emulation. (Verified against the replay-from-start
+/// implementation on the committed Rick and Sammy fights: identical
+/// plans, identical frame counts.)
+struct Menu {
+    state: frlg_emu::SaveState,
+    prefix: Vec<u16>,
+}
+
+/// What one candidate run establishes: the whole battle's inputs, whether
+/// it won, how many menus the battle visited, and checkpoints for the
+/// menus after the resume point.
+type PlanOutcome = (Vec<u16>, bool, usize, Vec<Menu>);
+
+/// `plan[k]` is the idle spent on arriving at the k-th action menu
+/// (k = 0 is the first menu, so plan[0] is stage 1's start delay).
+/// Run from menu `k` to the battle's end under `plan`, collecting a
+/// checkpoint at every later menu. A free function over a bare `Emu` so a
+/// worker pool can run candidates side by side -- the emulator is fully
+/// deterministic, so a worker's outcome is the recorder's outcome.
+fn continue_plan(
+    emu: &mut Emu,
+    obs: &Observer,
+    tuning: Tuning,
+    preferred_move: Option<u16>,
+    from: &Menu,
+    k: usize,
+    plan: &[usize],
+) -> Result<PlanOutcome, RouteError> {
+    let mash = mash_with(keys::A, tuning);
+    emu.load_state(&from.state)?;
+    let mut trial = Trial::new(emu);
+    let mut menu = k;
+    // Move steering happens on the first menu only; the cursor then
+    // persists for the whole battle (`gMoveSelectionCursor`), so a
+    // resume at k > 0 never needs to steer.
+    let mut move_chosen = preferred_move.is_none() || k > 0;
+    // (state, inputs fed since the resume) per menu arrival.
+    let mut later: Vec<(frlg_emu::SaveState, usize)> = Vec::new();
+    trial.idle(plan.get(k).copied().unwrap_or(0))?;
+    let won = loop {
+        if !move_chosen {
+            // A selects FIGHT (cursor starts there); wait for the move
+            // menu, then steer the cursor to the wanted slot. Layout is
+            // 2x2, slot = index into gBattleMons[0].moves: bit 1 is the
+            // row (DOWN), bit 0 the column (RIGHT).
+            let entered = trial.advance_while("the move menu", &mash, 600, |emu| {
+                obs.battle_controller_is(emu, 0, "HandleInputChooseMove")
+            });
+            match entered {
+                Err(RouteError::Timeout { .. }) => break false,
+                other => other?,
+            };
+            let mv = preferred_move.unwrap();
+            let slot = obs
+                .battle_mon(trial.core(), 0)
+                .moves
+                .iter()
+                .position(|&m| m == mv);
+            let Some(slot) = slot else {
+                // The mon does not know the move (yet): fall back to
+                // whatever the cursor is on. The caller decided the
+                // route wrongly; the battle search still gets a fair
+                // shot with slot 0.
+                move_chosen = true;
+                continue;
+            };
+            if slot & 2 != 0 {
+                trial.advance_while("cursor row", &[keys::DOWN, 0], 120, |emu| {
+                    obs.move_cursor(emu, 0) & 2 != 0
+                })?;
+            }
+            if slot & 1 != 0 {
+                trial.advance_while("cursor column", &[keys::RIGHT, 0], 120, |emu| {
+                    obs.move_cursor(emu, 0) & 1 != 0
+                })?;
+            }
+            move_chosen = true;
+        }
+
+        // Commit this turn's actions: mash until the selection state
+        // exits.
+        let to_turn =
+            trial.advance_while("the turn to resolve", &mash, BATTLE_FRAME_BUDGET, |emu| {
+                obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu)
+            });
+        match to_turn {
+            Err(RouteError::Timeout { .. }) => break false,
+            other => other?,
+        };
+        if obs.battle_outcome(trial.core()) != 0 {
+            break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
+        }
+        // To the next turn's menu, or the end.
+        let to_menu = trial.advance_while(
+            "the battle menu or the end",
+            &mash,
+            BATTLE_FRAME_BUDGET,
+            |emu| obs.battle_outcome(emu) != 0 || obs.battle_choosing_actions(emu),
+        );
+        match to_menu {
+            Err(RouteError::Timeout { .. }) => break false,
+            other => other?,
+        };
+        if obs.battle_outcome(trial.core()) != 0 {
+            break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
+        }
+        menu += 1;
+        later.push((trial.core().save_state()?, trial.fed()));
+        trial.idle(*plan.get(menu).unwrap_or(&0))?;
+    };
+    let suffix = trial.into_inputs();
+    let mut inputs = from.prefix.clone();
+    inputs.extend_from_slice(&suffix);
+    let menus = later
+        .into_iter()
+        .map(|(state, len)| {
+            let mut prefix = from.prefix.clone();
+            prefix.extend_from_slice(&suffix[..len]);
+            Menu { state, prefix }
+        })
+        .collect();
+    Ok((inputs, won, menu + 1, menus))
+}
+
+/// Run `f` once per item on a pool of worker emulators, each created and
+/// booted exactly the way the recorder's core was, then hand back the
+/// results ordered by item. The workers exist because the battle search is
+/// hundreds of independent deterministic candidates and the sandbox has
+/// cores to spare; anything that stops a worker from being *identical* to
+/// the recorder's core (no ROM path for this sha1, a different boot) falls
+/// back to the sequential search rather than risking a divergent answer.
+fn parallel_search<R: Send>(
+    rec: &mut Recorder,
+    items: &[usize],
+    f: impl Fn(&mut Emu, usize) -> Result<R, RouteError> + Sync,
+) -> Result<Vec<(usize, R)>, RouteError> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get().saturating_sub(2).max(1))
+        .unwrap_or(1)
+        .min(items.len());
+    let rom = frlg_emu::rom_path_for_sha1(&hex::encode(rec.log().rom_sha1))
+        .or_else(frlg_emu::default_rom_path);
+    let expected_boot = rec.boot().to_string();
+
+    if let Some(rom) = rom.filter(|_| workers > 1) {
+        let next = AtomicUsize::new(0);
+        let results: Mutex<Vec<(usize, R)>> = Mutex::new(Vec::with_capacity(items.len()));
+        let failed = Mutex::new(None::<RouteError>);
+        std::thread::scope(|s| {
+            for _ in 0..workers {
+                s.spawn(|| {
+                    let Ok(mut emu) = Emu::new(&rom) else { return };
+                    match frlg_emu::boot_with_default_bios(&mut emu) {
+                        Ok(boot) if boot == expected_boot => {}
+                        _ => return, // not the recorder's boot: contribute nothing
+                    }
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(&item) = items.get(i) else { break };
+                        match f(&mut emu, item) {
+                            Ok(r) => results.lock().unwrap().push((item, r)),
+                            Err(e) => {
+                                failed.lock().unwrap().get_or_insert(e);
+                                break;
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        if let Some(e) = failed.into_inner().unwrap() {
+            return Err(e);
+        }
+        let mut results = results.into_inner().unwrap();
+        if results.len() == items.len() {
+            results.sort_by_key(|(item, _)| *item);
+            return Ok(results);
+        }
+        // Workers could not boot (or missed items): sequential it is.
+    }
+
+    let mut out = Vec::with_capacity(items.len());
+    for &item in items {
+        out.push((item, f(rec.emu(), item)?));
+    }
+    Ok(out)
+}
+
 /// Win the battle the recorder is standing at, with the same two-stage
 /// delay search as rival-1's `09-battle-win` (stage 1 start delays, stage 2
 /// per-turn delays to a fixpoint), plus one new knob: `preferred_move`
 /// steers the *first* fight menu to that move id -- the cursor persists for
 /// the rest of the battle (`gMoveSelectionCursor`), so one navigation pays
 /// for every turn.
+///
+/// Both stages fan their candidates out over `parallel_search`; each stage-2
+/// batch evaluates one turn's delays against the current best and adopts the
+/// batch winner, repeating that turn until it stops improving. The search
+/// order differs from the old strictly-sequential greedy walk (which mutated
+/// the plan mid-scan), but the scoring -- shortest winning battle -- and the
+/// tie-break -- smallest delay -- are fixed, so a given ROM state still
+/// produces one deterministic answer.
 pub fn win_battle(
     rec: &mut Recorder,
     obs: &Observer,
@@ -190,25 +394,7 @@ pub fn win_battle(
     const MAX_PASSES: usize = 6;
 
     let start = rec.save_state()?;
-    let mash = mash_with(keys::A, tuning);
     let intro_mash = mash_with(keys::B, tuning);
-
-    // A checkpoint at a menu arrival: the emulator state and the inputs that
-    // got there from the battle's start, both taken *before* the plan's idle
-    // for that menu is spent. A candidate plan that differs from the current
-    // best only from menu k onwards resumes at checkpoint k instead of
-    // replaying the intro and the first k turns -- same trajectory, a
-    // fraction of the emulation. (Verified against the replay-from-start
-    // implementation on the committed Rick and Sammy fights: identical
-    // plans, identical frame counts.)
-    struct Menu {
-        state: frlg_emu::SaveState,
-        prefix: Vec<u16>,
-    }
-    /// What one candidate run establishes: the whole battle's inputs, whether
-    /// it won, how many menus the battle visited, and checkpoints for the
-    /// menus after the resume point.
-    type PlanOutcome = (Vec<u16>, bool, usize, Vec<Menu>);
 
     // Drive to the first action menu once; every candidate resumes from it.
     let menu0 = {
@@ -221,125 +407,21 @@ pub fn win_battle(
         }
     };
 
-    // `plan[k]` is the idle spent on arriving at the k-th action menu
-    // (k = 0 is the first menu, so plan[0] is stage 1's start delay).
-    // Run from menu `k` to the battle's end under `plan`, collecting a
-    // checkpoint at every later menu. Returns the whole battle's inputs
-    // (checkpoint prefix included), whether it won, how many menus the
-    // battle visited in total, and the checkpoints for menus k+1 onwards.
-    let continue_plan = |rec: &mut Recorder,
-                         from: &Menu,
-                         k: usize,
-                         plan: &[usize]|
-     -> Result<PlanOutcome, RouteError> {
-        rec.emu().load_state(&from.state)?;
-        let mut trial = Trial::new(rec.emu());
-        let mut menu = k;
-        // Move steering happens on the first menu only; the cursor then
-        // persists for the whole battle (`gMoveSelectionCursor`), so a
-        // resume at k > 0 never needs to steer.
-        let mut move_chosen = preferred_move.is_none() || k > 0;
-        // (state, inputs fed since the resume) per menu arrival.
-        let mut later: Vec<(frlg_emu::SaveState, usize)> = Vec::new();
-        trial.idle(plan.get(k).copied().unwrap_or(0))?;
-        let won = loop {
-            if !move_chosen {
-                // A selects FIGHT (cursor starts there); wait for the move
-                // menu, then steer the cursor to the wanted slot. Layout is
-                // 2x2, slot = index into gBattleMons[0].moves: bit 1 is the
-                // row (DOWN), bit 0 the column (RIGHT).
-                let entered = trial.advance_while("the move menu", &mash, 600, |emu| {
-                    obs.battle_controller_is(emu, 0, "HandleInputChooseMove")
-                });
-                match entered {
-                    Err(RouteError::Timeout { .. }) => break false,
-                    other => other?,
-                };
-                let mv = preferred_move.unwrap();
-                let slot = obs
-                    .battle_mon(trial.core(), 0)
-                    .moves
-                    .iter()
-                    .position(|&m| m == mv);
-                let Some(slot) = slot else {
-                    // The mon does not know the move (yet): fall back to
-                    // whatever the cursor is on. The caller decided the
-                    // route wrongly; the battle search still gets a fair
-                    // shot with slot 0.
-                    move_chosen = true;
-                    continue;
-                };
-                if slot & 2 != 0 {
-                    trial.advance_while("cursor row", &[keys::DOWN, 0], 120, |emu| {
-                        obs.move_cursor(emu, 0) & 2 != 0
-                    })?;
-                }
-                if slot & 1 != 0 {
-                    trial.advance_while("cursor column", &[keys::RIGHT, 0], 120, |emu| {
-                        obs.move_cursor(emu, 0) & 1 != 0
-                    })?;
-                }
-                move_chosen = true;
-            }
-
-            // Commit this turn's actions: mash until the selection state
-            // exits.
-            let to_turn =
-                trial.advance_while("the turn to resolve", &mash, BATTLE_FRAME_BUDGET, |emu| {
-                    obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu)
-                });
-            match to_turn {
-                Err(RouteError::Timeout { .. }) => break false,
-                other => other?,
-            };
-            if obs.battle_outcome(trial.core()) != 0 {
-                break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
-            }
-            // To the next turn's menu, or the end.
-            let to_menu = trial.advance_while(
-                "the battle menu or the end",
-                &mash,
-                BATTLE_FRAME_BUDGET,
-                |emu| obs.battle_outcome(emu) != 0 || obs.battle_choosing_actions(emu),
-            );
-            match to_menu {
-                Err(RouteError::Timeout { .. }) => break false,
-                other => other?,
-            };
-            if obs.battle_outcome(trial.core()) != 0 {
-                break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
-            }
-            menu += 1;
-            later.push((trial.core().save_state()?, trial.fed()));
-            trial.idle(*plan.get(menu).unwrap_or(&0))?;
-        };
-        let suffix = trial.into_inputs();
-        let mut inputs = from.prefix.clone();
-        inputs.extend_from_slice(&suffix);
-        let menus = later
-            .into_iter()
-            .map(|(state, len)| {
-                let mut prefix = from.prefix.clone();
-                prefix.extend_from_slice(&suffix[..len]);
-                Menu { state, prefix }
-            })
-            .collect();
-        Ok((inputs, won, menu + 1, menus))
-    };
-
-    // Stage 1: start delay. The best winner's outcome, plus the plan that
-    // produced it.
-    let mut best: Option<(PlanOutcome, Vec<usize>)> = None;
+    // Stage 1: start delay, all candidates in parallel.
+    let delays: Vec<usize> = start_delays.clone().collect();
+    let outcomes = parallel_search(rec, &delays, |emu, delay| {
+        continue_plan(emu, obs, tuning, preferred_move, &menu0, 0, &[delay])
+    })?;
     let mut wins = 0usize;
-    for delay in start_delays.clone() {
-        let (inputs, won, turns, menus) = continue_plan(rec, &menu0, 0, &[delay])?;
-        wins += won as usize;
-        if won
+    let mut best: Option<(PlanOutcome, Vec<usize>)> = None;
+    for (delay, outcome) in outcomes {
+        wins += outcome.1 as usize;
+        if outcome.1
             && best
                 .as_ref()
-                .is_none_or(|((seen, ..), _)| inputs.len() < seen.len())
+                .is_none_or(|((seen, ..), _)| outcome.0.len() < seen.len())
         {
-            best = Some(((inputs, won, turns, menus), vec![delay]));
+            best = Some((outcome, vec![delay]));
         }
     }
     let ((mut best_inputs, _, mut best_turns, best_menus), mut plan) =
@@ -362,36 +444,52 @@ pub fn win_battle(
     let mut menus: Vec<Menu> = vec![menu0];
     menus.extend(best_menus);
 
-    // Stage 2: per-turn delays, greedy, repeated to a fixpoint.
+    // Stage 2: per-turn delays to a fixpoint, one turn's batch at a time.
     for pass in 1..=MAX_PASSES {
         let mut adopted = false;
-        for turn in 1..menus.len() {
-            if turn >= menus.len() {
-                break; // an adoption shrank the battle below this turn
-            }
-            for delay in TURN_DELAYS {
-                if plan.get(turn) == Some(&delay) {
-                    continue;
-                }
+        let mut turn = 1;
+        while turn < menus.len() {
+            let candidates: Vec<usize> =
+                TURN_DELAYS.filter(|d| plan.get(turn) != Some(d)).collect();
+            let outcomes = parallel_search(rec, &candidates, |emu, delay| {
                 let mut candidate = plan.clone();
                 if candidate.len() < turn + 1 {
                     candidate.resize(turn + 1, 0);
                 }
                 candidate[turn] = delay;
-                let (inputs, won, turns_seen, new_menus) =
-                    continue_plan(rec, &menus[turn], turn, &candidate)?;
-                if won && inputs.len() < best_inputs.len() {
+                continue_plan(
+                    emu,
+                    obs,
+                    tuning,
+                    preferred_move,
+                    &menus[turn],
+                    turn,
+                    &candidate,
+                )
+            })?;
+            let winner = outcomes
+                .into_iter()
+                .filter(|(_, (inputs, won, ..))| *won && inputs.len() < best_inputs.len())
+                .min_by_key(|(delay, (inputs, ..))| (inputs.len(), *delay));
+            match winner {
+                Some((delay, (inputs, _, turns_seen, new_menus))) => {
                     eprintln!(
                         "      {label} stage 2 (pass {pass}): turn {turn} delay {delay} -> {} frames",
                         inputs.len()
                     );
                     best_inputs = inputs;
-                    plan = candidate;
+                    if plan.len() < turn + 1 {
+                        plan.resize(turn + 1, 0);
+                    }
+                    plan[turn] = delay;
                     best_turns = turns_seen;
                     menus.truncate(turn + 1);
                     menus.extend(new_menus);
                     adopted = true;
+                    // Same turn again: a shorter battle may leave room for
+                    // an even better delay here before moving on.
                 }
+                None => turn += 1,
             }
         }
         if !adopted {
@@ -875,8 +973,13 @@ pub fn walk_planned(
                 let inputs = trial.into_inputs();
                 match result {
                     StepTry::Moved { consumed } => {
-                        let planned_battle =
-                            matches!(step.kind, StepKind::Consume { fated_pass: true, .. });
+                        let planned_battle = matches!(
+                            step.kind,
+                            StepKind::Consume {
+                                fated_pass: true,
+                                ..
+                            }
+                        );
                         if consumption_matches(step.kind, consumed) && !planned_battle {
                             outcome = Some((inputs, StepTry::Moved { consumed }));
                             break;
@@ -890,9 +993,13 @@ pub fn walk_planned(
                         }
                     }
                     StepTry::Battle => {
-                        let planned_battle =
-                            matches!(step.kind, StepKind::Consume { fated_pass: true, .. })
-                                || step_into_cone(step);
+                        let planned_battle = matches!(
+                            step.kind,
+                            StepKind::Consume {
+                                fated_pass: true,
+                                ..
+                            }
+                        ) || step_into_cone(step);
                         if planned_battle || try_no == STEER_DELAYS.len() {
                             outcome = Some((inputs, StepTry::Battle));
                             break;
@@ -1078,7 +1185,9 @@ pub fn walk_smart(
     match walk_planned(rec, obs, tuning, leg, bias) {
         Ok(true) => return Ok(()),
         Ok(false) => eprintln!("      walk {leg:?}: no plan; emulator search takes over"),
-        Err(e) => eprintln!("      walk {leg:?}: planned walk gave up ({e}); emulator search takes over"),
+        Err(e) => {
+            eprintln!("      walk {leg:?}: planned walk gave up ({e}); emulator search takes over")
+        }
     }
     walk_fleeing(rec, obs, tuning, leg, bias, max_nodes)
 }
