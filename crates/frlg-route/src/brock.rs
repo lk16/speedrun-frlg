@@ -424,6 +424,30 @@ pub fn win_battle(
     let start = rec.save_state()?;
     let intro_mash = mash_with(keys::B, tuning);
 
+    // A solver-provided seed plan (`FRLG_SEED_PLAN_BATTLE` /
+    // `_TRAINER` / `_BROCK`, format "pre,d0,d1,d2,..."): `pre` idle
+    // frames before the intro mash -- the engine model's plan[0], a
+    // five-stream dial this search cannot otherwise express -- then the
+    // per-menu delays. The seed is replayed first and becomes the
+    // incumbent both stages must strictly beat, so a search seeded with
+    // an arbitrated `squirtle-solver` winner can only keep or improve it
+    // and stays deterministic.
+    let seed: Option<(usize, Vec<usize>)> = std::env::var(match label {
+        "battle" => "FRLG_SEED_PLAN_BATTLE",
+        "brock" => "FRLG_SEED_PLAN_BROCK",
+        _ => "FRLG_SEED_PLAN_TRAINER",
+    })
+    .ok()
+    .and_then(|v| {
+        let nums: Option<Vec<usize>> = v.split(',').map(|t| t.trim().parse().ok()).collect();
+        let mut nums = nums?;
+        if nums.is_empty() {
+            return None;
+        }
+        let pre = nums.remove(0);
+        Some((pre, nums))
+    });
+
     // Drive to the first action menu once; every candidate resumes from it.
     let menu0 = {
         let mut trial = Trial::new(rec.emu());
@@ -435,10 +459,47 @@ pub fn win_battle(
         }
     };
 
+    // Measure the seed, if any, from its own (pre-shifted) first menu.
+    let seeded: Option<(PlanOutcome, Vec<usize>, Menu)> = match seed {
+        None => None,
+        Some((pre, seed_plan)) => {
+            rec.emu().load_state(&start)?;
+            let seed_menu0 = {
+                let mut trial = Trial::new(rec.emu());
+                trial.idle(pre)?;
+                to_first_menu(&mut trial, obs, &intro_mash)?;
+                let prefix = trial.into_inputs();
+                Menu {
+                    state: rec.save_state()?,
+                    prefix,
+                }
+            };
+            let out = continue_plan(
+                rec.emu(),
+                obs,
+                tuning,
+                preferred_move,
+                &seed_menu0,
+                0,
+                &seed_plan,
+                usize::MAX,
+            )?;
+            eprintln!(
+                "      {label} seed pre {pre} plan {seed_plan:?}: {} at {} frames",
+                if out.1 { "win" } else { "LOSS (seed ignored)" },
+                out.0.len()
+            );
+            out.1.then_some((out, seed_plan, seed_menu0))
+        }
+    };
+
     // Stage 1: start delay, all candidates in parallel. The shared cap
-    // shrinks to the shortest winner seen so far; later candidates abort
-    // the moment they exceed it (see `continue_plan`).
-    let cap = std::sync::atomic::AtomicUsize::new(usize::MAX);
+    // shrinks to the shortest winner seen so far (starting from the seed's
+    // length when one won); later candidates abort the moment they exceed
+    // it (see `continue_plan`).
+    let cap = std::sync::atomic::AtomicUsize::new(
+        seeded.as_ref().map_or(usize::MAX, |(out, ..)| out.0.len()),
+    );
     let delays: Vec<usize> = start_delays.clone().collect();
     let outcomes = parallel_search(rec, &delays, |emu, delay| {
         let out = continue_plan(
@@ -468,6 +529,18 @@ pub fn win_battle(
             best = Some((outcome, vec![delay]));
         }
     }
+    // The seed competes on the same score (total inputs, ties to the
+    // search) and brings its own menu-0 checkpoint when it wins.
+    let mut base_menu0 = menu0;
+    if let Some((out, seed_plan, seed_menu0)) = seeded {
+        if best
+            .as_ref()
+            .is_none_or(|((seen, ..), _)| out.0.len() < seen.len())
+        {
+            best = Some((out, seed_plan));
+            base_menu0 = seed_menu0;
+        }
+    }
     let ((mut best_inputs, _, mut best_turns, best_menus), mut plan) =
         best.ok_or_else(|| RouteError::Timeout {
             what: format!("any start delay to win {label}"),
@@ -475,9 +548,8 @@ pub fn win_battle(
             frames: rec.frames(),
         })?;
     eprintln!(
-        "      {label} stage 1: {wins}/{} start delays win, delay {} at {} frames",
+        "      {label} stage 1: {wins}/{} start delays win, plan {plan:?} at {} frames",
         start_delays.end,
-        plan[0],
         best_inputs.len()
     );
 
@@ -485,7 +557,7 @@ pub fn win_battle(
     // arrival at menu k. On adoption, everything up to and including the
     // changed turn's arrival is unchanged (the candidate differed only in
     // the idle spent *after* arriving there), so only the tail is replaced.
-    let mut menus: Vec<Menu> = vec![menu0];
+    let mut menus: Vec<Menu> = vec![base_menu0];
     menus.extend(best_menus);
 
     // Stage 2: per-turn delays to a fixpoint, one turn's batch at a time.
