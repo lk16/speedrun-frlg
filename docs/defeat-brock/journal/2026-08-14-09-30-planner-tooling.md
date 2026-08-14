@@ -148,3 +148,21 @@ extends past Brock, deferred for this target.
 Also: wave A (seeds 20-23, pre-scan) confirmed the scan's ranking -- all
 lost badly (43750/46930/42971) and seed 21's build died silently after
 03-names with nothing in its log (one-off, unreproduced, noted).
+
+## Sweep closed: 38950 stands
+
+Wave B (scan-guided, seeds 38/26/13/6 at text 4): 41399 / 42938 / 43391 /
+43297 (seed 6 rerun after its first attempt died). Every scan-top-5 seed
+has now been built and lost to seed 27 -- the seed x knob neighborhood is
+exhausted and **38950 (seed 27, turn 1, text 4)** is the final number of
+this session. Tier-2 request `route-38950f-2f221a898d8e` remains queued.
+
+Two operational findings worth keeping:
+
+- **The "silent" build deaths were bus errors, self-inflicted**: rebuilding
+  `target/release/frlg` while wave builds were running corrupted their
+  mapped executable (seeds 21 and 6, both timed with a `cargo build`).
+  Waves now run from a snapshotted binary copy in scratch.
+- **The running-best abort measured**: the full Brock re-search (--from
+  brock, 384 candidates + stage 2) runs in 2m41s at 8 workers and
+  reproduces 38950 exactly -- versus ~4-5 min at 14 workers uncapped.
