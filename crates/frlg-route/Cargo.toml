@@ -6,6 +6,8 @@ publish.workspace = true
 
 [dependencies]
 frlg-emu = { path = "../frlg-emu" }
+frlg-mon = { path = "../frlg-mon" }
+frlg-rng = { path = "../frlg-rng" }
 anyhow.workspace = true
 hex.workspace = true
 thiserror.workspace = true

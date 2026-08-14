@@ -15,9 +15,11 @@ pub mod brock;
 pub mod ledger;
 pub mod nav;
 pub mod observe;
+pub mod plan;
 pub mod record;
 pub mod search;
 pub mod segments;
+pub mod world;
 
 pub use observe::{Observer, Snapshot};
 pub use record::{Feed, Recorder, RouteError};

@@ -568,6 +568,19 @@ impl Observer {
         rng_state | (prev_behavior << 32) | (steps << 41) | (buff << 45)
     }
 
+    /// `sWildEncounterData`'s raw fields (`decompiled/src/wild_encounter.c:24-34`),
+    /// for the model-driven path planner: the same data [`Observer::wild_key`]
+    /// folds, unfolded.
+    pub fn wild_data(&self, emu: &mut Emu) -> WildData {
+        let base = self.s_wild_encounter_data;
+        WildData {
+            rng_state: emu.read32(base),
+            prev_behavior: emu.read16(base + 4),
+            rate_buff: emu.read16(base + 6),
+            steps_since: emu.read8(base + 8),
+        }
+    }
+
     /// Everything at once, for logging a route's progress.
     pub fn snapshot(&self, emu: &mut Emu) -> Snapshot {
         Snapshot {
@@ -581,6 +594,16 @@ impl Observer {
             rng: self.rng(emu),
         }
     }
+}
+
+/// `struct WildEncounterData`'s decision-relevant fields
+/// (`decompiled/src/wild_encounter.c:24-34`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WildData {
+    pub rng_state: u32,
+    pub prev_behavior: u16,
+    pub rate_buff: u16,
+    pub steps_since: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
