@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         turn_hold: 2,
         text_hold: 4,
         seed_delay: 0,
+        ball_delay: 0,
     };
     brock::win_battle(&mut rec, &obs, tuning, preferred, "fight-lab", start_delays)?;
     println!("won in {} frames from the state", rec.frames());
