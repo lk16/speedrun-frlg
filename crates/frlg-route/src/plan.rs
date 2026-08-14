@@ -37,11 +37,14 @@ use frlg_rng::WildRng;
 use crate::observe::WildData;
 use crate::world::{MapData, MB_JUMP_EAST, MB_JUMP_NORTH, MB_JUMP_SOUTH, MB_JUMP_WEST};
 
-/// What a fled wild battle costs, in frames: ~1200 for the battle plus the
-/// walk disruption. High enough that any dodgeable encounter is dodged,
-/// low enough that a fully index-walled belt still routes through its
-/// cheapest flee instead of failing.
-const ENCOUNTER_COST: u32 = 1400;
+/// What a fled wild battle costs, in frames. Measured on the committed
+/// 38862 run (audit-run, 2026-08-14): the four flees are 501-506 frames
+/// in-battle plus ~70 of transition, ~575 all told -- and the old 1400
+/// ("~1200 for the battle", never measured) made the planner spend up to
+/// 87 detour steps (~1390 frames) to dodge a 575-frame flee. 600 keeps a
+/// slight dodge preference (a flee also re-lucks every downstream battle
+/// stream, which the plan cost cannot see) without paying double for it.
+const ENCOUNTER_COST: u32 = 600;
 
 /// Walking one tile. See the module docs for why 16 and not the measured 17:
 /// the constant term cancels between candidate paths of equal length, and a

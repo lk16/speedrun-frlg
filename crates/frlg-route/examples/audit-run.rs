@@ -226,6 +226,67 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Doglegs: lateral (or vertical) waste per contiguous same-map trail.
+    // A trail that takes L left-steps and R right-steps wastes
+    // 2*min(L,R) steps against its net displacement (likewise up/down) --
+    // the "walks left, then up, then right again" a viewer flags. Waste
+    // is not automatically a bug (grass-lane weaving, ledges, NPC cones,
+    // rate-test index shaping all force doglegs); this lists where to
+    // look, with the trail's tile ranges so each can be checked against
+    // `frlg map`.
+    println!("\n== direction waste per same-map trail (>= 2 wasted steps) ==");
+    let mut i = 0usize;
+    while i < steps.len() {
+        let map = steps[i].1;
+        // A trail ends on a map change or a >600-frame gap (a battle or
+        // scripted scene splits the walk).
+        let end = (i..steps.len())
+            .take_while(|&j| steps[j].1 == map && (j == i || steps[j].0 - steps[j - 1].0 <= 600))
+            .last()
+            .unwrap()
+            + 1;
+        let trail = &steps[i..end];
+        let (mut l, mut r, mut u, mut d) = (0i32, 0i32, 0i32, 0i32);
+        for (_, _, from, to) in trail {
+            match (to.0 - from.0, to.1 - from.1) {
+                (dx, _) if dx < 0 => l += 1,
+                (dx, _) if dx > 0 => r += 1,
+                (_, dy) if dy < 0 => u += 1,
+                _ => d += 1,
+            }
+        }
+        let waste = 2 * l.min(r) + 2 * u.min(d);
+        if waste >= 2 {
+            let (f0, _, from0, _) = trail[0];
+            let (f1, _, _, to1) = trail[trail.len() - 1];
+            println!(
+                "  {} map {:?} f{}..{} {:?}->{:?}: {} steps (L{l} R{r} U{u} D{d}), {} wasted (~{} fr)",
+                seg_of[f0 as usize],
+                map,
+                f0,
+                f1,
+                from0,
+                to1,
+                trail.len(),
+                waste,
+                waste * 16,
+            );
+        }
+        i = end;
+    }
+
+    // AUDIT_TRAIL="f0-f1": dump every step in the frame window, for
+    // checking one flagged trail against the map.
+    if let Ok(win) = std::env::var("AUDIT_TRAIL") {
+        if let Some((a, b)) = win.split_once('-') {
+            let (a, b): (u32, u32) = (a.parse().unwrap_or(0), b.parse().unwrap_or(u32::MAX));
+            println!("\n== trail {a}..{b} ==");
+            for (f, m, from, to) in steps.iter().filter(|(f, ..)| (a..=b).contains(f)) {
+                println!("  f{f} map {m:?} {from:?} -> {to:?}");
+            }
+        }
+    }
+
     // Reversal steps: step i+1 returns to step i's origin (an undo).
     println!("\n== reversal steps (step that undoes the previous one) ==");
     for w in steps.windows(2) {
