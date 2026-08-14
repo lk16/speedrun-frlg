@@ -14,6 +14,9 @@
 //! path shaping against the second LCG, not walking Route 1 three times
 //! slower than it must -- comes after a full run exists.
 
+use std::cell::RefCell;
+use std::collections::HashSet;
+
 use frlg_emu::{keys, Emu};
 
 use crate::nav::{self, Goal};
@@ -21,8 +24,10 @@ use crate::observe::{
     Observer, BATTLE_TYPE_TRAINER, B_OUTCOME_RAN, B_OUTCOME_WON, FLAG_DEFEATED_BROCK,
     VAR_OAKS_LAB_SCENE, VAR_VIRIDIAN_MART, VAR_VIRIDIAN_OLD_MAN,
 };
+use crate::plan::{self, PlanRequest, PlanStep, StepKind};
 use crate::record::{Feed, Recorder, RouteError, Trial};
-use crate::segments::{Segment, Starter, Tuning, OAKS_LAB, PALLET_TOWN};
+use crate::segments::{Segment, Starter, Tuning, Version, OAKS_LAB, PALLET_TOWN};
+use crate::world::World;
 
 /// `data/maps/map_groups.json` (group_order index, position in group).
 pub const ROUTE1: (u8, u8) = (3, 19);
@@ -665,6 +670,420 @@ pub fn walk_fleeing(
 }
 
 // ---------------------------------------------------------------------------
+// Model-driven walking: plan on the decoded map (`plan.rs`), execute in the
+// emulator, steer the frame-timed gates with 1-frame delays, replan when
+// reality disagrees. `walk_fleeing` stays as the fallback for anything the
+// static model cannot see.
+
+thread_local! {
+    /// One decoded-world cache per build thread. `None` after a failed load
+    /// -- the build then runs entirely on the `walk_fleeing` fallback.
+    static WORLD: RefCell<Option<World>> = RefCell::new(match World::load() {
+        Ok(w) => Some(w),
+        Err(e) => {
+            eprintln!("      no decoded world ({e}); walks fall back to emulator search");
+            None
+        }
+    });
+}
+
+/// The land encounter table for a map, by ROM version
+/// (`frlg_mon::wild`, cited there to `wild_encounters.json`).
+fn wild_table(map: (u8, u8), version: Version) -> Option<&'static frlg_mon::wild::MapWild> {
+    use frlg_mon::wild;
+    match map {
+        ROUTE1 => Some(&wild::ROUTE1),
+        ROUTE2 => Some(&wild::ROUTE2),
+        VIRIDIAN_FOREST => Some(match version {
+            Version::FireRed => &wild::VIRIDIAN_FOREST_FR,
+            Version::LeafGreen => &wild::VIRIDIAN_FOREST_LG,
+        }),
+        _ => None,
+    }
+}
+
+fn version_of(emu: &Emu) -> Version {
+    let code = emu.game_code();
+    let bytes: [u8; 4] = code.as_bytes().try_into().unwrap_or(*b"BPRE");
+    Version::from_game_code(bytes).unwrap_or(Version::FireRed)
+}
+
+/// What one attempted step did.
+enum StepTry {
+    /// Arrived on a tile; `consumed` is whether the wild rate test advanced.
+    Moved { consumed: bool },
+    /// A battle owns the screen (wild encounter or sight-line trainer).
+    Battle,
+    /// A script grabbed the player without a battle (ambush intro, coord
+    /// event).
+    Script,
+    /// Nothing happened within the budget -- an NPC or wall in the way.
+    Stuck,
+}
+
+/// Feed `dir` (after `delay` idle frames) until the player lands on a new
+/// tile; settle across a warp fade. The inputs are committed to the recorder
+/// only by the caller deciding to keep them.
+fn attempt_step(
+    trial: &mut Trial<'_>,
+    obs: &Observer,
+    dir: u16,
+    delay: usize,
+) -> Result<StepTry, RouteError> {
+    trial.idle(delay)?;
+    let start_pos = obs.pos(trial.core());
+    let start_map = obs.map(trial.core());
+    let wild_before = obs.wild_data(trial.core()).rng_state;
+    for _ in 0..96 {
+        trial.step(dir)?;
+        if obs.in_battle(trial.core()) {
+            return Ok(StepTry::Battle);
+        }
+        if obs.prevent_step(trial.core()) && obs.field_controls_locked(trial.core()) {
+            return Ok(StepTry::Script);
+        }
+        let now_map = obs.map(trial.core());
+        if obs.pos(trial.core()) != start_pos || now_map != start_map {
+            if now_map != start_map {
+                // A warp: hold nothing through the fade.
+                for _ in 0..300 {
+                    if obs.player_can_step(trial.core()) || obs.in_battle(trial.core()) {
+                        break;
+                    }
+                    trial.step(0)?;
+                }
+                if obs.in_battle(trial.core()) {
+                    return Ok(StepTry::Battle);
+                }
+            }
+            let consumed = obs.wild_data(trial.core()).rng_state != wild_before;
+            return Ok(StepTry::Moved { consumed });
+        }
+    }
+    Ok(StepTry::Stuck)
+}
+
+/// Whether a step's observed rate-test consumption matches the plan's
+/// expectation. Steps the plan calls `Free`/`Jump` never consume; `Cooldown`
+/// and `SkipBoundary` must not; `Consume` must.
+fn consumption_matches(kind: StepKind, consumed: bool) -> bool {
+    match kind {
+        StepKind::Consume { .. } => consumed,
+        _ => !consumed,
+    }
+}
+
+/// The delays tried when a step's first attempt does the wrong thing: each
+/// idle frame re-rolls the `gRngValue` gates (5% cooldown gate, 60%
+/// behavior roll) that decide everything the rate-test index does not.
+const STEER_DELAYS: [usize; 6] = [1, 2, 3, 4, 6, 9];
+
+/// Walk a leg by planning against the model. Returns `Ok(true)` on arrival,
+/// `Ok(false)` when planning is impossible (no world, no targets, no path)
+/// and the caller should fall back to `walk_fleeing`.
+pub fn walk_planned(
+    rec: &mut Recorder,
+    obs: &Observer,
+    tuning: Tuning,
+    leg: Leg,
+    bias: u16,
+) -> Result<bool, RouteError> {
+    const MAX_REPLANS: usize = 60;
+    let version = version_of(rec.emu());
+    let mut blocked: HashSet<((i16, i16), (i16, i16))> = HashSet::new();
+    let mut stuck_streak = 0usize;
+
+    for round in 0..MAX_REPLANS {
+        // Scenes and ambushes first, exactly as `walk_fleeing` does.
+        if obs.field_controls_locked(rec.emu()) && !obs.in_battle(rec.emu()) {
+            rec.hold_mash_until(
+                "the ambush to become a battle",
+                keys::A,
+                tuning.text_hold,
+                2400,
+                |emu| obs.in_battle(emu) || !obs.field_controls_locked(emu),
+            )?;
+            if obs.in_battle(rec.emu()) {
+                handle_battle(rec, obs, tuning)?;
+            }
+        }
+        if leg.arrived(obs, rec.emu()) {
+            return Ok(true);
+        }
+        rec.wait_until("the player to settle", 240, |emu| obs.player_can_step(emu))?;
+        if leg.arrived(obs, rec.emu()) {
+            return Ok(true);
+        }
+
+        let Some(map) = obs.map(rec.emu()) else {
+            return Ok(false);
+        };
+        let Some(pos) = obs.pos(rec.emu()) else {
+            return Ok(false);
+        };
+        let wild_data = obs.wild_data(rec.emu());
+        let wild = wild_table(map, version);
+
+        // Plan on the current map. Everything that needs the borrowed map
+        // happens inside; the plan comes out owned.
+        let planned: Option<(Vec<PlanStep>, u32, bool)> = WORLD.with(|w| {
+            let mut w = w.borrow_mut();
+            let world = w.as_mut()?;
+            let data = match world.map(map) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("      no decode for map {map:?} ({e})");
+                    return None;
+                }
+            };
+            let (targets, crossing) = leg_targets(&leg, data, map, bias)?;
+            let req = PlanRequest {
+                map: data,
+                wild,
+                start: pos,
+                wild_data,
+                targets,
+                blocked: blocked.clone(),
+            };
+            plan::plan(&req).map(|(steps, cost)| (steps, cost, crossing))
+        });
+        let Some((steps, cost, needs_crossing)) = planned else {
+            return Ok(false);
+        };
+        if round == 0 {
+            eprintln!(
+                "      walk {leg:?}: planned {} steps (model cost {cost})",
+                steps.len()
+            );
+        }
+
+        let mut diverged = false;
+        for step in &steps {
+            if leg.arrived(obs, rec.emu()) {
+                return Ok(true);
+            }
+            let before = rec.save_state()?;
+            let mut outcome = None;
+            // First attempt with no delay, then steer.
+            for (try_no, delay) in std::iter::once(0)
+                .chain(STEER_DELAYS.iter().copied())
+                .enumerate()
+            {
+                rec.emu().load_state(&before)?;
+                let mut trial = Trial::new(rec.emu());
+                let result = attempt_step(&mut trial, obs, step.dir, delay)?;
+                let inputs = trial.into_inputs();
+                match result {
+                    StepTry::Moved { consumed } => {
+                        let planned_battle =
+                            matches!(step.kind, StepKind::Consume { fated_pass: true, .. });
+                        if consumption_matches(step.kind, consumed) && !planned_battle {
+                            outcome = Some((inputs, StepTry::Moved { consumed }));
+                            break;
+                        }
+                        // Wrong branch of a gate: steer with one more delay
+                        // frame. If steering runs out, accept and replan --
+                        // the model realigns from RAM.
+                        if try_no == STEER_DELAYS.len() {
+                            outcome = Some((inputs, StepTry::Moved { consumed }));
+                            diverged = true;
+                        }
+                    }
+                    StepTry::Battle => {
+                        let planned_battle =
+                            matches!(step.kind, StepKind::Consume { fated_pass: true, .. })
+                                || step_into_cone(step);
+                        if planned_battle || try_no == STEER_DELAYS.len() {
+                            outcome = Some((inputs, StepTry::Battle));
+                            break;
+                        }
+                    }
+                    StepTry::Script => {
+                        outcome = Some((inputs, StepTry::Script));
+                        break;
+                    }
+                    StepTry::Stuck => {
+                        // Delays do not move NPCs much; bail to the stuck
+                        // path quickly.
+                        if try_no >= 1 {
+                            outcome = Some((inputs, StepTry::Stuck));
+                            break;
+                        }
+                    }
+                }
+                if outcome.is_some() {
+                    break;
+                }
+            }
+
+            let (inputs, result) = outcome.expect("the retry loop always resolves");
+            match result {
+                StepTry::Moved { .. } => {
+                    rec.emu().load_state(&before)?;
+                    rec.play(&inputs)?;
+                    stuck_streak = 0;
+                    if diverged {
+                        break; // replan from the realigned state
+                    }
+                }
+                StepTry::Battle => {
+                    rec.emu().load_state(&before)?;
+                    rec.play(&inputs)?;
+                    handle_battle(rec, obs, tuning)?;
+                    stuck_streak = 0;
+                    diverged = true;
+                    break; // modifiers reset; replan
+                }
+                StepTry::Script => {
+                    rec.emu().load_state(&before)?;
+                    rec.play(&inputs)?;
+                    // The round preamble drives the script/ambush.
+                    stuck_streak = 0;
+                    diverged = true;
+                    break;
+                }
+                StepTry::Stuck => {
+                    rec.emu().load_state(&before)?;
+                    let from = obs.pos(rec.emu()).unwrap_or((0, 0));
+                    blocked.insert((from, step.to));
+                    stuck_streak += 1;
+                    if stuck_streak >= 3 {
+                        // An NPC camping the corridor: wait a beat and give
+                        // the tile another chance.
+                        rec.idle(48)?;
+                        blocked.clear();
+                        stuck_streak = 0;
+                    }
+                    diverged = true;
+                    break;
+                }
+            }
+        }
+
+        if !diverged {
+            // The plan ran to its last tile. A connection crossing still
+            // needs the actual off-map step.
+            if needs_crossing && !leg.arrived(obs, rec.emu()) {
+                let start_map = obs.map(rec.emu());
+                let crossed = rec.advance_while("the map connection", &[bias], 120, |emu| {
+                    obs.map(emu) != start_map
+                });
+                if crossed.is_err() {
+                    return Ok(false);
+                }
+                rec.wait_until("the player to settle", 300, |emu| {
+                    obs.player_can_step(emu) || obs.in_battle(emu)
+                })?;
+                if obs.in_battle(rec.emu()) {
+                    handle_battle(rec, obs, tuning)?;
+                }
+            }
+            if leg.arrived(obs, rec.emu()) {
+                return Ok(true);
+            }
+            // Ran the whole plan and did not arrive (a Near/Tile goal the
+            // model mis-placed): replan once more; the round loop caps it.
+        }
+    }
+    Err(RouteError::Timeout {
+        what: format!("{leg:?} within the replan budget"),
+        budget: MAX_REPLANS,
+        frames: rec.frames(),
+    })
+}
+
+/// Whether a planned step knowingly enters a trainer sight cone -- the
+/// planner prices cones rather than forbidding them, so a battle on such a
+/// step is the plan working, not failing. Detected by cost bookkeeping being
+/// unavailable per step: the executor simply treats any battle on the last
+/// steer attempt as accepted, so this only matters for skipping the steering
+/// retries on genuinely planned fights. Conservative `false` keeps the
+/// retries; they cost ~100 emulated frames.
+fn step_into_cone(_step: &PlanStep) -> bool {
+    false
+}
+
+/// The tiles a leg wants, on the decoded map, plus whether reaching them
+/// still leaves a connection crossing to do.
+fn leg_targets(
+    leg: &Leg,
+    data: &crate::world::MapData,
+    current_map: (u8, u8),
+    bias: u16,
+) -> Option<(Vec<(i16, i16)>, bool)> {
+    match *leg {
+        Leg::Tile(map, x, y) => (map == current_map).then(|| (vec![(x, y)], false)),
+        Leg::Near(map, x, y, tol) => (map == current_map).then(|| {
+            let mut tiles = Vec::new();
+            let t = tol as i16;
+            for dx in -t..=t {
+                for dy in -t..=t {
+                    if dx.abs() + dy.abs() > t {
+                        continue;
+                    }
+                    let (px, py) = (x + dx, y + dy);
+                    if data.tile(px, py).is_some_and(|t| t.collision == 0) {
+                        tiles.push((px, py));
+                    }
+                }
+            }
+            (tiles, false)
+        }),
+        Leg::MapVia(_, via_map, (vx, vy)) => {
+            if via_map != current_map {
+                return None;
+            }
+            // A warp near the via tile means "walk onto the warp"; otherwise
+            // it is a map connection and the plan ends on the edge, one held
+            // step short of the next map.
+            let warps: Vec<(i16, i16)> = data
+                .warps
+                .iter()
+                .filter(|w| (w.x - vx).abs() + (w.y - vy).abs() <= 4)
+                .map(|w| (w.x, w.y))
+                .collect();
+            if !warps.is_empty() {
+                return Some((warps, false));
+            }
+            let (w, h) = (data.width as i16, data.height as i16);
+            let edge: Vec<(i16, i16)> = match bias {
+                b if b == frlg_emu::keys::UP => (0..w).map(|x| (x, 0)).collect(),
+                b if b == frlg_emu::keys::DOWN => (0..w).map(|x| (x, h - 1)).collect(),
+                b if b == frlg_emu::keys::LEFT => (0..h).map(|y| (0, y)).collect(),
+                _ => (0..h).map(|y| (w - 1, y)).collect(),
+            };
+            let near: Vec<(i16, i16)> = edge
+                .into_iter()
+                .filter(|&(x, y)| {
+                    (x - vx).abs() + (y - vy).abs() <= 8
+                        && data.tile(x, y).is_some_and(|t| t.collision == 0)
+                })
+                .collect();
+            (!near.is_empty()).then_some((near, true))
+        }
+    }
+}
+
+/// Plan-first walking with the emulator search as the fallback. The planner
+/// covers everything the static model can see; `walk_fleeing` remains for
+/// what it cannot (a mis-decoded tile, a scripted obstacle).
+pub fn walk_smart(
+    rec: &mut Recorder,
+    obs: &Observer,
+    tuning: Tuning,
+    leg: Leg,
+    bias: u16,
+    max_nodes: usize,
+) -> Result<(), RouteError> {
+    match walk_planned(rec, obs, tuning, leg, bias) {
+        Ok(true) => return Ok(()),
+        Ok(false) => eprintln!("      walk {leg:?}: no plan; emulator search takes over"),
+        Err(e) => eprintln!("      walk {leg:?}: planned walk gave up ({e}); emulator search takes over"),
+    }
+    walk_fleeing(rec, obs, tuning, leg, bias, max_nodes)
+}
+
+// ---------------------------------------------------------------------------
 // The segments.
 
 /// The post-battle lab script plays itself (rival leaves,
@@ -683,7 +1102,7 @@ fn exit_lab(tuning: Tuning) -> Segment {
                 4000,
                 |emu| obs.var(emu, VAR_OAKS_LAB_SCENE) == Some(4) && scene_over(obs, emu),
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -709,7 +1128,7 @@ fn to_viridian(tuning: Tuning) -> Segment {
             // Connections (research/story-gates.md, map.json cites): Pallet's
             // north exit is x=12/13 row 0; Route 1's top x=10..13 meets
             // Viridian's bottom x=22..25.
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -717,7 +1136,7 @@ fn to_viridian(tuning: Tuning) -> Segment {
                 keys::UP,
                 600,
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -742,7 +1161,7 @@ fn parcel(tuning: Tuning) -> Segment {
         run: Box::new(move |rec, obs| {
             // The mart door warp is at (36,19) (`data/maps/ViridianCity/
             // map.json:194-200`).
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -757,7 +1176,7 @@ fn parcel(tuning: Tuning) -> Segment {
                 3000,
                 |emu| obs.var(emu, VAR_VIRIDIAN_MART) == Some(1) && scene_over(obs, emu),
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -782,7 +1201,7 @@ fn deliver(tuning: Tuning) -> Segment {
         name: "deliver",
         goal: "Pokédex received, old man armed (his scene var 1)".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -790,7 +1209,7 @@ fn deliver(tuning: Tuning) -> Segment {
                 keys::DOWN,
                 1000,
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -800,7 +1219,7 @@ fn deliver(tuning: Tuning) -> Segment {
             )?;
             // The lab door in Pallet is at (16,5)-ish; entering is a warp
             // like any other.
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -808,7 +1227,7 @@ fn deliver(tuning: Tuning) -> Segment {
                 keys::UP,
                 2000,
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -844,7 +1263,7 @@ fn tutorial(tuning: Tuning) -> Segment {
         name: "tutorial",
         goal: "catching tutorial done (old man var 2), road north open".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -852,7 +1271,7 @@ fn tutorial(tuning: Tuning) -> Segment {
                 keys::UP,
                 600,
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -860,7 +1279,7 @@ fn tutorial(tuning: Tuning) -> Segment {
                 keys::UP,
                 1000,
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -901,7 +1320,7 @@ fn to_forest(tuning: Tuning) -> Segment {
             // Viridian's north exit x=19..23; the forest south-entrance
             // warps sit at Route 2 (5,51)/(6,51); the entrance building's
             // exit warp is (7,1) (research/story-gates.md).
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -909,7 +1328,7 @@ fn to_forest(tuning: Tuning) -> Segment {
                 keys::UP,
                 1500,
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -917,7 +1336,7 @@ fn to_forest(tuning: Tuning) -> Segment {
                 keys::UP,
                 1000,
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -941,6 +1360,24 @@ fn forest(tuning: Tuning) -> Segment {
         name: "forest",
         goal: "out the forest's north side".into(),
         run: Box::new(move |rec, obs| {
+            // One planned leg: the A* in `plan.rs` shapes the whole
+            // crossing against the decoded layout and the fated rate-test
+            // stream, Sammy's cone priced as the only forced fight
+            // (`research/story-gates.md`). The waypoint chain below is the
+            // pre-planner fallback, kept because the forest is the one map
+            // where a fallback that re-derives the maze from scratch
+            // costs hours.
+            match walk_planned(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(FOREST_NORTH_ENTRANCE, VIRIDIAN_FOREST, (5, 10)),
+                keys::UP,
+            ) {
+                Ok(true) => return Ok(()),
+                Ok(false) => eprintln!("      forest: no plan; waypoint fallback"),
+                Err(e) => eprintln!("      forest: planned walk gave up ({e}); waypoint fallback"),
+            }
             // The forest is a maze of walled grass columns; the decoded
             // layout is committed as `research/forest-map.txt` (formats:
             // `include/global.fieldmap.h:4-11`, `src/fieldmap.c:61-83`).
@@ -969,7 +1406,7 @@ fn forest(tuning: Tuning) -> Segment {
                 ((5, 18), 1, keys::UP),
             ];
             for ((x, y), tol, bias) in waypoints {
-                walk_fleeing(
+                walk_smart(
                     rec,
                     obs,
                     tuning,
@@ -978,7 +1415,7 @@ fn forest(tuning: Tuning) -> Segment {
                     1200,
                 )?;
             }
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -1008,7 +1445,7 @@ fn to_pewter(tuning: Tuning) -> Segment {
         name: "to-pewter",
         goal: "in Pewter City".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -1016,7 +1453,7 @@ fn to_pewter(tuning: Tuning) -> Segment {
                 keys::UP,
                 400,
             )?;
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -1037,7 +1474,7 @@ fn to_gym(tuning: Tuning) -> Segment {
         name: "to-gym",
         goal: "inside Pewter Gym".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
@@ -1076,7 +1513,7 @@ fn brock(starter: Starter, tuning: Tuning) -> Segment {
         name: "brock",
         goal: "FLAG_DEFEATED_BROCK set".into(),
         run: Box::new(move |rec, obs| {
-            walk_fleeing(
+            walk_smart(
                 rec,
                 obs,
                 tuning,
