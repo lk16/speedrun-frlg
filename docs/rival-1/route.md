@@ -361,7 +361,13 @@ remains, largest first:
   journal entry, not started). Starter creation manipulation is closed on arithmetic:
   Tackle needs Atk 13 for 6 damage and the best reachable is 12
   (`decompiled/src/data/pokemon/species_info.h:41`, `CALC_STAT`
-  `decompiled/src/pokemon.c:2093-2096`, `ModifyStatByNature` `:5404`).
+  `decompiled/src/pokemon.c:2093-2096`, `ModifyStatByNature` `:5404`). The dial itself
+  now exists (`Tuning::ball_delay`, 2026-08-14, built for defeat-brock) but stays at 0
+  here: a 2-turn kill is barred structurally — turn 1 cannot crit
+  (`FIRST_BATTLE` suppression until the first hit lands, `battle_controller_opponent.c:304-306`
+  above), so best-case turn-1 5 + turn-2 crit 10 = 15 < 18 — and within 3 turns a genome
+  changes only HP-bar drain times (~2.5 frames per HP, `frlg-battle` pacing), pennies
+  against the 17-frame floor gap.
 - **`02-intro-oak`'s boxes still wait on scripted beats.** Text now prints at one character
   per held frame, but the intro is also fades, sprite slides and timer waits that no input
   reaches; 1565 frames is the floor for this drive shape, not for the scene. Nobody has

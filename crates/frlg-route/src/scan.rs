@@ -63,7 +63,13 @@ fn crossings() -> Vec<Crossing> {
         Crossing {
             name: "route2-south",
             map: ROUTE2,
-            start: (16, 54),
+            // Viridian's north exit (x 19..23) lands at Route 2 x 7..11:
+            // the connection carries offset -12 (`data/maps/Route2/
+            // map.json`, connections). The old (16,54) start sat in the
+            // east corridor, which a cut tree at (16,62) walls off from
+            // the forest side -- the planner rightly said unreachable,
+            // and the scan silently scored this crossing as free.
+            start: (9, 79),
             targets: vec![(5, 51), (6, 51)],
         },
         Crossing {
