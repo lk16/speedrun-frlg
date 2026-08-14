@@ -266,6 +266,22 @@ LEGS = [
     ("fuchsia-pc_to_cinnabar-pc", ('MAP_FUCHSIA_CITY', 25, 31), ('MAP_CINNABAR_ISLAND', 14, 11), {'surf': True}),
     ("pallet_to_cinnabar-pc", ('MAP_PALLET_TOWN', 6, 7), ('MAP_CINNABAR_ISLAND', 14, 11), {'surf': True}),
     ("cinnabar-pc_to_cinnabar-gym", ('MAP_CINNABAR_ISLAND', 14, 11), ('MAP_CINNABAR_ISLAND', 20, 4), {}),
+    # route.md additions (2026-08-14): voucher/bike detours, Fly pickup, Saffron gym,
+    # Snorlax-cleared Cycling Road leg, and the in-Safari legs (Surf + Gold Teeth)
+    ("vermilion-pc_to_fanclub", ('MAP_VERMILION_CITY', 15, 6), ('MAP_VERMILION_CITY', 12, 17), {}),
+    ("cerulean-pc_to_bikeshop", ('MAP_CERULEAN_CITY', 22, 19), ('MAP_CERULEAN_CITY', 13, 28), {}),
+    ("celadon-pc_to_route16-house", ('MAP_CELADON_CITY', 48, 11), ('MAP_ROUTE16', 10, 5), {'cut': True}),
+    ("celadon-pc_to_saffron-gym", ('MAP_CELADON_CITY', 48, 11), ('MAP_SAFFRON_CITY', 46, 12),
+     {'ignore_scripts': ('RocketGrunt', 'DoorGuardGrunt')}),
+    ("route16-house_to_fuchsia-pc", ('MAP_ROUTE16', 10, 5), ('MAP_FUCHSIA_CITY', 25, 31),
+     {'cut': True, 'ignore_scripts': ('Snorlax',)}),
+    # Safari interior: the direct Center->West door is blocked; the real path goes
+    # East->North->West. Wandering NPCs block narrow pinches in the static model,
+    # so objects are ignored (wanderers are TAS-manipulable).
+    ("safari-gate_to_gold-teeth", ('MAP_SAFARI_ZONE_CENTER', 26, 28), ('MAP_SAFARI_ZONE_WEST', 28, 14),
+     {'ignore_objects': True}),
+    ("gold-teeth_to_secret-house", ('MAP_SAFARI_ZONE_WEST', 28, 14), ('MAP_SAFARI_ZONE_SECRET_HOUSE', 3, 3),
+     {'ignore_objects': True}),
     # endgame
     ("viridian-mart_to_viridian-gym", ('MAP_VIRIDIAN_CITY', 36, 19), ('MAP_VIRIDIAN_CITY', 36, 10), {}),
     ("viridian-mart_to_route22-gate", ('MAP_VIRIDIAN_CITY', 36, 19), ('MAP_ROUTE22', 8, 5), {}),
