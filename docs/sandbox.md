@@ -113,8 +113,8 @@ startup so you do not have to remember to look. A human on the host runs
 block on it — queue it and keep working.
 
 Tier 2 works: the host has a real GBA BIOS, and both routes' current runs have been replayed to
-a pass (rival-1's 9658 frames on 2026-08-12, defeat-brock's 43308 on 2026-08-14, plus every
-superseded defeat-brock revision). The per-target ledgers record which result backs which
+a pass (rival-1's 9658 frames on 2026-08-12, defeat-brock's 38950 on 2026-08-14, plus every
+superseded defeat-brock revision that was queued). The per-target ledgers record which result backs which
 segment; `docs/rival-1/route.md` has the contract.
 
 ## The output format

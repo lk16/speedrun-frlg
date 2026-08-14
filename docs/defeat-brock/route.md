@@ -1,10 +1,12 @@
 # Defeat Brock: the route
 
-**Status: 38950 frames, tier-1 verified, tier-2 queued.** (~10m52s at 59.7275 Hz)
+**Status: 38950 frames, tier-1 verified, tier-2 accepted.** (~10m52s at 59.7275 Hz)
 from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 1,
 `text_hold` **4**, `seed_delay` **27**), tier-1 verified from reset on 2026-08-14
-(`route/defeat-brock/ledger.json`); tier-2 request `route-38950f-2f221a898d8e` is in
-the queue (superseding the unrun 40940/40865/40106 requests). The previous accepted run was 43308 (tier-2 **passed** 2026-08-14,
+(`route/defeat-brock/ledger.json`); tier-2 **passed** 2026-08-14 as
+`route-38950f-2f221a898d8e`: BizHawk 2.11.1 replayed all 38950 frames with the per-frame
+gRngValue probe matching every frame (`verify/results/route-38950f-2f221a898d8e.json`).
+The previous accepted run was 43308 (tier-2 **passed** 2026-08-14,
 `verify/results/route-43308f-a7d7d48232c4.json`, kept in git history); the 4358-frame
 drop (−10.1%) came from the tooling rebuild of 2026-08-14
 (`journal/2026-08-14-09-30-planner-tooling.md`): overworld walks are now *planned* by
@@ -154,13 +156,16 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    the winning knobs and 27 won. A deeper scan (seeds 64-255) is cheap if
    wanted; battle-stream luck (±600) is the scan's blind spot.
 
-### Tier 2 — `route-38950f-2f221a898d8e` queued 2026-08-14
+### Tier 2 — `route-38950f-2f221a898d8e` passed 2026-08-14
 
-The 38950 export (ilog digest `2f221a89…`, bk2 `c3f364d5…`, round-trip checked) is in
-`verify/queue/`. Until its result lands, the newest *passed* tier-2 run is the
-superseded 43308 (`route-43308f-a7d7d48232c4`, replayed 2026-08-14 with the per-frame
-gRngValue probe matching every frame); 49143, 45276, 44464 and 43346 passed earlier.
-Only 38950 is the route; the rest are history.
+BizHawk 2.11.1 replayed all 38950 frames to the ledger's final ram_hash (`b841205d…`)
+with the per-frame gRngValue probe matching every frame
+(`verify/results/route-38950f-2f221a898d8e.json`, fast+headless, 68s). The result's ilog
+digest (`2f221a89…`) is the digest of the committed logs — re-exporting them reproduces
+it, so the pass is for exactly these `.ilog`s. (The re-export's `.bk2` sha1 differs from
+the queued one's, as it always does: zip metadata, not content.) The superseded 43308,
+49143, 45276, 44464 and 43346 requests passed earlier; the 40940/40865/40106 requests
+were pulled unrun. Only 38950 is the route; the rest are history.
 
 The export follows rival-1's contract (`docs/rival-1/route.md`): `.ilog`s are canonical,
 the `.bk2` is an export, the queue is drained by a human on the host.
