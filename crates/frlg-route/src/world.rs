@@ -124,10 +124,13 @@ impl MapData {
         for y in 0..self.height as i16 {
             for x in 0..self.width as i16 {
                 let t = self.tile(x, y).unwrap();
-                let mut c = if t.collision != 0 {
-                    '#'
-                } else if (MB_JUMP_EAST..=MB_JUMP_SOUTH).contains(&t.behavior) {
+                // Ledge tiles carry collision 1 in the grid -- the jump
+                // logic overrides it in the jump direction only -- so the
+                // behavior is checked first or every ledge prints as wall.
+                let mut c = if (MB_JUMP_EAST..=MB_JUMP_SOUTH).contains(&t.behavior) {
                     'J'
+                } else if t.collision != 0 {
+                    '#'
                 } else if t.land {
                     ','
                 } else {

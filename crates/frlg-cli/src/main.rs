@@ -34,6 +34,50 @@ enum Command {
     /// Build and verify the route.
     #[command(subcommand)]
     Route(RouteCommand),
+    /// Show a map decoded from the decomp checkout (collision, grass,
+    /// warps, objects) -- the data the path planner runs on.
+    Map(MapArgs),
+}
+
+#[derive(Args)]
+struct MapArgs {
+    /// The map as "group.num" (the save block's location, e.g. "1.0" for
+    /// Viridian Forest) or its decomp name (e.g. "ViridianForest").
+    map: String,
+}
+
+fn cmd_map(args: &MapArgs) -> Result<()> {
+    let mut world = frlg_route::world::World::load().map_err(anyhow::Error::msg)?;
+    let key = if let Some((g, n)) = args.map.split_once('.') {
+        (g.parse::<u8>()?, n.parse::<u8>()?)
+    } else {
+        let mut found = None;
+        'outer: for g in 0..43u8 {
+            for n in 0..60u8 {
+                if world.map_name((g, n)) == Some(args.map.as_str()) {
+                    found = Some((g, n));
+                    break 'outer;
+                }
+            }
+        }
+        found.ok_or_else(|| anyhow::anyhow!("no map named {}", args.map))?
+    };
+    let data = world.map(key).map_err(anyhow::Error::msg)?;
+    println!(
+        "{} (group {} num {}), {}x{}",
+        data.name, key.0, key.1, data.width, data.height
+    );
+    print!("{}", data.ascii());
+    for o in &data.objects {
+        println!(
+            "object at ({},{}) {} trainer={} sight={} range={}x{}",
+            o.x, o.y, o.movement_type, o.trainer_type, o.sight, o.range_x, o.range_y
+        );
+    }
+    for w in &data.warps {
+        println!("warp at ({},{}) -> {}", w.x, w.y, w.dest_map);
+    }
+    Ok(())
 }
 
 #[derive(Subcommand)]
@@ -266,6 +310,7 @@ fn main() -> Result<()> {
         Command::Sym(args) => cmd_sym(args),
         Command::Log(args) => cmd_log(args),
         Command::Route(args) => cmd_route(args),
+        Command::Map(args) => cmd_map(&args),
     }
 }
 
