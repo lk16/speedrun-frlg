@@ -1,14 +1,15 @@
 # Defeat Brock: the route
 
-**Status: first optimisation pass done (the seed sweep).** 45276 frames (~12m38s at
-59.7275 Hz) from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle**
-(`turn_hold` 2, `text_hold` 4, `seed_delay` 38), tier-1 verified from reset on 2026-08-13
-(`route/defeat-brock/ledger.json`), tier-2 queued (`route-45276f-d4bee65f9371`) and not yet
-replayed. The semi-naive baseline was 49143; the 3867-frame drop came from re-picking the
-wild-encounter stream at the title screen (`Tuning::seed_delay` — six candidates chosen by
-simulating each seed's rate-test stream, each then built end-to-end and measured; see
-`journal/2026-08-13-23-00-where-the-frames-go.md`). The list below remains the backlog,
-re-ranked by what the sweep taught.
+**Status: seed sweep + heal deletion done.** 44464 frames (~12m24s at 59.7275 Hz) from
+power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 2,
+`text_hold` 4, `seed_delay` 38), tier-1 verified from reset on 2026-08-14
+(`route/defeat-brock/ledger.json`), tier-2 queued (`route-44464f-8d3644886b9c`) and not
+yet replayed. The semi-naive baseline was 49143. The 4679-frame drop, in order of landing:
+re-picking the wild-encounter stream at the title screen (`Tuning::seed_delay`, −3867 —
+six candidates scored by simulating each seed's rate-test stream, then built end-to-end
+and measured), and deleting the Pewter heal the new stream no longer needs (−812). See
+`journal/2026-08-13-23-00-where-the-frames-go.md` and
+`journal/2026-08-14-00-30-seed-sweep-45276.md`.
 
 The target: power-on to `FLAG_DEFEATED_BROCK` (`data/maps/PewterCity_Gym/scripts.inc:14`). This is a strict superset of the rival-1 target:
 the lab rival battle is on the way. **The rival-1 route is a baseline, not a prefix to reuse
@@ -97,9 +98,9 @@ The rival-1 prefix (01..09) plus the continuation. Segment code:
 | `tutorial` | 6329 | 25680 | Route 1 north again, catching demo; two flees |
 | `to-forest` | 1307 | 26987 | Viridian north, Route 2, entrance building |
 | `forest` | 10583 | 37570 | the decoded-maze waypoint chain; **Rick dodged on this stream** — Sammy is the only fight (2839, plan `[27,0,0,3]`); seven wilds fled |
-| `heal-pewter` | 1759 | 39329 | Route 2 north, Pewter Pokémon Center full heal — worth 3 HP on this run (arrives 20/23); skip candidacy being probed |
-| `to-gym` | 921 | 40250 | the gym door |
-| `brock` | 5026 | 45276 | talk, 2-turn Bubble fight at L7 (plan `[98]`, 158/192 start delays win), `FLAG_DEFEATED_BROCK` |
+| `to-pewter` | 573 | 38143 | Route 2 north into Pewter — no Pokémon Center (see below) |
+| `to-gym` | 962 | 39105 | the gym door |
+| `brock` | 5359 | 44464 | talk, 3-turn Bubble fight at L7, unhealed at 20/23 (plan `[169,0,7]`, 55/192 start delays win), `FLAG_DEFEATED_BROCK` |
 
 Eleven wild flees at ~500 frames each remain (one more than the old seed, but Rick's
 4327-frame fight is gone and every crossing walks tighter); the run reaches Brock at L7
@@ -115,9 +116,10 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
 - **Sammy is forced** (the forest's column 1 is sealed except through his sight row) and
   is now the run's only forest fight. On the old seed Rick was fought too (and Doug,
   despite the first build report, never was — `gBattleMons` trace, 2026-08-13).
-- The heal question re-opened: the old run arrived at 6/28 HP and lost all 192 Brock
-  delays without the heal; this run arrives at **20/23**, so the 1759-frame segment now
-  buys 3 HP. The no-heal probe (from the forest-exit state straight to Brock) decides it.
+- **The heal is gone.** The semi-naive run arrived at 6/28 HP and lost all 192 Brock
+  delays unhealed; this stream arrives at **20/23, no status**, the no-heal probe beat
+  Brock from there, and the rebuild banked −812 net (walk −1145, unhealed fight +333).
+  The healed variant lives in git history for any future stream that arrives low.
 - The wild-encounter model's practical shape: clean paths exist when the search can vary
   the rate-test index; where a belt is index-walled, one fled battle resets the cooldown
   and opens 6-7 free steps (`research/wild-encounters.md`).
@@ -128,19 +130,18 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    path search (frlg-mon has the proven RNG model) could shape crossings against the
    known pass/fail stream instead of discovering it edge by edge; the seed and the path
    should be optimised *jointly* (the sweep held the walker fixed).
-2. **The heal fork** — probe in flight; worth 1759 if Brock survives it.
-3. **Wider seed neighbourhood.** 64 delays scanned, 6 built; the scan's flee model ranked
+2. **Wider seed neighbourhood.** 64 delays scanned, 6 built; the scan's flee model ranked
    candidates imperfectly (27 modeled best, placed third) — building more of the scan's
    top-10 is cheap now (~55 min/build, parallelisable).
-4. **Starter × version sweep.** Squirtle/FireRed won by default (Bubble at L7); Bulbasaur
+3. **Starter × version sweep.** Squirtle/FireRed won by default (Bubble at L7); Bulbasaur
    needs the Liam detour but fights differently; LeafGreen un-raced.
-5. **Starter IVs/nature** are 4 rolls at the ball — a frame dial never turned.
-6. **Battle plans**: A-mash + delays only (now 192-wide with the checkpointed searcher);
+4. **Starter IVs/nature** are 4 rolls at the ball — a frame dial never turned.
+5. **Battle plans**: A-mash + delays only (now 192-wide with the checkpointed searcher);
    move choice beyond the Bubble steer is first-pass.
-7. **The tutorial/deliver/parcel text** runs at one global text_hold.
+6. **The tutorial/deliver/parcel text** runs at one global text_hold.
 
-### Tier 2 — `route-45276f-d4bee65f9371` queued 2026-08-13, not yet replayed
-(the 49143 request from the semi-naive run is superseded and can be skipped)
+### Tier 2 — `route-44464f-8d3644886b9c` queued 2026-08-14, not yet replayed
+(the 49143 and 45276 requests are superseded and can be skipped)
 
 The export follows rival-1's contract (`docs/rival-1/route.md`): `.ilog`s are canonical,
 the `.bk2` is an export, the queue is drained by a human on the host.
