@@ -59,7 +59,7 @@ pub struct Ledger {
     pub segments: Vec<Entry>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entry {
     pub name: String,
     pub goal: String,
@@ -144,6 +144,29 @@ pub fn build(
     starter: Starter,
     tuning: Tuning,
     paths: &Paths,
+    progress: impl FnMut(&str),
+) -> Result<Ledger, LedgerError> {
+    build_from(rom, sym, target, starter, tuning, paths, None, progress)
+}
+
+/// [`build`], optionally resuming after a prefix of an existing ledger.
+///
+/// With `from = Some(name)`, the segments before `name` are *replayed* from
+/// the ledger at `paths.ledger` and its committed logs -- a pure replay runs
+/// at emulator speed (~1000 fps), so re-entering the route at the forest
+/// costs seconds where a full rebuild costs the whole battle search again.
+/// The prefix's final `ram_hash` is checked against the ledger before any
+/// new segment runs: a resume from a stale prefix would otherwise "improve"
+/// a run that no longer exists.
+#[allow(clippy::too_many_arguments)]
+pub fn build_from(
+    rom: &Path,
+    sym: &Path,
+    target: Target,
+    starter: Starter,
+    tuning: Tuning,
+    paths: &Paths,
+    from: Option<&str>,
     mut progress: impl FnMut(&str),
 ) -> Result<Ledger, LedgerError> {
     let obs = observer(sym)?;
@@ -155,7 +178,62 @@ pub fn build(
 
     let mut entries: Vec<Entry> = Vec::new();
     let mut consumed = 0usize;
-    for segment in target.segments(version_of(rom)?, starter, tuning) {
+    let mut skip_before = None;
+    if let Some(name) = from {
+        let prior = read(&paths.ledger)?;
+        if prior.starter != starter.name() || prior.tuning != tuning {
+            return Err(LedgerError::Message(format!(
+                "--from {name}: the ledger was built with starter {} and tuning {:?}; \
+                 resuming under different knobs would splice two different runs",
+                prior.starter, prior.tuning
+            )));
+        }
+        let split = prior
+            .segments
+            .iter()
+            .position(|e| e.name == name)
+            .ok_or_else(|| {
+                LedgerError::Message(format!("--from {name}: no such segment in the ledger"))
+            })?;
+        for entry in &prior.segments[..split] {
+            let log = InputLog::decode(&fs::read(&entry.log)?)?;
+            if log.digest() != entry.digest {
+                return Err(LedgerError::Message(format!(
+                    "--from {name}: {} does not match its ledger digest",
+                    entry.log
+                )));
+            }
+            frlg_emu::check_log_rom(&log, frlg_emu::file_sha1(rom)?)?;
+            rec.play(&log.frames)?;
+            entries.push(entry.clone());
+        }
+        consumed = rec.frames();
+        if let Some(last) = entries.last() {
+            let hash = rec.emu().ram_hash()?;
+            if hash != last.ram_hash {
+                return Err(LedgerError::Message(format!(
+                    "--from {name}: replaying the prefix ends at RAM {hash} but the ledger \
+                     recorded {}; the prefix logs and the ledger disagree",
+                    last.ram_hash
+                )));
+            }
+            progress(&format!(
+                "prefix replayed: {} segments, {} frames, RAM matches",
+                entries.len(),
+                consumed
+            ));
+        }
+        skip_before = Some(split);
+    }
+
+    for (index, segment) in target
+        .segments(version_of(rom)?, starter, tuning)
+        .into_iter()
+        .enumerate()
+    {
+        if skip_before.is_some_and(|split| index < split) {
+            continue;
+        }
         let start_frame = rec.frames();
         (segment.run)(&mut rec, &obs)?;
         if !(segment.reached)(&obs, rec.emu()) {

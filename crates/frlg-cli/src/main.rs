@@ -158,6 +158,13 @@ struct RouteArgs {
     /// sequence. Defaults like --turn-hold.
     #[arg(long)]
     seed_delay: Option<usize>,
+
+    /// Build only: resume after an existing ledger's prefix. The segments
+    /// before this one are replayed from the committed logs (seconds) and
+    /// only this one onward are rebuilt. Requires the same starter and
+    /// tuning as the ledger.
+    #[arg(long)]
+    from: Option<String>,
 }
 
 #[derive(Args)]
@@ -294,9 +301,16 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
                     .or_else(|| default_states_dir(target.name())),
             };
             let tuning = tuning_for(&args, &ledger_path);
-            let built = ledger::build(&rom, &sym, target, starter, tuning, &paths, |line| {
-                println!("{line}")
-            })?;
+            let built = ledger::build_from(
+                &rom,
+                &sym,
+                target,
+                starter,
+                tuning,
+                &paths,
+                args.from.as_deref(),
+                |line| println!("{line}"),
+            )?;
             println!("\n{} frames total", built.total_frames);
             println!("wrote {}", ledger_path.display());
             println!("tier 1 is claimed by `frlg route verify`, not by this command");
