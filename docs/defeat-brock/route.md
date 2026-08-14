@@ -1,10 +1,11 @@
 # Defeat Brock: the route
 
-**Status: first optimisation session done.** 43308 frames (~12m05s at 59.7275 Hz) from
-power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 1,
-`text_hold` 2, `seed_delay` 38), tier-1 verified from reset on 2026-08-14
-(`route/defeat-brock/ledger.json`), tier-2 queued (`route-43308f-a7d7d48232c4`) and not yet
-replayed. The semi-naive baseline was 49143; the 5835-frame drop (−11.9%), in order of
+**Status: first optimisation session done, and the run is accepted.** 43308 frames
+(~12m05s at 59.7275 Hz) from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with
+Squirtle** (`turn_hold` 1, `text_hold` 2, `seed_delay` 38), tier-1 verified from reset on
+2026-08-14 (`route/defeat-brock/ledger.json`), tier-2 **passed** 2026-08-14: BizHawk 2.11.1
+replayed all 43308 frames with the per-frame gRngValue probe matching every frame
+(`verify/results/route-43308f-a7d7d48232c4.json`). The semi-naive baseline was 49143; the 5835-frame drop (−11.9%), in order of
 landing: re-picking the wild-encounter stream at the title screen
 (`Tuning::seed_delay` 38, −3867 over six measured candidates), deleting the Pewter heal
 the new stream no longer needs (−812), and re-sweeping the hold knobs on this seed's
@@ -144,8 +145,14 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    move choice beyond the Bubble steer is first-pass.
 6. **The tutorial/deliver/parcel text** runs at one global text_hold.
 
-### Tier 2 — `route-43308f-a7d7d48232c4` queued 2026-08-14, not yet replayed
-(the 49143, 45276 and 44464 requests are superseded and can be skipped)
+### Tier 2 — `route-43308f-a7d7d48232c4` passed 2026-08-14
+
+BizHawk 2.11.1 replayed all 43308 frames to the ledger's final ram_hash
+(`72aa2aaf…`) with the per-frame gRngValue probe matching every frame
+(`verify/results/route-43308f-a7d7d48232c4.json`, fast replay, 189s). The ilog digest in
+the result (`a7d7d48232c4…`) is the digest of the committed logs — re-exporting them
+reproduces it. The superseded 49143, 45276, 44464 and 43346 requests were replayed too and
+all passed; only 43308 is the route.
 
 The export follows rival-1's contract (`docs/rival-1/route.md`): `.ilog`s are canonical,
 the `.bk2` is an export, the queue is drained by a human on the host.
