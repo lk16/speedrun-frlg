@@ -91,6 +91,42 @@ before `07-starter`), and full builds of seeds 184 and 148 (the 3-flee
 seeds; their extra seed_delay costs ~130-160 boot frames against one
 ~575-frame flee). Results below when they land.
 
-## Results — wave 1
+## Results — wave 1 (all tier-1 builds, scored on total frames; committed = 38862)
 
-(to be filled in)
+| build | knobs | total | delta |
+| --- | --- | ---: | ---: |
+| ball27 | seed 27, ball 27 (Modest, SpA IV 30) | 39944 | +1082 |
+| ball16 | seed 27, ball 16 (Adamant, Atk IV 20) | 40157 | +1295 |
+| ball44 | seed 27, ball 44 (Adamant, Atk IV 30) | (below) | |
+| seed148 | seed 148, ball 0 | 41482 | +2620 |
+| seed184 | seed 184, ball 0 | 41742 | +2880 |
+
+Two independent lessons, both worth keeping:
+
+1. **The scan is a screener, not a predictor.** The seed-184 build *realized
+   7 flees* (audited: 1 to-viridian, 1 deliver, 2 tutorial, 3 forest)
+   against the model's 3 — the per-leg executor replans from real
+   `sWildEncounterData` and its consumed-test indices drift from the scan's
+   idealized crossings, so the scan's flee count carries ±4 of error. The
+   corrected-crossing rescan (route2-south fixed) still ranks 184/148/27
+   at the top, so the *ranking* survives; the absolute counts do not.
+2. **The committed 38862 is a dial-tuned local optimum that raw rebuilds
+   cannot reach.** Its rival battle carries the solver seed (2445; plain
+   search on the same stream cannot win at all in 256 delays), and its
+   forest/gym arrival streams carry three adopted head-wait dials. Any
+   new seed or ball delay resets all of that: the wave's rival fights
+   came out 2549-2935, and every build paid +600..+1500 more across
+   Sammy/Brock stream luck. The Adamant genomes did produce the faster
+   raw rival fights the breakpoint math predicted (2549 and 2680 vs
+   ~2613-class for plain search on the committed genome) — the mechanism
+   is real, its ~150-frame value is just an order of magnitude below the
+   ~1000-frame cost of abandoning the tuned streams.
+
+**Adoption: none. The committed 38862 stands.** The starter-stat and
+seed dials are now *measured shut*, not assumed shut: to beat 38862 via
+either, a candidate would need its own solver pass plus wait-dial
+defense (~a session of compute per candidate) just to claw back the
+tuning it forfeits, before its structural advantage (one fewer flee ~ 575,
+or a faster rival family ~ 150) could show. The remaining real headroom
+is unchanged: the Sammy/Brock fight model (backlog #1, measured swing
+3157..3813 across families).
