@@ -121,3 +121,18 @@ raised to `200,96` samples ~19.6k candidate stream-lines per fight —
 enough that a 3-crit Sammy line (density ~1.9e-4) is *expected* ~3.7
 times if reachable dials contain it at all. The fit stays future work;
 this answers its headline question empirically. (results below)
+
+## The smaller sweeps, all negative
+
+- **Per-segment text_hold** (`FRLG_TEXT_HOLD_{EXIT_LAB,DELIVER,
+  TUTORIAL}` ∈ {2, 5}, builds from the segment with the committed wait
+  dials): 38931 / 39895 / 39688 / 39439 / 39841 / 38952 — every
+  variant loses to the global text_hold 4's 38862; the closest
+  (deliver at 2, +69) still pays more in downstream stream re-luck
+  than its local gain. Per-*box* holds remain unexplored (the space is
+  unbounded); per-*segment* is now measured shut on this route.
+- **rival-1 fat-man/anchor waits** (`FRLG_WAIT_05_HOUSE`/`06_TO_LAB`
+  1-4): five distinct anchor families, best 9671 (+13); 06-to-lab
+  waits 1-4 all absorb into one family — the overworld press grid
+  quantization again. The committed 2409 battle survives its
+  neighborhood; route.md updated.
