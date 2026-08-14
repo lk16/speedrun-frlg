@@ -20,7 +20,7 @@
       "start_frame": 0,
       "ram_hash": "ca2af8744de9a10cdd7da0f65872b8239721bfc7",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "02-intro-oak",
@@ -32,7 +32,7 @@
       "start_frame": 646,
       "ram_hash": "94fa83dad51d17498d6269d0f8074532926ff395",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "03-names",
@@ -44,7 +44,7 @@
       "start_frame": 2211,
       "ram_hash": "c9ca48ec653d9e79d272ef2c0dd7713e0852e9a5",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "04-options",
@@ -56,7 +56,7 @@
       "start_frame": 3256,
       "ram_hash": "f09f9683c4b717e2ee89edf3969201fa1b53e3f2",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "05-house",
@@ -68,7 +68,7 @@
       "start_frame": 3453,
       "ram_hash": "cb24dabf81aa3dd159313969d4c7397173459064",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "06-to-lab",
@@ -80,7 +80,7 @@
       "start_frame": 3885,
       "ram_hash": "482ad04076909e027d181933409da959d12aac85",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "07-starter",
@@ -92,7 +92,7 @@
       "start_frame": 5096,
       "ram_hash": "782d4f7b978395be99dd236d42331ad0bd774046",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "08-battle-start",
@@ -104,7 +104,7 @@
       "start_frame": 6818,
       "ram_hash": "1decf9e4cdde773a92b35a2abe056efee9d99de0",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "09-battle-win",
@@ -116,7 +116,7 @@
       "start_frame": 7207,
       "ram_hash": "8a7dccd42b01fe96e478411c4d16a0b167c9ae51",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "exit-lab",
@@ -128,7 +128,7 @@
       "start_frame": 9652,
       "ram_hash": "2d5ee14d98cdd04e3b9f37f56893db6b835a1db2",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "to-viridian",
@@ -140,7 +140,7 @@
       "start_frame": 10532,
       "ram_hash": "246b8e50dfce3b18fefa798f28b863cdf49ab98a",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "parcel",
@@ -152,7 +152,7 @@
       "start_frame": 13205,
       "ram_hash": "9dd51b8c955c5401479c288e225f9925f0138080",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "deliver",
@@ -164,7 +164,7 @@
       "start_frame": 14483,
       "ram_hash": "99568df0e153ef6772b21190be5c33347e931a8b",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "tutorial",
@@ -176,7 +176,7 @@
       "start_frame": 18905,
       "ram_hash": "ea98238358b968fc1a5a1a3800f2212d0ed23d00",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "to-forest",
@@ -188,7 +188,7 @@
       "start_frame": 24457,
       "ram_hash": "f9248848c494074791cc4e5e8421ca011691a433",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "forest",
@@ -200,7 +200,7 @@
       "start_frame": 25607,
       "ram_hash": "bd65cb622020233a580f9f05fdcca6fcb684e132",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "to-pewter",
@@ -212,7 +212,7 @@
       "start_frame": 32267,
       "ram_hash": "3c9486bb8c206be085b34ad474a3c97664dbd8c2",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "to-gym",
@@ -224,7 +224,7 @@
       "start_frame": 32819,
       "ram_hash": "57e9df28bed4c3adb53ae5b52aa707b11dcb1588",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     },
     {
       "name": "brock",
@@ -236,7 +236,7 @@
       "start_frame": 33799,
       "ram_hash": "868413a643bea3d7e0aa15bbb41d448f46301c00",
       "tier1": true,
-      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
+      "tier2": "passed 2026-08-14 as part of route-38862f-8ee04c5b8bfc: BizHawk 2.11.1 replayed all 38862 frames to ram_hash 868413a643bea3d7e0aa15bbb41d448f46301c00 with the per-frame gRngValue probe matching every frame (verify/results/route-38862f-8ee04c5b8bfc.json, fast+headless, 67s). Whole-movie replay, not a per-segment one; a rebuild resets this."
     }
   ]
 }

@@ -1,12 +1,12 @@
 # Defeat Brock: the route
 
-**Status: 38862 frames, tier-1 verified, tier-2 queued** (~10m51s at 59.7275 Hz)
+**Status: 38862 frames, tier-2 verified** (~10m51s at 59.7275 Hz)
 from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 1,
 `text_hold` **4**, `seed_delay` **27**), tier-1 verified from reset on 2026-08-14
-(`route/defeat-brock/ledger.json`); tier-2 queued as `route-38862f-8ee04c5b8bfc`
-(round-trip checked; not yet replayed). The previous run -- 38950, tier-2 **passed**
-2026-08-14 as `route-38950f-2f221a898d8e` -- is the current *accepted* number until
-that verdict lands; its logs live in git history.
+(`route/defeat-brock/ledger.json`) and tier-2 **passed** the same day as
+`route-38862f-8ee04c5b8bfc`. This is the accepted number; the previous accepted
+run -- 38950, passed as `route-38950f-2f221a898d8e` -- is superseded and its logs
+live in git history.
 
 The 88-frame drop came from the constraint-solver pass on the rival battle
 (`journal/2026-08-14-16-00-solver-on-the-rival-battle.md`): the fight model was
@@ -168,17 +168,17 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    the winning knobs and 27 won. A deeper scan (seeds 64-255) is cheap if
    wanted; battle-stream luck (±600) is the scan's blind spot.
 
-### Tier 2 — `route-38862f-8ee04c5b8bfc` queued 2026-08-14; last pass was 38950
+### Tier 2 — `route-38862f-8ee04c5b8bfc` passed 2026-08-14
 
-The current 38862 is **queued, not yet replayed** (`verify/queue/
-route-38862f-8ee04c5b8bfc.{bk2,json}`, ilog digest `8ee04c5b…`, round-trip
-checked at export). Until its verdict lands, the accepted number is the
-previous run: 38950, tier-2 passed 2026-08-14 as `route-38950f-2f221a898d8e`
--- BizHawk 2.11.1 replayed all 38950 frames to the ledger's final ram_hash
-with the per-frame gRngValue probe matching every frame
-(`verify/results/route-38950f-2f221a898d8e.json`); its logs are in git
-history. The superseded 43308, 49143, 45276, 44464 and 43346 requests passed
-earlier; the 40940/40865/40106 requests were pulled unrun.
+The current 38862 is **accepted**: BizHawk 2.11.1 replayed all 38862 frames to
+the ledger's final ram_hash (`868413a6…`, the `brock` segment's) with the
+per-frame gRngValue probe matching every frame
+(`verify/results/route-38862f-8ee04c5b8bfc.json`, `fast+headless`, 67s).
+Re-exporting the committed logs reproduces the result's ilog digest
+(`8ee04c5b…`), so the pass belongs to exactly the logs in
+`route/defeat-brock/logs/`; the `.bk2` hash differs per export, as this
+contract warns. The superseded 38950, 43308, 49143, 45276, 44464 and 43346
+requests passed earlier; the 40940/40865/40106 requests were pulled unrun.
 
 The export follows rival-1's contract (`docs/rival-1/route.md`): `.ilog`s are canonical,
 the `.bk2` is an export, the queue is drained by a human on the host.
