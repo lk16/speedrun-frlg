@@ -235,6 +235,28 @@ pub fn build_from(
             continue;
         }
         let start_frame = rec.frames();
+        // A per-segment head wait: `FRLG_WAIT_<NAME>` (uppercased, `-` to
+        // `_`) idles that many frames before the segment runs -- the
+        // downstream-stream dial the solver sweeps turn (an overworld idle
+        // advances `gRngValue` once per frame at 1:1 frame cost, while the
+        // step-indexed wild rate sequence stays put). The idles land in
+        // this segment's own log, so an adopted wait is just part of the
+        // committed route.
+        let env_key = format!(
+            "FRLG_WAIT_{}",
+            segment.name.to_uppercase().replace('-', "_")
+        );
+        if let Some(w) = std::env::var(&env_key)
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&w| w > 0)
+        {
+            progress(&format!(
+                "{}: {w} head-wait frames ({env_key})",
+                segment.name
+            ));
+            rec.play(&vec![0u16; w])?;
+        }
         (segment.run)(&mut rec, &obs)?;
         if !(segment.reached)(&obs, rec.emu()) {
             return Err(LedgerError::NotReached {

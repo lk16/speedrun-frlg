@@ -300,10 +300,12 @@ fn main() {
                             }
                         }
                         if let Some((frames, plan, durs)) = best {
-                            local
-                                .entry(frames)
-                                .and_modify(|e| e.0 += 1)
-                                .or_insert((1, anchor, plan.clone(), durs));
+                            local.entry(frames).and_modify(|e| e.0 += 1).or_insert((
+                                1,
+                                anchor,
+                                plan.clone(),
+                                durs,
+                            ));
                         }
                     }
                     local
@@ -395,7 +397,10 @@ fn main() {
         }
     }
     let state07 = state07.expect("08-battle-start in the ledger");
-    assert!(observer.in_battle(&mut emu), "replay must end in the battle");
+    assert!(
+        observer.in_battle(&mut emu),
+        "replay must end in the battle"
+    );
     let anchor0 = Rng(emu.read32(rng_addr));
     let start0 = emu.save_state().expect("state at battle start");
     println!(
@@ -460,7 +465,9 @@ fn main() {
                 }
                 loop {
                     let i = next.fetch_add(1, Ordering::Relaxed);
-                    let Some((_, plan)) = picked.get(i) else { break };
+                    let Some((_, plan)) = picked.get(i) else {
+                        break;
+                    };
                     let (won, frames) =
                         menu_run_plan(&mut emu, &observer, &start0, &intro_mash, &mash, plan);
                     results.lock().unwrap().push((i, won, frames));
