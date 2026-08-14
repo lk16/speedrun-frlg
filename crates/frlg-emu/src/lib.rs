@@ -108,6 +108,20 @@ pub fn default_sym_path() -> Option<PathBuf> {
     artifact_path("FRLG_SYM", "pokefirered.sym")
 }
 
+/// The symbol table matching a ROM: the `.sym` sibling next to it (both
+/// versions' syms sit beside their ROMs in `$FRLG_ARTIFACTS/rom`), falling
+/// back to [`default_sym_path`]. FireRed and LeafGreen place globals at
+/// different addresses, so pairing sym to ROM is correctness, not
+/// convenience -- a FireRed table over a LeafGreen ROM resolves every
+/// probe to a plausible-looking wrong address.
+pub fn sym_path_for_rom(rom: &Path) -> Option<PathBuf> {
+    let sibling = rom.with_extension("sym");
+    if sibling.is_file() {
+        return Some(sibling);
+    }
+    default_sym_path()
+}
+
 /// The World GBA BIOS, the one file both tiers must boot from. Same pin as
 /// tier 2's preflight (`tools/verify-runner.sh`), repeated here so tier 1
 /// cannot quietly boot from some other 16 KiB file.

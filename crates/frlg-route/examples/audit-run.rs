@@ -56,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ledger = frlg_route::ledger::read(std::path::Path::new(&ledger_path))?;
     // The ledger names its logs repo-relative; run from the repository root.
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).ok_or("rom for ledger sha1")?;
-    let sym = frlg_emu::default_sym_path().ok_or("sym")?;
+    let sym = frlg_emu::sym_path_for_rom(&rom).ok_or("sym for rom")?;
     let obs = Observer::new(frlg_emu::SymbolTable::load(&sym)?).map_err(std::io::Error::other)?;
 
     let mut emu = frlg_emu::Emu::new(&rom)?;

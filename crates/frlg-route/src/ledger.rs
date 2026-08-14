@@ -273,6 +273,32 @@ pub fn build_from(
             ));
             rec.play(&vec![0u16; w])?;
         }
+        // A per-segment text_hold: `FRLG_TEXT_HOLD_<NAME>` overrides the
+        // global knob for this one segment -- the route.md backlog's
+        // "per-scene text_hold" made drivable. The override lives in the
+        // recorded log like any other input, so an adopted value needs no
+        // ledger schema; the recorded tuning stays the base.
+        let th_key = format!(
+            "FRLG_TEXT_HOLD_{}",
+            segment.name.to_uppercase().replace('-', "_")
+        );
+        let segment = match std::env::var(&th_key)
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&th| th > 0 && th != tuning.text_hold)
+        {
+            Some(th) => {
+                progress(&format!("{}: text_hold {th} ({th_key})", segment.name));
+                let mut t2 = tuning;
+                t2.text_hold = th;
+                target
+                    .segments(version_of(rom)?, starter, t2)
+                    .into_iter()
+                    .nth(index)
+                    .expect("same segment list shape for any tuning")
+            }
+            None => segment,
+        };
         (segment.run)(&mut rec, &obs)?;
         if !(segment.reached)(&obs, rec.emu()) {
             return Err(LedgerError::NotReached {

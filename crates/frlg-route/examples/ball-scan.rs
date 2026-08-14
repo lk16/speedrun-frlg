@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or(64);
     let ledger = frlg_route::ledger::read(std::path::Path::new(&ledger_path))?;
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).ok_or("rom for ledger sha1")?;
-    let sym = frlg_emu::default_sym_path().ok_or("sym")?;
+    let sym = frlg_emu::sym_path_for_rom(&rom).ok_or("sym for rom")?;
     let syms = frlg_emu::SymbolTable::load(&sym)?;
     let obs = frlg_route::Observer::new(syms.clone()).map_err(std::io::Error::other)?;
     let party = syms.get("gPlayerParty").ok_or("gPlayerParty")?.addr;

@@ -368,16 +368,23 @@ remains, largest first:
   above), so best-case turn-1 5 + turn-2 crit 10 = 15 < 18 — and within 3 turns a genome
   changes only HP-bar drain times (~2.5 frames per HP, `frlg-battle` pacing), pennies
   against the 17-frame floor gap.
-- **`02-intro-oak`'s boxes still wait on scripted beats.** Text now prints at one character
-  per held frame, but the intro is also fades, sprite slides and timer waits that no input
-  reaches; 1565 frames is the floor for this drive shape, not for the scene. Nobody has
-  audited which of those waits are input-gated versus timer-gated.
+- **`02-intro-oak`: audited, and it is input-paced nearly wall to wall (2026-08-14).**
+  The slack probe (`examples/intro-slack.rs`: inject one idle frame at every 8th frame of
+  the committed segment, replay the rest, see whether the end shifts) found **191 of 196
+  probe points shift the end 1:1** — only the final ~36 frames (f1528..f1560, the fade
+  into the naming screen) absorb a delay. There are no mid-intro timer waits the drive
+  arrives early for; 1565 is the measured floor for this drive shape, and any further
+  gain would need a different press pattern, not better timing of this one.
 - **`text_hold` is one global knob.** The winning duty cycle is a compromise across every
   dialogue stretch in the route; per-segment (or per-box) hold values are strictly more
   general and completely unexplored.
-- **The player name is one fixed letter.** Which letter (and which of the naming screen's
-  cursor-start letters is cheapest to take) has never been compared; the name prints in a
-  handful of boxes.
+- **The player name: closed by inspection (2026-08-14).** The drive already takes the
+  letter under the cursor with zero moves (`03-names`: `tap A` the frame the screen
+  accepts input, then START, A — `crates/frlg-route/src/segments.rs`), and every
+  one-character name prints in identical time (`RenderText` is per-character,
+  `decompiled/src/text.c:639-650`), so no letter can be cheaper to *select* or to
+  *print*. The only residual effect of a different letter path would be shifting the
+  naming-exit frame — which is the seed dial, closed above.
 - **The naming-exit seed dial: closed (2026-08-14).** The battle seed is `REG_TM1CNT_L`
   at the naming screen's exit press, moving 18753 per frame (the RNG section above), so
   idling N frames right before that press buys N fresh battle streams at 1 frame each.
