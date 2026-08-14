@@ -74,6 +74,37 @@ dogleg = Oak's scripted escort.
   the global knob for one segment (recorded in the log, no schema
   change). Sweep results below.
 
-## Wave 2 and the remaining sweeps
+## Wave 2 — the max-attack builds, and LeafGreen raced
 
-(results below as they land)
+All tier-1 full builds from the committed prefix (wait dials set,
+`FRLG_PRE_SWEEP=12,48` on every fight); committed = 38862:
+
+| build | what | total | delta |
+| --- | --- | ---: | ---: |
+| ball44 | Adamant Atk-IV 30 (atk 12/13) | 40521 | +1659 |
+| ball142 | Adamant Atk-IV 27 (atk 12/13) | 41014 | +2152 |
+| lg | LeafGreen, its scan-best seed | 42195 | +3333 |
+
+The headline inside the wreckage: **ball142's rival fight played 2412**
+(pre-idle 1, plan [10,0,15]) — 33 frames under the committed
+solver-arbitrated 2445, the fastest this fight has ever measured, and
+the atk-12 genome's growled-hit bonus is visible in it. It still loses
+the run: the ball delay costs ~138 up front and the shifted streams pay
++600-1500 across Sammy/Brock, the same order-of-magnitude gap as
+wave 1. **LeafGreen is closed for this target**: +3333 on its best
+0-63-scanned seed is far beyond what dial tuning recovers (~500).
+
+## Wave 2's lesson applied back to the committed route
+
+ball142 proves the *in-battle pre dial* can beat the committed rival
+battle on some genome/stream. Whether it can on the *committed* one is
+a direct probe: `--from 09-battle-win` with `FRLG_PRE_SWEEP=48,96` and
+the wait dials (below).
+
+## Wave 3 — mega pre-sweeps as the empirical stand-in for the fight model
+
+Rather than the ~day-scale Sammy/Brock pacing fit, the pre-sweep grid
+raised to `200,96` samples ~19.6k candidate stream-lines per fight —
+enough that a 3-crit Sammy line (density ~1.9e-4) is *expected* ~3.7
+times if reachable dials contain it at all. The fit stays future work;
+this answers its headline question empirically. (results below)
