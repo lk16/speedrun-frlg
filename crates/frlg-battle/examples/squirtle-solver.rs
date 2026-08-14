@@ -381,13 +381,15 @@ fn main() {
     let mut state07: Option<SaveState> = None;
     let mut log08: Vec<u16> = Vec::new();
     let mut committed_frames_09 = 0u32;
+    let mut log09: Vec<u16> = Vec::new();
     for entry in &ledger.segments {
-        if entry.name == "09-battle-win" {
-            committed_frames_09 = entry.frames as u32;
-            break;
-        }
         let bytes = std::fs::read(root.join(&entry.log)).expect("log");
         let log = InputLog::decode(&bytes).expect("log decodes");
+        if entry.name == "09-battle-win" {
+            committed_frames_09 = entry.frames as u32;
+            log09 = log.frames.clone();
+            break;
+        }
         if entry.name == "08-battle-start" {
             state07 = Some(emu.save_state().expect("state at 07 end"));
             log08 = log.frames.clone();
@@ -419,8 +421,29 @@ fn main() {
         m
     };
 
-    // Re-measure the committed plan rather than trusting the ledger.
-    let committed_plan: Vec<u32> = vec![0, 217, 0, 0];
+    // Reconstruct the committed plan from the committed log itself (menu
+    // delays are the zero-mask runs after each `choosing_actions` rise --
+    // same derivation `tests/squirtle_committed_battle.rs` validates),
+    // then re-measure it rather than trusting the ledger.
+    let committed_plan: Vec<u32> = {
+        emu.load_state(&start0).expect("load battle start");
+        let mut plan = vec![0u32];
+        let mut choosing_prev = false;
+        for (frame, &mask) in log09.iter().enumerate() {
+            emu.step(mask);
+            let choosing = observer.battle_choosing_actions(&mut emu);
+            if choosing && !choosing_prev {
+                let mut delay = 0usize;
+                while log09.get(frame + 1 + delay) == Some(&0) {
+                    delay += 1;
+                }
+                plan.push(delay as u32);
+            }
+            choosing_prev = choosing;
+        }
+        plan
+    };
+    println!("committed plan reconstructed from the log: {committed_plan:?}");
     let (won, committed_replay) = menu_run_plan(
         &mut emu,
         &observer,
