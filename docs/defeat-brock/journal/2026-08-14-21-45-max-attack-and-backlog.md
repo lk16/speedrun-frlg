@@ -101,6 +101,19 @@ battle on some genome/stream. Whether it can on the *committed* one is
 a direct probe: `--from 09-battle-win` with `FRLG_PRE_SWEEP=48,96` and
 the wait dials (below).
 
+## The committed rival fight is solver-held, not dial-held
+
+The `--from 09-battle-win` probe (pre-sweep 48×96 + 256 delays on the
+committed arrival, `FRLG_SEED_PLAN_BATTLE` deliberately unset) found a
+best of **2672 across 4,864 candidates** — 227 frames worse than the
+committed 2445. The solver's constraint-derived plan is not reachable
+by any brute-force dial the search can express; the 2445 stands on the
+solver's arbitrated seed alone, which is worth knowing before anyone
+"re-tunes" that battle by sweeping. (The probe's downstream rebuild was
+discarded; two OOM lessons from the same wave: stage-1 losers now drop
+their inputs/menu savestates — FRLG_PRE_SWEEP=200,96 was an exit-137
+kill on the 11 GiB sandbox before the strip.)
+
 ## Wave 3 — mega pre-sweeps as the empirical stand-in for the fight model
 
 Rather than the ~day-scale Sammy/Brock pacing fit, the pre-sweep grid
