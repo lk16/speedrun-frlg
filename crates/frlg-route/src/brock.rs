@@ -195,6 +195,7 @@ type PlanOutcome = (Vec<u16>, bool, usize, Vec<Menu>);
 /// checkpoint at every later menu. A free function over a bare `Emu` so a
 /// worker pool can run candidates side by side -- the emulator is fully
 /// deterministic, so a worker's outcome is the recorder's outcome.
+#[allow(clippy::too_many_arguments)]
 fn continue_plan(
     emu: &mut Emu,
     obs: &Observer,
@@ -203,6 +204,7 @@ fn continue_plan(
     from: &Menu,
     k: usize,
     plan: &[usize],
+    cap: usize,
 ) -> Result<PlanOutcome, RouteError> {
     let mash = mash_with(keys::A, tuning);
     emu.load_state(&from.state)?;
@@ -255,12 +257,23 @@ fn continue_plan(
             move_chosen = true;
         }
 
+        // A candidate longer than the best battle already found cannot be
+        // the shortest; stop feeding it frames (the caller treats it as a
+        // loss). The cap only prunes candidates strictly longer than a
+        // completed winner, so the selected result matches an uncapped
+        // search.
+        let left = cap.saturating_sub(from.prefix.len() + trial.fed());
+        if left == 0 {
+            break false;
+        }
         // Commit this turn's actions: mash until the selection state
         // exits.
-        let to_turn =
-            trial.advance_while("the turn to resolve", &mash, BATTLE_FRAME_BUDGET, |emu| {
-                obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu)
-            });
+        let to_turn = trial.advance_while(
+            "the turn to resolve",
+            &mash,
+            BATTLE_FRAME_BUDGET.min(left),
+            |emu| obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu),
+        );
         match to_turn {
             Err(RouteError::Timeout { .. }) => break false,
             other => other?,
@@ -269,10 +282,14 @@ fn continue_plan(
             break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
         }
         // To the next turn's menu, or the end.
+        let left = cap.saturating_sub(from.prefix.len() + trial.fed());
+        if left == 0 {
+            break false;
+        }
         let to_menu = trial.advance_while(
             "the battle menu or the end",
             &mash,
-            BATTLE_FRAME_BUDGET,
+            BATTLE_FRAME_BUDGET.min(left),
             |emu| obs.battle_outcome(emu) != 0 || obs.battle_choosing_actions(emu),
         );
         match to_menu {
@@ -418,10 +435,26 @@ pub fn win_battle(
         }
     };
 
-    // Stage 1: start delay, all candidates in parallel.
+    // Stage 1: start delay, all candidates in parallel. The shared cap
+    // shrinks to the shortest winner seen so far; later candidates abort
+    // the moment they exceed it (see `continue_plan`).
+    let cap = std::sync::atomic::AtomicUsize::new(usize::MAX);
     let delays: Vec<usize> = start_delays.clone().collect();
     let outcomes = parallel_search(rec, &delays, |emu, delay| {
-        continue_plan(emu, obs, tuning, preferred_move, &menu0, 0, &[delay])
+        let out = continue_plan(
+            emu,
+            obs,
+            tuning,
+            preferred_move,
+            &menu0,
+            0,
+            &[delay],
+            cap.load(std::sync::atomic::Ordering::Relaxed),
+        )?;
+        if out.1 {
+            cap.fetch_min(out.0.len(), std::sync::atomic::Ordering::Relaxed);
+        }
+        Ok(out)
     })?;
     let mut wins = 0usize;
     let mut best: Option<(PlanOutcome, Vec<usize>)> = None;
@@ -468,6 +501,8 @@ pub fn win_battle(
                     candidate.resize(turn + 1, 0);
                 }
                 candidate[turn] = delay;
+                // Anything not strictly shorter than the current best is
+                // discarded by the winner filter below; cap it there.
                 continue_plan(
                     emu,
                     obs,
@@ -476,6 +511,7 @@ pub fn win_battle(
                     &menus[turn],
                     turn,
                     &candidate,
+                    best_inputs.len(),
                 )
             })?;
             let winner = outcomes
