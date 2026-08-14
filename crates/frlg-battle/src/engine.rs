@@ -152,7 +152,7 @@ fn walk(mut state: BattleState<'_>, plan: &[u32], durs: Vec<u32>, leaves: &mut V
     };
 
     let lb = state.det + delay + 1;
-    for &dur in state.pacing.commit_durations(delay) {
+    for &dur in state.pacing.commit_durs(delay) {
         let mut s = state;
         let mut durs = durs.clone();
         durs.push(dur);
