@@ -122,3 +122,29 @@ of the whole planner pipeline. The widening stays (search time only).
   tier-1 verified, export `route-38950f-2f221a89` queued (40106 pulled).
 - Next wave in flight: text 3/5/6 and turn 2, then wider seeds under the
   winning knobs.
+
+## Battle-search economics (asked: can the Rust engine replace it?)
+
+Where a ~13-min build goes: battle delay searches ~6 min (rival 256 +
+Sammy 192 + Brock 384 candidates, each a full emulated battle), plain
+playthrough emulation ~4 min, the rest walking/writes. Three cuts landed:
+
+- **Running-best abort**: a candidate past the shortest completed winner
+  cannot win; a shared atomic cap cuts it off. Provably selection-identical
+  to the uncapped search; ~30-40% off battle time.
+- **FRLG_WORKERS**: cap the per-process pool so sweep waves stop
+  oversubscribing (4 builds x 14 threads on 16 cores was ~2x slowdown).
+- **frlg route scan**: seeds screened in the model (~5 s each) instead of
+  built (~13 min each); ranking validated by seed 27 landing #1.
+
+Replacing the searches with frlg-battle wholesale is *possible* -- the
+rival fight proves the method -- but pacing.rs is fitted per fight (~280
+instrumented battles for the rival alone) because rolls and frames are
+mutually dependent, and Sammy/Brock add poison, a mid-fight level-up
+prompt, the special split, type chart, gym AI and a party switch.
+Estimated ~a day for both, saving ~4 min/build: worth it when the route
+extends past Brock, deferred for this target.
+
+Also: wave A (seeds 20-23, pre-scan) confirmed the scan's ranking -- all
+lost badly (43750/46930/42971) and seed 21's build died silently after
+03-names with nothing in its log (one-off, unreproduced, noted).
