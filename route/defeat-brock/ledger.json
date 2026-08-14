@@ -8,7 +8,7 @@
     "text_hold": 4,
     "seed_delay": 27
   },
-  "total_frames": 38950,
+  "total_frames": 38862,
   "segments": [
     {
       "name": "01-boot",
@@ -99,24 +99,24 @@
       "goal": "the rival battle has started",
       "parent": "07-starter",
       "log": "route/defeat-brock/logs/08-battle-start.ilog",
-      "digest": "07e132847263e07bb619d539e44d3b4e69e1876d",
-      "frames": 386,
+      "digest": "532ffceb7a5efe33eaa334a7960d8fb7db45e759",
+      "frames": 389,
       "start_frame": 6818,
-      "ram_hash": "28fd9407535e5f8ae9900dbd6e30974d31a42ae7",
+      "ram_hash": "1decf9e4cdde773a92b35a2abe056efee9d99de0",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "09-battle-win",
       "goal": "gBattleOutcome == B_OUTCOME_WON",
       "parent": "08-battle-start",
       "log": "route/defeat-brock/logs/09-battle-win.ilog",
-      "digest": "ad5d62c5cc02d97aa78c25e771e2ecadf7c509ca",
-      "frames": 2613,
-      "start_frame": 7204,
-      "ram_hash": "46feaee4109f72aa4bf5454d52815915c2112c2a",
+      "digest": "a08417bdc788d99ac602295626ff1b1aaf28593f",
+      "frames": 2445,
+      "start_frame": 7207,
+      "ram_hash": "8a7dccd42b01fe96e478411c4d16a0b167c9ae51",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "exit-lab",
@@ -125,22 +125,22 @@
       "log": "route/defeat-brock/logs/exit-lab.ilog",
       "digest": "43d44063a4e39177bb5c79c872aee3764302d050",
       "frames": 880,
-      "start_frame": 9817,
-      "ram_hash": "0acb7e08887d7a48cae81bce0c745555e150200f",
+      "start_frame": 9652,
+      "ram_hash": "2d5ee14d98cdd04e3b9f37f56893db6b835a1db2",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "to-viridian",
       "goal": "in Viridian City",
       "parent": "exit-lab",
       "log": "route/defeat-brock/logs/to-viridian.ilog",
-      "digest": "a596fb3a1238bb3f088a63aec08788ff61244e7f",
-      "frames": 2671,
-      "start_frame": 10697,
-      "ram_hash": "627d29bb0e08d35b55055a004274cfb320ef70ac",
+      "digest": "e661125cdf78038f572a0467ae841eed1aa64b19",
+      "frames": 2673,
+      "start_frame": 10532,
+      "ram_hash": "246b8e50dfce3b18fefa798f28b863cdf49ab98a",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "parcel",
@@ -149,58 +149,58 @@
       "log": "route/defeat-brock/logs/parcel.ilog",
       "digest": "c5c76fa5d6243add9abbf328855bd0c59b4dcac1",
       "frames": 1278,
-      "start_frame": 13368,
-      "ram_hash": "54aa2d6ea7e616e1fb73a0fc4d1c4d3cecf357b5",
+      "start_frame": 13205,
+      "ram_hash": "9dd51b8c955c5401479c288e225f9925f0138080",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "deliver",
       "goal": "Pokédex received, old man armed (his scene var 1)",
       "parent": "parcel",
       "log": "route/defeat-brock/logs/deliver.ilog",
-      "digest": "d8235a027acd58280f04abbc4eec1e16c7005810",
-      "frames": 4424,
-      "start_frame": 14646,
-      "ram_hash": "0b84de1e4dea16340f1dd8b0b598f49638b4de62",
+      "digest": "553d29a88991806d7f179253cf265e60d48bb1b5",
+      "frames": 4422,
+      "start_frame": 14483,
+      "ram_hash": "99568df0e153ef6772b21190be5c33347e931a8b",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "tutorial",
       "goal": "catching tutorial done (old man var 2), road north open",
       "parent": "deliver",
       "log": "route/defeat-brock/logs/tutorial.ilog",
-      "digest": "287f74f03db46796a4db1b2bfefd8ea44c5e4f16",
-      "frames": 5585,
-      "start_frame": 19070,
-      "ram_hash": "a08900c1b6d4f7d391f20ac4440dc6cee4290e41",
+      "digest": "7aa0dc1c8a9707d9884c64e41f98c0a53d9c9a81",
+      "frames": 5552,
+      "start_frame": 18905,
+      "ram_hash": "ea98238358b968fc1a5a1a3800f2212d0ed23d00",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "to-forest",
       "goal": "inside Viridian Forest",
       "parent": "tutorial",
       "log": "route/defeat-brock/logs/to-forest.ilog",
-      "digest": "9d7db9df9409868e26d859d94afa6e59f8a95f0b",
-      "frames": 1147,
-      "start_frame": 24655,
-      "ram_hash": "69a66a88a2c88ecb75e8c07b919f0f563a624277",
+      "digest": "0a0a2615a9ef204b724999e4fc10b10a20f96413",
+      "frames": 1150,
+      "start_frame": 24457,
+      "ram_hash": "f9248848c494074791cc4e5e8421ca011691a433",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "forest",
       "goal": "out the forest's north side",
       "parent": "to-forest",
       "log": "route/defeat-brock/logs/forest.ilog",
-      "digest": "5d2f3aa44299b1113585f819743e08ece796aba0",
-      "frames": 6693,
-      "start_frame": 25802,
-      "ram_hash": "ca4810cdf947d3a94399e93797f3710e44330461",
+      "digest": "2560bfdc6eae4f34a774fa5d35cde44503fbf847",
+      "frames": 6660,
+      "start_frame": 25607,
+      "ram_hash": "bd65cb622020233a580f9f05fdcca6fcb684e132",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "to-pewter",
@@ -209,34 +209,34 @@
       "log": "route/defeat-brock/logs/to-pewter.ilog",
       "digest": "8454e54a5ca4fde941c38a3f1aba2586158b5ee5",
       "frames": 552,
-      "start_frame": 32495,
-      "ram_hash": "9b006e564007e7c33a5e4aae9eb388ef21e10696",
+      "start_frame": 32267,
+      "ram_hash": "3c9486bb8c206be085b34ad474a3c97664dbd8c2",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "to-gym",
       "goal": "inside Pewter Gym",
       "parent": "to-pewter",
       "log": "route/defeat-brock/logs/to-gym.ilog",
-      "digest": "68c7ab7ef365de480d11936d40a5f303237ef9d5",
-      "frames": 979,
-      "start_frame": 33047,
-      "ram_hash": "e2070c4954dca62df6144abde949fad86bed9421",
+      "digest": "11c40209df4d8c038aeddf850915cc1efc8572b2",
+      "frames": 980,
+      "start_frame": 32819,
+      "ram_hash": "57e9df28bed4c3adb53ae5b52aa707b11dcb1588",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     },
     {
       "name": "brock",
       "goal": "FLAG_DEFEATED_BROCK set",
       "parent": "to-gym",
       "log": "route/defeat-brock/logs/brock.ilog",
-      "digest": "3cad64670896c0eed20373c1f9263c81c27bb3d7",
-      "frames": 4924,
-      "start_frame": 34026,
-      "ram_hash": "b841205d77f099667cfa63b7f6de5f75b9ff1e33",
+      "digest": "99fef0c35132de5ee869279abe2caf9e362164e1",
+      "frames": 5063,
+      "start_frame": 33799,
+      "ram_hash": "868413a643bea3d7e0aa15bbb41d448f46301c00",
       "tier1": true,
-      "tier2": "passed 2026-08-14 as part of route-38950f-2f221a898d8e: BizHawk 2.11.1 replayed all 38950 frames to ram_hash b841205d77f099667cfa63b7f6de5f75b9ff1e33 with the per-frame gRngValue probe matching every frame (verify/results/route-38950f-2f221a898d8e.json, fast+headless, 68s). Whole-movie replay, not a per-segment one; a rebuild resets this."
+      "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     }
   ]
 }

@@ -98,7 +98,54 @@ Follow-up in flight: keep the 2445 battle, re-luck only the forest with
 NPC/cooldown alignment but not the step-indexed rate-test sequence, so
 the planner's fated pass/fail map stays; results land below).
 
-PLACEHOLDER: forest-wait sweep results.
+## The wait sweeps: defending the battle gain downstream
+
+Five rounds of head-wait builds (all in
+`$FRLG_ARTIFACTS/scratch/forest-wait-sweep/`, ~2-13 min each on the
+worker pool), each keeping the 2445 battle and re-picking one later
+segment's stream family:
+
+- **FOREST 1..16** (round 1+2): most waits are *absorbed* -- the planned
+  walk's steering delays swallow small idles 1:1 and the total does not
+  move. Only 3 and 4 flipped anything; FOREST=3 gave forest 6876 /
+  Sammy 2782 / brock 4915 → **38926**, the first total under the
+  committed 38950.
+- **TO_FOREST 1..4** (round 2): 3 was the jackpot-with-a-catch -- forest
+  **6660** with Sammy **2603** (delay 13! vs the committed 2784), but the
+  brock arrival stream exploded (5571). Proof the forest and Brock lucks
+  are separately dialable.
+- **BROCK 1..30 on that base** (rounds 3-4): waits 1-4 absorbed; 5..30
+  all collapse to *one* family (brock 5065, fight 3306) -- the segment's
+  own walk/talk press grid quantizes hard. **38863.**
+- **TO_GYM 1..5 × BROCK {0,5}** (round 5): the gym-approach families
+  cluster (fights 3303-3482); TO_GYM=1 alone edged out one more frame:
+  brock 5063 (fight 3305, delay 164). **38862.**
+
+Flat landscape at the end (38862-38864 across every remaining dial), so
+38862 is the adoption: **tier-1 verified from reset, exported and queued
+as `route-38862f-8ee04c5b8bfc`** (round-trip checked). Reproduction from
+the committed 38950 prefix: `FRLG_WAIT_08_BATTLE_START=3
+FRLG_SEED_PLAN_BATTLE=0,2,2,3` (build --from 08-battle-start), then
+`FRLG_WAIT_TO_FOREST=3` (--from to-forest), then `FRLG_WAIT_TO_GYM=1`
+(--from to-gym); the committed logs are the canonical artifact either way.
+
+Final accounting vs the accepted 38950: battle −168, its 08 wait +3,
+to-viridian +2, deliver −2, tutorial −33, to-forest +3, forest −33
+(Sammy −181 inside it, walking +148), to-gym +1, brock +139. Net **−88**.
+The remaining known slack is Brock's fight (3305 here; 3157 exists on a
+family this route cannot cheaply reach) -- that is the Brock-model
+backlog item's price tag, now with measured stakes.
+
+## What this session proves about the method
+
+The solver's floor (2376) says another ~70 battle frames exist in
+principle (2445 − 2376), but every model-visible path below 2445 was
+arbitrated and refused -- same shape as rival-1's close. The deeper
+lesson is the two-sided one: the *model* finds states the search could
+never reach (0/256 start delays win on the adopted stream -- the seed
+was the only winner), and the *emulator* refuses the states the model
+over-promises (24/24 phase-2 candidates played 2897+). Enumerator and
+arbiter, never one without the other.
 
 ## What the rival-1 lessons bought here
 
