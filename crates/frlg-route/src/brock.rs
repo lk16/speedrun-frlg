@@ -864,16 +864,6 @@ fn attempt_step(
     Ok(StepTry::Stuck)
 }
 
-/// Whether a step's observed rate-test consumption matches the plan's
-/// expectation. Steps the plan calls `Free`/`Jump` never consume; `Cooldown`
-/// and `SkipBoundary` must not; `Consume` must.
-fn consumption_matches(kind: StepKind, consumed: bool) -> bool {
-    match kind {
-        StepKind::Consume { .. } => consumed,
-        _ => !consumed,
-    }
-}
-
 /// The delays tried when a step's first attempt does the wrong thing: each
 /// idle frame re-rolls the `gRngValue` gates (5% cooldown gate, 60%
 /// behavior roll) that decide everything the rate-test index does not.
@@ -986,13 +976,21 @@ pub fn walk_planned(
         }
 
         let mut diverged = false;
+        // The rate test for a step fires at its *tile-center* frame, a few
+        // frames after the position change that ends the executor's step
+        // window -- so the consumption observed during step N belongs to
+        // step N-1 (measured: every "gate mismatch" of the first candidate
+        // build was this off-by-one). `carry` holds the previous step's
+        // expectation; a mismatch realigns by replanning, never by delay
+        // steering -- a replan is free in route frames, a steer is not.
+        let mut carry: Option<StepKind> = None;
         for step in &steps {
             if leg.arrived(obs, rec.emu()) {
                 return Ok(true);
             }
             let before = rec.save_state()?;
             let mut outcome = None;
-            // First attempt with no delay, then steer.
+            // First attempt with no delay, then steer (battles only).
             for (try_no, delay) in std::iter::once(0)
                 .chain(STEER_DELAYS.iter().copied())
                 .enumerate()
@@ -1003,24 +1001,8 @@ pub fn walk_planned(
                 let inputs = trial.into_inputs();
                 match result {
                     StepTry::Moved { consumed } => {
-                        let planned_battle = matches!(
-                            step.kind,
-                            StepKind::Consume {
-                                fated_pass: true,
-                                ..
-                            }
-                        );
-                        if consumption_matches(step.kind, consumed) && !planned_battle {
-                            outcome = Some((inputs, StepTry::Moved { consumed }));
-                            break;
-                        }
-                        // Wrong branch of a gate: steer with one more delay
-                        // frame. If steering runs out, accept and replan --
-                        // the model realigns from RAM.
-                        if try_no == STEER_DELAYS.len() {
-                            outcome = Some((inputs, StepTry::Moved { consumed }));
-                            diverged = true;
-                        }
+                        outcome = Some((inputs, StepTry::Moved { consumed }));
+                        break;
                     }
                     StepTry::Battle => {
                         let planned_battle = matches!(
@@ -1059,11 +1041,17 @@ pub fn walk_planned(
                     rec.emu().load_state(&before)?;
                     rec.play(&inputs)?;
                     stuck_streak = 0;
-                    if diverged {
+                    let expected = matches!(carry, Some(StepKind::Consume { .. }));
+                    let checkable = wild.is_some() && carry.is_some();
+                    if checkable && consumed != expected {
+                        diverged = true;
                         last_event = format!(
-                            "gate mismatch at {:?} (consumed {consumed}, planned {:?})",
-                            step.to, step.kind
+                            "carry mismatch entering {:?} (consumed {consumed}, previous step planned {carry:?})",
+                            step.to
                         );
+                    }
+                    carry = Some(step.kind);
+                    if diverged {
                         break; // replan from the realigned state
                     }
                 }
@@ -1714,7 +1702,9 @@ fn brock(starter: Starter, tuning: Tuning) -> Segment {
             // 2/48 delays won on one stream and 0/48 on its sibling: this
             // fight is knife-edge at the semi-naive level, so it samples
             // wide. 192 delays cover 384 stream steps.
-            win_battle(rec, obs, tuning, Some(preferred), "brock", 192)?;
+            // 384, doubled from 192 after the planner rebuild moved this stream and
+            // the fight came back +314: more stream choices cost only pool time.
+            win_battle(rec, obs, tuning, Some(preferred), "brock", 384)?;
             rec.hold_mash_until("the defeat flag", keys::B, tuning.text_hold, 3000, |emu| {
                 obs.flag(emu, FLAG_DEFEATED_BROCK) == Some(true)
             })?;
