@@ -110,6 +110,13 @@ enum RouteCommand {
         #[arg(long, default_value = "route")]
         dir: PathBuf,
     },
+    /// Rank seed-delay candidates by modeled walk cost, without building.
+    ///
+    /// Boots each seed ~650 frames to capture its wild-encounter stream,
+    /// then plans the route's grass crossings against it. Ranks walks only:
+    /// battle-stream luck (±600 frames between seeds) is invisible here, so
+    /// build the top few rather than trusting the single best.
+    Scan(ScanArgs),
     /// Export the committed logs as one BizHawk movie for tier 2.
     ///
     /// Concatenates the ledger's segment logs into a single .bk2 built on
@@ -118,6 +125,56 @@ enum RouteCommand {
     /// host-side runner. Writing the file is not verification: tier 2 has
     /// only happened once a result lands in verify/results.
     Export(ExportArgs),
+}
+
+#[derive(Args)]
+struct ScanArgs {
+    #[command(flatten)]
+    rom: RomArgs,
+    #[arg(long)]
+    sym: Option<PathBuf>,
+    /// First seed delay to score.
+    #[arg(long, default_value_t = 0)]
+    from_seed: usize,
+    /// One past the last seed delay to score.
+    #[arg(long, default_value_t = 64)]
+    to_seed: usize,
+}
+
+fn cmd_scan(args: &ScanArgs) -> Result<()> {
+    let rom = args
+        .rom
+        .rom
+        .clone()
+        .or_else(frlg_emu::default_rom_path)
+        .context("no ROM: pass --rom or set $FRLG_ROM / $FRLG_ARTIFACTS")?;
+    let sym = args
+        .sym
+        .clone()
+        .or_else(frlg_emu::default_sym_path)
+        .context("no symbols: pass --sym or run `make syms`")?;
+    let scores = frlg_route::scan::scan(&rom, &sym, args.from_seed..args.to_seed, |s| {
+        eprintln!(
+            "  seed {:>3}: walk {:>6}, {} planned flees  (wild {:#010x})",
+            s.seed_delay, s.walk_cost, s.encounters, s.wild_state
+        );
+    })?;
+    println!("\ncheapest first (build the top few; battle luck is not scored):");
+    for s in scores.iter().take(12) {
+        let detail: Vec<String> = s
+            .detail
+            .iter()
+            .map(|(name, cost, enc)| format!("{name} {cost}/{enc}"))
+            .collect();
+        println!(
+            "seed {:>3}: walk {:>6}, {} flees  [{}]",
+            s.seed_delay,
+            s.walk_cost,
+            s.encounters,
+            detail.join(", ")
+        );
+    }
+    Ok(())
 }
 
 #[derive(Args)]
@@ -496,6 +553,7 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
         }
         RouteCommand::List { dir } => cmd_list(&dir),
         RouteCommand::Export(args) => cmd_export(args),
+        RouteCommand::Scan(args) => cmd_scan(&args),
     }
 }
 

@@ -315,9 +315,17 @@ fn parallel_search<R: Send>(
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
-    let workers = std::thread::available_parallelism()
-        .map(|n| n.get().saturating_sub(2).max(1))
-        .unwrap_or(1)
+    // `FRLG_WORKERS` caps the pool per process: a sweep running four builds
+    // side by side wants 4 workers each on a 16-core box, not 4x14 threads
+    // thrashing the scheduler.
+    let workers = std::env::var("FRLG_WORKERS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get().saturating_sub(2).max(1))
+                .unwrap_or(1)
+        })
         .min(items.len());
     let rom = frlg_emu::rom_path_for_sha1(&hex::encode(rec.log().rom_sha1))
         .or_else(frlg_emu::default_rom_path);
@@ -790,7 +798,7 @@ thread_local! {
 
 /// The land encounter table for a map, by ROM version
 /// (`frlg_mon::wild`, cited there to `wild_encounters.json`).
-fn wild_table(map: (u8, u8), version: Version) -> Option<&'static frlg_mon::wild::MapWild> {
+pub fn wild_table(map: (u8, u8), version: Version) -> Option<&'static frlg_mon::wild::MapWild> {
     use frlg_mon::wild;
     match map {
         ROUTE1 => Some(&wild::ROUTE1),
