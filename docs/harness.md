@@ -67,6 +67,7 @@ filter differently.
     frlg route tune                             # sweep the route knobs, score on total frames
     frlg route status --target defeat-brock     # print one ledger, without running anything
     frlg route list                             # every TAS in the repo, one ledger line each
+    frlg video --target rival-1                 # the publishable recording (see below)
 
 The ROM defaults to `$FRLG_ROM`, then `$FRLG_ARTIFACTS/rom/pokefirered.gba`; symbols to `$FRLG_SYM`,
 then `$FRLG_ARTIFACTS/rom/pokefirered.sym`. `--watch` and `--trace` take `name`, `name+0x10`,
@@ -75,6 +76,39 @@ else is a byte dump.
 
 Replaying a log against the wrong ROM is refused by comparing sha1s. An all-zero hash in a log means
 "unknown" and is allowed.
+
+## Recording a run
+
+`frlg video` is the only command that produces something for people who will never read a ledger,
+and the only one that needs a tool the sandbox does not have: **ffmpeg** (`sudo apt-get install
+ffmpeg` on the host). It writes one dated folder under `ignored/videos/`, named like a journal
+entry, holding the video and a markdown file with the title and description to publish it with.
+
+It refuses unless the run is **tier-2 verified and committed**. Tier 1 is not enough: a video
+cannot be corrected after upload, so the gate asks for BizHawk's verdict in every segment's
+`tier2` field, for the ledger and every log it names to be tracked and unmodified, and it links the
+commit that *introduced* that verdict rather than whatever HEAD happens to be
+(`crates/frlg-route/src/publish.rs`).
+
+- **Format.** `--format mp4` (default) is lossless H.264 in RGB (`libx264rgb -qp 0`) plus ALAC;
+  `--format mkv` is FFV1 plus FLAC. Both are bit-exact -- checked by encoding a raw stream,
+  decoding it back and comparing bytes -- but the mkv is 3-4x larger, because FFV1 codes every
+  frame independently and a GBA screen mostly does not move. rival-1's 9658 frames come to 32 MiB
+  as mp4.
+- **Scale.** `--scale 4` (default) is a nearest-neighbour upscale to 960x640: every output pixel is
+  a copy of one input pixel, so it stays reversible, but a video site will not throw away a 240-line
+  source's bitrate. `--scale 1` keeps the native frame.
+- **Sound.** Captured from the core, not synthesised. The GBA's sample rate is not constant -- the
+  game rewrites SOUNDBIAS, and FireRed/LeafGreen move between 32768 and 65536 Hz during the boot --
+  so each frame's samples are laid onto the *video's* clock at the highest rate seen. That is what
+  keeps picture and sound in step across a rate change instead of drifting by the samples the
+  slower stretch did not produce.
+- **Cost.** Two replays, one for sound and one for picture, plus the encode: about a minute for
+  rival-1. ffmpeg needs its audio input to exist before it starts, and the raw picture is far too
+  large to spool, so the deterministic replay is done twice rather than buffered once.
+
+`--preview-frames N` encodes only the first N frames and writes no description; it is for checking
+the pipeline, not for publishing.
 
 ## The divergence fingerprint
 

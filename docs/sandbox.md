@@ -149,6 +149,13 @@ format mistake then costs a re-export, not a re-route. A `.bk2` is only real onc
 came from has passed tier 1 **and** the `.bk2` decodes back to that same log. Write that
 round-trip check early.
 
+## ffmpeg
+
+Not in the image, and the one thing this project needs that is not. `frlg video` -- the publishable
+recording of a finished run -- shells out to it, so that command is host-only in the same way tier 2
+is (`sudo apt-get install ffmpeg`). Nothing else needs it, and it reports a missing binary as such
+rather than falling back to something lossy.
+
 ## Rust
 
 cargo works offline against a vendored crate tree; `~/.cargo/config.toml` is generated at startup

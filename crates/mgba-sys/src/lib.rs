@@ -67,6 +67,17 @@ extern "C" {
     /// `width * height` pixels, R in bits 0-7 through A in bits 24-31.
     pub fn frlg_video_buffer(core: *const FrlgCore) -> *const u32;
 
+    /// Sample-frames per second the core is producing. Derived from the GBA's
+    /// SOUNDBIAS resolution, so a game that rewrites it changes this.
+    pub fn frlg_audio_sample_rate(core: *const FrlgCore) -> c_uint;
+    /// Interleave width of [`frlg_audio_read`]: 2 on the GBA.
+    pub fn frlg_audio_channels(core: *mut FrlgCore) -> c_uint;
+    /// Reads up to `frames` sample-frames. `out` must be valid for
+    /// `frames * frlg_audio_channels()` `i16`s. Returns frames read.
+    pub fn frlg_audio_read(core: *mut FrlgCore, out: *mut i16, frames: usize) -> usize;
+    /// Discards whatever audio is buffered.
+    pub fn frlg_audio_clear(core: *mut FrlgCore);
+
     /// `out` must be valid for 16 bytes.
     pub fn frlg_game_title(core: *const FrlgCore, out: *mut c_char);
     /// `out` must be valid for 8 bytes.

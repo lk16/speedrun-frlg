@@ -154,7 +154,15 @@ pub fn score_seed(
             .count() as u32;
         let fated = steps
             .iter()
-            .filter(|s| matches!(s.kind, StepKind::Consume { fated_pass: true, .. }))
+            .filter(|s| {
+                matches!(
+                    s.kind,
+                    StepKind::Consume {
+                        fated_pass: true,
+                        ..
+                    }
+                )
+            })
             .count() as u32;
         // Advance the stream by the tests this crossing consumes; the next
         // crossing starts on the far side of them.

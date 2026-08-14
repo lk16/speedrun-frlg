@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 use clap::{Args, Parser, Subcommand};
 use frlg_emu::{check_log_rom, keys, Emu, InputLog, SymbolTable, Target};
 use frlg_route::segments::Tuning;
-use frlg_route::{ledger, RouteError, Starter};
+use frlg_route::{ledger, publish, video, RouteError, Starter};
 
 #[derive(Parser)]
 #[command(name = "frlg", about = "Headless mGBA harness for the FireRed TAS")]
@@ -37,6 +37,9 @@ enum Command {
     /// Show a map decoded from the decomp checkout (collision, grass,
     /// warps, objects) -- the data the path planner runs on.
     Map(MapArgs),
+    /// Encode a tier-2 verified run as a lossless video, with the title and
+    /// description to publish it with.
+    Video(VideoArgs),
 }
 
 #[derive(Args)]
@@ -368,6 +371,7 @@ fn main() -> Result<()> {
         Command::Log(args) => cmd_log(args),
         Command::Route(args) => cmd_route(args),
         Command::Map(args) => cmd_map(&args),
+        Command::Video(args) => cmd_video(args),
     }
 }
 
@@ -637,36 +641,7 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
     let ledger_path = target_ledger(parse_target(&args.target)?, &args.ledger);
     let led =
         ledger::read(&ledger_path).with_context(|| format!("reading {}", ledger_path.display()))?;
-    let mut rom_sha1 = [0u8; 20];
-    hex::decode_to_slice(&led.rom_sha1, &mut rom_sha1)
-        .with_context(|| format!("ledger rom_sha1 {:?} is not sha1 hex", led.rom_sha1))?;
-
-    // Re-derive the movie from the committed logs, and only from logs the
-    // ledger vouches for: a digest mismatch means the logs on disk are not
-    // the ones the ledger describes, and exporting them would put an
-    // unverified movie behind a verified-looking id.
-    let mut frames = Vec::with_capacity(led.total_frames);
-    for entry in &led.segments {
-        let log = read_log(Path::new(&entry.log))?;
-        if log.digest() != entry.digest {
-            bail!(
-                "{}: digest {} does not match the ledger's {} -- rebuild or re-verify the route",
-                entry.log,
-                log.digest(),
-                entry.digest
-            );
-        }
-        check_log_rom(&log, rom_sha1)?;
-        frames.extend_from_slice(&log.frames);
-    }
-    if frames.len() != led.total_frames {
-        bail!(
-            "segments sum to {} frames, the ledger claims {}",
-            frames.len(),
-            led.total_frames
-        );
-    }
-    let combined = InputLog::new(rom_sha1, frames);
+    let combined = combined_log(&led)?;
     let ilog_sha1 = combined.digest();
     let id = format!("route-{}f-{}", combined.len(), &ilog_sha1[..12]);
 
@@ -696,22 +671,7 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
     // export replayed against the wrong version would desync on frame 1 and
     // the error should say why, not where. No --rom means the ledger's sha1
     // finds it, same as `route verify`.
-    let rom = match &args.rom.rom {
-        Some(path) => path.clone(),
-        None => frlg_emu::rom_path_for_sha1(&led.rom_sha1)
-            .or_else(frlg_emu::default_rom_path)
-            .context("no ROM matching the ledger's rom_sha1: pass --rom or build it into $FRLG_ARTIFACTS/rom")?,
-    };
-    let rom_file_sha1 = frlg_emu::file_sha1(&rom)?;
-    if rom_file_sha1 != rom_sha1 {
-        bail!(
-            "{} is sha1 {}, but the ledger's logs were routed against {}; \
-             pass the matching ROM with --rom",
-            rom.display(),
-            hex::encode(rom_file_sha1),
-            led.rom_sha1
-        );
-    }
+    let rom = rom_for_ledger(&led, &args.rom.rom)?;
     let rom_name = rom
         .file_stem()
         .and_then(|s| s.to_str())
@@ -809,6 +769,211 @@ fn cmd_export(args: ExportArgs) -> Result<()> {
     println!("round-trip: the .bk2 decodes back to the exported frames");
     println!("tier 2 is claimed by a result in verify/results, not by this command");
     Ok(())
+}
+
+#[derive(Args)]
+struct VideoArgs {
+    /// Which TAS to record, when --ledger is not given.
+    #[arg(long, default_value = "rival-1")]
+    target: String,
+    #[arg(long)]
+    ledger: Option<PathBuf>,
+
+    #[command(flatten)]
+    rom: RomArgs,
+
+    /// Where the dated folder is created. Under `ignored/`, because a video is
+    /// a build product: the run itself is the input logs, which are committed.
+    #[arg(long, default_value = "ignored/videos")]
+    out_dir: PathBuf,
+
+    /// `mp4` (lossless H.264 in RGB + ALAC, the default) or `mkv` (FFV1 +
+    /// FLAC). Both are bit-exact; the mkv is 3-4x larger here, because FFV1
+    /// codes every frame independently.
+    #[arg(long, default_value = "mp4")]
+    format: String,
+
+    /// Integer nearest-neighbour upscale of the 240x160 frame. Reversible, so
+    /// still lossless; 1 keeps the native size.
+    #[arg(long, default_value_t = 4)]
+    scale: u32,
+
+    /// Frames of nothing held after the run's last input, so the final frame
+    /// is not the last thing on screen. Not counted in the title.
+    #[arg(long, default_value_t = 120)]
+    tail_frames: usize,
+
+    /// Encode only this many frames of the run. For checking the pipeline
+    /// without waiting for the whole encode; writes no description, since the
+    /// result is not the run.
+    #[arg(long)]
+    preview_frames: Option<usize>,
+
+    #[arg(long, default_value = "ffmpeg")]
+    ffmpeg: PathBuf,
+
+    /// What the run achieves, as it should read in the title. Defaults to the
+    /// target's own ("Defeat Rival 1").
+    #[arg(long)]
+    goal: Option<String>,
+
+    /// Base URL the description's links are built from. Defaults to the
+    /// `origin` remote.
+    #[arg(long)]
+    repo_url: Option<String>,
+}
+
+/// Record a verified run: video file plus the title and description to publish
+/// it with, in one dated folder.
+///
+/// The gate comes first and refuses on tier 1 alone. A video is the artifact
+/// that leaves the project, it is watched by people who will never read the
+/// ledger, and it cannot be corrected after upload -- so it may only be made
+/// from a run BizHawk has replayed and git has recorded (`publish::gate`).
+fn cmd_video(args: VideoArgs) -> Result<()> {
+    let target = parse_target(&args.target)?;
+    let ledger_path = target_ledger(target, &args.ledger);
+    let led =
+        ledger::read(&ledger_path).with_context(|| format!("reading {}", ledger_path.display()))?;
+
+    let tier2 = publish::gate(&led, &ledger_path)?;
+    let web_url = publish::web_url(args.repo_url.as_deref())?;
+    println!(
+        "tier 2  {} ({} {})",
+        tier2
+            .result_id
+            .clone()
+            .unwrap_or_else(|| "passed".to_string()),
+        tier2.commit.short,
+        tier2.commit.date
+    );
+
+    let format = video::Format::parse(&args.format)
+        .with_context(|| format!("unknown --format {:?}: mkv or mp4", args.format))?;
+    let rom = rom_for_ledger(&led, &args.rom.rom)?;
+    let version = frlg_route::Version::of_rom(&rom)?
+        .context("the ledger's ROM is neither FireRed nor LeafGreen")?;
+    let combined = combined_log(&led)?;
+
+    let goal = args
+        .goal
+        .clone()
+        .unwrap_or_else(|| publish::default_goal(target).to_string());
+    let title = publish::title(version, &goal, led.total_frames);
+    let stamp = publish::stamp(std::time::SystemTime::now());
+    let slug = publish::slug(&stamp, target, led.total_frames);
+
+    let dir = args.out_dir.join(&slug);
+    fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
+    let video_path = dir.join(format!("{slug}.{}", format.extension()));
+
+    let options = video::Options {
+        format,
+        scale: args.scale,
+        tail_frames: args.tail_frames,
+        preview_frames: args.preview_frames,
+        ffmpeg: args.ffmpeg.clone(),
+        expect_boot: led.bios.clone(),
+        title: Some(title.clone()),
+    };
+    println!("title   {title}");
+    println!("encode  {} -> {}", format.describe(), video_path.display());
+    let report = video::encode(&rom, &combined, &video_path, &options, |line| {
+        println!("{line}");
+    })?;
+
+    println!(
+        "wrote   {} ({} MiB, {}x{}, {} frames)",
+        report.path.display(),
+        report.bytes / (1 << 20),
+        report.width,
+        report.height,
+        report.frames
+    );
+
+    if args.preview_frames.is_some() {
+        println!(
+            "preview: {} of {} frames, no description written -- this is not publishable",
+            report.frames, led.total_frames
+        );
+        return Ok(());
+    }
+
+    let publication = publish::publication(&publish::Facts {
+        ledger: &led,
+        target,
+        version,
+        goal: &goal,
+        tier2: &tier2,
+        web_url: &web_url,
+        encode: &report,
+        stamp: &stamp,
+    });
+    let text_path = dir.join(format!("{slug}.md"));
+    fs::write(&text_path, &publication.markdown)
+        .with_context(|| format!("writing {}", text_path.display()))?;
+    println!("        {}", text_path.display());
+    Ok(())
+}
+
+/// The whole run as one input log, re-derived from the committed segment logs.
+///
+/// Only from logs the ledger vouches for: a digest mismatch means the logs on
+/// disk are not the ones the ledger describes, and anything built from them
+/// would carry a verified-looking claim it has not earned.
+fn combined_log(led: &ledger::Ledger) -> Result<InputLog> {
+    let mut rom_sha1 = [0u8; 20];
+    hex::decode_to_slice(&led.rom_sha1, &mut rom_sha1)
+        .with_context(|| format!("ledger rom_sha1 {:?} is not sha1 hex", led.rom_sha1))?;
+
+    let mut frames = Vec::with_capacity(led.total_frames);
+    for entry in &led.segments {
+        let log = read_log(Path::new(&entry.log))?;
+        if log.digest() != entry.digest {
+            bail!(
+                "{}: digest {} does not match the ledger's {} -- rebuild or re-verify the route",
+                entry.log,
+                log.digest(),
+                entry.digest
+            );
+        }
+        check_log_rom(&log, rom_sha1)?;
+        frames.extend_from_slice(&log.frames);
+    }
+    if frames.len() != led.total_frames {
+        bail!(
+            "segments sum to {} frames, the ledger claims {}",
+            frames.len(),
+            led.total_frames
+        );
+    }
+    Ok(InputLog::new(rom_sha1, frames))
+}
+
+/// The ledger's own ROM. It pins one by sha1, and both versions live in the
+/// rom dir side by side, so an export replayed against the other one would
+/// desync on the first frame that matters.
+fn rom_for_ledger(led: &ledger::Ledger, explicit: &Option<PathBuf>) -> Result<PathBuf> {
+    let rom = match explicit {
+        Some(path) => path.clone(),
+        None => frlg_emu::rom_path_for_sha1(&led.rom_sha1)
+            .or_else(frlg_emu::default_rom_path)
+            .context(
+                "no ROM matching the ledger's rom_sha1: pass --rom or build it into \
+                 $FRLG_ARTIFACTS/rom",
+            )?,
+    };
+    let actual = hex::encode(frlg_emu::file_sha1(&rom)?);
+    if actual != led.rom_sha1 {
+        bail!(
+            "{} is sha1 {}, but the ledger's logs were routed against {}; \
+             pass the matching ROM with --rom",
+            rom.display(),
+            actual,
+            led.rom_sha1
+        );
+    }
+    Ok(rom)
 }
 
 /// The ROM, symbols and starter a route command should use. Explicit flags

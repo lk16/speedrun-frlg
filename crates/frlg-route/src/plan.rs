@@ -355,7 +355,11 @@ pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
             if req.wild.is_none() || !tile.land {
                 push((nx, ny, cd, j, k, virgin), TILE_COST, StepKind::Free);
             } else if cd < min_steps {
-                push((nx, ny, cd + 1, j, k, virgin), TILE_COST, StepKind::Cooldown);
+                push(
+                    (nx, ny, cd + 1, j, k, virgin),
+                    TILE_COST,
+                    StepKind::Cooldown,
+                );
             } else {
                 // The buff at this test: the RAM value keeps growing until
                 // the first reset; afterwards it is purely fails-since-reset.

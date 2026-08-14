@@ -32,6 +32,7 @@
 #include <mgba/core/log.h>
 #include <mgba/core/serialize.h>
 #include <mgba/gba/core.h>
+#include <mgba-util/audio-buffer.h>
 #include <mgba-util/vfs.h>
 
 #include <fcntl.h>
@@ -316,6 +317,48 @@ unsigned frlg_height(const struct FrlgCore* h) {
  * order in memory on a little-endian host, which is PNG's RGBA8 directly. */
 const uint32_t* frlg_video_buffer(const struct FrlgCore* h) {
 	return (const uint32_t*) h->video;
+}
+
+/* --- audio -------------------------------------------------------------- */
+
+/* mGBA 0.11 hands audio out as a `struct mAudioBuffer` of interleaved stereo
+ * int16 (util/audio-buffer.c), filled by the core's own sample event. Nothing
+ * drains it unless we do, and mAudioBufferWrite drops what does not fit
+ * (capacity is 0x4000 frames, gb/audio.c:17), so a caller that wants every
+ * sample has to read after every frame. At 32768 Hz that is ~549 frames of
+ * audio per video frame, well inside the buffer.
+ *
+ * There is no mCoreSync here, so the write side never blocks waiting for a
+ * consumer -- which is what makes a headless capture at full speed safe. */
+
+unsigned frlg_audio_sample_rate(const struct FrlgCore* h) {
+	return h->core->audioSampleRate(h->core);
+}
+
+/* Interleave width. 2 on the GBA; read rather than assumed, since it decides
+ * how many int16 a frame of audio occupies. */
+unsigned frlg_audio_channels(struct FrlgCore* h) {
+	struct mAudioBuffer* buffer = h->core->getAudioBuffer(h->core);
+	return buffer ? buffer->channels : 0;
+}
+
+/* Reads up to `frames` sample-frames into `out`, which must hold
+ * `frames * frlg_audio_channels()` int16. Returns the frames actually read. */
+size_t frlg_audio_read(struct FrlgCore* h, int16_t* out, size_t frames) {
+	struct mAudioBuffer* buffer = h->core->getAudioBuffer(h->core);
+	if (!buffer) {
+		return 0;
+	}
+	return mAudioBufferRead(buffer, out, frames);
+}
+
+/* Drops whatever is buffered. Called after a reset so the first captured frame
+ * does not carry samples from before it. */
+void frlg_audio_clear(struct FrlgCore* h) {
+	struct mAudioBuffer* buffer = h->core->getAudioBuffer(h->core);
+	if (buffer) {
+		mAudioBufferClear(buffer);
+	}
 }
 
 /* --- rom header --------------------------------------------------------- */

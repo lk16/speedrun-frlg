@@ -279,6 +279,55 @@ impl Emu {
         out
     }
 
+    /// Sample-frames per second the core is producing right now.
+    ///
+    /// Not a constant: the GBA derives it from SOUNDBIAS's resolution field
+    /// (`mgba/src/gba/audio.c:231`), which is 9-bit at reset (32768 Hz) and
+    /// writable by the game. A capture that assumes one rate should read this
+    /// back and notice if it moves.
+    pub fn audio_sample_rate(&self) -> u32 {
+        unsafe { mgba_sys::frlg_audio_sample_rate(self.raw) }
+    }
+
+    /// Interleave width of [`Emu::drain_audio`]: 2 on the GBA.
+    pub fn audio_channels(&mut self) -> u32 {
+        unsafe { mgba_sys::frlg_audio_channels(self.raw) }
+    }
+
+    /// Discards buffered audio. Worth doing after a reset, so the first
+    /// captured frame carries no samples from before it.
+    pub fn clear_audio(&mut self) {
+        unsafe { mgba_sys::frlg_audio_clear(self.raw) }
+    }
+
+    /// Appends every buffered sample-frame to `out`, interleaved, and returns
+    /// how many were appended.
+    ///
+    /// The core's buffer is 0x4000 frames and it drops what does not fit, so
+    /// this has to be called every frame to capture a run losslessly -- at
+    /// 32768 Hz a video frame is only ~549 of them.
+    pub fn drain_audio(&mut self, out: &mut Vec<i16>) -> usize {
+        let channels = self.audio_channels() as usize;
+        if channels == 0 {
+            return 0;
+        }
+        let mut total = 0;
+        loop {
+            let want = 4096;
+            let base = out.len();
+            out.resize(base + want * channels, 0);
+            // SAFETY: `out` has `want * channels` i16 of spare capacity from
+            // `base`, which is what the shim is allowed to write.
+            let got =
+                unsafe { mgba_sys::frlg_audio_read(self.raw, out[base..].as_mut_ptr(), want) };
+            out.truncate(base + got * channels);
+            total += got;
+            if got < want {
+                return total;
+            }
+        }
+    }
+
     pub fn write_png(&self, path: &Path) -> Result<(), EmuError> {
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() {

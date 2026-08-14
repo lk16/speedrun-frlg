@@ -16,12 +16,14 @@ pub mod ledger;
 pub mod nav;
 pub mod observe;
 pub mod plan;
-pub mod scan;
+pub mod publish;
 pub mod record;
+pub mod scan;
 pub mod search;
 pub mod segments;
+pub mod video;
 pub mod world;
 
 pub use observe::{Observer, Snapshot};
 pub use record::{Feed, Recorder, RouteError};
-pub use segments::{Segment, Starter, Target};
+pub use segments::{Segment, Starter, Target, Version};
