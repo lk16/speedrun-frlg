@@ -8,7 +8,7 @@
     "text_hold": 2,
     "seed_delay": 38
   },
-  "total_frames": 40940,
+  "total_frames": 40865,
   "segments": [
     {
       "name": "01-boot",
@@ -231,10 +231,10 @@
       "goal": "FLAG_DEFEATED_BROCK set",
       "parent": "to-gym",
       "log": "route/defeat-brock/logs/brock.ilog",
-      "digest": "826ab760cb3676f6eae4c5a69f0eb9a4b209abbe",
-      "frames": 5203,
+      "digest": "5f8357bf07b3bd4cbdf782bea76481aeabee99d7",
+      "frames": 5128,
       "start_frame": 35737,
-      "ram_hash": "138d12cdca09e4c358aedaf8d4d0e238375d228e",
+      "ram_hash": "59d3b3c03b6c3591d560a45bc68f37899f91b065",
       "tier1": true,
       "tier2": "not replayed: queue with `frlg route export`, host runs tools/verify-runner.sh (docs/rival-1/route.md)"
     }
