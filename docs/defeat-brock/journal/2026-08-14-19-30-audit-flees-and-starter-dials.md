@@ -142,6 +142,51 @@ exactly.
   pre families — was 3580 (+275): an independent re-demonstration of
   why that 1-frame dial was adopted. Total 39136, discarded.
 
+## Follow-ups (user review): the doglegs, and a 3-crit Sammy
+
+The user pushed back on "no unnecessary steps": they had seen
+left-then-up-then-right walks. The audit grew a direction-waste pass
+(wasted = 2·min(L,R) + 2·min(U,D) per same-map trail) and a
+frame-window trail dump, and `plan-probe` runs the planner on one leg
+from the CLI. Every flagged dogleg checks out as forced:
+
+- **Pewter (28 wasted steps)**: row y20 is a solid wall x0..21 with its
+  only opening at x22-25, and the gym-door pocket (y17-19, x6-20) is
+  sealed east by the x21 fence — the only entrance is over the top at
+  y12 and down the x6-8 column. `plan-probe 3.2 20 40 15 17` = 56
+  steps, all `Free`, cost 896 = 56·16: the committed trail *is* the
+  shortest path. The up-past-the-gym, west, back-down-south, east
+  approach is the map, not the walker.
+- **06-to-lab (18 wasted)**: walking onto Oak's trigger then his
+  *scripted* escort south to the lab (`applymovement`) — the
+  interruption is the route into the lab.
+- Forest (58), Route 2 south (14), Route 1 legs (2-10 each): maze
+  walls, one-way ledges, grass-lane weaving and rate-test index
+  shaping; the gym interior's L3/R3 dodges Camper Liam's sight cone.
+
+The one genuine model bug this surfaced: `ENCOUNTER_COST` was 1400
+("~1200 for the battle", never measured) against the audited ~575, so
+the planner *would* have paid up to ~87 detour steps to dodge a
+575-frame flee. Fixed to 600 — and the definitive check: a `--from
+exit-lab` rebuild under the corrected price with the committed wait
+dials (`FRLG_WAIT_TO_FOREST=3 FRLG_WAIT_TO_GYM=1`) reproduces **all 19
+segment digests byte-for-byte** at 38862. The overpricing never bent a
+single committed path; it is now honest instead of lucky.
+
+**Can Sammy's Weedle die to 3 crit Tackles?** Arithmetically yes:
+crit Tackle at our L6 atk 11 vs def 10 is base 10, variance 8/9/10 at
+5/16, 10/16, 1/16 (`decompiled/src/battle_script_commands.c:1558`
+variance over the ×2-crit base 5); 26 HP dies to any 3-crit sum except
+{8,8,8} and {8,8,9} — P(lethal | 3 crits) ≈ 79%. Turn-1 crits are legal
+here (FIRST_BATTLE suppression is the lab fight only), so a 3-turn
+Sammy ≈ 570 net frames (one turn cycle ~650 minus one extra 84-frame
+crit text). Density: (1/16)³ · 0.79 ≈ 1.9e-4 per stream-line. Searched
+on the committed arrival stream: 192 plain delays + 24×64 (first
+probe) + 48×96 (deep probe) = **6,528 stream-lines, 0 hits** (~1.2
+expected — consistent with chance, so the door stays open; the next
+cheap widening is another pre/delay block or a to-forest-dial re-luck
+that keeps the forest walk clean).
+
 **Adoption: none. The committed 38862 stands.** The starter-stat and
 seed dials are now *measured shut*, not assumed shut: to beat 38862 via
 either, a candidate would need its own solver pass plus wait-dial
