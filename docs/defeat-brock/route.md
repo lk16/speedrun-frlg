@@ -1,19 +1,22 @@
 # Defeat Brock: the route
 
-**Status: first optimisation session done, and the run is accepted.** 43308 frames
-(~12m05s at 59.7275 Hz) from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with
-Squirtle** (`turn_hold` 1, `text_hold` 2, `seed_delay` 38), tier-1 verified from reset on
-2026-08-14 (`route/defeat-brock/ledger.json`), tier-2 **passed** 2026-08-14: BizHawk 2.11.1
-replayed all 43308 frames with the per-frame gRngValue probe matching every frame
-(`verify/results/route-43308f-a7d7d48232c4.json`). The semi-naive baseline was 49143; the 5835-frame drop (−11.9%), in order of
-landing: re-picking the wild-encounter stream at the title screen
-(`Tuning::seed_delay` 38, −3867 over six measured candidates), deleting the Pewter heal
-the new stream no longer needs (−812), and re-sweeping the hold knobs on this seed's
-streams (turn 1 / text 2, −1156 over ten measured variants; twelve other seeds across
-two waves all lost to 38, two of them by losing unhealed Brock outright). See
-`journal/2026-08-13-23-00-where-the-frames-go.md`,
-`journal/2026-08-14-00-30-seed-sweep-45276.md` and
-`journal/2026-08-14-03-00-session-close.md`.
+**Status: 40940 frames, tier-1 verified, tier-2 queued.** (~11m25s at 59.7275 Hz)
+from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 1,
+`text_hold` 2, `seed_delay` 38), tier-1 verified from reset on 2026-08-14
+(`route/defeat-brock/ledger.json`); tier-2 request `route-40940f-df8de7f27de8` is in
+the queue. The previous accepted run was 43308 (tier-2 **passed** 2026-08-14,
+`verify/results/route-43308f-a7d7d48232c4.json`, kept in git history); the 2368-frame
+drop (−5.5%) came from the tooling rebuild of 2026-08-14
+(`journal/2026-08-14-09-30-planner-tooling.md`): overworld walks are now *planned* by
+A* over the decoded maps against the precomputed wild rate-test stream
+(`crates/frlg-route/src/world.rs`, `plan.rs`) and executed with replanning
+(`brock.rs::walk_planned`), and both battle-search stages run checkpointed on a
+worker-emulator pool with turn delays 1..24 (`win_battle`). The forest alone gave
+back 1658 frames (fewer flees, no wasted tiles); Route 1 south now ledge-hops.
+Earlier history: semi-naive 49143 → 43308 via the seed sweep
+(`journal/2026-08-13-23-00-where-the-frames-go.md`,
+`journal/2026-08-14-00-30-seed-sweep-45276.md`,
+`journal/2026-08-14-03-00-session-close.md`).
 
 The target: power-on to `FLAG_DEFEATED_BROCK` (`data/maps/PewterCity_Gym/scripts.inc:14`). This is a strict superset of the rival-1 target:
 the lab rival battle is on the way. **The rival-1 route is a baseline, not a prefix to reuse
@@ -87,29 +90,30 @@ marked as decoded-from-binary lower bounds pending emulator confirmation):
   Water hit both at 4×; Bulbasaur's Vine Whip unlocks at L10 (560 exp), Squirtle's Bubble
   at L7, Charmander is resisted until L13. Exp math and stat formulas worked and cited.
 
-## The segments — measured 2026-08-14 (turn 1, text 2, seed 38)
+## The segments — measured 2026-08-14 (turn 1, text 2, seed 38, planner build)
 
 The rival-1 prefix (01..09) plus the continuation. Segment code:
 `crates/frlg-route/src/brock.rs`; names are semantic, order lives in the ledger.
 
 | Segment | Frames | Ends | What happens |
 | --- | ---: | ---: | --- |
-| `01-boot`..`09-battle-win` | 9787 | 9787 | the prefix: 38 title idles pick the streams; rival battle 2658 |
-| `exit-lab` | 863 | 10650 | post-battle script, out to Pallet |
-| `to-viridian` | 2162 | 12812 | Route 1 north, one fled encounter |
-| `parcel` | 1258 | 14070 | mart scene, Oak's Parcel |
-| `deliver` | 5031 | 19101 | Route 1 south, lab, Pokédex scene; one flee |
-| `tutorial` | 6486 | 25587 | Route 1 north again, catching demo; two flees |
-| `to-forest` | 1307 | 26894 | Viridian north, Route 2, entrance building |
-| `forest` | 9795 | 36689 | the decoded-maze waypoint chain; **Rick dodged on this stream** — Sammy is the only fight; wilds fled |
-| `to-pewter` | 568 | 37257 | Route 2 north into Pewter — no Pokémon Center (see below) |
-| `to-gym` | 962 | 38219 | the gym door |
-| `brock` | 4889 | 43308 | talk, Bubble fight at L7, unhealed, `FLAG_DEFEATED_BROCK` |
+| `01-boot`..`09-battle-win` | 9909 | 9909 | the prefix: 38 title idles pick the streams; rival battle 2580 (pool search, delay 31) |
+| `exit-lab` | 863 | 10772 | post-battle script, out to Pallet |
+| `to-viridian` | 2112 | 12884 | Route 1 north, planned crossing |
+| `parcel` | 1276 | 14160 | mart scene, Oak's Parcel |
+| `deliver` | 4485 | 18645 | Route 1 south **via the ledges**, lab, Pokédex scene |
+| `tutorial` | 6275 | 24920 | Route 1 north again, catching demo |
+| `to-forest` | 1147 | 26067 | Viridian north, Route 2, entrance building |
+| `forest` | 8137 | 34204 | one planned A* crossing; Sammy (2823, delay 28) is the only fight |
+| `to-pewter` | 554 | 34758 | Route 2 north into Pewter — no Pokémon Center |
+| `to-gym` | 979 | 35737 | the gym door |
+| `brock` | 5203 | 40940 | talk, Bubble fight at L7, unhealed (plan [59,0,7], 3458) |
 
-The run reaches Brock at L7 (rival 68 + Sammy 100 exp; Bubble learned mid-Sammy), not
-L9 as the semi-naive run did; text_hold 2 re-times every mash, which is why each
-segment's flee pattern and fight plan differ from the text_hold-4 table this replaced
-(`git log route/defeat-brock` keeps both).
+The run reaches Brock at L7 (rival 68 + Sammy 100 exp; Bubble learned mid-Sammy).
+Every walking leg is planned by `plan.rs` against the decoded map and the fated
+rate-test sequence, then executed with replanning; the emulator-Dijkstra
+(`walk_fleeing`) remains only as the fallback and never fired on this build's
+committed path. The previous 43308 table lives in git history.
 
 Route-shaping facts the builds measured (all reproduced in `journal/`):
 
@@ -129,30 +133,32 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
   the rate-test index; where a belt is index-walled, one fled battle resets the cooldown
   and opens 6-7 free steps (`research/wild-encounters.md`).
 
-## What is not optimised — the backlog, re-ranked after the sweep
+## What is not optimised — the backlog, re-ranked after the planner build
 
-1. **Eleven flees (~5.5k frames) and walk bloat.** Still the top item: a model-driven
-   path search (frlg-mon has the proven RNG model) could shape crossings against the
-   known pass/fail stream instead of discovering it edge by edge; the seed and the path
-   should be optimised *jointly* (the sweep held the walker fixed).
-2. **Wider seed neighbourhood.** 64 delays scanned, 6 built; the scan's flee model ranked
-   candidates imperfectly (27 modeled best, placed third) — building more of the scan's
-   top-10 is cheap now (~55 min/build, parallelisable).
-3. **Starter × version sweep.** Squirtle/FireRed won by default (Bubble at L7); Bulbasaur
-   needs the Liam detour but fights differently; LeafGreen un-raced.
-4. **Starter IVs/nature** are 4 rolls at the ball — a frame dial never turned.
-5. **Battle plans**: A-mash + delays only (now 192-wide with the checkpointed searcher);
-   move choice beyond the Bubble steer is first-pass.
-6. **The tutorial/deliver/parcel text** runs at one global text_hold.
+1. **The Brock fight regressed +314** (5203 vs 4889): every upstream frame moved its
+   stream. Its 192-delay search found 42 winners; a wider start-delay window, per-turn
+   move choice, and the Torrent probe (arrive ≤7/23 HP for ×1.5 Bubble,
+   `src/pokemon.c:2500` — likely marginal per the napkin math in
+   `journal/2026-08-14-09-30-planner-tooling.md`) are untried on this stream.
+2. **Joint seed × path sweep.** The planner prices a seed's whole walk in ~0.1 s/map;
+   `bin/frlg-sweep`-style parallel builds over the scan's top seeds are now ~25 min
+   each end-to-end. The 38 seed was picked for the *old* walker's step pattern.
+3. **Executor consumption attribution is one step late** (the check fires at
+   tile-center, after the position change) — costs nothing in frames but causes
+   replan churn and blocks precise gate steering; fix before the next deep pass.
+4. **Remaining flees.** The forest crossing still fled wilds where the fated stream
+   walled the corridor; a longer-horizon plan (or a different seed, see 2) could
+   trade a few tiles for zero flees.
+5. **Starter × version sweep**, **starter IVs/nature at the ball**, and **per-scene
+   text_hold** — unchanged from before, cheaper to measure now.
 
-### Tier 2 — `route-43308f-a7d7d48232c4` passed 2026-08-14
+### Tier 2 — `route-40940f-df8de7f27de8` queued 2026-08-14
 
-BizHawk 2.11.1 replayed all 43308 frames to the ledger's final ram_hash
-(`72aa2aaf…`) with the per-frame gRngValue probe matching every frame
-(`verify/results/route-43308f-a7d7d48232c4.json`, fast replay, 189s). The ilog digest in
-the result (`a7d7d48232c4…`) is the digest of the committed logs — re-exporting them
-reproduces it. The superseded 49143, 45276, 44464 and 43346 requests were replayed too and
-all passed; only 43308 is the route.
+The 40940 export (ilog digest `df8de7f2…`, bk2 `bf6dc68c…`, round-trip checked) is in
+`verify/queue/`. Until its result lands, the newest *passed* tier-2 run is the
+superseded 43308 (`route-43308f-a7d7d48232c4`, replayed 2026-08-14 with the per-frame
+gRngValue probe matching every frame); 49143, 45276, 44464 and 43346 passed earlier.
+Only 40940 is the route; the rest are history.
 
 The export follows rival-1's contract (`docs/rival-1/route.md`): `.ilog`s are canonical,
 the `.bk2` is an export, the queue is drained by a human on the host.

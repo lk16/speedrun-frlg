@@ -77,3 +77,16 @@ executor fixes landed. Segment deltas vs the accepted 43308:
 
 Total 46230 — a regression end to end, but every regression is a fixed
 executor bug, and every planned leg that ran beat its old segment.
+
+## Candidate build adopted: 40940, tier-1 verified, tier-2 queued
+
+Second full build, executor fixes in: **40940 frames** (−2368, −5.5% vs the
+accepted 43308), same knobs. All 19 segments tier-1 verified from reset;
+export `route-40940f-df8de7f27de8` queued for tier 2 (bk2 round-trip
+checked). Segment story: forest 8137 (−1658, one planned A* crossing, Sammy
+the only fight at 2823), deliver 4485 (−546, ledges), tutorial 6275,
+to-forest 1147, to-viridian 2112, rival 2580; brock 5203 (+314 — its
+stream moved; top backlog item). The diagnostics also caught the executor's
+consumption check reading one step late (tile-center vs pos-change timing)
+— accepted-and-replanned each time, costing ~0 frames but worth fixing
+before the next optimisation pass (backlog #3 in route.md).
