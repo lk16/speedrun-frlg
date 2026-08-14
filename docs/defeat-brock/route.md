@@ -1,15 +1,18 @@
 # Defeat Brock: the route
 
-**Status: seed sweep + heal deletion done.** 44464 frames (~12m24s at 59.7275 Hz) from
-power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 2,
-`text_hold` 4, `seed_delay` 38), tier-1 verified from reset on 2026-08-14
-(`route/defeat-brock/ledger.json`), tier-2 queued (`route-44464f-8d3644886b9c`) and not
-yet replayed. The semi-naive baseline was 49143. The 4679-frame drop, in order of landing:
-re-picking the wild-encounter stream at the title screen (`Tuning::seed_delay`, −3867 —
-six candidates scored by simulating each seed's rate-test stream, then built end-to-end
-and measured), and deleting the Pewter heal the new stream no longer needs (−812). See
-`journal/2026-08-13-23-00-where-the-frames-go.md` and
-`journal/2026-08-14-00-30-seed-sweep-45276.md`.
+**Status: first optimisation session done.** 43308 frames (~12m05s at 59.7275 Hz) from
+power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 1,
+`text_hold` 2, `seed_delay` 38), tier-1 verified from reset on 2026-08-14
+(`route/defeat-brock/ledger.json`), tier-2 queued (`route-43308f-a7d7d48232c4`) and not yet
+replayed. The semi-naive baseline was 49143; the 5835-frame drop (−11.9%), in order of
+landing: re-picking the wild-encounter stream at the title screen
+(`Tuning::seed_delay` 38, −3867 over six measured candidates), deleting the Pewter heal
+the new stream no longer needs (−812), and re-sweeping the hold knobs on this seed's
+streams (turn 1 / text 2, −1156 over ten measured variants; twelve other seeds across
+two waves all lost to 38, two of them by losing unhealed Brock outright). See
+`journal/2026-08-13-23-00-where-the-frames-go.md`,
+`journal/2026-08-14-00-30-seed-sweep-45276.md` and
+`journal/2026-08-14-03-00-session-close.md`.
 
 The target: power-on to `FLAG_DEFEATED_BROCK` (`data/maps/PewterCity_Gym/scripts.inc:14`). This is a strict superset of the rival-1 target:
 the lab rival battle is on the way. **The rival-1 route is a baseline, not a prefix to reuse
@@ -83,28 +86,29 @@ marked as decoded-from-binary lower bounds pending emulator confirmation):
   Water hit both at 4×; Bulbasaur's Vine Whip unlocks at L10 (560 exp), Squirtle's Bubble
   at L7, Charmander is resisted until L13. Exp math and stat formulas worked and cited.
 
-## The segments — measured 2026-08-13 (seed_delay 38)
+## The segments — measured 2026-08-14 (turn 1, text 2, seed 38)
 
 The rival-1 prefix (01..09) plus the continuation. Segment code:
 `crates/frlg-route/src/brock.rs`; names are semantic, order lives in the ledger.
 
 | Segment | Frames | Ends | What happens |
 | --- | ---: | ---: | --- |
-| `01-boot`..`09-battle-win` | 9986 | 9986 | the prefix: 38 title idles pick the streams; rival battle 2770 (plan `[4,14]`, 103/128 delays win) |
-| `exit-lab` | 880 | 10866 | post-battle script, out to Pallet |
-| `to-viridian` | 2165 | 13031 | Route 1 north, one fled encounter |
-| `parcel` | 1260 | 14291 | mart scene, Oak's Parcel |
-| `deliver` | 5060 | 19351 | Route 1 south, lab, Pokédex scene; one flee |
-| `tutorial` | 6329 | 25680 | Route 1 north again, catching demo; two flees |
-| `to-forest` | 1307 | 26987 | Viridian north, Route 2, entrance building |
-| `forest` | 10583 | 37570 | the decoded-maze waypoint chain; **Rick dodged on this stream** — Sammy is the only fight (2839, plan `[27,0,0,3]`); seven wilds fled |
-| `to-pewter` | 573 | 38143 | Route 2 north into Pewter — no Pokémon Center (see below) |
-| `to-gym` | 962 | 39105 | the gym door |
-| `brock` | 5359 | 44464 | talk, 3-turn Bubble fight at L7, unhealed at 20/23 (plan `[169,0,7]`, 55/192 start delays win), `FLAG_DEFEATED_BROCK` |
+| `01-boot`..`09-battle-win` | 9787 | 9787 | the prefix: 38 title idles pick the streams; rival battle 2658 |
+| `exit-lab` | 863 | 10650 | post-battle script, out to Pallet |
+| `to-viridian` | 2162 | 12812 | Route 1 north, one fled encounter |
+| `parcel` | 1258 | 14070 | mart scene, Oak's Parcel |
+| `deliver` | 5031 | 19101 | Route 1 south, lab, Pokédex scene; one flee |
+| `tutorial` | 6486 | 25587 | Route 1 north again, catching demo; two flees |
+| `to-forest` | 1307 | 26894 | Viridian north, Route 2, entrance building |
+| `forest` | 9795 | 36689 | the decoded-maze waypoint chain; **Rick dodged on this stream** — Sammy is the only fight; wilds fled |
+| `to-pewter` | 568 | 37257 | Route 2 north into Pewter — no Pokémon Center (see below) |
+| `to-gym` | 962 | 38219 | the gym door |
+| `brock` | 4889 | 43308 | talk, Bubble fight at L7, unhealed, `FLAG_DEFEATED_BROCK` |
 
-Eleven wild flees at ~500 frames each remain (one more than the old seed, but Rick's
-4327-frame fight is gone and every crossing walks tighter); the run reaches Brock at L7
-(rival 68 + Sammy 100 exp; Bubble learned mid-Sammy), not L9 as before.
+The run reaches Brock at L7 (rival 68 + Sammy 100 exp; Bubble learned mid-Sammy), not
+L9 as the semi-naive run did; text_hold 2 re-times every mash, which is why each
+segment's flee pattern and fight plan differ from the text_hold-4 table this replaced
+(`git log route/defeat-brock` keeps both).
 
 Route-shaping facts the builds measured (all reproduced in `journal/`):
 
@@ -140,8 +144,8 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    move choice beyond the Bubble steer is first-pass.
 6. **The tutorial/deliver/parcel text** runs at one global text_hold.
 
-### Tier 2 — `route-44464f-8d3644886b9c` queued 2026-08-14, not yet replayed
-(the 49143 and 45276 requests are superseded and can be skipped)
+### Tier 2 — `route-43308f-a7d7d48232c4` queued 2026-08-14, not yet replayed
+(the 49143, 45276 and 44464 requests are superseded and can be skipped)
 
 The export follows rival-1's contract (`docs/rival-1/route.md`): `.ilog`s are canonical,
 the `.bk2` is an export, the queue is drained by a human on the host.
