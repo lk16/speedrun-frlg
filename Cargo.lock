@@ -369,6 +369,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "frlg-mon"
+version = "0.1.0"
+dependencies = [
+ "frlg-emu",
+ "frlg-rng",
+ "frlg-route",
+]
+
+[[package]]
 name = "frlg-rng"
 version = "0.1.0"
 dependencies = [
@@ -382,6 +391,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "frlg-emu",
+ "frlg-mon",
+ "frlg-rng",
  "hex",
  "serde",
  "serde_json",

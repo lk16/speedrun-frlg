@@ -7,6 +7,7 @@ members = [
     "crates/frlg-cli",
     "crates/frlg-rng",
     "crates/frlg-battle",
+    "crates/frlg-mon",
 ]
 
 [workspace.package]

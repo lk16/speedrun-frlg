@@ -102,6 +102,8 @@ mod sb1_off {
     /// `/*0x3A4C*/ u8 rivalName[PLAYER_NAME_LENGTH + 1]`
     /// (`decompiled/include/global.h:813`).
     pub const RIVAL_NAME: u32 = 0x3A4C;
+    /// `/*0x0EE0*/ u8 flags[NUM_FLAG_BYTES]` (`decompiled/include/global.h:790`).
+    pub const FLAGS: u32 = 0x0EE0;
 }
 
 /// `VARS_START`, the id every `VAR_*` constant is an offset from.
@@ -116,6 +118,25 @@ pub const VAR_OAKS_LAB_SCENE: u16 = 0x4055;
 /// `VAR_STARTER_MON` (`decompiled/include/constants/vars.h:98`):
 /// 0 Bulbasaur, 1 Squirtle, 2 Charmander.
 pub const VAR_STARTER_MON: u16 = 0x4031;
+
+/// `VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN` (`decompiled/include/constants/vars.h`):
+/// 0 lying across the road, 1 standing (tutorial pending), 2+ done, road open
+/// (`data/maps/ViridianCity/scripts.inc:5-27`).
+pub const VAR_VIRIDIAN_OLD_MAN: u16 = 0x4051;
+
+/// `VAR_MAP_SCENE_VIRIDIAN_CITY_MART` (`decompiled/include/constants/vars.h`):
+/// 1 once the clerk has handed over Oak's Parcel
+/// (`data/maps/ViridianCity_Mart/scripts.inc:19-33`).
+pub const VAR_VIRIDIAN_MART: u16 = 0x4057;
+
+/// `FLAG_DEFEATED_BROCK 0x4B0` (`decompiled/include/constants/flags.h:1236`),
+/// set by `PewterCity_Gym_EventScript_DefeatedBrock`
+/// (`data/maps/PewterCity_Gym/scripts.inc:14`).
+pub const FLAG_DEFEATED_BROCK: u16 = 0x4B0;
+
+/// `FLAG_BADGE01_GET` = `SYS_FLAGS + 0x20` = 0x820
+/// (`decompiled/include/constants/flags.h:1324,1364`).
+pub const FLAG_BADGE01_GET: u16 = 0x820;
 
 /// `struct BattlePokemon`, `decompiled/include/pokemon.h:170`. Unlike a party
 /// `struct Pokemon`, its substructs are not encrypted, so species and HP can be
@@ -149,6 +170,11 @@ mod avatar_off {
 pub const B_OUTCOME_WON: u8 = 1;
 /// `B_OUTCOME_LOST`, `decompiled/include/constants/battle.h:77`.
 pub const B_OUTCOME_LOST: u8 = 2;
+/// `B_OUTCOME_RAN`, `decompiled/include/constants/battle.h:79`.
+pub const B_OUTCOME_RAN: u8 = 4;
+
+/// `BATTLE_TYPE_TRAINER` (`decompiled/include/constants/battle.h:45`).
+pub const BATTLE_TYPE_TRAINER: u32 = 0x8;
 
 /// The addresses the probes need, resolved once so a missing symbol is one
 /// clear error at startup rather than a zero read in the middle of a route.
@@ -169,6 +195,12 @@ pub struct Observer {
     s_option_menu_ptr: u32,
     s_start_menu_callback: u32,
     s_start_menu_cursor_pos: u32,
+    g_battler_controller_funcs: u32,
+    g_move_selection_cursor: u32,
+    g_action_selection_cursor: u32,
+    s_wild_encounter_data: u32,
+    s_lock_field_controls: u32,
+    g_player_party: u32,
 }
 
 impl Observer {
@@ -193,6 +225,12 @@ impl Observer {
             s_option_menu_ptr: addr("sOptionMenuPtr")?,
             s_start_menu_callback: addr("sStartMenuCallback")?,
             s_start_menu_cursor_pos: addr("sStartMenuCursorPos")?,
+            g_battler_controller_funcs: addr("gBattlerControllerFuncs")?,
+            g_move_selection_cursor: addr("gMoveSelectionCursor")?,
+            g_action_selection_cursor: addr("gActionSelectionCursor")?,
+            s_wild_encounter_data: addr("sWildEncounterData")?,
+            s_lock_field_controls: addr("sLockFieldControls")?,
+            g_player_party: addr("gPlayerParty")?,
             syms,
         })
     }
@@ -459,6 +497,90 @@ impl Observer {
         emu.read8(self.g_player_avatar + avatar_off::PREVENT_STEP) != 0
     }
 
+    /// `FlagGet(id)` for ordinary save-block flags:
+    /// `gSaveBlock1Ptr->flags[id / 8] & (1 << (id & 7))`
+    /// (`decompiled/src/event_data.c:257-309`, flags array at
+    /// `include/global.h:790`).
+    pub fn flag(&self, emu: &mut Emu, id: u16) -> Option<bool> {
+        let sb1 = self.save_block1(emu)?;
+        let byte = emu.read8(sb1 + sb1_off::FLAGS + (id as u32) / 8);
+        Some(byte & (1 << (id & 7)) != 0)
+    }
+
+    /// True when `gBattlerControllerFuncs[battler]` points inside the named
+    /// function -- "is this battler's controller waiting in state X", e.g.
+    /// `HandleInputChooseMove` for the move menu
+    /// (`decompiled/src/battle_controller_player.c`).
+    pub fn battle_controller_is(&self, emu: &mut Emu, battler: u32, name: &str) -> bool {
+        let func = emu.read32(self.g_battler_controller_funcs + battler * 4);
+        matches!(self.syms.covering(func), Some((sym, _)) if sym == name)
+    }
+
+    /// `gMoveSelectionCursor[battler]` -- which move slot the move menu's
+    /// cursor is on. Persists across turns within one battle.
+    pub fn move_cursor(&self, emu: &mut Emu, battler: u32) -> u8 {
+        emu.read8(self.g_move_selection_cursor + battler)
+    }
+
+    /// `gActionSelectionCursor[battler]` -- FIGHT/BAG/POKEMON/RUN, 0-3.
+    pub fn action_cursor(&self, emu: &mut Emu, battler: u32) -> u8 {
+        emu.read8(self.g_action_selection_cursor + battler)
+    }
+
+    /// The lead party mon's `(hp, maxHP)` -- the computed stats at the tail
+    /// of `struct Pokemon` are not encrypted (`include/pokemon.h:126-138`:
+    /// box 80 bytes, status u32, level, mail, then `u16 hp` at 0x56 and
+    /// `u16 maxHP` at 0x58).
+    pub fn party_lead_hp(&self, emu: &mut Emu) -> (u16, u16) {
+        (
+            emu.read16(self.g_player_party + 0x56),
+            emu.read16(self.g_player_party + 0x58),
+        )
+    }
+
+    /// `sLockFieldControls` (`decompiled/src/script.c:34,199-209`): true
+    /// while a script owns field input (`lockall`..`releaseall`). The
+    /// avatar can read as free mid-scene between forced moves, so
+    /// [`Observer::player_can_step`] alone does *not* prove a scene is over
+    /// -- measured on the parcel scene, whose reward text waits for a press
+    /// while the player stands "free" at the counter.
+    pub fn field_controls_locked(&self, emu: &mut Emu) -> bool {
+        emu.read8(self.s_lock_field_controls) != 0
+    }
+
+    /// `sWildEncounterData`'s decision-relevant fields, folded into one value:
+    /// rngState (u32), encounterRateBuff and prevMetatileBehavior (u16 each),
+    /// stepsSinceLastEncounter (u8) (`decompiled/src/wild_encounter.c:24-34`).
+    /// Two field states with the same key make identical encounter decisions
+    /// on identical tiles, which is what lets a path search treat "same tile,
+    /// different rate-test index" as different nodes.
+    pub fn wild_key(&self, emu: &mut Emu) -> u64 {
+        let base = self.s_wild_encounter_data;
+        let rng_state = emu.read32(base) as u64;
+        // Behavior is a 9-bit attribute (`src/fieldmap.c:63-83`); steps
+        // saturates at the largest minSteps, 8 (`wild_encounter.c:749`), so
+        // 4 bits; the buff gets the remaining 19 (it grows by the map rate
+        // per failed test and resets on success/map load, so 2^19 is far
+        // beyond anything a route sees).
+        let prev_behavior = (emu.read16(base + 4) as u64) & 0x1FF;
+        let buff = (emu.read16(base + 6) as u64) & 0x7FFFF;
+        let steps = (emu.read8(base + 8) as u64).min(15);
+        rng_state | (prev_behavior << 32) | (steps << 41) | (buff << 45)
+    }
+
+    /// `sWildEncounterData`'s raw fields (`decompiled/src/wild_encounter.c:24-34`),
+    /// for the model-driven path planner: the same data [`Observer::wild_key`]
+    /// folds, unfolded.
+    pub fn wild_data(&self, emu: &mut Emu) -> WildData {
+        let base = self.s_wild_encounter_data;
+        WildData {
+            rng_state: emu.read32(base),
+            prev_behavior: emu.read16(base + 4),
+            rate_buff: emu.read16(base + 6),
+            steps_since: emu.read8(base + 8),
+        }
+    }
+
     /// Everything at once, for logging a route's progress.
     pub fn snapshot(&self, emu: &mut Emu) -> Snapshot {
         Snapshot {
@@ -472,6 +594,16 @@ impl Observer {
             rng: self.rng(emu),
         }
     }
+}
+
+/// `struct WildEncounterData`'s decision-relevant fields
+/// (`decompiled/src/wild_encounter.c:24-34`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WildData {
+    pub rng_state: u32,
+    pub prev_behavior: u16,
+    pub rate_buff: u16,
+    pub steps_since: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

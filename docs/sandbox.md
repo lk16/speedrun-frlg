@@ -112,8 +112,10 @@ startup so you do not have to remember to look. A human on the host runs
 `tools/verify-runner.sh`, so it is not instant and may not happen during your session. Never
 block on it — queue it and keep working.
 
-Tier 2 has not yet completed a single run: BizHawk refuses a deterministic movie without a real
-GBA BIOS, which the host does not have. `docs/rival-1/route.md` says what is left.
+Tier 2 works: the host has a real GBA BIOS, and both routes' current runs have been replayed to
+a pass (rival-1's 9658 frames on 2026-08-12, defeat-brock's 38950 on 2026-08-14, plus every
+superseded defeat-brock revision that was queued). The per-target ledgers record which result backs which
+segment; `docs/rival-1/route.md` has the contract.
 
 ## The output format
 

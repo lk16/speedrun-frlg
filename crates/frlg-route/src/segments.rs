@@ -15,7 +15,7 @@ use frlg_emu::{keys, Emu};
 
 use crate::nav::{self, Goal};
 use crate::observe::{self, Observer, B_OUTCOME_WON, VAR_OAKS_LAB_SCENE, VAR_STARTER_MON};
-use crate::record::{Feed, Recorder, RouteError, Trial};
+use crate::record::{Feed, Recorder, RouteError};
 
 /// `data/maps/map_groups.json`, `group_order` index and position in the group.
 pub const PLAYERS_HOUSE_2F: (u8, u8) = (4, 1);
@@ -141,6 +141,18 @@ pub struct Tuning {
     /// menu-advancing press up to `text_hold` frames later.
     #[serde(default = "text_hold_compat")]
     pub text_hold: usize,
+    /// Frames idled at power-on before the boot mash starts. Shifting the
+    /// mash shifts the title-exit press, and that press seeds *both* RNG
+    /// streams at once: `SeedRngAndSetTrainerId`
+    /// (`decompiled/src/title_screen.c:735`) reseeds `gRngValue` from the
+    /// frame timer, and `ResetMenuAndMonGlobals` -> `SeedWildEncounterRng`
+    /// (`decompiled/src/new_game.c:103`) derives the wild-encounter LCG from
+    /// it on the same frame (`docs/defeat-brock/research/wild-encounters.md`).
+    /// One frame here buys a completely fresh wild pass/fail sequence and a
+    /// fresh battle stream family, at a cost of one frame -- the cheapest
+    /// dial the route has.
+    #[serde(default)]
+    pub seed_delay: usize,
 }
 
 /// What `text_hold` was before it existed: ledgers written without the field
@@ -158,22 +170,26 @@ impl Default for Tuning {
         Self {
             turn_hold: 2,
             text_hold: 1,
+            seed_delay: 0,
         }
     }
 }
 
 impl Tuning {
-    /// The variants a tuning sweep tries: the product of both knobs.
-    /// `text_hold`'s candidates are the top of the intro-only measurement
-    /// (`text_hold_on_the_intro_alone`, 2026-08-12: 1 -> 3699, 2 -> 3361,
-    /// 4 -> 3229 frames, with 3, 7 and above all worse) plus 1 as the
-    /// baseline; the landscape is phase-alignment, not a curve, so the sweep
-    /// re-tries the measured leaders rather than a spread.
-    pub fn variants() -> impl Iterator<Item = Tuning> {
-        (1..=8).flat_map(|turn_hold| {
+    /// The variants a tuning sweep tries: the product of the two hold knobs,
+    /// each carrying `base`'s `seed_delay` -- the seed is a route decision
+    /// the sweep must not silently reset. `text_hold`'s candidates are the
+    /// top of the intro-only measurement (`text_hold_on_the_intro_alone`,
+    /// 2026-08-12: 1 -> 3699, 2 -> 3361, 4 -> 3229 frames, with 3, 7 and
+    /// above all worse) plus 1 as the baseline; the landscape is
+    /// phase-alignment, not a curve, so the sweep re-tries the measured
+    /// leaders rather than a spread.
+    pub fn variants(base: Tuning) -> impl Iterator<Item = Tuning> {
+        (1..=8).flat_map(move |turn_hold| {
             [1usize, 2, 4].into_iter().map(move |text_hold| Tuning {
                 turn_hold,
                 text_hold,
+                ..base
             })
         })
     }
@@ -199,7 +215,7 @@ pub struct Segment {
 /// The whole route, in order.
 pub fn all(version: Version, starter: Starter, tuning: Tuning) -> Vec<Segment> {
     vec![
-        boot(),
+        boot(tuning),
         intro_oak(tuning),
         names(version, tuning),
         options(),
@@ -209,6 +225,41 @@ pub fn all(version: Version, starter: Starter, tuning: Tuning) -> Vec<Segment> {
         battle_start(),
         battle_win(tuning),
     ]
+}
+
+/// Which TAS this build is for. A target is a segment list and a home
+/// directory under `route/<name>/`; rival-1 is a strict prefix of
+/// defeat-brock, so the enum picks how far the build runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Target {
+    Rival1,
+    DefeatBrock,
+}
+
+impl Target {
+    pub fn parse(name: &str) -> Option<Target> {
+        match name {
+            "rival-1" => Some(Target::Rival1),
+            "defeat-brock" => Some(Target::DefeatBrock),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Target::Rival1 => "rival-1",
+            Target::DefeatBrock => "defeat-brock",
+        }
+    }
+
+    /// The target's segments, in order.
+    pub fn segments(self, version: Version, starter: Starter, tuning: Tuning) -> Vec<Segment> {
+        let mut segments = all(version, starter, tuning);
+        if self == Target::DefeatBrock {
+            segments.extend(crate::brock::segments(starter, tuning));
+        }
+        segments
+    }
 }
 
 /// The task that owns both preset-name menus
@@ -221,11 +272,22 @@ const NAME_MENU_TASK: &str = "Task_OakSpeech_HandleRivalNameInput";
 /// A is the whole segment: it dismisses the copyright screen, skips the intro
 /// movie, starts the title screen and picks the first main-menu entry, which
 /// with no save file is NEW GAME (`CB2_MainMenu`, `src/main_menu.c`).
-fn boot() -> Segment {
+///
+/// `seed_delay` idle frames are inserted *on the title screen* -- measured
+/// (2026-08-13): idles at power-on shift nothing but parity, because every
+/// mashed press before the title lands inside a slack window and the
+/// title-exit press stays put. Idling once `CB2_TitleScreenRun` is up moves
+/// the exit press frame for frame, and each frame reads back a distinct
+/// wild-encounter seed (`Tuning::seed_delay`).
+fn boot(tuning: Tuning) -> Segment {
     Segment {
         name: "01-boot",
         goal: "NEW GAME selected (CB2_NewGameScene running)".into(),
-        run: Box::new(|rec, obs| {
+        run: Box::new(move |rec, obs| {
+            rec.mash_until("the title screen", keys::A, 1200, |emu| {
+                obs.callback2_is(emu, "CB2_TitleScreenRun")
+            })?;
+            rec.idle(tuning.seed_delay)?;
             rec.mash_until("NEW GAME", keys::A, 2000, |emu| {
                 obs.callback2_is(emu, "CB2_NewGameScene")
             })?;
@@ -589,147 +651,19 @@ fn battle_start() -> Segment {
 ///    landscape cycles). What still never moves: the start delay after stage
 ///    1, and what is pressed -- move choice is untouched.
 fn battle_win(tuning: Tuning) -> Segment {
-    const START_DELAYS: std::ops::Range<usize> = 0..64;
-    const TURN_DELAYS: std::ops::Range<usize> = 1..16;
-    /// More than any winning battle here has ever used; a plan that runs
-    /// past it loses rather than aborting the build.
-    const FRAME_BUDGET: usize = 20000;
+    // 0..64 until 2026-08-12, when a defeat-brock prefix (one frame shifted
+    // by nav changes) hit a stream family where all 64 lost; the wider
+    // range costs search time only. The search itself is brock::win_battle
+    // -- the checkpointed, worker-pool two-stage delay search -- which
+    // replaced the original replay-from-start greedy walk here on
+    // 2026-08-14; scoring (shortest winning battle) is unchanged.
+    const START_DELAYS: usize = 256;
 
     Segment {
         name: "09-battle-win",
         goal: "gBattleOutcome == B_OUTCOME_WON".into(),
         run: Box::new(move |rec, obs| {
-            let start = rec.save_state()?;
-
-            // The battle's own boxes take the held-A speed-up too
-            // (`decompiled/src/battle_message.c:2778-2785` sets
-            // `canABSpeedUpPrint` for B_WIN_MSG and the tutorial window), so
-            // the drive mashes at the route's text_hold duty cycle.
-            let mut mash: Vec<u16> = vec![keys::A; tuning.text_hold.max(1)];
-            mash.push(0);
-
-            // One battle under a delay plan: plan[0] idle frames before any
-            // input, plan[k] idle frames on arriving at the k-th turn's
-            // action selection. Timeouts are losses, not errors. Returns the
-            // masks fed, whether it won, and how many turns it saw.
-            let run_plan = |rec: &mut Recorder,
-                            plan: &[usize]|
-             -> Result<(Vec<u16>, bool, usize), RouteError> {
-                rec.emu().load_state(&start)?;
-                let mut trial = Trial::new(rec.emu());
-                let mut turns = 0usize;
-                trial.idle(plan.first().copied().unwrap_or(0))?;
-                let won = loop {
-                    // To this turn's selection state, or the end.
-                    let to_menu = trial.advance_while(
-                        "the battle menu or the end",
-                        &mash,
-                        FRAME_BUDGET,
-                        |emu| obs.battle_outcome(emu) != 0 || obs.battle_choosing_actions(emu),
-                    );
-                    match to_menu {
-                        Err(RouteError::Timeout { .. }) => break false,
-                        other => other?,
-                    };
-                    if obs.battle_outcome(trial.core()) != 0 {
-                        break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
-                    }
-                    turns += 1;
-                    trial.idle(*plan.get(turns).unwrap_or(&0))?;
-                    // Commit this turn's actions: mash until the state exits.
-                    let to_turn =
-                        trial.advance_while("the turn to resolve", &mash, FRAME_BUDGET, |emu| {
-                            obs.battle_outcome(emu) != 0 || !obs.battle_choosing_actions(emu)
-                        });
-                    match to_turn {
-                        Err(RouteError::Timeout { .. }) => break false,
-                        other => other?,
-                    };
-                    if obs.battle_outcome(trial.core()) != 0 {
-                        break obs.battle_outcome(trial.core()) == B_OUTCOME_WON;
-                    }
-                };
-                Ok((trial.into_inputs(), won, turns))
-            };
-
-            // Stage 1: start delay.
-            let mut best: Option<(Vec<u16>, Vec<usize>, usize)> = None;
-            let mut wins = 0usize;
-            for delay in START_DELAYS {
-                let (inputs, won, turns) = run_plan(rec, &[delay])?;
-                wins += won as usize;
-                if won
-                    && best
-                        .as_ref()
-                        .is_none_or(|(seen, _, _)| inputs.len() < seen.len())
-                {
-                    best = Some((inputs, vec![delay], turns));
-                }
-            }
-            let (mut best_inputs, mut plan, turns) = best.ok_or_else(|| RouteError::Timeout {
-                what: "any start delay to win the battle".to_string(),
-                budget: START_DELAYS.end,
-                frames: rec.frames(),
-            })?;
-            eprintln!(
-                "      battle stage 1: {wins}/{} start delays win, delay {} at {} frames",
-                START_DELAYS.end,
-                plan[0],
-                best_inputs.len()
-            );
-
-            // Stage 2: per-turn delays, greedy on the winning stream,
-            // repeated until a pass adopts nothing. An adoption changes the
-            // stream for every later turn *and* invalidates what the pass
-            // already settled for earlier ones, so a single pass is only the
-            // first approximation. The adopted plan's turn count can move as
-            // the battle shortens; each pass iterates the current best
-            // battle's count, and stale indices past the end simply change
-            // nothing and cannot win. MAX_PASSES bounds a pathological
-            // adopt-one-frame-forever landscape, far above anything observed.
-            const MAX_PASSES: usize = 8;
-            let mut best_turns = turns;
-            for pass in 1..=MAX_PASSES {
-                let mut adopted = false;
-                // The pass walks the turn count the battle had when the pass
-                // started; an adoption mid-pass updates `best_turns` for the
-                // *next* pass.
-                let pass_turns = best_turns;
-                for turn in 1..=pass_turns {
-                    for delay in TURN_DELAYS {
-                        let mut candidate = plan.clone();
-                        if candidate.len() < turn + 1 {
-                            candidate.resize(turn + 1, 0);
-                        }
-                        if candidate[turn] == delay {
-                            continue; // the current best, already measured
-                        }
-                        candidate[turn] = delay;
-                        let (inputs, won, turns_seen) = run_plan(rec, &candidate)?;
-                        if won && inputs.len() < best_inputs.len() {
-                            eprintln!(
-                                "      battle stage 2 (pass {pass}): turn {turn} delay {delay} -> {} frames",
-                                inputs.len()
-                            );
-                            best_inputs = inputs;
-                            plan = candidate;
-                            best_turns = turns_seen;
-                            adopted = true;
-                        }
-                    }
-                }
-                if !adopted {
-                    break;
-                }
-            }
-
-            eprintln!(
-                "      battle: plan {plan:?}, {} frames, {best_turns} turns",
-                best_inputs.len()
-            );
-            rec.emu().load_state(&start)?;
-            rec.play(&best_inputs)?;
-            Ok(())
+            crate::brock::win_battle(rec, obs, tuning, None, "battle", START_DELAYS)
         }),
         reached: Box::new(|obs, emu| obs.battle_outcome(emu) == B_OUTCOME_WON),
     }

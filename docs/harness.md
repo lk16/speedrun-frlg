@@ -61,8 +61,12 @@ filter differently.
     frlg log show seg.ilog
     frlg log cat a.ilog b.ilog -o whole.ilog    # join segments into one run
     frlg route build                            # run the route (docs/rival-1/route.md)
+    frlg route build --target defeat-brock      # a longer target: same builder, more segments,
+                                                #   paths default to route/<target>/
     frlg route verify                           # replay the committed logs and check the ledger
     frlg route tune                             # sweep the route knobs, score on total frames
+    frlg route status --target defeat-brock     # print one ledger, without running anything
+    frlg route list                             # every TAS in the repo, one ledger line each
 
 The ROM defaults to `$FRLG_ROM`, then `$FRLG_ARTIFACTS/rom/pokefirered.gba`; symbols to `$FRLG_SYM`,
 then `$FRLG_ARTIFACTS/rom/pokefirered.sym`. `--watch` and `--trace` take `name`, `name+0x10`,
