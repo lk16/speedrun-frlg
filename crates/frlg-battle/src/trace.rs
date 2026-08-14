@@ -33,7 +33,7 @@
 use frlg_rng::constraint::{Constraint, Pred};
 use frlg_rng::Rng;
 
-use crate::pacing;
+use crate::pacing::{self, Pacing};
 use crate::{apply_variance, base_damage, Mon, Move};
 
 /// What one extracted leaf pins down.
@@ -105,13 +105,39 @@ fn pin<K: PartialEq>(
 /// the commit duration taken at turn k+1's gate -- and extract its
 /// constraints. Errors mirror the engine's undecidable cases
 /// ([`crate::engine::SimResult::Unmodelled`] and losses), plus a gate
-/// sequence shorter than the battle it describes.
+/// sequence shorter than the battle it describes. The rival-1 fight;
+/// [`extract_leaf_with`] takes the fight's parameters.
 pub fn extract_leaf(
+    plan: &[u32],
+    gates: &[u32],
+    anchor: Rng,
+    us: Mon,
+    rival: Mon,
+) -> Result<Trace, &'static str> {
+    extract_leaf_with(
+        plan,
+        gates,
+        anchor,
+        us,
+        rival,
+        Move::Scratch,
+        &pacing::RIVAL1,
+    )
+}
+
+/// [`extract_leaf`] parameterized by the rival's damaging move and the
+/// fight's [`Pacing`] -- mirroring [`crate::engine::simulate_with`]. New
+/// decisive roll relative to rival-1: when the rival's hit move has
+/// accuracy below 100 (Bulbasaur's Tackle at 95), its accuracy roll
+/// decides hit vs miss and gets pinned mod 100.
+pub fn extract_leaf_with(
     plan: &[u32],
     gates: &[u32],
     anchor: Rng,
     mut us: Mon,
     mut rival: Mon,
+    rival_hit: Move,
+    pacing: &Pacing,
 ) -> Result<Trace, &'static str> {
     assert!(
         us.speed > rival.speed,
@@ -127,7 +153,7 @@ pub fn extract_leaf(
     let mut crit_enabled = false;
 
     let start_delay = plan.first().copied().unwrap_or(0);
-    let mut det = pacing::INTRO_PRETURN[start_delay as usize % 5];
+    let mut det = pacing.intro_preturn[start_delay as usize % 5];
     let _pre_turn = stream.roll_at(det);
 
     let mut turn = 0u32;
@@ -141,7 +167,7 @@ pub fn extract_leaf(
         // The AI block, all on one frame (engine::walk):
         // rival_choose_move's exact consumption (crate root, citations
         // there), with a pin at each branch a roll decides.
-        let ai_frame = det + pacing::DET_TO_AI;
+        let ai_frame = det + pacing.det_to_ai;
         let rival_move = {
             let mut simulated = [0u16; 4];
             for (slot, sim) in simulated.iter_mut().enumerate() {
@@ -150,7 +176,7 @@ pub fn extract_leaf(
                 if slot == 0 {
                     // The only simulatedRNG slot whose value reaches a
                     // branch: AI_TryToFaint scales Scratch's damage by it.
-                    let (hp, base) = (us.hp, base_damage(&rival, &us, Move::Scratch, false));
+                    let (hp, base) = (us.hp, base_damage(&rival, &us, rival_hit, false));
                     pin(&mut constraints, offset, 16, roll, |r| {
                         hp as i32 <= (base * (100 - r as i32) / 100).max(1)
                     });
@@ -180,7 +206,7 @@ pub fn extract_leaf(
                 growl_score -= 2;
             }
             let sim_damage =
-                (base_damage(&rival, &us, Move::Scratch, false) * simulated[0] as i32 / 100).max(1);
+                (base_damage(&rival, &us, rival_hit, false) * simulated[0] as i32 / 100).max(1);
             if us.hp as i32 <= sim_damage {
                 scratch_score += 4;
             }
@@ -188,12 +214,12 @@ pub fn extract_leaf(
             if scratch_score == growl_score {
                 pin(&mut constraints, offset_tie, 2, tie, |r| r == 0);
                 if tie.is_multiple_of(2) {
-                    Move::Scratch
+                    rival_hit
                 } else {
                     Move::Growl
                 }
             } else if scratch_score > growl_score {
-                Move::Scratch
+                rival_hit
             } else {
                 Move::Growl
             }
@@ -208,13 +234,13 @@ pub fn extract_leaf(
         let loop_a = lb + gate + 1;
 
         // Player Tackle: crit, damage, drain, trailing secondary.
-        let pcrit_f = loop_a + pacing::LOOP_A_TO_PCRIT;
+        let pcrit_f = loop_a + pacing.loop_a_to_pcrit;
         let (offset, roll) = stream.roll_at(pcrit_f);
         let crit = roll.is_multiple_of(16) && crit_enabled;
         if crit_enabled {
             pin(&mut constraints, offset, 16, roll, |r| r == 0);
         }
-        let pdmg_f = pcrit_f + pacing::PCRIT_TO_PDMG;
+        let pdmg_f = pcrit_f + pacing.pcrit_to_pdmg;
         let base = base_damage(&us, &rival, Move::Tackle, crit);
         let (offset, roll) = stream.roll_at(pdmg_f);
         pin(&mut constraints, offset, 16, roll, |r| {
@@ -223,9 +249,9 @@ pub fn extract_leaf(
         let damage = apply_variance(base, roll);
         let delta = rival.hp.min(damage as u16);
         let drain = if crit_enabled {
-            pacing::RHP_DRAIN.get(delta as usize).copied()
+            pacing.rhp_drain(delta)
         } else {
-            pacing::rhp_drain_first(delta)
+            pacing.rhp_drain_first(delta)
         };
         let Some(drain) = drain else {
             return Err("rival HP-bar delta");
@@ -235,14 +261,14 @@ pub fn extract_leaf(
         crit_enabled = true;
         let psec_f = rhp_f
             + if crit {
-                pacing::HP_TO_SEC_CRIT
+                pacing.hp_to_sec_crit
             } else {
-                pacing::HP_TO_SEC
+                pacing.hp_to_sec
             };
         let _ = stream.roll_at(psec_f); // secondary: burned, never read
 
         if rival.hp == 0 {
-            let Some(gaps) = pacing::outcome_win_gaps((psec_f - loop_a) % 5) else {
+            let Some(gaps) = pacing.outcome_win_gaps((psec_f - loop_a) % 5) else {
                 return Err("end-sequence press phase");
             };
             return Ok(Trace {
@@ -256,21 +282,36 @@ pub fn extract_leaf(
         // The rival's answer.
         match rival_move {
             Move::Growl => {
-                let racc_f = psec_f + pacing::PSEC_TO_RACC_GROWL;
+                let racc_f = psec_f + pacing.psec_to_racc_growl;
                 let _ = stream.roll_at(racc_f); // 100 accuracy: never decisive
                 assert!(us.atk_stage > 0, "a second rival Growl cannot score 100");
                 us.atk_stage -= 1;
-                let stagefall_f = racc_f + pacing::RACC_TO_STAGEFALL_FIRST;
-                det = stagefall_f + pacing::STAGEFALL_FIRST_TO_TURNEND;
+                let stagefall_f = racc_f + pacing.racc_to_stagefall_first;
+                det = stagefall_f + pacing.stagefall_first_to_turnend;
             }
             mv => {
-                let racc_f = psec_f + pacing::PSEC_TO_RACC_SCRATCH;
-                let _ = stream.roll_at(racc_f); // 100 accuracy
-                let rcrit_f = racc_f + pacing::RACC_TO_RCRIT;
+                let racc_f = psec_f + pacing.psec_to_racc_hit;
+                let (offset, acc_roll) = stream.roll_at(racc_f);
+                let acc = mv.accuracy();
+                if acc < 100 {
+                    // Decisive: hit iff roll % 100 + 1 <= acc.
+                    pin(&mut constraints, offset, 100, acc_roll, |r| {
+                        (r as u32 + 1) <= acc
+                    });
+                }
+                if (acc_roll as u32 % 100 + 1) > acc {
+                    let Some(gap) = pacing.racc_miss_to_turnend() else {
+                        return Err("rival miss");
+                    };
+                    det = racc_f + gap;
+                    let _turn_end = stream.roll_at(det);
+                    continue;
+                }
+                let rcrit_f = racc_f + pacing.racc_to_rcrit;
                 let (offset, roll) = stream.roll_at(rcrit_f);
                 let crit = roll.is_multiple_of(16) && crit_enabled;
                 pin(&mut constraints, offset, 16, roll, |r| r == 0);
-                let rdmg_f = rcrit_f + pacing::RCRIT_TO_RDMG;
+                let rdmg_f = rcrit_f + pacing.rcrit_to_rdmg;
                 let base = base_damage(&rival, &us, mv, crit);
                 let (offset, roll) = stream.roll_at(rdmg_f);
                 pin(&mut constraints, offset, 16, roll, |r| {
@@ -282,18 +323,18 @@ pub fn extract_leaf(
                 if us.hp == 0 {
                     return Err("loss");
                 }
-                let Some(drain) = pacing::uhp_drain(delta) else {
+                let Some(drain) = pacing.uhp_drain(delta) else {
                     return Err("player HP-bar delta");
                 };
                 let uhp_f = rdmg_f + drain;
                 let rsec_f = uhp_f
                     + if crit {
-                        pacing::HP_TO_SEC_CRIT
+                        pacing.hp_to_sec_crit
                     } else {
-                        pacing::HP_TO_SEC
+                        pacing.hp_to_sec
                     };
                 let _ = stream.roll_at(rsec_f);
-                det = rsec_f + pacing::RSEC_TO_TURNEND;
+                det = rsec_f + pacing.rsec_to_turnend;
             }
         }
         let _turn_end = stream.roll_at(det);

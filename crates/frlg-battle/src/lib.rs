@@ -253,8 +253,26 @@ pub fn execute_move(
 /// unconditional tie-break (`battle_ai_script_commands.c:408`).
 ///
 /// `target` is the player's mon (the AI scores Growl against it). Returns
-/// the chosen move.
+/// the chosen move. The rival-1 fight: Charmander [Scratch, Growl].
 pub fn rival_choose_move(target: &Mon, rival: &Mon, stream: &mut impl FnMut() -> u16) -> Move {
+    rival_choose_move_with(Move::Scratch, target, rival, stream)
+}
+
+/// [`rival_choose_move`] with the rival's slot-0 damaging move a parameter:
+/// the defeat-brock lab rival is Bulbasaur [Tackle, Growl], and Tackle is
+/// EFFECT_HIT exactly like Scratch (`decompiled/src/data/battle_moves.h:432`
+/// vs `:133`), so the AI walk is identical with the hit move's damage
+/// swapped in. Both fights' second slot is Growl, and the AttackDown4
+/// physical-type list (`data/battle_ai_scripts.s:1153-1160`: Normal,
+/// Fighting, Ground, Rock, Bug, Steel) contains neither Bulbasaur's
+/// Grass/Poison nor Squirtle's Water, so roll B always fires for both
+/// targets.
+pub fn rival_choose_move_with(
+    hit_move: Move,
+    target: &Mon,
+    rival: &Mon,
+    stream: &mut impl FnMut() -> u16,
+) -> Move {
     // BattleAI_SetupAIData: 4 rolls, all 4 slots, even empty ones
     // (battle_ai_script_commands.c:299-311; empty slots score 0 via
     // CheckMoveLimitations, so they never join a tie).
@@ -306,7 +324,7 @@ pub fn rival_choose_move(target: &Mon, rival: &Mon, stream: &mut impl FnMut() ->
     // battle_ai_script_commands.c:1022-1025): Growl is NOT penalised here.
     // The AI's Scratch slot is 0 (moves [SCRATCH, GROWL]).
     let sim_damage =
-        (base_damage(rival, target, Move::Scratch, false) * simulated[0] as i32 / 100).max(1);
+        (base_damage(rival, target, hit_move, false) * simulated[0] as i32 / 100).max(1);
     if target.hp as i32 <= sim_damage {
         scratch_score += 4;
     }
@@ -316,12 +334,12 @@ pub fn rival_choose_move(target: &Mon, rival: &Mon, stream: &mut impl FnMut() ->
     let tie = stream();
     if scratch_score == growl_score {
         if tie.is_multiple_of(2) {
-            Move::Scratch
+            hit_move
         } else {
             Move::Growl
         }
     } else if scratch_score > growl_score {
-        Move::Scratch
+        hit_move
     } else {
         Move::Growl
     }
@@ -356,6 +374,49 @@ mod tests {
             atk_stage: 6,
             def_stage: 6,
         }
+    }
+
+    /// The defeat-brock lab fight's mons, measured from `gBattleMons` on
+    /// the committed 38950 route (battle-truth with
+    /// `FRLG_LEDGER=route/defeat-brock/ledger.json`, 2026-08-14): our
+    /// Squirtle 20/20 HP, atk 10, def 11, spe 10; the rival's Bulbasaur
+    /// 19/19 HP, atk 9, def 9, spe 9, moves [Tackle, Growl].
+    fn squirtle() -> Mon {
+        Mon {
+            hp: 20,
+            max_hp: 20,
+            attack: 10,
+            defense: 11,
+            speed: 10,
+            level: 5,
+            atk_stage: 6,
+            def_stage: 6,
+        }
+    }
+
+    fn rival_bulbasaur() -> Mon {
+        Mon {
+            hp: 19,
+            max_hp: 19,
+            attack: 9,
+            defense: 9,
+            speed: 9,
+            level: 5,
+            atk_stage: 6,
+            def_stage: 6,
+        }
+    }
+
+    /// The brock-run fight's damage numbers, against the committed
+    /// battle's observed HP deltas (battle-truth 2026-08-14): our Tackle
+    /// base 5 (first hit landed 4 = 85-99% variance), crit 10 (observed on
+    /// turn 2), the rival's Tackle base 4 (observed 3).
+    #[test]
+    fn brock_fight_damage_matches_the_committed_battle() {
+        let (us, rival) = (squirtle(), rival_bulbasaur());
+        assert_eq!(base_damage(&us, &rival, Move::Tackle, false), 5);
+        assert_eq!(base_damage(&us, &rival, Move::Tackle, true), 10);
+        assert_eq!(base_damage(&rival, &us, Move::Tackle, false), 4);
     }
 
     #[test]

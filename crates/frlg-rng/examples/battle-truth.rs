@@ -8,6 +8,9 @@
 //! predictions get checked against.
 //!
 //!     cargo run --release -p frlg-rng --example battle-truth [-- TSV_PATH]
+//!
+//! `FRLG_LEDGER` selects the route (default `route/rival-1/ledger.json`);
+//! the battle replayed is always that ledger's `09-battle-win`.
 
 use std::path::{Path, PathBuf};
 
@@ -64,8 +67,9 @@ fn dump_mon(emu: &mut Emu, base: u32, index: u32) -> String {
 fn main() {
     let tsv_path = std::env::args().nth(1).map(PathBuf::from);
     let root = repo_root();
-    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
-        .expect("committed ledger");
+    let ledger_path =
+        std::env::var("FRLG_LEDGER").unwrap_or_else(|_| "route/rival-1/ledger.json".into());
+    let ledger = frlg_route::ledger::read(&root.join(ledger_path)).expect("committed ledger");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).expect("ROM");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");
     let mons_base = syms.get("gBattleMons").expect("gBattleMons").addr;

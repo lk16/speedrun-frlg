@@ -1,8 +1,17 @@
 //! Fit the battle's frame pacing, per semantic event, from emulator runs.
 //!
-//! Replays the committed route to the end of `08-battle-start`, then runs a
-//! training set of delay plans through the exact drive the route's search
-//! uses (`run_plan` in frlg-rng's battle-plan-scan). For every run it
+//! Replays the committed route (`FRLG_LEDGER`, default rival-1) to the end
+//! of `08-battle-start`, then runs a training set of delay plans through
+//! the route's own drive: `run_plan` (frlg-rng's battle-plan-scan) by
+//! default, or -- with `FRLG_DRIVE=menu` -- the `win_battle` drive
+//! (`crates/frlg-route/src/brock.rs`): a B-mash intro, then the same
+//! detection/commit loops with an A-mash. In both drives `plan[0]` idles
+//! before any mash starts and `plan[k]` idles at turn k's action menu, so
+//! the plan semantics match `engine::simulate` unchanged. The fight's
+//! semantics (the rival's damaging move) come from the ledger's starter:
+//! squirtle means the rival is Bulbasaur [Tackle, Growl], whose Tackle can
+//! miss (accuracy 95) -- a miss shows up as the `racc Tackle -> turnend`
+//! gap key. For every run it
 //! extracts the logic rolls (the window beyond the 2-per-frame VBlank pair,
 //! pair leading -- the established order, `docs/rival-1/journal/` 2026-08-12),
 //! labels each roll with the v1 semantics from this crate, cross-checks the
@@ -20,7 +29,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 
-use frlg_battle::{apply_variance, base_damage, rival_choose_move, Mon, Move};
+use frlg_battle::{apply_variance, base_damage, rival_choose_move_with, Mon, Move};
 use frlg_emu::{keys, Emu, InputLog, SaveState};
 use frlg_rng::Rng;
 use frlg_route::observe::Observer;
@@ -169,6 +178,7 @@ fn run_plan_recorded(
     start: &SaveState,
     mons_base: u32,
     rng_addr: u32,
+    intro_mash: &[u16],
     mash: &[u16],
     state: Rng,
     shift: i64,
@@ -203,11 +213,12 @@ fn run_plan_recorded(
     }
     let mut turns = 0usize;
     let won = loop {
+        let phase_mash = if turns == 0 { intro_mash } else { mash };
         let loop_a_start = rec.frame;
         let mut mash_phase = 0usize;
         let mut over = false;
         loop {
-            rec.step(mash[mash_phase % mash.len()]);
+            rec.step(phase_mash[mash_phase % phase_mash.len()]);
             mash_phase += 1;
             frames += 1;
             if rec.observer.battle_outcome(rec.emu) != 0
@@ -292,7 +303,7 @@ struct Ev {
 /// Walk the trace's roll stream with the v1 semantics and name every roll.
 /// Errors instead of guessing when the stream disagrees with the model --
 /// a failed label is evidence against v1, and gets printed, not skipped.
-fn label(trace: &Trace) -> Result<Vec<Ev>, String> {
+fn label(trace: &Trace, hit_move: Move) -> Result<Vec<Ev>, String> {
     let (mut us, mut rival) = trace.mons.ok_or("gBattleMons never initialised")?;
     let rolls = &trace.rolls;
     let mut ri = 0usize;
@@ -341,7 +352,7 @@ fn label(trace: &Trace) -> Result<Vec<Ev>, String> {
                     0
                 }
             };
-            rival_choose_move(&us, &rival, &mut src)
+            rival_choose_move_with(hit_move, &us, &rival, &mut src)
         };
         if let Some(e) = err {
             return Err(e.into());
@@ -411,11 +422,23 @@ fn label(trace: &Trace) -> Result<Vec<Ev>, String> {
         }
 
         // The rival's move.
-        let (f, _acc_roll) = take(&mut ri)?; // both rival moves are 100 acc
+        let (f, acc_roll) = take(&mut ri)?; // Growl is 100 acc; the hit
+                                            // move may not be (Tackle 95)
         events.push(Ev {
             key: format!("racc {mv:?}"),
             frame: f,
         });
+        if mv.power() != 0 && (acc_roll as u32 % 100 + 1) > mv.accuracy() {
+            // The rival missed: no crit/damage rolls, no HP write; the
+            // next roll is the turn-end. The `racc <hit> -> turnend` gap
+            // key is the miss pacing.
+            let (f, _) = take(&mut ri)?;
+            events.push(Ev {
+                key: "turnend".into(),
+                frame: f,
+            });
+            continue;
+        }
         match mv {
             Move::Growl => {
                 growls += 1;
@@ -536,8 +559,16 @@ fn observe_gaps(events: &[Ev], table: &mut GapTable) {
 
 fn main() {
     let root = repo_root();
-    let ledger = frlg_route::ledger::read(&root.join("route/rival-1/ledger.json"))
-        .expect("committed ledger");
+    let ledger_path =
+        std::env::var("FRLG_LEDGER").unwrap_or_else(|_| "route/rival-1/ledger.json".into());
+    let ledger = frlg_route::ledger::read(&root.join(&ledger_path)).expect("committed ledger");
+    let hit_move = if ledger.starter == "squirtle" {
+        Move::Tackle
+    } else {
+        Move::Scratch
+    };
+    let menu_drive = std::env::var("FRLG_DRIVE").as_deref() == Ok("menu");
+    println!("ledger {ledger_path}, rival hit move {hit_move:?}, menu drive {menu_drive}");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).expect("ROM in $FRLG_ARTIFACTS/rom");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");
     let rng_addr = syms.get("gRngValue").expect("gRngValue").addr;
@@ -565,34 +596,77 @@ fn main() {
         m.push(0);
         m
     };
+    let intro_mash: Vec<u16> = if menu_drive {
+        let mut m = vec![keys::B; ledger.tuning.text_hold.max(1)];
+        m.push(0);
+        m
+    } else {
+        mash.clone()
+    };
 
     // The training set: the search's own space, plus stream shifts for
     // vocabulary breadth (more crit patterns, kill deltas, Growl turns).
     // Start delays collapse mod 5 (the mash period) -- verified over the
     // full 0..64 range in an earlier fit -- so two periods suffice.
     let mut jobs_list: Vec<(i64, Vec<u32>)> = Vec::new();
-    for d in 0..10 {
-        jobs_list.push((0, vec![d]));
-        jobs_list.push((0, vec![d, 3, 3, 3]));
-    }
-    for t in 1..=4 {
-        for d in 0..16 {
-            let mut plan = vec![4, 3, 3, 3];
-            if plan.len() < t + 1 {
-                plan.resize(t + 1, 0);
+    if menu_drive {
+        // plan[0] is a pre-battle idle (should leave the intro's preturn
+        // frame shifted by exactly its own length -- measured, not
+        // assumed); plan[1] is the first action menu's delay, the
+        // win_battle stage-1 dial, so it gets the widest sweep including
+        // a few stage-1-sized values.
+        for d in 0..10 {
+            jobs_list.push((0, vec![d]));
+            jobs_list.push((0, vec![0, d]));
+            jobs_list.push((0, vec![0, d, 3, 3]));
+        }
+        for d in [16, 21, 47, 100, 217] {
+            jobs_list.push((0, vec![0, d]));
+            jobs_list.push((0, vec![0, d, 3, 3]));
+        }
+        for t in 2..=4 {
+            for d in 0..16 {
+                let mut plan = vec![0, 4, 3, 3];
+                if plan.len() < t + 1 {
+                    plan.resize(t + 1, 0);
+                }
+                plan[t] = d;
+                jobs_list.push((0, plan));
             }
-            plan[t] = d;
-            jobs_list.push((0, plan));
         }
-    }
-    for shift in -10i64..=10 {
-        if shift == 0 {
-            continue;
+        for shift in -10i64..=10 {
+            if shift == 0 {
+                continue;
+            }
+            for d in 0..5 {
+                jobs_list.push((shift, vec![0, d]));
+            }
+            jobs_list.push((shift, vec![0, 4, 3, 3]));
         }
-        for d in 0..5 {
-            jobs_list.push((shift, vec![d]));
+    } else {
+        for d in 0..10 {
+            jobs_list.push((0, vec![d]));
+            jobs_list.push((0, vec![d, 3, 3, 3]));
         }
-        jobs_list.push((shift, vec![4, 3, 3, 3]));
+        for t in 1..=4 {
+            for d in 0..16 {
+                let mut plan = vec![4, 3, 3, 3];
+                if plan.len() < t + 1 {
+                    plan.resize(t + 1, 0);
+                }
+                plan[t] = d;
+                jobs_list.push((0, plan));
+            }
+        }
+        for shift in -10i64..=10 {
+            if shift == 0 {
+                continue;
+            }
+            for d in 0..5 {
+                jobs_list.push((shift, vec![d]));
+            }
+            jobs_list.push((shift, vec![4, 3, 3, 3]));
+        }
     }
     jobs_list.sort();
     jobs_list.dedup();
@@ -619,6 +693,7 @@ fn main() {
         let rom = rom.clone();
         let start: SaveState = start.clone();
         let mash = mash.clone();
+        let intro_mash = intro_mash.clone();
         let bios = ledger.bios.clone();
         std::thread::spawn(move || {
             let mut emu = Emu::new(&rom).expect("core");
@@ -643,12 +718,21 @@ fn main() {
                     s
                 };
                 let trace = run_plan_recorded(
-                    &mut emu, &observer, &start, mons_base, rng_addr, &mash, state, shift, &plan,
+                    &mut emu,
+                    &observer,
+                    &start,
+                    mons_base,
+                    rng_addr,
+                    &intro_mash,
+                    &mash,
+                    state,
+                    shift,
+                    &plan,
                 );
                 let label = if trace.budget_exceeded {
                     Err("frame budget exceeded".to_string())
                 } else {
-                    label(&trace).map(|events| {
+                    label(&trace, hit_move).map(|events| {
                         let mut t = GapTable::new();
                         observe_gaps(&events, &mut t);
                         (t, events.into_iter().map(|e| (e.key, e.frame)).collect())
