@@ -605,6 +605,167 @@
    ]
   },
   {
+   "name": "vermilion-pc_to_fanclub",
+   "from": [
+    "MAP_VERMILION_CITY",
+    15,
+    6
+   ],
+   "to": [
+    "MAP_VERMILION_CITY",
+    12,
+    17
+   ],
+   "opts": {},
+   "tiles": 30,
+   "via": [
+    "MAP_VERMILION_CITY"
+   ]
+  },
+  {
+   "name": "cerulean-pc_to_bikeshop",
+   "from": [
+    "MAP_CERULEAN_CITY",
+    22,
+    19
+   ],
+   "to": [
+    "MAP_CERULEAN_CITY",
+    13,
+    28
+   ],
+   "opts": {},
+   "tiles": 20,
+   "via": [
+    "MAP_CERULEAN_CITY"
+   ]
+  },
+  {
+   "name": "celadon-pc_to_route16-house",
+   "from": [
+    "MAP_CELADON_CITY",
+    48,
+    11
+   ],
+   "to": [
+    "MAP_ROUTE16",
+    10,
+    5
+   ],
+   "opts": {
+    "cut": true
+   },
+   "tiles": 109,
+   "via": [
+    "MAP_CELADON_CITY",
+    "MAP_ROUTE16",
+    "MAP_ROUTE16_NORTH_ENTRANCE_1F",
+    "MAP_ROUTE16"
+   ]
+  },
+  {
+   "name": "celadon-pc_to_saffron-gym",
+   "from": [
+    "MAP_CELADON_CITY",
+    48,
+    11
+   ],
+   "to": [
+    "MAP_SAFFRON_CITY",
+    46,
+    12
+   ],
+   "opts": {
+    "ignore_scripts": [
+     "RocketGrunt",
+     "DoorGuardGrunt"
+    ]
+   },
+   "tiles": 100,
+   "via": [
+    "MAP_CELADON_CITY",
+    "MAP_ROUTE7",
+    "MAP_ROUTE7_EAST_ENTRANCE",
+    "MAP_SAFFRON_CITY"
+   ]
+  },
+  {
+   "name": "route16-house_to_fuchsia-pc",
+   "from": [
+    "MAP_ROUTE16",
+    10,
+    5
+   ],
+   "to": [
+    "MAP_FUCHSIA_CITY",
+    25,
+    31
+   ],
+   "opts": {
+    "cut": true,
+    "ignore_scripts": [
+     "Snorlax"
+    ]
+   },
+   "tiles": 351,
+   "via": [
+    "MAP_ROUTE16",
+    "MAP_ROUTE16_NORTH_ENTRANCE_1F",
+    "MAP_ROUTE16",
+    "MAP_ROUTE16_NORTH_ENTRANCE_1F",
+    "MAP_ROUTE16",
+    "MAP_ROUTE17",
+    "MAP_ROUTE18",
+    "MAP_ROUTE18_EAST_ENTRANCE_1F",
+    "MAP_ROUTE18",
+    "MAP_FUCHSIA_CITY"
+   ]
+  },
+  {
+   "name": "safari-gate_to_gold-teeth",
+   "from": [
+    "MAP_SAFARI_ZONE_CENTER",
+    26,
+    28
+   ],
+   "to": [
+    "MAP_SAFARI_ZONE_WEST",
+    28,
+    14
+   ],
+   "opts": {
+    "ignore_objects": true
+   },
+   "tiles": 195,
+   "via": [
+    "MAP_SAFARI_ZONE_CENTER",
+    "MAP_SAFARI_ZONE_EAST",
+    "MAP_SAFARI_ZONE_NORTH",
+    "MAP_SAFARI_ZONE_WEST"
+   ]
+  },
+  {
+   "name": "gold-teeth_to_secret-house",
+   "from": [
+    "MAP_SAFARI_ZONE_WEST",
+    28,
+    14
+   ],
+   "to": [
+    "MAP_SAFARI_ZONE_SECRET_HOUSE",
+    3,
+    3
+   ],
+   "opts": {
+    "ignore_objects": true
+   },
+   "tiles": 33,
+   "via": [
+    "MAP_SAFARI_ZONE_WEST",
+    "MAP_SAFARI_ZONE_SECRET_HOUSE"
+   ]
+  },
+  {
    "name": "viridian-mart_to_viridian-gym",
    "from": [
     "MAP_VIRIDIAN_CITY",
