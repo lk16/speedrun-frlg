@@ -56,6 +56,16 @@ enum RouteCommand {
         #[arg(long)]
         ledger: Option<PathBuf>,
     },
+    /// One line per TAS in the repo, from the committed ledgers.
+    ///
+    /// Reads `route/<target>/ledger.json` for every target directory. Like
+    /// `status` it reports what the ledgers claim without running anything;
+    /// replaying is `route verify` (tier 1) and the verify queue (tier 2).
+    List {
+        /// Directory holding the per-target route directories.
+        #[arg(long, default_value = "route")]
+        dir: PathBuf,
+    },
     /// Export the committed logs as one BizHawk movie for tier 2.
     ///
     /// Concatenates the ledger's segment logs into a single .bk2 built on
@@ -425,7 +435,82 @@ fn cmd_route(command: RouteCommand) -> Result<()> {
             );
             Ok(())
         }
+        RouteCommand::List { dir } => cmd_list(&dir),
         RouteCommand::Export(args) => cmd_export(args),
+    }
+}
+
+/// One line per committed TAS. Nothing is replayed, so this reports the
+/// ledgers' claims, not fresh evidence.
+fn cmd_list(dir: &Path) -> Result<()> {
+    // GBA frame rate, so the frame counts mean something on a clock. The
+    // route docs publish times at this rate (docs/defeat-brock/route.md).
+    const HZ: f64 = 59.7275;
+
+    let mut ledgers = Vec::new();
+    for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
+        let path = entry?.path().join("ledger.json");
+        if path.is_file() {
+            let led = ledger::read(&path).with_context(|| format!("reading {}", path.display()))?;
+            ledgers.push(led);
+        }
+    }
+    if ledgers.is_empty() {
+        bail!(
+            "no <target>/ledger.json under {}; run from the repo root or pass --dir",
+            dir.display()
+        );
+    }
+    ledgers.sort_by(|a, b| a.target.cmp(&b.target));
+
+    println!(
+        "{:<14} {:<10} {:>7} {:>7} {:>4}  {:<5} tier2",
+        "target", "starter", "frames", "~time", "segs", "tier1"
+    );
+    for led in &ledgers {
+        let secs = led.total_frames as f64 / HZ;
+        let tier1_ok = led.segments.iter().filter(|s| s.tier1).count();
+        let tier1 = if tier1_ok == led.segments.len() {
+            "yes".to_string()
+        } else {
+            format!("{tier1_ok}/{}", led.segments.len())
+        };
+        println!(
+            "{:<14} {:<10} {:>7} {:>3}m{:02}s {:>4}  {:<5} {}",
+            led.target,
+            led.starter,
+            led.total_frames,
+            secs as u64 / 60,
+            secs as u64 % 60,
+            led.segments.len(),
+            tier1,
+            tier2_summary(&led.segments),
+        );
+    }
+    Ok(())
+}
+
+/// The tier-2 column: the shared head of the segments' tier2 claims when they
+/// all pass, a count when they disagree. The full sentences are in `status`.
+fn tier2_summary(segments: &[ledger::Entry]) -> String {
+    let passed = segments
+        .iter()
+        .filter(|s| s.tier2.starts_with("passed"))
+        .count();
+    if passed == segments.len() {
+        let head = segments[0].tier2.split(':').next().unwrap_or("passed");
+        if segments
+            .iter()
+            .all(|s| s.tier2.split(':').next() == Some(head))
+        {
+            head.to_string()
+        } else {
+            "passed, in more than one result (see status)".to_string()
+        }
+    } else if passed == 0 {
+        "not replayed".to_string()
+    } else {
+        format!("{passed}/{} segments passed (see status)", segments.len())
     }
 }
 
