@@ -199,6 +199,11 @@ pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
     if targets.is_empty() {
         return None;
     }
+    // Door-warp tiles carry grid collision 1 (measured: the Viridian Mart
+    // door at (36,19), behavior 0x69) yet walking into them is exactly how a
+    // door is used -- the door animation plays and the warp fires. Any tile
+    // the map lists a warp on is enterable.
+    let warp_tiles: HashSet<(i16, i16)> = map.warps.iter().map(|w| (w.x, w.y)).collect();
 
     // (x, y, cooldown steps so far (saturated), tests consumed).
     type Node = (i16, i16, u8, u16);
@@ -295,7 +300,7 @@ pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
                 continue;
             }
 
-            if tile.collision != 0 {
+            if tile.collision != 0 && !warp_tiles.contains(&(nx, ny)) {
                 continue;
             }
 

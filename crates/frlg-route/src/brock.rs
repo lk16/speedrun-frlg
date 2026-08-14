@@ -894,8 +894,15 @@ pub fn walk_planned(
     let mut blocked: HashSet<((i16, i16), (i16, i16))> = HashSet::new();
     let mut stuck_streak = 0usize;
 
+    let mut last_event = String::from("start");
     for round in 0..MAX_REPLANS {
-        // Scenes and ambushes first, exactly as `walk_fleeing` does.
+        // A battle can be live on entry (a crossing hold walked into one, a
+        // previous round accepted one): resolve it before anything reads
+        // the field.
+        if obs.in_battle(rec.emu()) {
+            handle_battle(rec, obs, tuning)?;
+        }
+        // Scenes and ambushes next, exactly as `walk_fleeing` does.
         if obs.field_controls_locked(rec.emu()) && !obs.in_battle(rec.emu()) {
             rec.hold_mash_until(
                 "the ambush to become a battle",
@@ -911,7 +918,27 @@ pub fn walk_planned(
         if leg.arrived(obs, rec.emu()) {
             return Ok(true);
         }
-        rec.wait_until("the player to settle", 240, |emu| obs.player_can_step(emu))?;
+        // Wait for the player to settle -- or for whatever froze them to
+        // *declare itself*. An ambush that fired between steps spends ~100
+        // frames on the '!' bubble and the trainer's approach before the
+        // script lock reads true; waiting on `player_can_step` alone here
+        // timed out through exactly that window (measured: Sammy, forest
+        // build 2026-08-14). Locks and battles loop back to the preamble.
+        let settled = rec.wait_until("the player to settle or be taken", 600, |emu| {
+            obs.player_can_step(emu) || obs.field_controls_locked(emu) || obs.in_battle(emu)
+        });
+        if obs.field_controls_locked(rec.emu()) || obs.in_battle(rec.emu()) {
+            continue; // the next round's preamble drives it
+        }
+        if settled.is_err() {
+            eprintln!(
+                "      walk {leg:?} round {round}: no settle at {:?} {:?} ({}); handing over",
+                obs.map(rec.emu()),
+                obs.pos(rec.emu()),
+                obs.snapshot(rec.emu()).callback2,
+            );
+            return Ok(false);
+        }
         if leg.arrived(obs, rec.emu()) {
             return Ok(true);
         }
@@ -1028,11 +1055,15 @@ pub fn walk_planned(
 
             let (inputs, result) = outcome.expect("the retry loop always resolves");
             match result {
-                StepTry::Moved { .. } => {
+                StepTry::Moved { consumed } => {
                     rec.emu().load_state(&before)?;
                     rec.play(&inputs)?;
                     stuck_streak = 0;
                     if diverged {
+                        last_event = format!(
+                            "gate mismatch at {:?} (consumed {consumed}, planned {:?})",
+                            step.to, step.kind
+                        );
                         break; // replan from the realigned state
                     }
                 }
@@ -1042,6 +1073,7 @@ pub fn walk_planned(
                     handle_battle(rec, obs, tuning)?;
                     stuck_streak = 0;
                     diverged = true;
+                    last_event = format!("battle at {:?}", step.to);
                     break; // modifiers reset; replan
                 }
                 StepTry::Script => {
@@ -1050,6 +1082,7 @@ pub fn walk_planned(
                     // The round preamble drives the script/ambush.
                     stuck_streak = 0;
                     diverged = true;
+                    last_event = format!("script at {:?}", step.to);
                     break;
                 }
                 StepTry::Stuck => {
@@ -1065,15 +1098,37 @@ pub fn walk_planned(
                         stuck_streak = 0;
                     }
                     diverged = true;
+                    last_event = format!("stuck {:?} -> {:?}", from, step.to);
                     break;
                 }
             }
         }
+        if diverged && round >= 2 {
+            eprintln!(
+                "      walk {leg:?} round {round}: {last_event}, now {:?} {:?}",
+                obs.map(rec.emu()),
+                obs.pos(rec.emu()),
+            );
+        }
 
         if !diverged {
             // The plan ran to its last tile. A connection crossing still
-            // needs the actual off-map step.
-            if needs_crossing && !leg.arrived(obs, rec.emu()) {
+            // needs the actual off-map step -- and so does an *arrow* warp
+            // tile (e.g. the lab exit mat, behavior 0x65): standing on one
+            // does nothing until the exit direction is pressed, unlike a
+            // door, which warps on entry.
+            let on_warp = WORLD.with(|w| {
+                let mut w = w.borrow_mut();
+                let (Some(world), Some(m), Some(p)) =
+                    (w.as_mut(), obs.map(rec.emu()), obs.pos(rec.emu()))
+                else {
+                    return false;
+                };
+                world
+                    .map(m)
+                    .is_ok_and(|d| d.warps.iter().any(|warp| (warp.x, warp.y) == p))
+            });
+            if (needs_crossing || on_warp) && !leg.arrived(obs, rec.emu()) {
                 let start_map = obs.map(rec.emu());
                 let crossed = rec.advance_while("the map connection", &[bias], 120, |emu| {
                     obs.map(emu) != start_map
@@ -1329,13 +1384,14 @@ fn deliver(tuning: Tuning) -> Segment {
                 keys::DOWN,
                 1000,
             )?;
-            // The lab door in Pallet is at (16,5)-ish; entering is a warp
-            // like any other.
+            // The lab door in Pallet is at (16,13)
+            // (`data/maps/PalletTown/map.json` warp_events); entering is a
+            // warp like any other.
             walk_smart(
                 rec,
                 obs,
                 tuning,
-                Leg::MapVia(OAKS_LAB, PALLET_TOWN, (16, 6)),
+                Leg::MapVia(OAKS_LAB, PALLET_TOWN, (16, 13)),
                 keys::UP,
                 2000,
             )?;
@@ -1375,6 +1431,18 @@ fn tutorial(tuning: Tuning) -> Segment {
         name: "tutorial",
         goal: "catching tutorial done (old man var 2), road north open".into(),
         run: Box::new(move |rec, obs| {
+            // The segment starts inside the lab (deliver ends at Oak): the
+            // planner works one map at a time, so the lab exit is its own
+            // leg -- the fallback search never needed it, which is why it
+            // was missing.
+            walk_smart(
+                rec,
+                obs,
+                tuning,
+                Leg::MapVia(PALLET_TOWN, OAKS_LAB, (6, 12)),
+                keys::DOWN,
+                1500,
+            )?;
             walk_smart(
                 rec,
                 obs,
