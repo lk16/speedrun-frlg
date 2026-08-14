@@ -80,8 +80,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Movement traces.
     let mut prev_pos: Option<(u8, u8, i16, i16)> = None;
-    let mut steps: Vec<(u32, (u8, u8), (i16, i16), (i16, i16))> = Vec::new(); // frame, map, from, to
-                                                                              // Free-idle runs: player_can_step && !locked && !in_battle && standing still.
+    // (frame, map, from-tile, to-tile) per step.
+    type Step = (u32, (u8, u8), (i16, i16), (i16, i16));
+    let mut steps: Vec<Step> = Vec::new();
+    // Free-idle runs: player_can_step && !locked && !in_battle && standing still.
     let mut idle_run_start: Option<u32> = None;
     let mut idle_runs: Vec<(u32, u32, String)> = Vec::new();
     // Wild rate tests: the second LCG advances only per rate test.
