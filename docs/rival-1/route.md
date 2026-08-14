@@ -357,8 +357,11 @@ remains, largest first:
   then a 4-roll event slides into the window) were engine-barred and arbitrated: nothing
   came within 280 frames of paying. What genuinely remains here: move choice (Growl is
   strictly slower per the pacing tables, so this is closed in practice), and the fat-man
-  zero-cost anchor shift (same-length Pallet path variants move his rolls — priced in the
-  journal entry, not started). Starter creation manipulation is closed on arithmetic:
+  anchor shift — its wait-dial form was measured 2026-08-14 (`FRLG_WAIT_05_HOUSE` 1-4 →
+  9709/9893/9914/9915; `FRLG_WAIT_06_TO_LAB` 1-4 all absorb to one family at 9671; five
+  distinct anchor families, none beats the committed 9658, consistent with the 17-frame
+  floor gap). The zero-cost same-length-path form is still unimplemented (nav has no
+  waypoint forcing) and is bounded by the same ≤17 frames. Starter creation manipulation is closed on arithmetic:
   Tackle needs Atk 13 for 6 damage and the best reachable is 12
   (`decompiled/src/data/pokemon/species_info.h:41`, `CALC_STAT`
   `decompiled/src/pokemon.c:2093-2096`, `ModifyStatByNature` `:5404`). The dial itself
