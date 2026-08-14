@@ -24,6 +24,8 @@
 //! `tests/emulator.rs` replays the committed route and checks this model
 //! against `gRngValue` read out of libmgba on every frame.
 
+pub mod constraint;
+
 /// `RAND_MULT`, `decompiled/include/random.h:18`.
 pub const MULT: u32 = 1_103_515_245;
 /// The `ISO_RANDOMIZE1` increment, `decompiled/include/random.h:19`.
@@ -107,6 +109,27 @@ impl Rng {
             *slot = (x >> 16) as u16;
         }
         self.0 = x;
+    }
+
+    /// The affine map of `n` steps: `(a, c)` with `jump(n)(x) = a·x + c`
+    /// (mod 2^32). Composed from the same power-of-two table `jump` walks;
+    /// all these maps are powers of one map, so composition order is
+    /// irrelevant. This is what lets a caller ask about the roll `n` calls
+    /// ahead of *any* state for the price of one multiply-add -- the
+    /// primitive [`constraint`] compiles to.
+    pub fn jump_coeffs(n: u32) -> (u32, u32) {
+        let (mut a, mut c) = (1u32, 0u32);
+        let mut n = n;
+        while n != 0 {
+            let k = n.trailing_zeros();
+            let (pa, pc) = POW2[k as usize];
+            // Apply the power-of-two map after the accumulated one:
+            // p(f(x)) = pa·(a·x + c) + pc.
+            a = pa.wrapping_mul(a);
+            c = pa.wrapping_mul(c).wrapping_add(pc);
+            n &= n - 1;
+        }
+        (a, c)
     }
 
     /// How many steps ahead `target` is: the unique `n` in `[0, 2^32)` with
@@ -210,6 +233,20 @@ mod tests {
         // A few large ones against jump-composition rather than 2^31 steps.
         for &(a, b) in &[(1u32 << 20, 3), (0xFFFF_0000, 0xFFFF), (7, 1 << 30)] {
             assert_eq!(start.jump(a).jump(b), start.jump(a.wrapping_add(b)));
+        }
+    }
+
+    #[test]
+    fn jump_coeffs_agree_with_jump() {
+        for n in [0u32, 1, 2, 3, 100, 65_535, 1 << 20, u32::MAX] {
+            let (a, c) = Rng::jump_coeffs(n);
+            for s in [0u32, 1, 0xDEAD_BEEF, 0xFFFF_FFFF, 0x1234_5678] {
+                assert_eq!(
+                    a.wrapping_mul(s).wrapping_add(c),
+                    Rng(s).jump(n).0,
+                    "coeffs for n={n}, s={s:#x}"
+                );
+            }
         }
     }
 
