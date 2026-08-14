@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+"""Tile-level pathfinding over the decomp's map data. Stdlib only.
+
+Reads, from $FRLG_DECOMP (the writable pret checkout):
+  data/layouts/layouts.json + each layout's map.bin   -- per-tile u16:
+      bits 0-9 metatile id, 10-11 collision, 12-15 elevation
+      (format per decompiled/src/fieldmap.c:61-72, include/fieldmap.h:8)
+  data/tilesets/*/*/metatile_attributes.bin           -- u32 per metatile,
+      behavior in bits 0-8 (decompiled/src/fieldmap.c:63-72)
+  data/maps/*/map.json                                -- objects, warps, connections
+
+Movement model (documented caveats -- keep in sync with docs/glitchless-run/route-sketch.md):
+  * collision bits != 0 block, except warp-entry behaviors (doors/stairs/ladders,
+    MB 0x60-0x6F) which are enterable despite collision=1
+  * water behaviors (MB 0x10-0x22 water group) need --surf
+  * ledges (MB_JUMP_* 0x38-0x3B) are directed 2-tile hops
+  * warps cost 1 step; map connections stitch neighbouring overworld maps
+    (dest = src - offset on the shared axis)
+  * static NPC/object bodies block; wandering NPCs are assumed manipulable and
+    are NOT modelled -- and script-driven setmetatile barriers (gym puzzles,
+    Silph doors) are NOT modelled either: distances through those maps are
+    lower bounds
+  * spin tiles / forced-movement tiles are treated as plain floor
+
+Cost is TILES, not frames. Frames per tile (decompiled/src/event_object_movement.c:158-162,
+8866-8931): walk 16, run/surf 8, bike/water-current 6.
+
+Usage:
+  frlg-mapgraph path MAP_A x,y MAP_B x,y [--surf] [--cut] [--ignore-objects]
+  frlg-mapgraph dump [outfile]     # standard route-leg distance table (JSON)
+"""
+import json, os, re, struct, sys, functools
+from collections import deque
+
+DECOMP = os.environ.get('FRLG_DECOMP', os.path.expanduser('~/decomp'))
+NUM_PRIMARY = 640
+
+MB_WATER = {0x10, 0x11, 0x12, 0x13, 0x15, 0x19, 0x1A, 0x1B, 0x22}
+MB_JUMP = {0x38: (1, 0), 0x39: (-1, 0), 0x3A: (0, -1), 0x3B: (0, 1)}
+MB_WARPTILE = set(range(0x60, 0x70)) - {0x68}
+
+
+@functools.lru_cache(maxsize=None)
+def layouts():
+    d = json.load(open(f'{DECOMP}/data/layouts/layouts.json'))
+    return {l['id']: l for l in d['layouts'] if l}
+
+
+@functools.lru_cache(maxsize=None)
+def tileset_attrs(tileset):
+    key = tileset.replace('gTileset_', '').replace('_', '').lower()
+    for kind in ('primary', 'secondary'):
+        base = f'{DECOMP}/data/tilesets/{kind}'
+        for d in os.listdir(base):
+            if d.replace('_', '').lower() == key:
+                raw = open(f'{base}/{d}/metatile_attributes.bin', 'rb').read()
+                return struct.unpack(f'<{len(raw)//4}I', raw)
+    raise FileNotFoundError(tileset)
+
+
+@functools.lru_cache(maxsize=None)
+def map_index():
+    out = {}
+    base = f'{DECOMP}/data/maps'
+    for d in os.listdir(base):
+        p = f'{base}/{d}/map.json'
+        if os.path.exists(p):
+            out[json.load(open(p))['id']] = d
+    return out
+
+
+class Map:
+    _cache = {}
+
+    @classmethod
+    def get(cls, map_id):
+        if map_id not in cls._cache:
+            cls._cache[map_id] = cls(map_id)
+        return cls._cache[map_id]
+
+    def __init__(self, map_id):
+        self.id = map_id
+        self.j = json.load(open(f'{DECOMP}/data/maps/{map_index()[map_id]}/map.json'))
+        lay = layouts()[self.j['layout']]
+        self.w, self.h = lay['width'], lay['height']
+        raw = open(f'{DECOMP}/{lay["blockdata_filepath"]}', 'rb').read()
+        self.grid = struct.unpack(f'<{self.w*self.h}H', raw[:self.w*self.h*2])
+        pri, sec = tileset_attrs(lay['primary_tileset']), tileset_attrs(lay['secondary_tileset'])
+        self._beh = lambda mt: (pri[mt] if mt < NUM_PRIMARY else sec[mt - NUM_PRIMARY]) & 0x1FF
+        self.warps = self.j.get('warp_events') or []
+        self.connections = self.j.get('connections') or []
+        self.objects = self.j.get('object_events') or []
+
+    def cell(self, x, y):
+        v = self.grid[y*self.w + x]
+        return v & 0x3FF, (v >> 10) & 3
+
+    def behavior(self, x, y):
+        return self._beh(self.cell(x, y)[0])
+
+    def blocked_tiles(self, opts):
+        tiles = set()
+        for o in self.objects:
+            if opts.get('ignore_objects'):
+                continue
+            scr = str(o.get('script'))
+            if opts.get('cut') and 'CutTree' in scr:
+                continue
+            if any(tag in scr for tag in opts.get('ignore_scripts', ())):
+                continue
+            # wandering NPCs are manipulable; static bodies block
+            if 'FACE' in o.get('movement_type', '') or o.get('movement_type') == 'MOVEMENT_TYPE_NONE' \
+               or 'BERRY' in o.get('movement_type', '') or 'GFX_ITEM_BALL' in o.get('graphics_id', '') \
+               or 'ROTATE' in o.get('movement_type', ''):
+                tiles.add((o['x'], o['y']))
+        return tiles
+
+    def enterable(self, x, y, surf):
+        if not (0 <= x < self.w and 0 <= y < self.h):
+            return False
+        mt, col = self.cell(x, y)
+        b = self._beh(mt)
+        if b in MB_WARPTILE:
+            return True
+        if col != 0:
+            return False
+        if b in MB_WATER:
+            return surf
+        if b in MB_JUMP:
+            return False
+        return True
+
+
+def neighbours(m, x, y, surf, blocked):
+    for dx, dy in ((1, 0), (-1, 0), (0, -1), (0, 1)):
+        nx, ny = x + dx, y + dy
+        if not (0 <= nx < m.w and 0 <= ny < m.h):
+            continue
+        b = m.behavior(nx, ny)
+        if b in MB_JUMP:
+            if MB_JUMP[b] == (dx, dy):
+                lx, ly = nx + dx, ny + dy
+                if m.enterable(lx, ly, surf) and (lx, ly) not in blocked:
+                    yield lx, ly
+            continue
+        if m.enterable(nx, ny, surf) and (nx, ny) not in blocked:
+            yield nx, ny
+
+
+def conn_exit(m, x, y):
+    """Cross-map step via a map connection, if (x,y) walks off the edge."""
+    for c in m.connections:
+        d, off, other_id = c['direction'], c['offset'], c['map']
+        if other_id not in map_index():
+            continue
+        other = Map.get(other_id)
+        if d == 'up' and y == 0:
+            yield other_id, x - off, other.h - 1
+        elif d == 'down' and y == m.h - 1:
+            yield other_id, x - off, 0
+        elif d == 'left' and x == 0:
+            yield other_id, other.w - 1, y - off
+        elif d == 'right' and x == m.w - 1:
+            yield other_id, 0, y - off
+
+
+def search(start, goals, opts):
+    """BFS over (map,x,y) across warps and connections. Unit cost per step/warp."""
+    surf = opts.get('surf', False)
+    blocked_cache = {}
+    dist = {start: 0}
+    prev = {}
+    q = deque([start])
+    goalset = set(goals)
+    while q:
+        cur = q.popleft()
+        if cur in goalset:
+            legs = []
+            n = cur
+            while n in prev:
+                legs.append(n)
+                n = prev[n]
+            return dist[cur], list(reversed(legs))
+        mid, x, y = cur
+        if mid in opts.get('avoid_maps', ()):
+            continue
+        m = Map.get(mid)
+        if mid not in blocked_cache:
+            blocked_cache[mid] = m.blocked_tiles(opts)
+        # warp under our feet
+        for w in m.warps:
+            if (w['x'], w['y']) == (x, y) and w['dest_map'] in map_index() \
+               and w['dest_map'] != 'MAP_DYNAMIC':
+                dm = Map.get(w['dest_map'])
+                wid = int(w['dest_warp_id']) if str(w['dest_warp_id']).isdigit() else 0
+                if wid < len(dm.warps):
+                    dw = dm.warps[wid]
+                    n = (w['dest_map'], dw['x'], dw['y'])
+                    if n not in dist:
+                        dist[n] = dist[cur] + 1
+                        prev[n] = cur
+                        q.append(n)
+        for nid, nx, ny in conn_exit(m, x, y):
+            other = Map.get(nid)
+            if other.enterable(nx, ny, surf):
+                n = (nid, nx, ny)
+                if n not in dist:
+                    dist[n] = dist[cur] + 1
+                    prev[n] = cur
+                    q.append(n)
+        for nx, ny in neighbours(m, x, y, surf, blocked_cache[mid]):
+            n = (mid, nx, ny)
+            if n not in dist:
+                dist[n] = dist[cur] + 1
+                prev[n] = cur
+                q.append(n)
+    return None, None
+
+
+# The standard legs of the glitchless full run. Endpoints are door/warp tiles or
+# adjacent walkable tiles, chosen from each map's map.json. Modes note what the
+# leg legitimately assumes. See docs/glitchless-run/route-sketch.md.
+LEGS = [
+    # opening
+    ("pallet-house_to_oaks-lab", ('MAP_PALLET_TOWN', 6, 7), ('MAP_PALLET_TOWN', 16, 13), {}),
+    ("oaks-lab_to_viridian-mart", ('MAP_PALLET_TOWN', 16, 13), ('MAP_VIRIDIAN_CITY', 36, 19), {}),
+    ("viridian-mart_to_forest-south", ('MAP_VIRIDIAN_CITY', 36, 19), ('MAP_VIRIDIAN_FOREST', 29, 62), {}),
+    ("forest-south_to_forest-north", ('MAP_VIRIDIAN_FOREST', 29, 62), ('MAP_VIRIDIAN_FOREST', 5, 9), {}),
+    ("forest-north_to_pewter-gym", ('MAP_VIRIDIAN_FOREST', 5, 9), ('MAP_PEWTER_CITY', 15, 16), {}),
+    # Pewter -> Cerulean (whole Mt Moon inside one BFS). The B2F exit chamber is
+    # only reachable across the two fossil-pedestal tiles, so the fossil objects
+    # (removed together when one is taken, after beating Super Nerd Miguel) are
+    # treated as picked up -- see route-sketch.md.
+    ("pewter-gym_to_cerulean-pc", ('MAP_PEWTER_CITY', 15, 16), ('MAP_CERULEAN_CITY', 22, 19),
+     {'ignore_scripts': ('Fossil',)}),
+    ("cerulean-pc_to_bills-door", ('MAP_CERULEAN_CITY', 22, 19), ('MAP_ROUTE25', 51, 4), {}),
+    ("cerulean-pc_to_cerulean-gym", ('MAP_CERULEAN_CITY', 22, 19), ('MAP_CERULEAN_CITY', 31, 21), {}),
+    # south to Vermilion; Saffron transit needs Tea, so score the ungated path
+    ("cerulean-pc_to_vermilion-pc", ('MAP_CERULEAN_CITY', 22, 19), ('MAP_VERMILION_CITY', 15, 6),
+     {'avoid_maps': ('MAP_SAFFRON_CITY',)}),
+    ("vermilion-pc_to_ssanne-dock", ('MAP_VERMILION_CITY', 15, 6), ('MAP_VERMILION_CITY', 23, 34), {}),
+    ("vermilion-pc_to_vermilion-gym", ('MAP_VERMILION_CITY', 15, 6), ('MAP_VERMILION_CITY', 14, 25), {'cut': True}),
+    # east through Rock Tunnel (Cut opens Route 9; grunt tile ignored -- he's fought anyway)
+    ("cerulean-pc_to_lavender-pc", ('MAP_CERULEAN_CITY', 22, 19), ('MAP_LAVENDER_TOWN', 6, 5),
+     {'cut': True, 'ignore_scripts': ('CeruleanCity_EventScript_Grunt',)}),
+    ("lavender-pc_to_pokemontower", ('MAP_LAVENDER_TOWN', 6, 5), ('MAP_LAVENDER_TOWN', 18, 6), {}),
+    ("lavender-pc_to_celadon-pc", ('MAP_LAVENDER_TOWN', 6, 5), ('MAP_CELADON_CITY', 48, 11),
+     {'avoid_maps': ('MAP_SAFFRON_CITY',)}),
+    ("celadon-pc_to_gamecorner", ('MAP_CELADON_CITY', 48, 11), ('MAP_CELADON_CITY', 34, 21), {}),
+    ("celadon-pc_to_condominiums", ('MAP_CELADON_CITY', 48, 11), ('MAP_CELADON_CITY', 30, 11), {}),
+    ("celadon-pc_to_celadon-gym", ('MAP_CELADON_CITY', 48, 11), ('MAP_CELADON_CITY', 11, 30), {'cut': True}),
+    # Saffron (Tea assumed; gate interiors traversed via warps)
+    ("celadon-pc_to_silph-door", ('MAP_CELADON_CITY', 48, 11), ('MAP_SAFFRON_CITY', 33, 30), {}),
+    # post-Silph state: the FLAG_HIDE_SAFFRON_ROCKETS roadblock NPCs are gone
+    ("silph-door_to_saffron-gym", ('MAP_SAFFRON_CITY', 33, 30), ('MAP_SAFFRON_CITY', 46, 12),
+     {'ignore_scripts': ('RocketGrunt', 'DoorGuardGrunt')}),
+    # to Fuchsia, both sides of the Snorlax fork (flute assumed: Snorlax ignored)
+    ("lavender-pc_to_fuchsia-pc", ('MAP_LAVENDER_TOWN', 6, 5), ('MAP_FUCHSIA_CITY', 25, 31),
+     {'ignore_scripts': ('Snorlax',), 'cut': True}),
+    ("celadon-pc_to_fuchsia-pc-cycling", ('MAP_CELADON_CITY', 48, 11), ('MAP_FUCHSIA_CITY', 25, 31),
+     {'ignore_scripts': ('Snorlax',)}),
+    ("fuchsia-pc_to_safari-entrance", ('MAP_FUCHSIA_CITY', 25, 31), ('MAP_FUCHSIA_CITY', 24, 5), {}),
+    ("fuchsia-pc_to_wardens-house", ('MAP_FUCHSIA_CITY', 25, 31), ('MAP_FUCHSIA_CITY', 33, 31), {}),
+    ("fuchsia-pc_to_fuchsia-gym", ('MAP_FUCHSIA_CITY', 25, 31), ('MAP_FUCHSIA_CITY', 9, 32), {}),
+    # water legs (surf); the two candidate Cinnabar approaches
+    ("fuchsia-pc_to_cinnabar-pc", ('MAP_FUCHSIA_CITY', 25, 31), ('MAP_CINNABAR_ISLAND', 14, 11), {'surf': True}),
+    ("pallet_to_cinnabar-pc", ('MAP_PALLET_TOWN', 6, 7), ('MAP_CINNABAR_ISLAND', 14, 11), {'surf': True}),
+    ("cinnabar-pc_to_cinnabar-gym", ('MAP_CINNABAR_ISLAND', 14, 11), ('MAP_CINNABAR_ISLAND', 20, 4), {}),
+    # endgame
+    ("viridian-mart_to_viridian-gym", ('MAP_VIRIDIAN_CITY', 36, 19), ('MAP_VIRIDIAN_CITY', 36, 10), {}),
+    ("viridian-mart_to_route22-gate", ('MAP_VIRIDIAN_CITY', 36, 19), ('MAP_ROUTE22', 8, 5), {}),
+    ("route22-gate_to_victoryroad", ('MAP_ROUTE22', 8, 5), ('MAP_ROUTE23', 5, 28), {'surf': True}),
+    ("victoryroad_to_indigo-pc", ('MAP_ROUTE23', 5, 28), ('MAP_INDIGO_PLATEAU_EXTERIOR', 11, 6),
+     {'ignore_objects': True, 'surf': True}),
+]
+
+
+def cmd_path(argv):
+    opts = {'surf': '--surf' in argv, 'cut': '--cut' in argv,
+            'ignore_objects': '--ignore-objects' in argv}
+    argv = [a for a in argv if not a.startswith('--')]
+    ma, xy_a, mb, xy_b = argv
+    ax, ay = map(int, xy_a.split(','))
+    bx, by = map(int, xy_b.split(','))
+    d, path = search((ma, ax, ay), [(mb, bx, by)], opts)
+    if d is None:
+        print('unreachable')
+        return 1
+    hops = [p[0] for p in path]
+    seen = [hops[0]] if hops else []
+    for h in hops[1:]:
+        if h != seen[-1]:
+            seen.append(h)
+    print(f'{d} tiles  via {" -> ".join(s.replace("MAP_", "") for s in seen)}')
+    return 0
+
+
+def cmd_dump(argv):
+    out = {'_format': 'frlg-mapgraph distance table, cost in tiles (see tool header for model caveats)',
+           'frames_per_tile': {'walk': 16, 'run': 8, 'surf': 8, 'bike': 6,
+                               '_cite': 'decompiled/src/event_object_movement.c:158-162,8866-8931'},
+           'legs': []}
+    for name, a, b, opts in LEGS:
+        d, path = search(a, [b], opts)
+        maps = []
+        if path:
+            for p in path:
+                if not maps or maps[-1] != p[0]:
+                    maps.append(p[0])
+        out['legs'].append({'name': name, 'from': list(a), 'to': list(b),
+                            'opts': opts, 'tiles': d, 'via': maps})
+        print(f'{name:36s} {str(d):>6s} tiles')
+    dest = argv[0] if argv else f'{os.path.dirname(os.path.dirname(os.path.abspath(__file__)))}/docs/glitchless-run/distances.json'
+    json.dump(out, open(dest, 'w'), indent=1)
+    print('wrote', dest)
+    return 0
+
+
+if __name__ == '__main__':
+    if len(sys.argv) < 2 or sys.argv[1] not in ('path', 'dump'):
+        print(__doc__)
+        sys.exit(2)
+    sys.exit({'path': cmd_path, 'dump': cmd_dump}[sys.argv[1]](sys.argv[2:]))
