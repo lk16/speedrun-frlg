@@ -1,0 +1,692 @@
+{
+ "_format": "frlg-mapgraph distance table, cost in tiles (see tool header for model caveats)",
+ "frames_per_tile": {
+  "walk": 16,
+  "run": 8,
+  "surf": 8,
+  "bike": 6,
+  "_cite": "decompiled/src/event_object_movement.c:158-162,8866-8931"
+ },
+ "legs": [
+  {
+   "name": "pallet-house_to_oaks-lab",
+   "from": [
+    "MAP_PALLET_TOWN",
+    6,
+    7
+   ],
+   "to": [
+    "MAP_PALLET_TOWN",
+    16,
+    13
+   ],
+   "opts": {},
+   "tiles": 18,
+   "via": [
+    "MAP_PALLET_TOWN"
+   ]
+  },
+  {
+   "name": "oaks-lab_to_viridian-mart",
+   "from": [
+    "MAP_PALLET_TOWN",
+    16,
+    13
+   ],
+   "to": [
+    "MAP_VIRIDIAN_CITY",
+    36,
+    19
+   ],
+   "opts": {},
+   "tiles": 116,
+   "via": [
+    "MAP_PALLET_TOWN",
+    "MAP_ROUTE1",
+    "MAP_VIRIDIAN_CITY"
+   ]
+  },
+  {
+   "name": "viridian-mart_to_forest-south",
+   "from": [
+    "MAP_VIRIDIAN_CITY",
+    36,
+    19
+   ],
+   "to": [
+    "MAP_VIRIDIAN_FOREST",
+    29,
+    62
+   ],
+   "opts": {},
+   "tiles": 91,
+   "via": [
+    "MAP_VIRIDIAN_CITY",
+    "MAP_ROUTE2",
+    "MAP_ROUTE2_VIRIDIAN_FOREST_SOUTH_ENTRANCE",
+    "MAP_VIRIDIAN_FOREST"
+   ]
+  },
+  {
+   "name": "forest-south_to_forest-north",
+   "from": [
+    "MAP_VIRIDIAN_FOREST",
+    29,
+    62
+   ],
+   "to": [
+    "MAP_VIRIDIAN_FOREST",
+    5,
+    9
+   ],
+   "opts": {},
+   "tiles": 139,
+   "via": [
+    "MAP_VIRIDIAN_FOREST"
+   ]
+  },
+  {
+   "name": "forest-north_to_pewter-gym",
+   "from": [
+    "MAP_VIRIDIAN_FOREST",
+    5,
+    9
+   ],
+   "to": [
+    "MAP_PEWTER_CITY",
+    15,
+    16
+   ],
+   "opts": {},
+   "tiles": 84,
+   "via": [
+    "MAP_ROUTE2_VIRIDIAN_FOREST_NORTH_ENTRANCE",
+    "MAP_ROUTE2",
+    "MAP_PEWTER_CITY"
+   ]
+  },
+  {
+   "name": "pewter-gym_to_cerulean-pc",
+   "from": [
+    "MAP_PEWTER_CITY",
+    15,
+    16
+   ],
+   "to": [
+    "MAP_CERULEAN_CITY",
+    22,
+    19
+   ],
+   "opts": {
+    "ignore_scripts": [
+     "Fossil"
+    ]
+   },
+   "tiles": 492,
+   "via": [
+    "MAP_PEWTER_CITY",
+    "MAP_ROUTE3",
+    "MAP_ROUTE4",
+    "MAP_MT_MOON_1F",
+    "MAP_MT_MOON_B1F",
+    "MAP_MT_MOON_B2F",
+    "MAP_MT_MOON_B1F",
+    "MAP_ROUTE4",
+    "MAP_CERULEAN_CITY"
+   ]
+  },
+  {
+   "name": "cerulean-pc_to_bills-door",
+   "from": [
+    "MAP_CERULEAN_CITY",
+    22,
+    19
+   ],
+   "to": [
+    "MAP_ROUTE25",
+    51,
+    4
+   ],
+   "opts": {},
+   "tiles": 156,
+   "via": [
+    "MAP_CERULEAN_CITY",
+    "MAP_ROUTE24",
+    "MAP_ROUTE25"
+   ]
+  },
+  {
+   "name": "cerulean-pc_to_cerulean-gym",
+   "from": [
+    "MAP_CERULEAN_CITY",
+    22,
+    19
+   ],
+   "to": [
+    "MAP_CERULEAN_CITY",
+    31,
+    21
+   ],
+   "opts": {},
+   "tiles": 13,
+   "via": [
+    "MAP_CERULEAN_CITY"
+   ]
+  },
+  {
+   "name": "cerulean-pc_to_vermilion-pc",
+   "from": [
+    "MAP_CERULEAN_CITY",
+    22,
+    19
+   ],
+   "to": [
+    "MAP_VERMILION_CITY",
+    15,
+    6
+   ],
+   "opts": {
+    "avoid_maps": [
+     "MAP_SAFFRON_CITY"
+    ]
+   },
+   "tiles": 260,
+   "via": [
+    "MAP_CERULEAN_CITY",
+    "MAP_CERULEAN_CITY_HOUSE2",
+    "MAP_CERULEAN_CITY",
+    "MAP_ROUTE5",
+    "MAP_UNDERGROUND_PATH_NORTH_ENTRANCE",
+    "MAP_UNDERGROUND_PATH_NORTH_SOUTH_TUNNEL",
+    "MAP_UNDERGROUND_PATH_SOUTH_ENTRANCE",
+    "MAP_ROUTE6",
+    "MAP_VERMILION_CITY"
+   ]
+  },
+  {
+   "name": "vermilion-pc_to_ssanne-dock",
+   "from": [
+    "MAP_VERMILION_CITY",
+    15,
+    6
+   ],
+   "to": [
+    "MAP_VERMILION_CITY",
+    23,
+    34
+   ],
+   "opts": {},
+   "tiles": 60,
+   "via": [
+    "MAP_VERMILION_CITY"
+   ]
+  },
+  {
+   "name": "vermilion-pc_to_vermilion-gym",
+   "from": [
+    "MAP_VERMILION_CITY",
+    15,
+    6
+   ],
+   "to": [
+    "MAP_VERMILION_CITY",
+    14,
+    25
+   ],
+   "opts": {
+    "cut": true
+   },
+   "tiles": 36,
+   "via": [
+    "MAP_VERMILION_CITY"
+   ]
+  },
+  {
+   "name": "cerulean-pc_to_lavender-pc",
+   "from": [
+    "MAP_CERULEAN_CITY",
+    22,
+    19
+   ],
+   "to": [
+    "MAP_LAVENDER_TOWN",
+    6,
+    5
+   ],
+   "opts": {
+    "cut": true,
+    "ignore_scripts": [
+     "CeruleanCity_EventScript_Grunt"
+    ]
+   },
+   "tiles": 218,
+   "via": [
+    "MAP_CERULEAN_CITY",
+    "MAP_ROUTE5",
+    "MAP_ROUTE5_SOUTH_ENTRANCE",
+    "MAP_SAFFRON_CITY",
+    "MAP_ROUTE8_WEST_ENTRANCE",
+    "MAP_ROUTE8",
+    "MAP_LAVENDER_TOWN"
+   ]
+  },
+  {
+   "name": "lavender-pc_to_pokemontower",
+   "from": [
+    "MAP_LAVENDER_TOWN",
+    6,
+    5
+   ],
+   "to": [
+    "MAP_LAVENDER_TOWN",
+    18,
+    6
+   ],
+   "opts": {},
+   "tiles": 15,
+   "via": [
+    "MAP_LAVENDER_TOWN"
+   ]
+  },
+  {
+   "name": "lavender-pc_to_celadon-pc",
+   "from": [
+    "MAP_LAVENDER_TOWN",
+    6,
+    5
+   ],
+   "to": [
+    "MAP_CELADON_CITY",
+    48,
+    11
+   ],
+   "opts": {
+    "avoid_maps": [
+     "MAP_SAFFRON_CITY"
+    ]
+   },
+   "tiles": 227,
+   "via": [
+    "MAP_LAVENDER_TOWN",
+    "MAP_ROUTE8",
+    "MAP_UNDERGROUND_PATH_EAST_ENTRANCE",
+    "MAP_UNDERGROUND_PATH_EAST_WEST_TUNNEL",
+    "MAP_UNDERGROUND_PATH_WEST_ENTRANCE",
+    "MAP_ROUTE7",
+    "MAP_CELADON_CITY"
+   ]
+  },
+  {
+   "name": "celadon-pc_to_gamecorner",
+   "from": [
+    "MAP_CELADON_CITY",
+    48,
+    11
+   ],
+   "to": [
+    "MAP_CELADON_CITY",
+    34,
+    21
+   ],
+   "opts": {},
+   "tiles": 26,
+   "via": [
+    "MAP_CELADON_CITY"
+   ]
+  },
+  {
+   "name": "celadon-pc_to_condominiums",
+   "from": [
+    "MAP_CELADON_CITY",
+    48,
+    11
+   ],
+   "to": [
+    "MAP_CELADON_CITY",
+    30,
+    11
+   ],
+   "opts": {},
+   "tiles": 20,
+   "via": [
+    "MAP_CELADON_CITY"
+   ]
+  },
+  {
+   "name": "celadon-pc_to_celadon-gym",
+   "from": [
+    "MAP_CELADON_CITY",
+    48,
+    11
+   ],
+   "to": [
+    "MAP_CELADON_CITY",
+    11,
+    30
+   ],
+   "opts": {
+    "cut": true
+   },
+   "tiles": 86,
+   "via": [
+    "MAP_CELADON_CITY"
+   ]
+  },
+  {
+   "name": "celadon-pc_to_silph-door",
+   "from": [
+    "MAP_CELADON_CITY",
+    48,
+    11
+   ],
+   "to": [
+    "MAP_SAFFRON_CITY",
+    33,
+    30
+   ],
+   "opts": {},
+   "tiles": 79,
+   "via": [
+    "MAP_CELADON_CITY",
+    "MAP_ROUTE7",
+    "MAP_ROUTE7_EAST_ENTRANCE",
+    "MAP_SAFFRON_CITY"
+   ]
+  },
+  {
+   "name": "silph-door_to_saffron-gym",
+   "from": [
+    "MAP_SAFFRON_CITY",
+    33,
+    30
+   ],
+   "to": [
+    "MAP_SAFFRON_CITY",
+    46,
+    12
+   ],
+   "opts": {
+    "ignore_scripts": [
+     "RocketGrunt",
+     "DoorGuardGrunt"
+    ]
+   },
+   "tiles": 43,
+   "via": [
+    "MAP_SAFFRON_CITY"
+   ]
+  },
+  {
+   "name": "lavender-pc_to_fuchsia-pc",
+   "from": [
+    "MAP_LAVENDER_TOWN",
+    6,
+    5
+   ],
+   "to": [
+    "MAP_FUCHSIA_CITY",
+    25,
+    31
+   ],
+   "opts": {
+    "ignore_scripts": [
+     "Snorlax"
+    ],
+    "cut": true
+   },
+   "tiles": 547,
+   "via": [
+    "MAP_LAVENDER_TOWN",
+    "MAP_ROUTE12",
+    "MAP_ROUTE12_NORTH_ENTRANCE_1F",
+    "MAP_ROUTE12",
+    "MAP_ROUTE13",
+    "MAP_ROUTE14",
+    "MAP_ROUTE15",
+    "MAP_ROUTE15_WEST_ENTRANCE_1F",
+    "MAP_ROUTE15",
+    "MAP_FUCHSIA_CITY"
+   ]
+  },
+  {
+   "name": "celadon-pc_to_fuchsia-pc-cycling",
+   "from": [
+    "MAP_CELADON_CITY",
+    48,
+    11
+   ],
+   "to": [
+    "MAP_FUCHSIA_CITY",
+    25,
+    31
+   ],
+   "opts": {
+    "ignore_scripts": [
+     "Snorlax"
+    ]
+   },
+   "tiles": 374,
+   "via": [
+    "MAP_CELADON_CITY",
+    "MAP_ROUTE16",
+    "MAP_ROUTE16_NORTH_ENTRANCE_1F",
+    "MAP_ROUTE16",
+    "MAP_ROUTE17",
+    "MAP_ROUTE18",
+    "MAP_ROUTE18_EAST_ENTRANCE_1F",
+    "MAP_ROUTE18",
+    "MAP_FUCHSIA_CITY"
+   ]
+  },
+  {
+   "name": "fuchsia-pc_to_safari-entrance",
+   "from": [
+    "MAP_FUCHSIA_CITY",
+    25,
+    31
+   ],
+   "to": [
+    "MAP_FUCHSIA_CITY",
+    24,
+    5
+   ],
+   "opts": {},
+   "tiles": 70,
+   "via": [
+    "MAP_FUCHSIA_CITY"
+   ]
+  },
+  {
+   "name": "fuchsia-pc_to_wardens-house",
+   "from": [
+    "MAP_FUCHSIA_CITY",
+    25,
+    31
+   ],
+   "to": [
+    "MAP_FUCHSIA_CITY",
+    33,
+    31
+   ],
+   "opts": {},
+   "tiles": 9,
+   "via": [
+    "MAP_FUCHSIA_CITY"
+   ]
+  },
+  {
+   "name": "fuchsia-pc_to_fuchsia-gym",
+   "from": [
+    "MAP_FUCHSIA_CITY",
+    25,
+    31
+   ],
+   "to": [
+    "MAP_FUCHSIA_CITY",
+    9,
+    32
+   ],
+   "opts": {},
+   "tiles": 19,
+   "via": [
+    "MAP_FUCHSIA_CITY"
+   ]
+  },
+  {
+   "name": "fuchsia-pc_to_cinnabar-pc",
+   "from": [
+    "MAP_FUCHSIA_CITY",
+    25,
+    31
+   ],
+   "to": [
+    "MAP_CINNABAR_ISLAND",
+    14,
+    11
+   ],
+   "opts": {
+    "surf": true
+   },
+   "tiles": 287,
+   "via": [
+    "MAP_FUCHSIA_CITY",
+    "MAP_ROUTE19",
+    "MAP_ROUTE20",
+    "MAP_SEAFOAM_ISLANDS_1F",
+    "MAP_SEAFOAM_ISLANDS_B1F",
+    "MAP_SEAFOAM_ISLANDS_B2F",
+    "MAP_SEAFOAM_ISLANDS_B3F",
+    "MAP_SEAFOAM_ISLANDS_B2F",
+    "MAP_SEAFOAM_ISLANDS_B1F",
+    "MAP_SEAFOAM_ISLANDS_1F",
+    "MAP_ROUTE20",
+    "MAP_CINNABAR_ISLAND"
+   ]
+  },
+  {
+   "name": "pallet_to_cinnabar-pc",
+   "from": [
+    "MAP_PALLET_TOWN",
+    6,
+    7
+   ],
+   "to": [
+    "MAP_CINNABAR_ISLAND",
+    14,
+    11
+   ],
+   "opts": {
+    "surf": true
+   },
+   "tiles": 146,
+   "via": [
+    "MAP_PALLET_TOWN",
+    "MAP_ROUTE21_NORTH",
+    "MAP_ROUTE21_SOUTH",
+    "MAP_CINNABAR_ISLAND"
+   ]
+  },
+  {
+   "name": "cinnabar-pc_to_cinnabar-gym",
+   "from": [
+    "MAP_CINNABAR_ISLAND",
+    14,
+    11
+   ],
+   "to": [
+    "MAP_CINNABAR_ISLAND",
+    20,
+    4
+   ],
+   "opts": {},
+   "tiles": 17,
+   "via": [
+    "MAP_CINNABAR_ISLAND"
+   ]
+  },
+  {
+   "name": "viridian-mart_to_viridian-gym",
+   "from": [
+    "MAP_VIRIDIAN_CITY",
+    36,
+    19
+   ],
+   "to": [
+    "MAP_VIRIDIAN_CITY",
+    36,
+    10
+   ],
+   "opts": {},
+   "tiles": 55,
+   "via": [
+    "MAP_VIRIDIAN_CITY"
+   ]
+  },
+  {
+   "name": "viridian-mart_to_route22-gate",
+   "from": [
+    "MAP_VIRIDIAN_CITY",
+    36,
+    19
+   ],
+   "to": [
+    "MAP_ROUTE22",
+    8,
+    5
+   ],
+   "opts": {},
+   "tiles": 113,
+   "via": [
+    "MAP_VIRIDIAN_CITY",
+    "MAP_ROUTE22"
+   ]
+  },
+  {
+   "name": "route22-gate_to_victoryroad",
+   "from": [
+    "MAP_ROUTE22",
+    8,
+    5
+   ],
+   "to": [
+    "MAP_ROUTE23",
+    5,
+    28
+   ],
+   "opts": {
+    "surf": true
+   },
+   "tiles": 167,
+   "via": [
+    "MAP_ROUTE22_NORTH_ENTRANCE",
+    "MAP_ROUTE23"
+   ]
+  },
+  {
+   "name": "victoryroad_to_indigo-pc",
+   "from": [
+    "MAP_ROUTE23",
+    5,
+    28
+   ],
+   "to": [
+    "MAP_INDIGO_PLATEAU_EXTERIOR",
+    11,
+    6
+   ],
+   "opts": {
+    "ignore_objects": true,
+    "surf": true
+   },
+   "tiles": 155,
+   "via": [
+    "MAP_VICTORY_ROAD_1F",
+    "MAP_VICTORY_ROAD_2F",
+    "MAP_VICTORY_ROAD_3F",
+    "MAP_VICTORY_ROAD_2F",
+    "MAP_ROUTE23",
+    "MAP_INDIGO_PLATEAU_EXTERIOR"
+   ]
+  }
+ ]
+}

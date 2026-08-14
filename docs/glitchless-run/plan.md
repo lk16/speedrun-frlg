@@ -17,8 +17,9 @@
 > (`requires_flash` exists, is render-only); Rock Smash resolved non-mandatory by collision BFS;
 > starter×HM learnset audit added (solo run impossible); §3 rebuilt against the real collision
 > map and engine sight rules — Rock Tunnel is not dodgeable, and the Sammy / Cerulean rival /
-> Dig grunt / Tower / Hideout / Silph-7F / Snorlax forced battles plus the S.S. Ticket, Poké
-> Flute and Tea gate chains were added. §8 tracks what stayed open.
+> Dig grunt / Mt-Moon-Miguel (fossil gate) / Tower / Hideout / Silph-7F / Snorlax forced
+> battles plus the S.S. Ticket, Poké Flute and Tea gate chains were added. §8 tracks what
+> stayed open.
 
 ---
 
@@ -155,6 +156,7 @@ not by an aggressive sight radius.
 | Giovanni, `SilphCo_11F` | Forced trigger line blocks the only path in the room; defeat sets `FLAG_HIDE_SAFFRON_ROCKETS`, clearing 8 non-battle roadblock NPCs in Saffron | `decompiled/data/maps/SilphCo_11F/scripts.inc:46-77`; consumed at `decompiled/data/maps/SaffronCity/map.json:52,66,80,94,108,123,137,151` |
 | "Late Rival," Route 22 (post-badges) | Same forced-trigger pattern on the only Viridian↔Route 23 path — BFS: gate door unreachable from the Viridian side avoiding trigger tiles (33,4-6) | `decompiled/data/maps/Route22/map.json`, `.../scripts.inc:155-220` |
 | Bug Catcher Sammy, Viridian Forest | The only S↔N corridor is 5 tiles wide (x=3-7 at y=22); Sammy's body covers x=7 and his 4-tile leftward sight cone covers x=3-6 — BFS finds no path dodging him | object in `decompiled/data/maps/ViridianForest/map.json` (`FACE_LEFT`, sight 4); corridor from `decompiled/data/layouts/ViridianForest/map.bin` |
+| Super Nerd Miguel + fossil pickup, Mt Moon B2F | The B2F exit chamber (ladder (5,10) → the B1F room with the Route 4 east exit) is reachable only across the two fossil-pedestal tiles at (13,7)/(14,7); the fossil objects clear only after Miguel is defeated and a fossil is taken (both objects removed together; Miguel ends at (14,8), leaving (13,7) open). **A fossil pickup is therefore mandatory** | `decompiled/data/maps/MtMoon_B2F/scripts.inc:25-83`, `map.json` + layout BFS |
 | Rival, Cerulean City (pre-Nugget Bridge) | Trigger tiles (22-24, y=6) span the only walkable columns to the Route 24 edge | `decompiled/data/maps/CeruleanCity/map.json` coord_events, `.../scripts.inc:16-56` |
 | Dig grunt, Cerulean City | The only path to Route 9 runs through the burgled house's back door; grunt body (33,6) + triggers (33,5/7) close the backyard passage. Defeat hands over **TM28 Dig** — the §7 tool arrives free, on the critical path | `decompiled/data/maps/CeruleanCity/map.json`, `.../scripts.inc:160-190` |
 | ≥7 Rock Tunnel trainers | See the dodgeable-section correction below — Rock Tunnel is **not** cleanly dodgeable | `decompiled/data/maps/RockTunnel_{1F,B1F}/map.json` + layout BFS |
@@ -381,3 +383,7 @@ should be re-checked against the actual FRLG map set before being relied on eith
 5. This document's HM/trainer/version claims should be treated the way `defeat-brock` treats its
    own research phase: correctness first, then segment-by-segment measurement — nothing here is
    a route until it's built and tier-1 verified.
+6. **Tooling**: the pathfinder that produced the §2/§3 verdicts is committed as
+   `bin/frlg-mapgraph`; the standard-leg distance table it emits is
+   `docs/glitchless-run/distances.json`, and `docs/glitchless-run/route-sketch.md` reads the
+   route consequences out of both. Reuse them instead of re-deriving geometry by hand.
