@@ -1,7 +1,7 @@
-//! The battle engine: play the rival battle forward from a `gRngValue` and a
-//! delay plan without the emulator, using the v1 roll semantics for what the
-//! rolls decide (`crate::` root) and the fitted tables for where in the
-//! stream they land (`crate::pacing`).
+//! The battle engine: play a lab rival battle forward from a `gRngValue`
+//! and a delay plan without the emulator, using the v1 roll semantics for
+//! what the rolls decide (`crate::` root) and a fitted [`Pacing`] table for
+//! where in the stream they land.
 //!
 //! Where the pacing model has a gate (a commit press or the end sequence
 //! whose exact frame it cannot decide), the engine enumerates the measured
@@ -17,8 +17,8 @@
 
 use frlg_rng::Rng;
 
-use crate::pacing;
-use crate::{apply_variance, base_damage, rival_choose_move, Mon, Move};
+use crate::pacing::{self, Pacing};
+use crate::{apply_variance, base_damage, rival_choose_move_with, Mon, Move};
 
 /// How one enumerated battle ends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,9 +65,11 @@ impl Stream {
 }
 
 #[derive(Clone, Copy)]
-struct BattleState {
+struct BattleState<'a> {
     us: Mon,
     rival: Mon,
+    rival_hit: Move,
+    pacing: &'a Pacing,
     stream: Stream,
     /// FIRST_BATTLE_MSG_FLAG_INFLICT_DMG: crits live once our first hit's
     /// bar has drained.
@@ -78,22 +80,40 @@ struct BattleState {
     turn: u32,
 }
 
+/// [`simulate_with`] for the rival-1 fight: Charmander answers with Scratch,
+/// pacing per [`pacing::RIVAL1`] (the `run_plan` drive).
+pub fn simulate(plan: &[u32], start: Rng, us: Mon, rival: Mon) -> Vec<Leaf> {
+    simulate_with(plan, start, us, rival, Move::Scratch, &pacing::RIVAL1)
+}
+
 /// Play every gate combination of `plan` (same semantics as the route
 /// search: `plan[0]` idle frames before the battle's mash starts, `plan[k]`
 /// idle frames at turn k's action selection) from the battle-start
 /// `gRngValue`. `us` and `rival` are the mons as `gBattleMons` will hold
-/// them; the player must be the faster side (this route's is -- the model
-/// has no speed-tie rolls).
-pub fn simulate(plan: &[u32], start: Rng, us: Mon, rival: Mon) -> Vec<Leaf> {
+/// them; the player must be the faster side (both fitted fights' is -- the
+/// model has no speed-tie rolls). `rival_hit` is the rival's damaging move
+/// (its slot 0); the player always attacks with Tackle-or-Scratch slot 0,
+/// whose accuracy is never rolled in these battles (the ACC_CURR_MOVE
+/// quirk, crate root).
+pub fn simulate_with(
+    plan: &[u32],
+    start: Rng,
+    us: Mon,
+    rival: Mon,
+    rival_hit: Move,
+    pacing: &Pacing,
+) -> Vec<Leaf> {
     assert!(
         us.speed > rival.speed,
         "the pacing model is fitted for a player that acts first"
     );
     let start_delay = plan.first().copied().unwrap_or(0);
-    let preturn = pacing::INTRO_PRETURN[start_delay as usize % 5];
+    let preturn = pacing.intro_preturn[start_delay as usize % 5];
     let mut state = BattleState {
         us,
         rival,
+        rival_hit,
+        pacing,
         stream: Stream {
             rng: start,
             consumed: 0,
@@ -116,7 +136,7 @@ fn leaf(leaves: &mut Vec<Leaf>, durs: Vec<u32>, result: SimResult) {
     });
 }
 
-fn walk(mut state: BattleState, plan: &[u32], durs: Vec<u32>, leaves: &mut Vec<Leaf>) {
+fn walk(mut state: BattleState<'_>, plan: &[u32], durs: Vec<u32>, leaves: &mut Vec<Leaf>) {
     state.turn += 1;
     if state.turn > 16 {
         return leaf(leaves, durs, SimResult::Loss);
@@ -124,15 +144,15 @@ fn walk(mut state: BattleState, plan: &[u32], durs: Vec<u32>, leaves: &mut Vec<L
     let delay = plan.get(state.turn as usize).copied().unwrap_or(0);
 
     // The AI block: every roll on one frame, before the player commits.
-    let ai_frame = state.det + pacing::DET_TO_AI;
-    let (us, rival) = (state.us, state.rival);
+    let ai_frame = state.det + state.pacing.det_to_ai;
+    let (us, rival, rival_hit) = (state.us, state.rival, state.rival_hit);
     let rival_move = {
         let stream = &mut state.stream;
-        rival_choose_move(&us, &rival, &mut || stream.roll_at(ai_frame))
+        rival_choose_move_with(rival_hit, &us, &rival, &mut || stream.roll_at(ai_frame))
     };
 
     let lb = state.det + delay + 1;
-    for &dur in pacing::commit_durations(delay) {
+    for &dur in state.pacing.commit_durs(delay) {
         let mut s = state;
         let mut durs = durs.clone();
         durs.push(dur);
@@ -153,32 +173,33 @@ enum TurnEnd {
 }
 
 fn play_turn(
-    s: &mut BattleState,
+    s: &mut BattleState<'_>,
     rival_move: Move,
     loop_a: u32,
     leaves: &mut Vec<Leaf>,
     durs: &[u32],
 ) -> TurnEnd {
+    let pacing = s.pacing;
     let emit = |leaves: &mut Vec<Leaf>, result| {
         leaf(leaves, durs.to_vec(), result);
         TurnEnd::Decided
     };
 
-    // Player Tackle: crit, damage, bar drain, secondary. No accuracy roll on
-    // this route (the ACC_CURR_MOVE quirk, crate root).
-    let pcrit_f = loop_a + pacing::LOOP_A_TO_PCRIT;
+    // Player attack: crit, damage, bar drain, secondary. No accuracy roll
+    // on this route (the ACC_CURR_MOVE quirk, crate root).
+    let pcrit_f = loop_a + pacing.loop_a_to_pcrit;
     let crit = s.stream.roll_at(pcrit_f).is_multiple_of(16) && s.crit_enabled;
-    let pdmg_f = pcrit_f + pacing::PCRIT_TO_PDMG;
+    let pdmg_f = pcrit_f + pacing.pcrit_to_pdmg;
     let damage = apply_variance(
         base_damage(&s.us, &s.rival, Move::Tackle, crit),
         s.stream.roll_at(pdmg_f),
     );
     let delta = s.rival.hp.min(damage as u16);
     let drain = if s.crit_enabled {
-        pacing::RHP_DRAIN.get(delta as usize).copied()
+        pacing.rhp_drain(delta)
     } else {
         // Our first hit has not landed yet: Oak's interjection variant.
-        pacing::rhp_drain_first(delta)
+        pacing.rhp_drain_first(delta)
     };
     let Some(drain) = drain else {
         return emit(leaves, SimResult::Unmodelled("rival HP-bar delta"));
@@ -188,14 +209,14 @@ fn play_turn(
     s.crit_enabled = true;
     let psec_f = rhp_f
         + if crit {
-            pacing::HP_TO_SEC_CRIT
+            pacing.hp_to_sec_crit
         } else {
-            pacing::HP_TO_SEC
+            pacing.hp_to_sec
         };
     let _ = s.stream.roll_at(psec_f);
 
     if s.rival.hp == 0 {
-        let Some(gaps) = pacing::outcome_win_gaps((psec_f - loop_a) % 5) else {
+        let Some(gaps) = pacing.outcome_win_gaps((psec_f - loop_a) % 5) else {
             return emit(leaves, SimResult::Unmodelled("end-sequence press phase"));
         };
         for gap in gaps {
@@ -214,42 +235,51 @@ fn play_turn(
     // The rival's answer.
     match rival_move {
         Move::Growl => {
-            let racc_f = psec_f + pacing::PSEC_TO_RACC_GROWL;
+            let racc_f = psec_f + pacing.psec_to_racc_growl;
             let _ = s.stream.roll_at(racc_f); // Growl is 100 accurate
             assert!(s.us.atk_stage > 0, "a second rival Growl cannot score 100");
             s.us.atk_stage -= 1;
-            let stagefall_f = racc_f + pacing::RACC_TO_STAGEFALL_FIRST;
-            s.det = stagefall_f + pacing::STAGEFALL_FIRST_TO_TURNEND;
+            let stagefall_f = racc_f + pacing.racc_to_stagefall_first;
+            s.det = stagefall_f + pacing.stagefall_first_to_turnend;
         }
         mv => {
-            let racc_f = psec_f + pacing::PSEC_TO_RACC_SCRATCH;
-            let _ = s.stream.roll_at(racc_f); // Scratch is 100 accurate
-            let rcrit_f = racc_f + pacing::RACC_TO_RCRIT;
-            let crit = s.stream.roll_at(rcrit_f).is_multiple_of(16) && s.crit_enabled;
-            let rdmg_f = rcrit_f + pacing::RCRIT_TO_RDMG;
-            let damage = apply_variance(
-                base_damage(&s.rival, &s.us, mv, crit),
-                s.stream.roll_at(rdmg_f),
-            );
-            let delta = s.us.hp.min(damage as u16);
-            s.us.hp -= delta;
-            if s.us.hp == 0 {
-                // The fatal hit's trailing secondary roll happens, but
-                // nothing after it can matter to a search.
-                return emit(leaves, SimResult::Loss);
-            }
-            let Some(drain) = pacing::uhp_drain(delta) else {
-                return emit(leaves, SimResult::Unmodelled("player HP-bar delta"));
-            };
-            let uhp_f = rdmg_f + drain;
-            let rsec_f = uhp_f
-                + if crit {
-                    pacing::HP_TO_SEC_CRIT
-                } else {
-                    pacing::HP_TO_SEC
+            let racc_f = psec_f + pacing.psec_to_racc_hit;
+            let acc_roll = s.stream.roll_at(racc_f);
+            if (acc_roll as u32 % 100 + 1) > mv.accuracy() {
+                // The rival's move missed (only possible below 100
+                // accuracy, e.g. Bulbasaur's Tackle at 95).
+                let Some(gap) = pacing.racc_miss_to_turnend() else {
+                    return emit(leaves, SimResult::Unmodelled("rival miss"));
                 };
-            let _ = s.stream.roll_at(rsec_f);
-            s.det = rsec_f + pacing::RSEC_TO_TURNEND;
+                s.det = racc_f + gap;
+            } else {
+                let rcrit_f = racc_f + pacing.racc_to_rcrit;
+                let crit = s.stream.roll_at(rcrit_f).is_multiple_of(16) && s.crit_enabled;
+                let rdmg_f = rcrit_f + pacing.rcrit_to_rdmg;
+                let damage = apply_variance(
+                    base_damage(&s.rival, &s.us, mv, crit),
+                    s.stream.roll_at(rdmg_f),
+                );
+                let delta = s.us.hp.min(damage as u16);
+                s.us.hp -= delta;
+                if s.us.hp == 0 {
+                    // The fatal hit's trailing secondary roll happens, but
+                    // nothing after it can matter to a search.
+                    return emit(leaves, SimResult::Loss);
+                }
+                let Some(drain) = pacing.uhp_drain(delta) else {
+                    return emit(leaves, SimResult::Unmodelled("player HP-bar delta"));
+                };
+                let uhp_f = rdmg_f + drain;
+                let rsec_f = uhp_f
+                    + if crit {
+                        pacing.hp_to_sec_crit
+                    } else {
+                        pacing.hp_to_sec
+                    };
+                let _ = s.stream.roll_at(rsec_f);
+                s.det = rsec_f + pacing.rsec_to_turnend;
+            }
         }
     }
     let _turn_end_roll = s.stream.roll_at(s.det);

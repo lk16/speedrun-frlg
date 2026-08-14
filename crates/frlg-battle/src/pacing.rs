@@ -1,12 +1,24 @@
-//! The battle's frame pacing, measured event by event.
+//! The battle's frame pacing, measured event by event, per fight.
 //!
-//! Every constant here was fitted by `examples/fit-pacing.rs` (2026-08-12,
-//! ~280 emulator battles over start delays, per-turn delay sweeps and stream
-//! shifts -10..=10, zero label failures), and none of it is derived from the
-//! decomp: these are measured properties of this route's rival battle under
-//! this route's drive (the `text_hold = 4` A-mash of `run_plan`, restarted at
-//! every stage, `route/rival-1/ledger.json` tuning). Change the drive, the starter,
-//! or the opponent and the table must be re-fitted.
+//! A [`Pacing`] value holds every fitted constant for one fight under one
+//! drive. Two are committed:
+//!
+//! - [`RIVAL1`]: the rival-1 lab battle (our Bulbasaur vs Charmander), under
+//!   the `run_plan` drive (A-mash from battle start, the plan's first entry
+//!   idled *before* the battle's mash starts). Fitted 2026-08-12 by
+//!   `examples/fit-pacing.rs` (~280 emulator battles over start delays,
+//!   per-turn delay sweeps and stream shifts -10..=10, zero label failures).
+//! - [`SQUIRTLE_LAB`]: the defeat-brock lab battle (our Squirtle vs the
+//!   rival's Bulbasaur), under the `win_battle` drive (B-mash intro,
+//!   delays spent at each action menu; `crates/frlg-route/src/brock.rs`).
+//!   Fitted 2026-08-14 by the same fitter (`FRLG_LEDGER=route/defeat-brock/
+//!   ledger.json FRLG_DRIVE=menu`); the evidence notes sit with each
+//!   constant.
+//!
+//! None of it is derived from the decomp: these are measured properties of
+//! one fight under one drive (`text_hold` mash of the route's tuning).
+//! Change the drive, the starter, or the opponent and the table must be
+//! re-fitted.
 //!
 //! The frame anatomy of one turn, verified against the marks the fitter
 //! records (`Marks` in fit-pacing):
@@ -26,48 +38,124 @@
 //! detection-frame parity, mash phase and turn index, none classify it
 //! fully). A gate enumerates its measured candidates instead of guessing;
 //! `engine::simulate` returns one leaf per combination, and the emulator
-//! picks the real one. Everything else in this file is single-valued in the
-//! fit.
+//! picks the real one. Everything else here is single-valued in its fit.
 
-/// `turnend`/`preturn` roll (== the `choosing_actions` detection frame) to
-/// the AI block. Independent of the plan's delay: the opponent controller
-/// answers before the player commits.
-pub const DET_TO_AI: u32 = 5;
-/// Player crit roll relative to the resolution-mash start (`lbe + 1`).
-pub const LOOP_A_TO_PCRIT: u32 = 30;
-/// Crit roll to damage roll (`adjustnormaldamage` script step).
-pub const PCRIT_TO_PDMG: u32 = 3;
-/// HP write to the attacker's trailing secondary-effect roll...
-pub const HP_TO_SEC: u32 = 5;
-/// ...which waits out "A critical hit!" when the hit crit.
-pub const HP_TO_SEC_CRIT: u32 = 84;
-/// Player secondary roll to the rival's accuracy roll, by announced move.
-pub const PSEC_TO_RACC_SCRATCH: u32 = 12;
-pub const PSEC_TO_RACC_GROWL: u32 = 14;
-/// Rival accuracy roll to its crit roll (Scratch's animation).
-pub const RACC_TO_RCRIT: u32 = 31;
-pub const RCRIT_TO_RDMG: u32 = 3;
-/// Rival secondary roll to the turn-end roll.
-pub const RSEC_TO_TURNEND: u32 = 10;
-/// The rival's first Growl: accuracy roll to the stat-stage write, and the
-/// stage write to the turn-end roll (Oak's stat-change interjection included;
-/// a second rival Growl cannot happen -- its score is then 99 < 100).
-pub const RACC_TO_STAGEFALL_FIRST: u32 = 29;
-pub const STAGEFALL_FIRST_TO_TURNEND: u32 = 213;
+/// Every fitted pacing quantity for one fight under one drive. Tables use
+/// 0 for "never observed" (real gaps are all far from 0); the accessor
+/// methods turn that into `Option`.
+#[derive(Debug, Clone)]
+pub struct Pacing {
+    /// Battle-segment frame of the pre-turn-1 roll, by `plan[0] % 5` (the
+    /// mash period). A drive whose intro does not depend on the plan's
+    /// head repeats one value five times.
+    pub intro_preturn: [u32; 5],
+    /// `turnend`/`preturn` roll (== the `choosing_actions` detection frame)
+    /// to the AI block. Independent of the plan's delay: the opponent
+    /// controller answers before the player commits.
+    pub det_to_ai: u32,
+    /// Player crit roll relative to the resolution-mash start (`lbe + 1`).
+    pub loop_a_to_pcrit: u32,
+    /// Crit roll to damage roll (`adjustnormaldamage` script step).
+    pub pcrit_to_pdmg: u32,
+    /// HP write to the attacker's trailing secondary-effect roll...
+    pub hp_to_sec: u32,
+    /// ...which waits out "A critical hit!" when the hit crit.
+    pub hp_to_sec_crit: u32,
+    /// Player secondary roll to the rival's accuracy roll, by announced
+    /// move: the rival's damaging move, and Growl.
+    pub psec_to_racc_hit: u32,
+    pub psec_to_racc_growl: u32,
+    /// Rival accuracy roll to its crit roll (the hit move's animation).
+    pub racc_to_rcrit: u32,
+    pub rcrit_to_rdmg: u32,
+    /// Rival secondary roll to the turn-end roll.
+    pub rsec_to_turnend: u32,
+    /// The rival's damaging move missing (only possible when its accuracy
+    /// is below 100): accuracy roll to the turn-end roll, through the
+    /// "attack missed" text. 0 = never observed (a fight whose rival
+    /// cannot miss).
+    pub racc_miss_to_turnend: u32,
+    /// The rival's first Growl: accuracy roll to the stat-stage write, and
+    /// the stage write to the turn-end roll (Oak's stat-change interjection
+    /// included; a second rival Growl cannot happen -- its score is then
+    /// 99 < 100).
+    pub racc_to_stagefall_first: u32,
+    pub stagefall_first_to_turnend: u32,
+    /// GATE: how long the commit mash runs, `8 + 5 * k` with `k` the index
+    /// of the first menu press that registered, as a per-delay candidate
+    /// set. The observed sets are structured by the delay (rival-1: {13,18}
+    /// below 4, {8,13,18} above; the squirtle fight's differ per delay), so
+    /// the mapping is a function, not a threshold pair.
+    pub commit_durations: fn(u32) -> &'static [u32],
+    /// HP-bar drain (damage roll to the `gBattleMons` HP write) for the
+    /// rival's bar, by HP actually lost -- a killing hit drains only what
+    /// was left. Crit and non-crit hits drain identically; index 0 unused,
+    /// 0 = unobserved delta.
+    pub rhp_drain: &'static [u32],
+    /// The same drain when it is the player's first landed hit: Oak's
+    /// "the enemy's HP bar!" interjection sits in the middle. Only the
+    /// no-crit damage range is reachable (crits are suppressed until the
+    /// first hit lands).
+    pub rhp_drain_first: &'static [u32],
+    /// HP-bar drain for the player's bar (a bar pixel covers different HP
+    /// than the rival's when max HP differs, so the table is separate).
+    pub uhp_drain: &'static [u32],
+    /// GATE: the win sequence (final secondary roll to `gBattleOutcome`
+    /// being set: faint, EXP, level-up, Oak). Its texts run on the
+    /// resolution mash's press grid, so the base depends on
+    /// `(psec - loop_a_start) % 5`, and the last press can slip one mash
+    /// period. 0 = phase never observed.
+    pub outcome_win_base: [u32; 5],
+}
 
-/// Battle-segment frame of the pre-turn-1 roll, by `start_delay % 5`: the
-/// whole intro is press-gated on the restarted mash, so delays collapse mod
-/// the mash period. Measured for every start delay 0..64 (identical run
-/// frames AND identical outcomes across each residue class).
-pub const INTRO_PRETURN: [u32; 5] = [1048, 1049, 1050, 1046, 1047];
+impl Pacing {
+    pub fn commit_durs(&self, delay: u32) -> &'static [u32] {
+        (self.commit_durations)(delay)
+    }
 
-/// GATE: how long the commit mash runs, `8 + 5 * k` with `k` the index of
-/// the first menu press that registered. Delays 0..=3 have hundreds of
-/// observations and never registered their first press (it falls within 4
-/// frames of detection), so their set is the {13, 18} pair. Larger delays
-/// are sparsely observed and their first press sometimes registers and
-/// sometimes whiffs (13 was seen at delay 9 on a held-out run after only 8s
-/// in the fit), so they carry the full union until more data narrows them.
+    fn table(t: &[u32], delta: u16) -> Option<u32> {
+        match t.get(delta as usize).copied() {
+            Some(0) | None => None,
+            some => some,
+        }
+    }
+
+    pub fn rhp_drain(&self, delta: u16) -> Option<u32> {
+        Self::table(self.rhp_drain, delta)
+    }
+
+    pub fn rhp_drain_first(&self, delta: u16) -> Option<u32> {
+        Self::table(self.rhp_drain_first, delta)
+    }
+
+    pub fn uhp_drain(&self, delta: u16) -> Option<u32> {
+        Self::table(self.uhp_drain, delta)
+    }
+
+    /// Both end-gate candidates for the given press phase, or `None` for a
+    /// phase the fit never observed.
+    pub fn outcome_win_gaps(&self, phase: u32) -> Option<[u32; 2]> {
+        match self.outcome_win_base[phase as usize % 5] {
+            0 => None,
+            base => Some([base, base + 5]),
+        }
+    }
+
+    pub fn racc_miss_to_turnend(&self) -> Option<u32> {
+        match self.racc_miss_to_turnend {
+            0 => None,
+            v => Some(v),
+        }
+    }
+}
+
+/// The rival-1 lab battle (Bulbasaur vs Charmander) under the `run_plan`
+/// drive -- the fitted values documented in this module's header. Delays
+/// 0..=3 have hundreds of observations and never registered their first
+/// commit press (it falls within 4 frames of detection), so their gate set
+/// is the {13, 18} pair. Larger delays are sparsely observed and their
+/// first press sometimes registers and sometimes whiffs, so they carry the
+/// full union until more data narrows them.
 ///
 /// Arbitration evidence (2026-08-14, `examples/arbitrate*`): in 40+ real
 /// replays on the committed stream at delays 4-11, the 8 never fired once,
@@ -76,55 +164,129 @@ pub const INTRO_PRETURN: [u32; 5] = [1048, 1049, 1050, 1046, 1047];
 /// Every measured battle still equalled one of the enumerated leaves --
 /// the gate set is sound, but a search must not bank a margin smaller
 /// than the gate spread without an emulator run.
+pub const RIVAL1: Pacing = Pacing {
+    intro_preturn: [1048, 1049, 1050, 1046, 1047],
+    det_to_ai: 5,
+    loop_a_to_pcrit: 30,
+    pcrit_to_pdmg: 3,
+    hp_to_sec: 5,
+    hp_to_sec_crit: 84,
+    psec_to_racc_hit: 12,
+    psec_to_racc_growl: 14,
+    racc_to_rcrit: 31,
+    rcrit_to_rdmg: 3,
+    rsec_to_turnend: 10,
+    racc_miss_to_turnend: 0, // Scratch is 100 accurate: no miss exists
+    racc_to_stagefall_first: 29,
+    stagefall_first_to_turnend: 213,
+    commit_durations: rival1_commit_durations,
+    // Deltas 1..=10; rival max HP 18.
+    rhp_drain: &[0, 77, 80, 82, 85, 88, 90, 93, 96, 98, 101],
+    // Only deltas 4 and 5 are reachable (crits suppressed on the first hit).
+    rhp_drain_first: &[0, 0, 0, 0, 210, 215],
+    // Deltas 1 and 6 were only ever observed on killing blows, where the
+    // battle is decided anyway. Player max HP 20.
+    uhp_drain: &[0, 0, 79, 82, 84, 87, 0, 91, 94, 96, 99],
+    // Phase 1 was never observed.
+    outcome_win_base: [424, 0, 427, 426, 425],
+};
+
+// --- Backwards-compatible re-exports of the rival-1 constants. The fitter
+// and the older examples name them directly; new code should carry a
+// `&Pacing` instead. ---
+
+pub const DET_TO_AI: u32 = RIVAL1.det_to_ai;
+pub const LOOP_A_TO_PCRIT: u32 = RIVAL1.loop_a_to_pcrit;
+pub const PCRIT_TO_PDMG: u32 = RIVAL1.pcrit_to_pdmg;
+pub const HP_TO_SEC: u32 = RIVAL1.hp_to_sec;
+pub const HP_TO_SEC_CRIT: u32 = RIVAL1.hp_to_sec_crit;
+pub const PSEC_TO_RACC_SCRATCH: u32 = RIVAL1.psec_to_racc_hit;
+pub const PSEC_TO_RACC_GROWL: u32 = RIVAL1.psec_to_racc_growl;
+pub const RACC_TO_RCRIT: u32 = RIVAL1.racc_to_rcrit;
+pub const RCRIT_TO_RDMG: u32 = RIVAL1.rcrit_to_rdmg;
+pub const RSEC_TO_TURNEND: u32 = RIVAL1.rsec_to_turnend;
+pub const RACC_TO_STAGEFALL_FIRST: u32 = RIVAL1.racc_to_stagefall_first;
+pub const STAGEFALL_FIRST_TO_TURNEND: u32 = RIVAL1.stagefall_first_to_turnend;
+pub const INTRO_PRETURN: [u32; 5] = RIVAL1.intro_preturn;
+pub const RHP_DRAIN: [u32; 11] = [0, 77, 80, 82, 85, 88, 90, 93, 96, 98, 101];
+
+fn rival1_commit_durations(delay: u32) -> &'static [u32] {
+    if delay <= 3 {
+        &[13, 18]
+    } else {
+        &[8, 13, 18]
+    }
+}
+
 pub fn commit_durations(delay: u32) -> &'static [u32] {
+    RIVAL1.commit_durs(delay)
+}
+
+pub fn rhp_drain_first(delta: u16) -> Option<u32> {
+    RIVAL1.rhp_drain_first(delta)
+}
+
+pub fn uhp_drain(delta: u16) -> Option<u32> {
+    RIVAL1.uhp_drain(delta)
+}
+
+pub fn outcome_win_gaps(phase: u32) -> Option<[u32; 2]> {
+    RIVAL1.outcome_win_gaps(phase)
+}
+
+/// The defeat-brock lab battle's commit-gate sets, per menu delay, from
+/// the fit's 992 observed turns: delay 0 played {13 (x75), 18 (x568)};
+/// delay 1 played 23 in all 25 observations; delays 2 and 4 played 18
+/// only; delay 3 {13, 18}; delays 5+ played 13 mostly with 8 appearing at
+/// delays 8 and 13-15. The sets below are supersets of everything
+/// observed -- over-inclusion only adds leaves for the emulator to refute,
+/// while a missing value would hide the real battle from the enumeration.
+fn squirtle_commit_durations(delay: u32) -> &'static [u32] {
     match delay {
-        0..=3 => &[13, 18],
+        0 | 2..=4 => &[13, 18],
+        1 => &[18, 23],
         _ => &[8, 13, 18],
     }
 }
 
-/// HP-bar drain (damage roll to the `gBattleMons` HP write) for the rival's
-/// bar, by HP actually lost -- a killing hit drains only what was left.
-/// Crit and non-crit hits drain identically; index 0 is unused.
-pub const RHP_DRAIN: [u32; 11] = [0, 77, 80, 82, 85, 88, 90, 93, 96, 98, 101];
-/// The same drain when it is the player's first landed hit: Oak's
-/// "the enemy's HP bar!" interjection sits in the middle. Only deltas 4 and
-/// 5 are reachable (crits are still suppressed on the first hit).
-pub fn rhp_drain_first(delta: u16) -> Option<u32> {
-    match delta {
-        4 => Some(210),
-        5 => Some(215),
-        _ => None,
-    }
-}
-/// HP-bar drain for the player's bar (max 20 vs the rival's 18: a bar pixel
-/// covers more HP, so the table differs). Deltas 1 and 6 were only ever
-/// observed on killing blows, where the battle is decided anyway.
-pub fn uhp_drain(delta: u16) -> Option<u32> {
-    match delta {
-        2 => Some(79),
-        3 => Some(82),
-        4 => Some(84),
-        5 => Some(87),
-        7 => Some(91),
-        8 => Some(94),
-        9 => Some(96),
-        10 => Some(99),
-        _ => None,
-    }
-}
-
-/// GATE: the win sequence (final secondary roll to `gBattleOutcome` being
-/// set: faint, EXP, level-up, Oak). Its texts run on the resolution mash's
-/// press grid, so the base depends on `(psec - loop_a_start) % 5`, and the
-/// last press can slip one mash period. Phase 1 was never observed.
-pub fn outcome_win_gaps(phase: u32) -> Option<[u32; 2]> {
-    let base = match phase {
-        0 => 424,
-        2 => 427,
-        3 => 426,
-        4 => 425,
-        _ => return None,
-    };
-    Some([base, base + 5])
-}
+/// The defeat-brock lab battle (Squirtle vs the rival's Bulbasaur) under
+/// the `win_battle` drive: B-mash intro, `plan[0]` idled before the mash
+/// starts (its residue mod 5 moves the preturn frame exactly like
+/// rival-1's start delay -- same measured table, coincidentally), then
+/// per-menu delays with an A-mash. Fitted 2026-08-14: ~230 battles at
+/// seed 27 / text_hold 4 (the committed 38950 route's tuning), zero label
+/// failures; raw evidence in `$FRLG_ARTIFACTS/scratch/fit-pacing-
+/// squirtle.tsv` and the constants' derivation in
+/// `docs/defeat-brock/journal/` (2026-08-14 solver-on-brock entry).
+///
+/// Unobserved-and-so-unmodelled (0 = the engine reports `Unmodelled` and
+/// the emulator decides): rival HP-bar deltas 1-2, player delta 5, the
+/// end sequence's press phase 0. Phase 1's early gap (420) was never
+/// observed -- only its +5 slip (425, x5) -- and is included as the
+/// optimistic candidate; an adoption never trusts it without a replay.
+pub const SQUIRTLE_LAB_FITTED: bool = true;
+pub const SQUIRTLE_LAB: Pacing = Pacing {
+    intro_preturn: [1048, 1049, 1050, 1046, 1047],
+    det_to_ai: 5,
+    loop_a_to_pcrit: 29,
+    pcrit_to_pdmg: 3,
+    hp_to_sec: 5,
+    hp_to_sec_crit: 84,
+    psec_to_racc_hit: 12,
+    psec_to_racc_growl: 14,
+    racc_to_rcrit: 29,
+    rcrit_to_rdmg: 3,
+    rsec_to_turnend: 10,
+    racc_miss_to_turnend: 166,
+    racc_to_stagefall_first: 28,
+    stagefall_first_to_turnend: 212,
+    commit_durations: squirtle_commit_durations,
+    // Delta 10 never occurred in the fit's runs; it is measured on the
+    // committed battle itself (its turn-2 crit, pdmg roll at battle frame
+    // 1721 -> HP write at 1821; `tests/squirtle_committed_battle.rs` holds
+    // the engine to that battle).
+    rhp_drain: &[0, 0, 0, 82, 85, 87, 90, 92, 95, 97, 100],
+    rhp_drain_first: &[0, 0, 0, 0, 211, 211],
+    uhp_drain: &[0, 77, 79, 82, 84, 0, 89, 91],
+    outcome_win_base: [0, 420, 419, 418, 417],
+};

@@ -598,6 +598,16 @@ fn starter_segment(starter: Starter, tuning: Tuning) -> Segment {
 }
 
 /// Walk onto the trigger row; the rival turns round and the battle starts.
+///
+/// The battle-anchor dial `squirtle-solver` phase 3 scans is this
+/// segment's head wait (`FRLG_WAIT_08_BATTLE_START`, the generic
+/// per-segment knob in `ledger::build_from`): each overworld frame
+/// advances `gRngValue` once, plus whatever scripted objects roll in the
+/// shifted window. The wait's worth is established by the solver's
+/// arbitration, and the seeded battle plan (`FRLG_SEED_PLAN_BATTLE`)
+/// re-measures on the rebuilt state anyway, so a walk that lands on a
+/// different anchor degrades to the ordinary search rather than silently
+/// keeping a stale claim.
 fn battle_start() -> Segment {
     Segment {
         name: "08-battle-start",
