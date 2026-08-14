@@ -270,7 +270,7 @@ fn main() {
         .nth(3)
         .map(|s| s.parse().expect("TOP_PLANS"))
         .unwrap_or(24);
-    assert!(pacing::SQUIRTLE_LAB_FITTED);
+    const { assert!(pacing::SQUIRTLE_LAB_FITTED) };
     let (us, rival) = mons();
     let threads = std::thread::available_parallelism().map_or(8, |n| n.get());
 

@@ -51,7 +51,7 @@ fn read_mon(emu: &mut Emu, base: u32, index: u32) -> Mon {
 
 #[test]
 fn engine_reproduces_the_committed_brock_run_rival_battle() {
-    assert!(pacing::SQUIRTLE_LAB_FITTED);
+    const { assert!(pacing::SQUIRTLE_LAB_FITTED) };
     let root = repo_root();
     let ledger = frlg_route::ledger::read(&root.join("route/defeat-brock/ledger.json"))
         .expect("committed ledger");
