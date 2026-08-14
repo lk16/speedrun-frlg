@@ -122,6 +122,17 @@ enough that a 3-crit Sammy line (density ~1.9e-4) is *expected* ~3.7
 times if reachable dials contain it at all. The fit stays future work;
 this answers its headline question empirically. (results below)
 
+**Sammy mega verdict (in): 207/19,392 candidates win; the best is
+still the committed plan [13] at 2603, 4 turns.** With the earlier
+sweeps that is ~26k stream-lines sampled on the committed arrival and
+zero 3-crit (3-turn) lines — ~5 expected if the reachable dial set
+sampled the state space uniformly. The reachable set is a correlated
+family that simply does not contain one; a 3-turn Sammy would need a
+different *arrival* (upstream re-route), not a better dial. This is
+the empirical answer the fight model's solver would have given for
+this arrival; the fitted model itself stays future work, and its
+remaining unique value is exactly the cross-arrival question.
+
 ## The smaller sweeps, all negative
 
 - **Per-segment text_hold** (`FRLG_TEXT_HOLD_{EXIT_LAB,DELIVER,
