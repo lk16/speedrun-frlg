@@ -1,37 +1,25 @@
-//! The committed rival battle, inverted: extract the roll constraints that
-//! make it play out exactly as committed, solve for start states, and
-//! benchmark the solver shapes against each other and against
-//! `engine::simulate` used as a predicate.
-//!
-//! The extraction walks ONE leaf of the pacing model -- the committed one
-//! (plan [4, 3, 3, 3], commit gates 13/13/13, `tests/committed_battle.rs`)
-//! -- with a stream that records each roll's absolute call offset, and pins
-//! every *decisive* roll to the residue class that reproduces its committed
-//! outcome: AI viability branches (% 256 vs 50), the move tie-break parity
-//! (when the scores actually tied), crit rolls (% 16, once enabled), and
-//! damage variance rolls (the % 16 class giving the same damage -- damage
-//! feeds the HP-bar drain, so pacing itself depends on it). Rolls whose
-//! value cannot matter (suppressed crits, 100-accuracy checks, secondary
-//! rolls, turn-end rolls, unused AI slots) get no constraint. Everything is
-//! validated two ways: the committed anchor must satisfy the set, and every
-//! wait-scan hit must make `engine::simulate` reproduce the committed
-//! 2409-frame [13,13,13] win from that shifted anchor.
+//! The committed rival battle, inverted and benchmarked: extract its roll
+//! constraints (`frlg_battle::trace`, correctness tested in
+//! `tests/trace_vs_engine.rs`), solve for start states, and race the solver
+//! shapes against each other and against `engine::simulate` used as a
+//! predicate.
 //!
 //!     cargo run --release -p frlg-battle --example constraint-solver
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use frlg_battle::{apply_variance, base_damage, engine, pacing, Mon, Move};
-use frlg_rng::constraint::{Constraint, ConstraintSet, Pred};
+use frlg_battle::trace::extract_leaf;
+use frlg_battle::{engine, Mon};
+use frlg_rng::constraint::{ConstraintSet, Pred};
 use frlg_rng::Rng;
 
 /// The committed battle's anchor `gRngValue` (fit-pacing, and the
 /// `engine_reproduces_the_committed_battle` unit test).
 const ANCHOR: Rng = Rng(0xed94271d);
 const PLAN: [u32; 4] = [4, 3, 3, 3];
-/// The committed commit-gate duration, every turn.
-const GATE: u32 = 13;
+/// The committed commit-gate durations.
+const GATES: [u32; 3] = [13, 13, 13];
 const COMMITTED_FRAMES: u32 = 2409;
 
 /// Mons as `gBattleMons` holds them at battle start (measured on the
@@ -62,245 +50,12 @@ fn charmander() -> Mon {
     }
 }
 
-/// `engine::Stream` with the absolute call offset exposed: `calls` counts
-/// every `Random()` since the anchor, so the roll this returns is the
-/// `calls`-th call -- exactly `ConstraintSet`'s offset convention.
-struct RecStream {
-    rng: Rng,
-    consumed: u32,
-    calls: u32,
-}
-
-impl RecStream {
-    fn roll_at(&mut self, frame: u32) -> (u32, u16) {
-        assert!(frame + 1 >= self.consumed);
-        let vblank = 2 * (frame + 1 - self.consumed);
-        self.rng = self.rng.jump(vblank);
-        self.consumed = frame + 1;
-        self.calls += vblank + 1;
-        (self.calls, self.rng.random())
-    }
-}
-
-/// Pin `roll` (consumed at `offset`) to the residues mod `m` that `key`
-/// maps to the same outcome as the committed residue. No constraint when
-/// every residue agrees (the roll is not decisive); panics if the agreeing
-/// class is not contiguous (never happens for these monotone formulas).
-fn pin<K: PartialEq>(
-    out: &mut Vec<Constraint>,
-    offset: u32,
-    m: u16,
-    roll: u16,
-    key: impl Fn(u16) -> K,
-) {
-    let committed = key(roll % m);
-    let passing: Vec<u16> = (0..m).filter(|&r| key(r) == committed).collect();
-    if passing.len() == m as usize {
-        return;
-    }
-    let (lo, hi) = (passing[0], *passing.last().unwrap());
-    assert_eq!(
-        passing.len() as u16,
-        hi - lo + 1,
-        "non-contiguous residue class at offset {offset}"
-    );
-    out.push(Constraint {
-        offset,
-        pred: Pred::ModRange { m, lo, hi },
-    });
-}
-
-/// What the extraction walked out of the committed leaf.
-struct Trace {
-    constraints: Vec<Constraint>,
-    /// Both end-gate frame candidates; the committed 2409 is one of them.
-    frame_candidates: [u32; 2],
-    /// Total `Random()` calls from the anchor to the last modelled roll --
-    /// what a route search would advance the stream by to skip the battle.
-    total_calls: u32,
-    rival_moves: Vec<Move>,
-}
-
-/// Walk the committed leaf (fixed plan, fixed gates), recording constraints.
-/// This mirrors `engine::simulate`/`play_turn` restricted to one gate
-/// combination; any drift from the engine is caught by the caller comparing
-/// the outcome against `engine::simulate`'s committed leaf.
-fn extract(anchor: Rng, us: &mut Mon, rival: &mut Mon) -> Trace {
-    let mut stream = RecStream {
-        rng: anchor,
-        consumed: 0,
-        calls: 0,
-    };
-    let mut constraints = Vec::new();
-    let mut rival_moves = Vec::new();
-    let mut crit_enabled = false;
-
-    let start_delay = PLAN[0];
-    let mut det = pacing::INTRO_PRETURN[start_delay as usize % 5];
-    let _pre_turn = stream.roll_at(det);
-
-    let mut turn = 0u32;
-    loop {
-        turn += 1;
-        assert!(turn <= 16, "the committed battle has 3 turns");
-        let delay = PLAN.get(turn as usize).copied().unwrap_or(0);
-
-        // The AI block, all on one frame (engine::walk).
-        let ai_frame = det + pacing::DET_TO_AI;
-        let rival_move = {
-            // rival_choose_move's exact consumption (frlg-battle root, with
-            // its citations), with a pin at each branch a roll decides.
-            let mut simulated = [0u16; 4];
-            for (slot, sim) in simulated.iter_mut().enumerate() {
-                let (offset, roll) = stream.roll_at(ai_frame);
-                *sim = 100 - (roll % 16);
-                if slot == 0 {
-                    // The only simulatedRNG slot whose value reaches a
-                    // branch: AI_TryToFaint scales Scratch's damage by it.
-                    let (hp, base) = (us.hp, base_damage(rival, us, Move::Scratch, false));
-                    pin(&mut constraints, offset, 16, roll, |r| {
-                        hp as i32 <= (base * (100 - r as i32) / 100).max(1)
-                    });
-                }
-            }
-            let mut scratch_score = 100i32;
-            let mut growl_score = 100i32;
-            if us.atk_stage != 6 {
-                growl_score -= 1;
-                if 100 * rival.hp as u32 / rival.max_hp as u32 <= 90 {
-                    growl_score -= 1;
-                }
-                if us.atk_stage <= 3 {
-                    let (offset, roll) = stream.roll_at(ai_frame);
-                    pin(&mut constraints, offset, 256, roll, |r| r >= 50);
-                    if roll % 256 >= 50 {
-                        growl_score -= 2;
-                    }
-                }
-            }
-            if 100 * us.hp as u32 / us.max_hp as u32 <= 70 {
-                growl_score -= 2;
-            }
-            let (offset_b, roll_b) = stream.roll_at(ai_frame);
-            pin(&mut constraints, offset_b, 256, roll_b, |r| r >= 50);
-            if roll_b % 256 >= 50 {
-                growl_score -= 2;
-            }
-            let sim_damage =
-                (base_damage(rival, us, Move::Scratch, false) * simulated[0] as i32 / 100).max(1);
-            if us.hp as i32 <= sim_damage {
-                scratch_score += 4;
-            }
-            let (offset_tie, tie) = stream.roll_at(ai_frame);
-            if scratch_score == growl_score {
-                pin(&mut constraints, offset_tie, 2, tie, |r| r == 0);
-                if tie.is_multiple_of(2) {
-                    Move::Scratch
-                } else {
-                    Move::Growl
-                }
-            } else if scratch_score > growl_score {
-                Move::Scratch
-            } else {
-                Move::Growl
-            }
-        };
-        rival_moves.push(rival_move);
-
-        // The committed gate, then the turn (engine::play_turn, one leaf).
-        let lb = det + delay + 1;
-        let loop_a = lb + GATE + 1;
-
-        // Player Tackle: crit, damage, drain, trailing secondary.
-        let pcrit_f = loop_a + pacing::LOOP_A_TO_PCRIT;
-        let (offset, roll) = stream.roll_at(pcrit_f);
-        let crit = roll.is_multiple_of(16) && crit_enabled;
-        if crit_enabled {
-            pin(&mut constraints, offset, 16, roll, |r| r == 0);
-        }
-        let pdmg_f = pcrit_f + pacing::PCRIT_TO_PDMG;
-        let base = base_damage(us, rival, Move::Tackle, crit);
-        let (offset, roll) = stream.roll_at(pdmg_f);
-        pin(&mut constraints, offset, 16, roll, |r| {
-            apply_variance(base, r)
-        });
-        let damage = apply_variance(base, roll);
-        let delta = rival.hp.min(damage as u16);
-        let drain = if crit_enabled {
-            pacing::RHP_DRAIN[delta as usize]
-        } else {
-            pacing::rhp_drain_first(delta).expect("first-hit drain delta")
-        };
-        let rhp_f = pdmg_f + drain;
-        rival.hp -= delta;
-        crit_enabled = true;
-        let psec_f = rhp_f
-            + if crit {
-                pacing::HP_TO_SEC_CRIT
-            } else {
-                pacing::HP_TO_SEC
-            };
-        let _ = stream.roll_at(psec_f); // secondary: burned, never read
-
-        if rival.hp == 0 {
-            let gaps = pacing::outcome_win_gaps((psec_f - loop_a) % 5).expect("observed phase");
-            return Trace {
-                constraints,
-                frame_candidates: [psec_f + gaps[0] + 1, psec_f + gaps[1] + 1],
-                total_calls: stream.calls,
-                rival_moves,
-            };
-        }
-
-        // The rival's answer.
-        match rival_move {
-            Move::Growl => {
-                let racc_f = psec_f + pacing::PSEC_TO_RACC_GROWL;
-                let _ = stream.roll_at(racc_f); // 100 accuracy: never decisive
-                assert!(us.atk_stage > 0);
-                us.atk_stage -= 1;
-                let stagefall_f = racc_f + pacing::RACC_TO_STAGEFALL_FIRST;
-                det = stagefall_f + pacing::STAGEFALL_FIRST_TO_TURNEND;
-            }
-            mv => {
-                let racc_f = psec_f + pacing::PSEC_TO_RACC_SCRATCH;
-                let _ = stream.roll_at(racc_f); // 100 accuracy
-                let rcrit_f = racc_f + pacing::RACC_TO_RCRIT;
-                let (offset, roll) = stream.roll_at(rcrit_f);
-                let crit = roll.is_multiple_of(16) && crit_enabled;
-                pin(&mut constraints, offset, 16, roll, |r| r == 0);
-                let rdmg_f = rcrit_f + pacing::RCRIT_TO_RDMG;
-                let base = base_damage(rival, us, mv, crit);
-                let (offset, roll) = stream.roll_at(rdmg_f);
-                pin(&mut constraints, offset, 16, roll, |r| {
-                    apply_variance(base, r)
-                });
-                let damage = apply_variance(base, roll);
-                let delta = us.hp.min(damage as u16);
-                us.hp -= delta;
-                assert!(us.hp > 0, "the committed battle is a win");
-                let drain = pacing::uhp_drain(delta).expect("player drain delta");
-                let uhp_f = rdmg_f + drain;
-                let rsec_f = uhp_f
-                    + if crit {
-                        pacing::HP_TO_SEC_CRIT
-                    } else {
-                        pacing::HP_TO_SEC
-                    };
-                let _ = stream.roll_at(rsec_f);
-                det = rsec_f + pacing::RSEC_TO_TURNEND;
-            }
-        }
-        let _turn_end = stream.roll_at(det);
-    }
-}
-
 /// Does `engine::simulate` from this anchor reproduce the committed leaf?
 fn engine_reproduces(anchor: Rng) -> bool {
     engine::simulate(&PLAN, anchor, bulbasaur(), charmander())
         .iter()
         .any(|l| {
-            l.commit_durs == [GATE; 3]
+            l.commit_durs == GATES
                 && l.result
                     == engine::SimResult::Win {
                         frames: COMMITTED_FRAMES,
@@ -309,17 +64,11 @@ fn engine_reproduces(anchor: Rng) -> bool {
 }
 
 fn main() {
-    // ---- Extraction and validation --------------------------------------
-    let (mut us, mut rival) = (bulbasaur(), charmander());
-    let trace = extract(ANCHOR, &mut us, &mut rival);
-    assert!(
-        trace.frame_candidates.contains(&COMMITTED_FRAMES),
-        "extractor's frames {:?} must include the committed {COMMITTED_FRAMES}",
-        trace.frame_candidates
-    );
+    // ---- Extraction (validated in tests/trace_vs_engine.rs) -------------
+    let trace = extract_leaf(&PLAN, &GATES, ANCHOR, bulbasaur(), charmander())
+        .expect("the committed leaf is a modelled win");
     let set = ConstraintSet::new(&trace.constraints);
     assert!(set.satisfied(ANCHOR), "the committed anchor must satisfy");
-    assert!(engine_reproduces(ANCHOR), "engine sanity");
     println!(
         "extracted {} constraints from the committed battle ({} rolls consumed, \
          rival played {:?}, frame candidates {:?})",
@@ -334,25 +83,17 @@ fn main() {
         set.density() * 2f64.powi(32)
     );
 
-    // Every wait-scan hit must reproduce the committed battle in the engine.
+    // How strict is exact-trace pinning? Count the window's engine
+    // reproductions next to the constraint hits.
     const WINDOW: u32 = 1 << 14;
     let hits = set.wait_hits(ANCHOR, 1, WINDOW);
-    let engine_hits: Vec<u32> = (0..WINDOW)
+    let engine_hits = (0..WINDOW)
         .filter(|&w| engine_reproduces(ANCHOR.jump(w)))
-        .collect();
-    assert!(hits.contains(&0));
-    for &w in &hits {
-        assert!(
-            engine_hits.contains(&w),
-            "constraint hit at wait {w} but the engine disagrees"
-        );
-    }
+        .count();
     println!(
-        "wait scan over {WINDOW} frames (stride 1): {} constraint hits, {} engine \
-         reproductions, hits ⊆ engine {}",
+        "wait scan over {WINDOW} frames (stride 1): {} constraint hits, {engine_hits} \
+         engine reproductions (exact-trace is sufficient, not necessary)",
         hits.len(),
-        engine_hits.len(),
-        hits.iter().all(|w| engine_hits.contains(w)),
     );
 
     // ---- Alternative checker shapes, built from the same compilation ----
