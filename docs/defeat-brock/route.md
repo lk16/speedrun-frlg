@@ -3,7 +3,7 @@
 **Status: 40106 frames, tier-1 verified, tier-2 queued.** (~11m11s at 59.7275 Hz)
 from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 1,
 `text_hold` 2, `seed_delay` **27**), tier-1 verified from reset on 2026-08-14
-(`route/defeat-brock/ledger.json`); tier-2 request `route-40106f-6f142cb4` is in
+(`route/defeat-brock/ledger.json`); tier-2 request `route-40106f-6f142cb4b90a` is in
 the queue (superseding `route-40940f`/`route-40865f`, both pulled unrun). The previous accepted run was 43308 (tier-2 **passed** 2026-08-14,
 `verify/results/route-43308f-a7d7d48232c4.json`, kept in git history); the 3202-frame
 drop (−7.4%) came from the tooling rebuild of 2026-08-14
@@ -155,7 +155,7 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
 5. **Starter × version sweep**, **starter IVs/nature at the ball**, and **per-scene
    text_hold** — unchanged from before, cheaper to measure now.
 
-### Tier 2 — `route-40106f-6f142cb4` queued 2026-08-14
+### Tier 2 — `route-40106f-6f142cb4b90a` queued 2026-08-14
 
 The 40106 export (ilog digest `6f142cb4…`, bk2 `c0424bd3…`, round-trip checked) is in
 `verify/queue/`. Until its result lands, the newest *passed* tier-2 run is the

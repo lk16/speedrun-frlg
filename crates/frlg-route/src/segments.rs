@@ -657,7 +657,7 @@ fn battle_win(tuning: Tuning) -> Segment {
     // -- the checkpointed, worker-pool two-stage delay search -- which
     // replaced the original replay-from-start greedy walk here on
     // 2026-08-14; scoring (shortest winning battle) is unchanged.
-    const START_DELAYS: usize = 128;
+    const START_DELAYS: usize = 256;
 
     Segment {
         name: "09-battle-win",

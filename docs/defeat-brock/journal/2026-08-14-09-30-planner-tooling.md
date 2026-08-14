@@ -101,3 +101,10 @@ to-viridian 2661 (worse), rival 3024 (worse, delay 44), net −759. No
 fallback and no planner divergence anywhere on its build log. Tier-1
 verified; export `route-40106f` queued (the unrun 40940/40865 requests were
 pulled). Wave wall-clock: ~19 min for all four.
+
+## Rival window probe: 256 delays reproduce 40106 exactly
+
+Doubling the rival's start-delay window (128→256) on seed 27 found the same
+optimum (delay 44, 3024; 62/256 win) and the `--from 09-battle-win` rebuild
+reproduced every downstream segment byte-for-byte — a free determinism check
+of the whole planner pipeline. The widening stays (search time only).
