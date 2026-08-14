@@ -21,6 +21,7 @@
 
 pub mod engine;
 pub mod pacing;
+pub mod trace;
 
 /// One battler's fighting numbers, as read from `gBattleMons`
 /// (`decompiled/include/pokemon.h:170`).

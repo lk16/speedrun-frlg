@@ -339,22 +339,29 @@ someone finds a skip" here for exactly one route generation; the skip was holdin
 down), plus the stale single-sample starter table and the never-raced LeafGreen. What
 remains, largest first:
 
-- **`09-battle-win`, 2409 frames.** The per-turn stage now repeats to a fixpoint, so
-  adoptions do revisit earlier turns — measured across the day's 146 builds, a second pass
-  found further cuts in 13 of them and one (a LeafGreen/Charmander re-run) kept adopting
-  into a third, so the fixpoint loop is not paranoia. What still never moves:
-  the start delay after stage 1 (a joint start × turn search remains untried), and *what* is
-  pressed — move choice is untouched, and both crit rolls (live from Oak's "inflicting damage
-  is key" line onwards, see the RNG section) and the 85-100% damage rolls are only reached
-  through delays. The search keeps stumbling into good crit rolls because they make battles
-  short; nothing yet aims for them, and nobody has re-run the crit census on the current
-  battle. The joint search is no longer priced in emulator-hours, though: the battle engine
-  (`crates/frlg-battle`, 2026-08-12) plays whole battles from a `gRngValue` and a plan in
-  about a microsecond, enumerating the few input-gated frames it cannot decide as leaves,
-  and its pure-Rust sweep already names plans whose best leaf is 2405 (-4) — candidates for
-  emulator arbitration, not results. Two facts it measured on the way: start delays
-  collapse mod 5 (stage 1 is five battles, not 64), and delays 0..=3 carry the least gate
-  ambiguity.
+- **`09-battle-win`, 2409 frames — now measured to be within 17 of its floor, and locally
+  unimprovable (2026-08-14).** The engine + constraint solver put the whole question on
+  arithmetic footing (`global-floor`, `arbitrate`, `arbitrate-list` examples;
+  `docs/rival-1/journal/2026-08-14-13-15`): no start state in the entire 2^32 space plays
+  this battle below **2392** (exact class densities from `ConstraintSet::count_all`), so
+  2409 − 2392 = 17 frames is a hard ceiling on every stream manipulation. The joint
+  start × turn search is no longer untried: the dense engine grid (d0 0..5 × delays 0..12
+  per turn, superseding pure-search's even-only sweep) named 217 plans below 2409 on the
+  committed anchor, and libmgba arbitrated every serious one — all twenty 2405-predictions
+  ride the 8-frame commit gate, which fired in **zero** of 40+ replays; the safest-gate
+  2406 family (turn-3 delay 0, a value `TURN_DELAYS = 1..` had never tried) played its
+  gate-18 leaf at 2496; every measured battle equals one of the engine's leaves, so the
+  model enumerates truthfully and the unmodelled scene-state gates resolve the 3–5-frame
+  margins — on this anchor, in the committed plan's favour. Pre-battle waits w = 1..16
+  (idles at the head of `08-battle-start`; anchor moves as exactly `jump(w)` through w = 5,
+  then a 4-roll event slides into the window) were engine-barred and arbitrated: nothing
+  came within 280 frames of paying. What genuinely remains here: move choice (Growl is
+  strictly slower per the pacing tables, so this is closed in practice), and the fat-man
+  zero-cost anchor shift (same-length Pallet path variants move his rolls — priced in the
+  journal entry, not started). Starter creation manipulation is closed on arithmetic:
+  Tackle needs Atk 13 for 6 damage and the best reachable is 12
+  (`decompiled/src/data/pokemon/species_info.h:41`, `CALC_STAT`
+  `decompiled/src/pokemon.c:2093-2096`, `ModifyStatByNature` `:5404`).
 - **`02-intro-oak`'s boxes still wait on scripted beats.** Text now prints at one character
   per held frame, but the intro is also fades, sprite slides and timer waits that no input
   reaches; 1565 frames is the floor for this drive shape, not for the scene. Nobody has
@@ -365,17 +372,14 @@ remains, largest first:
 - **The player name is one fixed letter.** Which letter (and which of the naming screen's
   cursor-start letters is cheapest to take) has never been compared; the name prints in a
   handful of boxes.
-- **The naming-exit seed has never been sampled deliberately.** The battle seed is
-  `REG_TM1CNT_L` at the naming screen's exit press, moving 18753 per frame (the RNG
-  section above), so idling N frames right before that press buys N completely fresh
-  battle streams at 1 frame each — the cheapest seed dial the route has, distinct from
-  in-battle delays, which move *within* one seed at 2 steps per frame. The tuning sweeps
-  only ever sampled it incidentally (any variant that moves the exit frame moves the
-  seed). A sampled seed wins if its searched battle beats 2409 by more than N. Sampled
-  2026-08-12 for N = 1..24 (`seed-sample`, full battle search per seed, anchored at N=0
-  reproducing the committed battle exactly): **no winner** -- best N=10 at total 9666
-  (+8), four seeds unwinnable outright. Deeper N stays open but each frame raises the
-  bar; the dial is real, this stream neighbourhood just does not pay.
+- **The naming-exit seed dial: closed (2026-08-14).** The battle seed is `REG_TM1CNT_L`
+  at the naming screen's exit press, moving 18753 per frame (the RNG section above), so
+  idling N frames right before that press buys N fresh battle streams at 1 frame each.
+  Sampled 2026-08-12 for N = 1..24 (`seed-sample`, full battle search per seed): no
+  winner — best N=10 at total 9666 (+8), four seeds unwinnable. The global floor
+  (`global-floor`, 2026-08-14) now closes the rest: no start state anywhere plays the
+  battle below 2392, so a seed at N ≥ 17 cannot beat 2409 − N even in principle, and
+  N ≤ 24 is measured. Nothing left to sample while the mons and the drive stand.
 
 ## Tier 2
 

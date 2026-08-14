@@ -145,10 +145,25 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    emulating every candidate. ~A day of fit-pacing-grade work per
    `pacing.rs`'s own warning; defer until the route extends past Brock, where
    fights are longer and sweeps bigger (economics in
-   `journal/2026-08-14-09-30-planner-tooling.md`).
+   `journal/2026-08-14-09-30-planner-tooling.md`). The *search* side of this
+   is now solved ahead of it: `frlg-rng::constraint` inverts a decided fight
+   into residue constraints on the battle-start `gRngValue` (wait scans at
+   ~6 ns/frame, the full 2^32 start-state space in ~2.3 s) — proven on the
+   committed rival battle end to end
+   (`journal/2026-08-14-13-30-rng-inversion-solver.md`;
+   `frlg_battle::trace::extract_leaf`, tested against every engine leaf in
+   `frlg-battle/tests/trace_vs_engine.rs`). Pacing per fight remains the
+   only missing piece. One design constraint learned when the solver was
+   put to work on rival-1 (2026-08-14,
+   `docs/rival-1/journal/2026-08-14-13-15-solver-floor-and-arbitration.md`):
+   the engine screens and *orders* candidates truthfully, but the
+   unmodelled commit gates resolve 3–5-frame margins for real — so model
+   scans replace the emulator as the enumerator, never as the arbiter; any
+   adopted plan still needs its emulator run.
 2. **Torrent probe** (arrive ≤7/23 HP for ×1.5 Bubble, `src/pokemon.c:2500`)
    and **starter IVs/nature at the ball** (a frame dial at `givemon`, never
-   turned — needs a `ball_delay` knob and full builds per candidate).
+   turned — needs a `ball_delay` knob; the wait scan that turns the dial
+   exists, `frlg-mon/examples/starter-wait-scan.rs`, ~3 ns/candidate).
 3. **Starter × version sweep**: LeafGreen still un-raced; per-scene
    text_hold still one global knob.
 4. **Seed × knob neighborhood: exhausted for now.** `frlg route scan` ranks

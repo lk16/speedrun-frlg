@@ -68,6 +68,14 @@ pub const INTRO_PRETURN: [u32; 5] = [1048, 1049, 1050, 1046, 1047];
 /// are sparsely observed and their first press sometimes registers and
 /// sometimes whiffs (13 was seen at delay 9 on a held-out run after only 8s
 /// in the fit), so they carry the full union until more data narrows them.
+///
+/// Arbitration evidence (2026-08-14, `examples/arbitrate*`): in 40+ real
+/// replays on the committed stream at delays 4-11, the 8 never fired once,
+/// and within {13, 18} the resolution flipped with the plan's tail (the
+/// committed [4,3,3,3] resolves its final gate to 13; [4,3,3,0] to 18).
+/// Every measured battle still equalled one of the enumerated leaves --
+/// the gate set is sound, but a search must not bank a margin smaller
+/// than the gate spread without an emulator run.
 pub fn commit_durations(delay: u32) -> &'static [u32] {
     match delay {
         0..=3 => &[13, 18],
