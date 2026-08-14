@@ -540,7 +540,7 @@ pub fn win_battle(
         items.extend((0..pre_delays).map(|d| pre * 1000 + d));
     }
     let outcomes = parallel_search(rec, &items, |emu, item| {
-        let out = continue_plan(
+        let mut out = continue_plan(
             emu,
             obs,
             tuning,
@@ -552,6 +552,16 @@ pub fn win_battle(
         )?;
         if out.1 {
             cap.fetch_min(out.0.len(), std::sync::atomic::Ordering::Relaxed);
+        } else {
+            // A loser contributes only its win flag to the selection
+            // below; its inputs and menu checkpoints (each a full
+            // savestate) are never read again. parallel_search holds
+            // every outcome until the whole batch finishes, so a mega
+            // pre-sweep keeping them all is an OOM -- measured:
+            // FRLG_PRE_SWEEP=200,96 (~19k candidates) was killed at
+            // exit 137 before this strip existed.
+            out.0 = Vec::new();
+            out.3 = Vec::new();
         }
         Ok(out)
     })?;
