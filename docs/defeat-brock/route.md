@@ -139,6 +139,12 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
 - The wild-encounter model's practical shape: clean paths exist when the search can vary
   the rate-test index; where a belt is index-walled, one fled battle resets the cooldown
   and opens 6-7 free steps (`research/wild-encounters.md`).
+- **The walking after a battle that looks like wandering is the cooldown being spent.**
+  Audited 2026-08-14 (`examples/audit-run.rs`): zero reversal steps and zero ≥8-frame
+  free-idle runs in all 38862 frames; the post-battle steps a viewer flags are the
+  planner deliberately routing grass while the reset cooldown makes it nearly free
+  (`src/battle_setup.c:205`). The four remaining flees (501-506 frames each) are fated
+  rate passes measured cheaper to take than to dodge.
 
 ## What is not optimised — the backlog after the sweep sessions
 
@@ -157,16 +163,30 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    (`journal/2026-08-14-16-00-solver-on-the-rival-battle.md`). The
    rival-1 lesson stands: the engine enumerates and orders, the emulator
    arbitrates; any adopted plan still needs its emulator run.
-2. **Torrent probe** (arrive ≤7/23 HP for ×1.5 Bubble, `src/pokemon.c:2500`)
-   and **starter IVs/nature at the ball** (a frame dial at `givemon`, never
-   turned — needs a `ball_delay` knob; the wait scan that turns the dial
-   exists, `frlg-mon/examples/starter-wait-scan.rs`, ~3 ns/candidate).
+2. **Torrent probe and starter IVs/nature: closed, measured (2026-08-14).**
+   The audit's HP trace (`examples/audit-run.rs`) showed the committed
+   Brock fight one-shots both mons with crits (Geodude 31, Onix 33) and
+   Sammy falls to 4 Tackles with 2 crits — no reachable SpA beats a crit
+   one-shot, which closes Torrent (`src/pokemon.c:2500`) with it. The
+   `ball_delay` dial exists now (`Tuning::ball_delay`, `--ball-delay`,
+   `examples/ball-scan.rs` maps delay → genome) and was built: Adamant
+   genomes give the predicted faster raw rival fights (atk ≥ 11 opens a
+   2-turn window against def 9 / 19 HP), but wave-1 builds landed
+   +1082..+1295 behind — the genome's ~150 frames are an order of
+   magnitude below the solver+wait-dial tuning any new stream forfeits
+   (`journal/2026-08-14-19-30`).
 3. **Starter × version sweep**: LeafGreen still un-raced; per-scene
    text_hold still one global knob.
-4. **Seed × knob neighborhood: exhausted for now.** `frlg route scan` ranks
-   64 seeds in minutes; its top-5 (27, 38, 26, 13, 6) have all been built at
-   the winning knobs and 27 won. A deeper scan (seeds 64-255) is cheap if
-   wanted; battle-stream luck (±600) is the scan's blind spot.
+4. **Seed neighborhood: exhausted through delay 255 (2026-08-14).** The
+   full 0-255 scan (after the route2-south crossing fix) models seeds
+   184/148 at 3 flees — the only ones below the committed 4 — and the
+   forest index-walled at ≥ 2 on every seed, so zero encounters is
+   unreachable on this dial. Both were built: 41742/41482, and seed 184
+   *realized* 7 flees against its modeled 3 — the scan's threading
+   carries ±4 flees of realization error, so treat it as a ranking, not
+   a count. No repel exists to buy pre-forest
+   (`data/maps/ViridianCity_Mart/scripts.inc:65-70`, and the clerk will
+   not shop while the parcel is held, `:55`).
 
 ### Tier 2 — `route-38862f-8ee04c5b8bfc` passed 2026-08-14
 
