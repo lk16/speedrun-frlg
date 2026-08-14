@@ -90,3 +90,14 @@ stream moved; top backlog item). The diagnostics also caught the executor's
 consumption check reading one step late (tile-center vs pos-change timing)
 — accepted-and-replanned each time, costing ~0 frames but worth fixing
 before the next optimisation pass (backlog #3 in route.md).
+
+## Seed wave and the 40106 adoption
+
+With the planner priced in, four full builds ran in parallel against the
+incumbent seed 38 (40865): seed 27 → **40106**, 36 → 41935, 39 → 43287,
+40 → 44309. Seed 27 is the old scan's modeled-best that placed third under
+the old walker — the planner realizes it: forest 6919, tutorial 5582,
+to-viridian 2661 (worse), rival 3024 (worse, delay 44), net −759. No
+fallback and no planner divergence anywhere on its build log. Tier-1
+verified; export `route-40106f` queued (the unrun 40940/40865 requests were
+pulled). Wave wall-clock: ~19 min for all four.
