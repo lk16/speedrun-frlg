@@ -131,15 +131,33 @@ const DIRS: [(u16, (i16, i16)); 4] = [
 /// `AddToWildEncounterRateBuff` (`decompiled/src/wild_encounter.c:778-784`),
 /// test per `DoWildEncounterRateTest` (`:309-332`).
 pub fn fated_passes(wild_data: &WildData, table: &MapWild, horizon: usize) -> Vec<bool> {
-    let mut rng = WildRng(wild_data.rng_state);
-    let mut buff = wild_data.rate_buff as u32;
-    let mut out = Vec::with_capacity(horizon);
-    for _ in 0..horizon {
-        let rate = (table.rate as u32 * 16 + buff * 16 / 200).min(1600);
-        out.push(((rng.random() % 1600) as u32) < rate);
-        buff += table.rate as u32;
-    }
-    out
+    let outs = rate_outputs(wild_data.rng_state, horizon);
+    outs.iter()
+        .enumerate()
+        .map(|(k, &out)| {
+            rate_test_passes(
+                out,
+                table.rate,
+                wild_data.rate_buff as u32 + k as u32 * table.rate as u32,
+            )
+        })
+        .collect()
+}
+
+/// The wild LCG's next `horizon` rate-roll outputs (`WildEncounterRandom() %
+/// 1600`, `decompiled/src/wild_encounter.c:302-307`), independent of the
+/// buff -- the buff decides the threshold, not the roll.
+fn rate_outputs(rng_state: u32, horizon: usize) -> Vec<u16> {
+    let mut rng = WildRng(rng_state);
+    (0..horizon).map(|_| rng.random() % 1600).collect()
+}
+
+/// `DoWildEncounterRateTest` (`decompiled/src/wild_encounter.c:309-332`) with
+/// the given accumulated buff (`AddToWildEncounterRateBuff`, `:778-784`:
+/// +rate per failed test, reset on success, battle, or map load).
+fn rate_test_passes(out: u16, base_rate: u8, buff: u32) -> bool {
+    let rate = (base_rate as u32 * 16 + buff * 16 / 200).min(1600);
+    (out as u32) < rate
 }
 
 /// Static per-tile extra costs: sight cones, NPC tiles, coord events.
@@ -190,10 +208,12 @@ fn penalty_grid(map: &MapData) -> HashMap<(i16, i16), u32> {
 pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
     let map = req.map;
     let min_steps = req.wild.map(|w| w.min_steps()).unwrap_or(0);
-    let fated = req
-        .wild
-        .map(|w| fated_passes(&req.wild_data, w, FATED_HORIZON))
-        .unwrap_or_default();
+    let base_rate = req.wild.map(|w| w.rate).unwrap_or(0);
+    let outs = if req.wild.is_some() {
+        rate_outputs(req.wild_data.rng_state, FATED_HORIZON)
+    } else {
+        Vec::new()
+    };
     let penalties = penalty_grid(map);
     let targets: HashSet<(i16, i16)> = req.targets.iter().copied().collect();
     if targets.is_empty() {
@@ -205,13 +225,25 @@ pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
     // the map lists a warp on is enterable.
     let warp_tiles: HashSet<(i16, i16)> = map.warps.iter().map(|w| (w.x, w.y)).collect();
 
-    // (x, y, cooldown steps so far (saturated), tests consumed).
-    type Node = (i16, i16, u8, u16);
+    // (x, y, cooldown steps so far (saturated), tests consumed, fails since
+    // the last modifier reset, whether no reset has happened yet).
+    //
+    // The last two exist because a battle (a planned encounter) resets both
+    // the cooldown counter and the rate buff (`ResetEncounterRateModifiers`,
+    // `decompiled/src/wild_encounter.c:701-705`, called from
+    // `src/battle_setup.c:205`): after a flee the next `min_steps` grass
+    // steps consume nothing and later tests run at the *base* rate again.
+    // Without them the planner cannot place an unavoidable flee where the
+    // reset clears the rest of the belt -- measured on seed 27's Route 1,
+    // which planned two flees where one well-placed one may do.
+    // `virgin` distinguishes the RAM buff (applies until the first reset)
+    // from the k-fails-since-reset buff after one.
+    type Node = (i16, i16, u8, u16, u16, bool);
     // A jump moves 2 tiles per 40 frames, so the cheapest possible per-tile
     // progress is 40/2 = 20 > 16; distance * TILE_COST would still be
     // admissible, but halving keeps a safety margin for any future cheaper
     // movement (bike, spin tiles) without re-deriving this bound.
-    let h = |&(x, y, _, _): &Node| -> u32 {
+    let h = |&(x, y, ..): &Node| -> u32 {
         targets
             .iter()
             .map(|&(tx, ty)| x.abs_diff(tx) as u32 + y.abs_diff(ty) as u32)
@@ -226,6 +258,8 @@ pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
         req.start.1,
         req.wild_data.steps_since.min(min_steps),
         0,
+        0,
+        true,
     );
     let start_behavior = req.wild_data.prev_behavior;
 
@@ -237,7 +271,7 @@ pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
     let goal = loop {
         let Reverse((_, node)) = queue.pop()?;
         let (g, _) = best[&node];
-        let (x, y, cd, j) = node;
+        let (x, y, cd, j, k, virgin) = node;
         if targets.contains(&(x, y)) {
             break node;
         }
@@ -286,7 +320,7 @@ pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
                 if land_pen == u32::MAX {
                     continue;
                 }
-                let next: Node = (lx, ly, cd, j);
+                let next: Node = (lx, ly, cd, j, k, virgin);
                 let ng = g + JUMP_COST + land_pen;
                 if best.get(&next).is_none_or(|&(seen, _)| ng < seen) {
                     let step = PlanStep {
@@ -319,21 +353,41 @@ pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
             };
 
             if req.wild.is_none() || !tile.land {
-                push((nx, ny, cd, j), TILE_COST, StepKind::Free);
+                push((nx, ny, cd, j, k, virgin), TILE_COST, StepKind::Free);
             } else if cd < min_steps {
-                push((nx, ny, cd + 1, j), TILE_COST, StepKind::Cooldown);
+                push((nx, ny, cd + 1, j, k, virgin), TILE_COST, StepKind::Cooldown);
             } else {
-                let pass = fated.get(j as usize).copied().unwrap_or(true);
+                // The buff at this test: the RAM value keeps growing until
+                // the first reset; afterwards it is purely fails-since-reset.
+                let buff = if virgin {
+                    req.wild_data.rate_buff as u32 + k as u32 * base_rate as u32
+                } else {
+                    k as u32 * base_rate as u32
+                };
+                let pass = outs
+                    .get(j as usize)
+                    .is_none_or(|&out| rate_test_passes(out, base_rate, buff));
                 let consume_cost = if map.tile(nx, ny).unwrap().behavior != behavior_here {
                     // A boundary step can go either way; both edges exist.
-                    push((nx, ny, cd, j), SKIP_BOUNDARY_COST, StepKind::SkipBoundary);
+                    push(
+                        (nx, ny, cd, j, k, virgin),
+                        SKIP_BOUNDARY_COST,
+                        StepKind::SkipBoundary,
+                    );
                     CONSUME_BOUNDARY_COST
                 } else {
                     TILE_COST
                 };
+                let next = if pass {
+                    // An encounter: the battle resets the cooldown counter
+                    // and the buff, so the belt reopens behind it.
+                    (nx, ny, 0, j + 1, 0, false)
+                } else {
+                    (nx, ny, cd, j + 1, k + 1, virgin)
+                };
                 let battle = if pass { ENCOUNTER_COST } else { 0 };
                 push(
-                    (nx, ny, cd, j + 1),
+                    next,
                     consume_cost + battle,
                     StepKind::Consume {
                         index: j,
