@@ -24,6 +24,8 @@ struct Battle {
     our_stats: [u16; 5],
     our_level: u8,
     our_hp: (u16, u16),
+    /// (frame, side 0=us/1=foe, hp before, hp after): every HP write seen.
+    hp_events: Vec<(u32, u8, u16, u16)>,
     outcome: u8,
     wild_state_at_start: u32,
     steps_since: u8,
@@ -109,6 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     our_stats: [0; 5],
                     our_level: 0,
                     our_hp: (0, 0),
+                    hp_events: Vec::new(),
                 });
             }
             if ib {
@@ -126,6 +129,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         b.our_stats = us.stats;
                         b.our_level = us.level;
                         b.our_hp = (us.hp, us.max_hp);
+                    }
+                    // HP writes, both sides, keyed off the last event's
+                    // after-value (start values are the first "before").
+                    for (side, mon) in [(0u8, &us), (1u8, &foe)] {
+                        if mon.species == 0 {
+                            continue;
+                        }
+                        let prev = b
+                            .hp_events
+                            .iter()
+                            .rev()
+                            .find(|e| e.1 == side)
+                            .map(|e| e.3)
+                            .unwrap_or(if side == 0 { b.our_hp.0 } else { mon.max_hp });
+                        if mon.hp != prev {
+                            b.hp_events.push((frame_abs, side, prev, mon.hp));
+                        }
                     }
                     b.trainer = obs.battle_type_flags(&mut emu)
                         & frlg_route::observe::BATTLE_TYPE_TRAINER
@@ -192,6 +212,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "      us L{} hp {}/{} a/d/s/sa/sd {:?} | foe {:?} | wild {:#010x}",
             b.our_level, b.our_hp.0, b.our_hp.1, b.our_stats, b.foe_stats, b.wild_state_at_start,
         );
+        if b.trainer {
+            for (f, side, from, to) in &b.hp_events {
+                println!(
+                    "      f{f} {} hp {from} -> {to} ({}{})",
+                    if *side == 0 { "us " } else { "foe" },
+                    if to > from { "+" } else { "-" },
+                    to.abs_diff(*from),
+                );
+            }
+        }
     }
 
     // Reversal steps: step i+1 returns to step i's origin (an undo).

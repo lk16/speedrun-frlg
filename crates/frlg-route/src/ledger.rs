@@ -181,13 +181,6 @@ pub fn build_from(
     let mut skip_before = None;
     if let Some(name) = from {
         let prior = read(&paths.ledger)?;
-        if prior.starter != starter.name() || prior.tuning != tuning {
-            return Err(LedgerError::Message(format!(
-                "--from {name}: the ledger was built with starter {} and tuning {:?}; \
-                 resuming under different knobs would splice two different runs",
-                prior.starter, prior.tuning
-            )));
-        }
         let split = prior
             .segments
             .iter()
@@ -195,6 +188,29 @@ pub fn build_from(
             .ok_or_else(|| {
                 LedgerError::Message(format!("--from {name}: no such segment in the ledger"))
             })?;
+        // A knob may differ from the ledger's iff no segment *before* the
+        // split can see it: seed_delay is spent in 01-boot and text_hold in
+        // every dialogue, but turn_hold and ball_delay are consumed only by
+        // 07-starter -- resuming there (or earlier) under a different value
+        // splices nothing.
+        let starter_split = prior
+            .segments
+            .iter()
+            .position(|e| e.name == "07-starter")
+            .unwrap_or(usize::MAX);
+        let splice = prior.starter != starter.name()
+            || prior.tuning.seed_delay != tuning.seed_delay
+            || prior.tuning.text_hold != tuning.text_hold
+            || ((prior.tuning.turn_hold != tuning.turn_hold
+                || prior.tuning.ball_delay != tuning.ball_delay)
+                && split > starter_split);
+        if splice {
+            return Err(LedgerError::Message(format!(
+                "--from {name}: the ledger was built with starter {} and tuning {:?}; \
+                 resuming under different knobs would splice two different runs",
+                prior.starter, prior.tuning
+            )));
+        }
         for entry in &prior.segments[..split] {
             let log = InputLog::decode(&fs::read(&entry.log)?)?;
             if log.digest() != entry.digest {
