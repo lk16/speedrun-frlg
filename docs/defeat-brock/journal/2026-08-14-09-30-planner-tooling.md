@@ -108,3 +108,17 @@ Doubling the rival's start-delay window (128→256) on seed 27 found the same
 optimum (delay 44, 3024; 62/256 win) and the `--from 09-battle-win` rebuild
 reproduced every downstream segment byte-for-byte — a free determinism check
 of the whole planner pipeline. The widening stays (search time only).
+
+## Second optimisation pass (same day): reset model, knobs re-swept
+
+- **Planner models the battle reset now** (`ResetEncounterRateModifiers`
+  on battle start): the A* node carries fails-since-reset, so a planned
+  flee reopens the belt behind it. The from-exit-lab probe on the old
+  knobs came out 40162 (+56) — flee placement improved but battle-arrival
+  streams shuffled Sammy/Brock by more; the model stays, the run did not.
+- **text_hold is seed-coupled.** Re-swept on seed 27: text 4 → **38950**
+  (−1156), text 1 → 39251, both beating the text-2 incumbent 40106. Every
+  segment improved at once under text 4; Brock's fight hit 3166. Adopted,
+  tier-1 verified, export `route-38950f-2f221a89` queued (40106 pulled).
+- Next wave in flight: text 3/5/6 and turn 2, then wider seeds under the
+  winning knobs.
