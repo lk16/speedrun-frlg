@@ -56,3 +56,24 @@ the model-driven path search.
   tier 1, queue tier 2.
 - Then: joint seed × path sweep (the planner makes each seed's walk cheap to
   price), wider Brock delay search, Torrent probe.
+
+## Shakedown build (old executor, 46230 — measured 2026-08-14 mid-session)
+
+First full build with the planner + parallel battle search, before the
+executor fixes landed. Segment deltas vs the accepted 43308:
+
+- rival battle 2580 (−78): the checkpointed pool search with 1..24 turn
+  delays beat the old greedy walk's 2658.
+- deliver 4490 (−541), tutorial 6220 (−266), to-forest 1149 (−158): fully
+  planned walks (Route 1 southbound uses the ledges).
+- exit-lab/parcel (+~130): the arrow-warp/door bugs; fixed.
+- **forest 13553 (+3758)**: the settle-timeout bug forced the waypoint
+  fallback the whole way, and this walker's step pattern hit fated rate
+  passes the old run's pattern missed — the flee count is path-dependent
+  (`research/wild-encounters.md`), so a *worse path* on the same seed flees
+  more. This is precisely the case the model-driven plan exists for.
+- brock segment 4954 (+65), battle itself 3209 in 2 menus (delay 84 + turn
+  delay 11) — the wider delay range finds a 2-menu fight.
+
+Total 46230 — a regression end to end, but every regression is a fixed
+executor bug, and every planned leg that ran beat its old segment.
