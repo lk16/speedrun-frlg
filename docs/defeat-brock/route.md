@@ -150,9 +150,10 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    into residue constraints on the battle-start `gRngValue` (wait scans at
    ~6 ns/frame, the full 2^32 start-state space in ~2.3 s) — proven on the
    committed rival battle end to end
-   (`journal/2026-08-14-13-30-rng-inversion-solver.md`,
-   `frlg-battle/examples/constraint-solver.rs`). Pacing per fight remains
-   the only missing piece.
+   (`journal/2026-08-14-13-30-rng-inversion-solver.md`;
+   `frlg_battle::trace::extract_leaf`, tested against every engine leaf in
+   `frlg-battle/tests/trace_vs_engine.rs`). Pacing per fight remains the
+   only missing piece.
 2. **Torrent probe** (arrive ≤7/23 HP for ×1.5 Bubble, `src/pokemon.c:2500`)
    and **starter IVs/nature at the ball** (a frame dial at `givemon`, never
    turned — needs a `ball_delay` knob; the wait scan that turns the dial

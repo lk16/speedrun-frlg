@@ -143,3 +143,15 @@ Wild encounters need nothing new here: the rate dice run on the second,
 step-indexed LCG (already planned against); the `gRngValue` parts (slot,
 level, creation, flee) join via the same state-predicate shape if flee-roll
 manipulation ever becomes worth frames.
+
+## Addendum (same day): extraction promoted to `frlg_battle::trace`, tested
+
+The extraction no longer lives only in the example: `trace::extract_leaf`
+(e7ddcfc) takes any plan and per-turn gate sequence and errs on exactly the
+engine's undecidable cases. `tests/trace_vs_engine.rs` now holds it to the
+engine in both directions — every Win leaf across 64 shifted anchors × 4
+plans extracts into a set its own anchor satisfies with the leaf's exact
+frames among the candidates, every Loss/Unmodelled leaf refuses, and every
+shifted anchor the committed set accepts makes the engine replay the
+committed battle. The committed shape (12 constraints, 4004 calls,
+Scratch×3) is a regression anchor in `cargo test`, not just example output.
