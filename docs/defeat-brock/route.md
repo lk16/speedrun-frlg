@@ -148,13 +148,20 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
 
 ## What is not optimised — the backlog after the sweep sessions
 
-0. **Both remaining fights survived a 5× wider search (2026-08-14).**
-   `FRLG_PRE_SWEEP` lets stage 1 search in-battle pre-idle families (the
-   rival solver's `plan[0]` dial); Sammy's committed 2603 held against
-   1728 candidates and Brock's 3305 against 1920, including 24 fresh
-   families each (`journal/2026-08-14-19-30`). The 3157-class Brock
-   family remains unreachable from this arrival, which sharpens item 1's
-   price tag: only the fight model can say whether *any* dial reaches it.
+0. **Both remaining fights are dial-exhausted (2026-08-14/15).**
+   `FRLG_PRE_SWEEP` mega-sweeps sampled ~26k stream-lines on Sammy's
+   committed arrival and ~21.5k on Brock's: Sammy's 2603 (4 turns, no
+   3-crit line exists in the reachable set) and Brock's 3305 (the crit
+   double-one-shot, 7 winners in 19.6k lines) are the reachable floors
+   for these arrivals (`journal/2026-08-14-21-45`). The 3157-class
+   Brock family needs a different *arrival* — an upstream re-route —
+   not a better dial. Also measured shut the same session: LeafGreen
+   (+3333 on its scan-best seed), per-segment text_hold (all six
+   variants lose to global 4), the max-attack starter (atk 15 is
+   unreachable before L8; the reachable Adamant maximum produced the
+   fastest-ever rival fight, 2412, and still lost end-to-end), and the
+   committed rival 2445 itself is solver-held — a 4,864-candidate dial
+   sweep on its own arrival maxes at 2672.
 1. **The battle model for Sammy/Brock** (`frlg-battle` now covers *both*
    lab rival fights -- rival-1's and this route's Squirtle one, fitted and
    arbitrated 2026-08-14, worth −165 at the battle -- but not Sammy or

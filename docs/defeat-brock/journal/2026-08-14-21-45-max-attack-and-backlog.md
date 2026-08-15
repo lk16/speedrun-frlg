@@ -133,6 +133,15 @@ the empirical answer the fight model's solver would have given for
 this arrival; the fitted model itself stays future work, and its
 remaining unique value is exactly the cross-arrival question.
 
+**Brock mega verdict (in, 2026-08-15): 7/19,584 candidates win; the
+best is still the committed plan [164] at 3305, the crit
+double-one-shot.** Seven winners in 19.6k lines says how rare a
+winning Brock line is at all on this arrival; none beat the committed
+one. With the earlier probes that is ~21.5k lines: 3305 is the
+reachable floor for this arrival, and the 3157-class family stays
+unreachable by any dial — the cross-arrival question (a different
+to-gym approach entirely) is the only path left to it.
+
 ## The smaller sweeps, all negative
 
 - **Per-segment text_hold** (`FRLG_TEXT_HOLD_{EXIT_LAB,DELIVER,
