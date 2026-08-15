@@ -1,14 +1,34 @@
 # Defeat Brock: the route
 
-**Status: 38862 frames, tier-2 verified** (~10m51s at 59.7275 Hz)
-from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with Squirtle** (`turn_hold` 1,
-`text_hold` **4**, `seed_delay` **27**), tier-1 verified from reset on 2026-08-14
-(`route/defeat-brock/ledger.json`) and tier-2 **passed** the same day as
-`route-38862f-8ee04c5b8bfc`. This is the accepted number; the previous accepted
-run -- 38950, passed as `route-38950f-2f221a898d8e` -- is superseded and its logs
-live in git history.
+**Status: 38812 frames, tier-1 verified, tier-2 queued** (~10m50s at
+59.7275 Hz) from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with
+Squirtle** (`turn_hold` 1, `text_hold` **4**, `seed_delay` **27**), tier-1
+verified from reset on 2026-08-15 (`route/defeat-brock/ledger.json`) and
+queued for tier 2 as `route-38812f-33133637dfeb`. Until that result lands,
+the last tier-2-**passed** run is the superseded 38862
+(`route-38862f-8ee04c5b8bfc`, logs in git history).
 
-The 88-frame drop came from the constraint-solver pass on the rival battle
+The 50-frame drop came out of the 2026-08-15 video audit
+(`journal/2026-08-15-10-00-video-audit-verdicts.md`, all eleven viewer
+observations verified against `decompiled/` and fresh probes): the lab
+battle now triggers from the **right-hand** tile (7,8) -- with Squirtle the
+rival's scripted approach+exit is 3+6 steps there vs 4+7 from the mid tile,
+and the tile is one player step closer from the ball
+(`data/maps/PalletTown_ProfessorOaksLab/scripts.inc`) -- and MapVia walking
+no longer targets warp *events* on tiles whose behavior cannot fire them
+(the lab's flanking door tiles, a measured ~120-frame fumble). The moved
+arrival re-rolled every stream: the squirtle-solver re-arbitrated the rival
+battle to plan [0,25,2,13] at **2463** (wait 0; waits 1..48 all worse), and
+the downstream re-luck landed on `FRLG_WAIT_TO_FOREST=14` with in-battle
+pre-idle sweeps (`FRLG_PRE_SWEEP=24,64`): Sammy **2706** (4 turns, plan
+[109,15]), Brock **3233** (plan [92]). Dials swept and dead: to-gym 1..8,
+to-pewter 1..8 and the forest segment head (absorbed by the entrance
+settle), Sammy/Brock pre-idles to 96 families (Sammy was walled at 2872
+until the to-forest wait moved the arrival). Earlier history: semi-naive
+49143 → 43308 (seed sweep) → 38950 (planner rebuild) → 38862 (solver pass,
+`journal/2026-08-14-16-00-solver-on-the-rival-battle.md`).
+
+The 38862 run's 88-frame drop came from the constraint-solver pass on the rival battle
 (`journal/2026-08-14-16-00-solver-on-the-rival-battle.md`): the fight model was
 generalized and refitted to this route's Squirtle-vs-Bulbasaur lab battle
 (`frlg_battle::pacing::SQUIRTLE_LAB`, validated leaf-for-leaf by
@@ -93,24 +113,24 @@ marked as decoded-from-binary lower bounds pending emulator confirmation):
   Water hit both at 4×; Bulbasaur's Vine Whip unlocks at L10 (560 exp), Squirtle's Bubble
   at L7, Charmander is resisted until L13. Exp math and stat formulas worked and cited.
 
-## The segments — measured 2026-08-14 (turn 1, text 4, seed 27, solver build)
+## The segments — measured 2026-08-15 (turn 1, text 4, seed 27, right-tile build)
 
 The rival-1 prefix (01..09) plus the continuation. Segment code:
 `crates/frlg-route/src/brock.rs`; names are semantic, order lives in the ledger.
 
 | Segment | Frames | Ends | What happens |
 | --- | ---: | ---: | --- |
-| `01-boot`..`09-battle-win` | 9652 | 9652 | the prefix: 27 title idles pick the streams; 3 idles before the trigger, rival battle **2445** (solver seed [0,2,2,3]) |
-| `exit-lab` | 880 | 10532 | post-battle script, out to Pallet |
-| `to-viridian` | 2673 | 13205 | Route 1 north, planned crossing |
-| `parcel` | 1278 | 14483 | mart scene, Oak's Parcel |
-| `deliver` | 4422 | 18905 | Route 1 south **via the ledges**, lab, Pokédex scene |
-| `tutorial` | 5552 | 24457 | Route 1 north again, catching demo |
-| `to-forest` | 1150 | 25607 | Viridian north, Route 2, entrance building (3 head-wait frames) |
-| `forest` | 6660 | 32267 | one planned A* crossing; Sammy (2603, delay 13) is the only fight |
-| `to-pewter` | 552 | 32819 | Route 2 north into Pewter — no Pokémon Center |
-| `to-gym` | 980 | 33799 | the gym door (1 head-wait frame) |
-| `brock` | 5063 | 38862 | talk, Bubble fight at L7, unhealed (delay 164 of 384, 3305) |
+| `01-boot`..`09-battle-win` | 9635 | 9635 | the prefix: 27 title idles pick the streams; trigger from (7,8), rival battle **2463** (solver seed [0,25,2,13], wait 0) |
+| `exit-lab` | 864 | 10499 | post-battle script (right-tile exit is 6 rival steps), out to Pallet |
+| `to-viridian` | 2671 | 13170 | Route 1 north, planned crossing, 2 fated flees |
+| `parcel` | 1278 | 14448 | mart scene, Oak's Parcel |
+| `deliver` | 4422 | 18870 | Route 1 south **via the ledges**, lab, Pokédex scene |
+| `tutorial` | 5551 | 24421 | Route 1 north again, catching demo, 1 fated flee |
+| `to-forest` | 1161 | 25582 | Viridian north, Route 2, entrance building (14 head-wait frames) |
+| `forest` | 6708 | 32290 | one planned A* crossing, 1 fated flee; Sammy (**2706**, plan [109,15], 4 turns) |
+| `to-pewter` | 568 | 32858 | Route 2 north into Pewter — no Pokémon Center |
+| `to-gym` | 963 | 33821 | the gym door |
+| `brock` | 4991 | 38812 | talk, Bubble fight at L7, unhealed (**3233**, plan [92] of the 24,64 pre-sweep) |
 
 The run reaches Brock at L7 (rival 68 + Sammy 100 exp; Bubble learned mid-Sammy).
 The head-wait frames are stream dials, not slack: each one re-picks the
@@ -202,9 +222,11 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    (`data/maps/ViridianCity_Mart/scripts.inc:65-70`, and the clerk will
    not shop while the parcel is held, `:55`).
 
-### Tier 2 — `route-38862f-8ee04c5b8bfc` passed 2026-08-14
+### Tier 2 — 38812 queued 2026-08-15; last pass `route-38862f-8ee04c5b8bfc`
 
-The current 38862 is **accepted**: BizHawk 2.11.1 replayed all 38862 frames to
+The current 38812 is queued as `route-38812f-33133637dfeb` (ilog digest
+`33133637…`; the export round-trips). Until its result lands, the accepted
+run is the superseded 38862: BizHawk 2.11.1 replayed all 38862 frames to
 the ledger's final ram_hash (`868413a6…`, the `brock` segment's) with the
 per-frame gRngValue probe matching every frame
 (`verify/results/route-38862f-8ee04c5b8bfc.json`, `fast+headless`, 67s).

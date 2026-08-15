@@ -148,6 +148,8 @@ pub fn score_seed(
                 steps_since: 0,
             },
             targets: crossing.targets,
+            encounter_cost: plan::ENCOUNTER_COST,
+            test_bias: 0,
             blocked: Default::default(),
         };
         let Some((steps, cost)) = plan::plan(&req) else {

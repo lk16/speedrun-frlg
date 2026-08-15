@@ -29,6 +29,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         targets: vec![(tx, ty)],
         blocked: Default::default(),
+        encounter_cost: frlg_route::plan::ENCOUNTER_COST,
+        test_bias: 0,
     };
     match plan(&req) {
         None => println!("no plan"),

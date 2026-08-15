@@ -44,7 +44,11 @@ use crate::world::{MapData, MB_JUMP_EAST, MB_JUMP_NORTH, MB_JUMP_SOUTH, MB_JUMP_
 /// 87 detour steps (~1390 frames) to dodge a 575-frame flee. 600 keeps a
 /// slight dodge preference (a flee also re-lucks every downstream battle
 /// stream, which the plan cost cannot see) without paying double for it.
-const ENCOUNTER_COST: u32 = 600;
+pub const ENCOUNTER_COST: u32 = 600;
+
+/// An `encounter_cost` high enough that a plan only routes through a fated
+/// pass when no clean path exists at all -- the "price the dodge" probe.
+pub const FORBID_ENCOUNTERS: u32 = 1_000_000;
 
 /// Walking one tile. See the module docs for why 16 and not the measured 17:
 /// the constant term cancels between candidate paths of equal length, and a
@@ -119,6 +123,15 @@ pub struct PlanRequest<'a> {
     /// collision the static model missed): `(from, to)` pairs the planner
     /// must not use this time round.
     pub blocked: HashSet<((i16, i16), (i16, i16))>,
+    /// What a planned encounter costs; [`ENCOUNTER_COST`] for real legs,
+    /// [`FORBID_ENCOUNTERS`] to price the cheapest clean path instead.
+    pub encounter_cost: u32,
+    /// Extra model cost per consumed rate test. 0 prices pure frames; a
+    /// positive bias makes the planner trade walk frames for a smaller
+    /// constraint surface (every consumed test and cooldown 5%-gate roll is
+    /// a condition a stream-dial sweep has to satisfy), which is what makes
+    /// downstream re-lucking searches land more often.
+    pub test_bias: u32,
 }
 
 const DIRS: [(u16, (i16, i16)); 4] = [
@@ -392,7 +405,7 @@ pub fn plan(req: &PlanRequest) -> Option<(Vec<PlanStep>, u32)> {
                 } else {
                     (nx, ny, cd, j + 1, k + 1, virgin)
                 };
-                let battle = if pass { ENCOUNTER_COST } else { 0 };
+                let battle = if pass { req.encounter_cost } else { 0 } + req.test_bias;
                 push(
                     next,
                     consume_cost + battle,
@@ -451,6 +464,8 @@ mod tests {
             wild_data: wild0(0x1234_5678),
             targets: vec![(4, 9), (5, 9), (6, 9)],
             blocked: HashSet::new(),
+            encounter_cost: ENCOUNTER_COST,
+            test_bias: 0,
         };
         let begin = std::time::Instant::now();
         let (steps, cost) = plan(&req).expect("the forest has an exit");
@@ -494,6 +509,8 @@ mod tests {
             wild_data: wild0(1),
             targets: vec![(12, 1)],
             blocked: HashSet::new(),
+            encounter_cost: ENCOUNTER_COST,
+            test_bias: 0,
         };
         let (steps, _) = plan(&req).expect("Pallet is walkable");
         // Manhattan distance is 9; NPCs or fences may force a detour, but a

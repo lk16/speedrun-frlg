@@ -1112,6 +1112,17 @@ pub fn walk_planned(
         };
         let wild_data = obs.wild_data(rec.emu());
         let wild = wild_table(map, version);
+        // `FRLG_TEST_BIAS_MAP_<group>_<num>`: extra model cost per rate test
+        // consumed on that one map, so a build can buy a smaller constraint
+        // surface (fewer tests and cooldown 5%-gate rolls for downstream
+        // dial sweeps to satisfy) exactly where it is cheap -- e.g. Route 2's
+        // north stub, where the grass-free line costs 2 steps (video audit,
+        // journal 2026-08-15) -- without distorting index-walled maps where
+        // avoidance detours are unbounded. 0 (off) when unset.
+        let test_bias: u32 = std::env::var(format!("FRLG_TEST_BIAS_MAP_{}_{}", map.0, map.1))
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
 
         // Plan on the current map. Everything that needs the borrowed map
         // happens inside; the plan comes out owned.
@@ -1133,6 +1144,8 @@ pub fn walk_planned(
                 wild_data,
                 targets,
                 blocked: blocked.clone(),
+                encounter_cost: plan::ENCOUNTER_COST,
+                test_bias,
             };
             plan::plan(&req).map(|(steps, cost)| (steps, cost, crossing))
         });
@@ -1359,13 +1372,31 @@ fn leg_targets(
             }
             // A warp near the via tile means "walk onto the warp"; otherwise
             // it is a map connection and the plan ends on the edge, one held
-            // step short of the next map.
-            let warps: Vec<(i16, i16)> = data
+            // step short of the next map. A warp *event* only fires from a
+            // tile whose metatile behavior activates it (doors, arrow and
+            // stair warps, 0x60..0x6F, `include/constants/`
+            // `metatile_behaviors.h:71-87`) -- Oak's lab lists warps on
+            // (5,12) and (7,12) too, but those are plain floor (behavior 0)
+            // and standing on them does nothing; measured on the r78 build,
+            // where targeting (7,12) cost a ~120-frame fumble before the
+            // executor found the real door. Keep the unfiltered set only if
+            // the filter empties it (a mis-decoded behavior must not brick
+            // the leg).
+            let all: Vec<(i16, i16)> = data
                 .warps
                 .iter()
                 .filter(|w| (w.x - vx).abs() + (w.y - vy).abs() <= 4)
                 .map(|w| (w.x, w.y))
                 .collect();
+            let live: Vec<(i16, i16)> = all
+                .iter()
+                .copied()
+                .filter(|&(x, y)| {
+                    data.tile(x, y)
+                        .is_some_and(|t| (0x60..=0x6F).contains(&t.behavior))
+                })
+                .collect();
+            let warps = if live.is_empty() { all } else { live };
             if !warps.is_empty() {
                 return Some((warps, false));
             }
