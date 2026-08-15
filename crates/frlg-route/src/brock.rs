@@ -1133,6 +1133,8 @@ pub fn walk_planned(
                 wild_data,
                 targets,
                 blocked: blocked.clone(),
+                encounter_cost: plan::ENCOUNTER_COST,
+                test_bias: 0,
             };
             plan::plan(&req).map(|(steps, cost)| (steps, cost, crossing))
         });
