@@ -459,6 +459,38 @@ pub fn win_battle(
         }
     };
 
+    // `FRLG_PRE_SWEEP="P"` or `"P,D"`: widen stage 1 with pre-idle streams
+    // 1..=P, each searched over menu delays 0..D (default 64). The pre
+    // idles are spent *inside the battle*, before the intro mash -- the
+    // dial the rival solver proved matters (its plan[0]; on the committed
+    // rival stream 0/256 plain menu delays won at all) and the one the
+    // segment-head waits cannot reach, because the overworld press grid
+    // quantizes those (measured: BROCK waits 5..30 collapse to one
+    // family, `journal/2026-08-14-16-00`). Every in-battle frame moves
+    // the stream by 2 (`decompiled/src/battle_main.c:1650`), so each pre
+    // is a distinct family. Off (0) by default: the committed routes were
+    // built without it.
+    let (pre_max, pre_delays): (usize, usize) = std::env::var("FRLG_PRE_SWEEP")
+        .ok()
+        .and_then(|v| {
+            let mut it = v.split(',').map(|t| t.trim().parse::<usize>().ok());
+            let p = it.next().flatten()?;
+            Some((p, it.next().flatten().unwrap_or(64)))
+        })
+        .unwrap_or((0, 0));
+    let mut menu0s: Vec<Menu> = vec![menu0];
+    for pre in 1..=pre_max {
+        rec.emu().load_state(&start)?;
+        let mut trial = Trial::new(rec.emu());
+        trial.idle(pre)?;
+        to_first_menu(&mut trial, obs, &intro_mash)?;
+        let prefix = trial.into_inputs();
+        menu0s.push(Menu {
+            state: rec.save_state()?,
+            prefix,
+        });
+    }
+
     // Measure the seed, if any, from its own (pre-shifted) first menu.
     let seeded: Option<(PlanOutcome, Vec<usize>, Menu)> = match seed {
         None => None,
@@ -500,47 +532,71 @@ pub fn win_battle(
     let cap = std::sync::atomic::AtomicUsize::new(
         seeded.as_ref().map_or(usize::MAX, |(out, ..)| out.0.len()),
     );
-    let delays: Vec<usize> = start_delays.clone().collect();
-    let outcomes = parallel_search(rec, &delays, |emu, delay| {
-        let out = continue_plan(
+    // Items encode (pre, delay) as pre * 1000 + delay -- delays are far
+    // below 1000. Pre 0 keeps the full width; swept pres use the smaller
+    // per-pre width, with the shared cap pruning across all of them.
+    let mut items: Vec<usize> = start_delays.clone().collect();
+    for pre in 1..=pre_max {
+        items.extend((0..pre_delays).map(|d| pre * 1000 + d));
+    }
+    let outcomes = parallel_search(rec, &items, |emu, item| {
+        let mut out = continue_plan(
             emu,
             obs,
             tuning,
             preferred_move,
-            &menu0,
+            &menu0s[item / 1000],
             0,
-            &[delay],
+            &[item % 1000],
             cap.load(std::sync::atomic::Ordering::Relaxed),
         )?;
         if out.1 {
             cap.fetch_min(out.0.len(), std::sync::atomic::Ordering::Relaxed);
+        } else {
+            // A loser contributes only its win flag to the selection
+            // below; its inputs and menu checkpoints (each a full
+            // savestate) are never read again. parallel_search holds
+            // every outcome until the whole batch finishes, so a mega
+            // pre-sweep keeping them all is an OOM -- measured:
+            // FRLG_PRE_SWEEP=200,96 (~19k candidates) was killed at
+            // exit 137 before this strip existed.
+            out.0 = Vec::new();
+            out.3 = Vec::new();
         }
         Ok(out)
     })?;
     let mut wins = 0usize;
-    let mut best: Option<(PlanOutcome, Vec<usize>)> = None;
-    for (delay, outcome) in outcomes {
+    let mut best: Option<(PlanOutcome, Vec<usize>, usize)> = None;
+    for (item, outcome) in outcomes {
         wins += outcome.1 as usize;
         if outcome.1
             && best
                 .as_ref()
-                .is_none_or(|((seen, ..), _)| outcome.0.len() < seen.len())
+                .is_none_or(|((seen, ..), ..)| outcome.0.len() < seen.len())
         {
-            best = Some((outcome, vec![delay]));
+            best = Some((outcome, vec![item % 1000], item / 1000));
         }
     }
+    let item_count = items.len();
     // The seed competes on the same score (total inputs, ties to the
     // search) and brings its own menu-0 checkpoint when it wins.
-    let mut base_menu0 = menu0;
-    if let Some((out, seed_plan, seed_menu0)) = seeded {
-        if best
-            .as_ref()
-            .is_none_or(|((seen, ..), _)| out.0.len() < seen.len())
+    let (best, base_menu0) = match (best, seeded) {
+        (best, Some((out, seed_plan, seed_menu0)))
+            if best
+                .as_ref()
+                .is_none_or(|((seen, ..), ..)| out.0.len() < seen.len()) =>
         {
-            best = Some((out, seed_plan));
-            base_menu0 = seed_menu0;
+            (Some((out, seed_plan)), seed_menu0)
         }
-    }
+        (Some((out, plan, pre)), _) => {
+            let menu = menu0s.into_iter().nth(pre).expect("pre-indexed menu");
+            if pre > 0 {
+                eprintln!("      {label} stage 1: pre-idle {pre} wins");
+            }
+            (Some((out, plan)), menu)
+        }
+        (None, _) => (None, menu0s.into_iter().next().expect("menu 0")),
+    };
     let ((mut best_inputs, _, mut best_turns, best_menus), mut plan) =
         best.ok_or_else(|| RouteError::Timeout {
             what: format!("any start delay to win {label}"),
@@ -548,8 +604,7 @@ pub fn win_battle(
             frames: rec.frames(),
         })?;
     eprintln!(
-        "      {label} stage 1: {wins}/{} start delays win, plan {plan:?} at {} frames",
-        start_delays.end,
+        "      {label} stage 1: {wins}/{item_count} start delays win, plan {plan:?} at {} frames",
         best_inputs.len()
     );
 

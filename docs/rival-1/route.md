@@ -357,21 +357,37 @@ remains, largest first:
   then a 4-roll event slides into the window) were engine-barred and arbitrated: nothing
   came within 280 frames of paying. What genuinely remains here: move choice (Growl is
   strictly slower per the pacing tables, so this is closed in practice), and the fat-man
-  zero-cost anchor shift (same-length Pallet path variants move his rolls — priced in the
-  journal entry, not started). Starter creation manipulation is closed on arithmetic:
+  anchor shift — its wait-dial form was measured 2026-08-14 (`FRLG_WAIT_05_HOUSE` 1-4 →
+  9709/9893/9914/9915; `FRLG_WAIT_06_TO_LAB` 1-4 all absorb to one family at 9671; five
+  distinct anchor families, none beats the committed 9658, consistent with the 17-frame
+  floor gap). The zero-cost same-length-path form is still unimplemented (nav has no
+  waypoint forcing) and is bounded by the same ≤17 frames. Starter creation manipulation is closed on arithmetic:
   Tackle needs Atk 13 for 6 damage and the best reachable is 12
   (`decompiled/src/data/pokemon/species_info.h:41`, `CALC_STAT`
-  `decompiled/src/pokemon.c:2093-2096`, `ModifyStatByNature` `:5404`).
-- **`02-intro-oak`'s boxes still wait on scripted beats.** Text now prints at one character
-  per held frame, but the intro is also fades, sprite slides and timer waits that no input
-  reaches; 1565 frames is the floor for this drive shape, not for the scene. Nobody has
-  audited which of those waits are input-gated versus timer-gated.
+  `decompiled/src/pokemon.c:2093-2096`, `ModifyStatByNature` `:5404`). The dial itself
+  now exists (`Tuning::ball_delay`, 2026-08-14, built for defeat-brock) but stays at 0
+  here: a 2-turn kill is barred structurally — turn 1 cannot crit
+  (`FIRST_BATTLE` suppression until the first hit lands, `battle_controller_opponent.c:304-306`
+  above), so best-case turn-1 5 + turn-2 crit 10 = 15 < 18 — and within 3 turns a genome
+  changes only HP-bar drain times (~2.5 frames per HP, `frlg-battle` pacing), pennies
+  against the 17-frame floor gap.
+- **`02-intro-oak`: audited, and it is input-paced nearly wall to wall (2026-08-14).**
+  The slack probe (`examples/intro-slack.rs`: inject one idle frame at every 8th frame of
+  the committed segment, replay the rest, see whether the end shifts) found **191 of 196
+  probe points shift the end 1:1** — only the final ~36 frames (f1528..f1560, the fade
+  into the naming screen) absorb a delay. There are no mid-intro timer waits the drive
+  arrives early for; 1565 is the measured floor for this drive shape, and any further
+  gain would need a different press pattern, not better timing of this one.
 - **`text_hold` is one global knob.** The winning duty cycle is a compromise across every
   dialogue stretch in the route; per-segment (or per-box) hold values are strictly more
   general and completely unexplored.
-- **The player name is one fixed letter.** Which letter (and which of the naming screen's
-  cursor-start letters is cheapest to take) has never been compared; the name prints in a
-  handful of boxes.
+- **The player name: closed by inspection (2026-08-14).** The drive already takes the
+  letter under the cursor with zero moves (`03-names`: `tap A` the frame the screen
+  accepts input, then START, A — `crates/frlg-route/src/segments.rs`), and every
+  one-character name prints in identical time (`RenderText` is per-character,
+  `decompiled/src/text.c:639-650`), so no letter can be cheaper to *select* or to
+  *print*. The only residual effect of a different letter path would be shifting the
+  naming-exit frame — which is the seed dial, closed above.
 - **The naming-exit seed dial: closed (2026-08-14).** The battle seed is `REG_TM1CNT_L`
   at the naming screen's exit press, moving 18753 per frame (the RNG section above), so
   idling N frames right before that press buys N fresh battle streams at 1 frame each.

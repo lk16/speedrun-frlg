@@ -263,6 +263,13 @@ struct RouteArgs {
     #[arg(long)]
     seed_delay: Option<usize>,
 
+    /// Frames idled facing the starter's ball before taking it: the
+    /// starter-genome dial (givemon's 4 rolls pick nature and IVs,
+    /// decompiled/src/pokemon.c:1778,1836-1852). Scan candidates with the
+    /// ball-scan example. Defaults like --turn-hold.
+    #[arg(long)]
+    ball_delay: Option<usize>,
+
     /// Build only: resume after an existing ledger's prefix. The segments
     /// before this one are replayed from the committed logs (seconds) and
     /// only this one onward are rebuilt. Requires the same starter and
@@ -1042,6 +1049,9 @@ fn tuning_for(args: &RouteArgs, ledger_path: &Path) -> Tuning {
     }
     if let Some(seed_delay) = args.seed_delay {
         tuning.seed_delay = seed_delay;
+    }
+    if let Some(ball_delay) = args.ball_delay {
+        tuning.ball_delay = ball_delay;
     }
     tuning
 }

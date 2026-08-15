@@ -153,6 +153,17 @@ pub struct Tuning {
     /// dial the route has.
     #[serde(default)]
     pub seed_delay: usize,
+    /// Frames idled facing the starter's ball before the A press that runs
+    /// its script. `givemon` consumes exactly 4 `Random()` calls -- PID low,
+    /// PID high, then the two IV words (`decompiled/src/pokemon.c:1778`,
+    /// `:1836-1852`, via `ScriptGiveMon`,
+    /// `decompiled/src/script_pokemon_util.c:48-72`) -- so each idle frame
+    /// here re-picks the starter's nature and all six IVs at a cost of one
+    /// frame plus whatever the shifted downstream streams re-luck to.
+    /// The genome per delay is scanned by
+    /// `crates/frlg-route/examples/ball-scan.rs`.
+    #[serde(default)]
+    pub ball_delay: usize,
 }
 
 /// What `text_hold` was before it existed: ledgers written without the field
@@ -171,6 +182,7 @@ impl Default for Tuning {
             turn_hold: 2,
             text_hold: 1,
             seed_delay: 0,
+            ball_delay: 0,
         }
     }
 }
@@ -567,6 +579,12 @@ fn starter_segment(starter: Starter, tuning: Tuning) -> Segment {
             // `Tuning`.
             rec.hold(keys::UP, tuning.turn_hold)?;
             rec.idle(1)?;
+
+            // The starter-genome dial (`Tuning::ball_delay`): idle here so
+            // `givemon`'s 4 rolls land later in the stream.
+            if tuning.ball_delay > 0 {
+                rec.idle(tuning.ball_delay)?;
+            }
 
             // A opens the ball's script and answers YES to "so, you want it?".
             // Stop the moment the mon is in the party: the next prompt is the

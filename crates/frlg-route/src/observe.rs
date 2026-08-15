@@ -143,6 +143,9 @@ pub const FLAG_BADGE01_GET: u16 = 0x820;
 /// read straight out.
 mod battle_mon_off {
     pub const SPECIES: u32 = 0x00;
+    /// `/*0x02*/ u16 attack` .. `/*0x0A*/ u16 spDefense`, five u16s in
+    /// atk/def/spe/spa/spd order.
+    pub const STATS: u32 = 0x02;
     /// `/*0x0C*/ u16 moves[MAX_MON_MOVES]`.
     pub const MOVES: u32 = 0x0C;
     /// `/*0x28*/ u16 hp`, `/*0x2A*/ u8 level`, `/*0x2C*/ u16 maxHP`.
@@ -467,6 +470,7 @@ impl Observer {
             hp: emu.read16(base + battle_mon_off::HP),
             max_hp: emu.read16(base + battle_mon_off::MAX_HP),
             moves: std::array::from_fn(|i| emu.read16(base + battle_mon_off::MOVES + 2 * i as u32)),
+            stats: std::array::from_fn(|i| emu.read16(base + battle_mon_off::STATS + 2 * i as u32)),
         }
     }
 
@@ -613,6 +617,8 @@ pub struct BattleMon {
     pub hp: u16,
     pub max_hp: u16,
     pub moves: [u16; 4],
+    /// atk/def/spe/spa/spd, before stat stages.
+    pub stats: [u16; 5],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
