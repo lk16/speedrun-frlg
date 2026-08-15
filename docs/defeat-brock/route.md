@@ -1,12 +1,12 @@
 # Defeat Brock: the route
 
-**Status: 38812 frames, tier-1 verified, tier-2 queued** (~10m50s at
+**Status: 38812 frames, tier-2 verified** (~10m50s at
 59.7275 Hz) from power-on to `FLAG_DEFEATED_BROCK`, on **FireRed with
 Squirtle** (`turn_hold` 1, `text_hold` **4**, `seed_delay` **27**), tier-1
 verified from reset on 2026-08-15 (`route/defeat-brock/ledger.json`) and
-queued for tier 2 as `route-38812f-33133637dfeb`. Until that result lands,
-the last tier-2-**passed** run is the superseded 38862
-(`route-38862f-8ee04c5b8bfc`, logs in git history).
+tier-2 **passed** the same day as `route-38812f-33133637dfeb`. This is the
+accepted number; the previous accepted run -- 38862, passed as
+`route-38862f-8ee04c5b8bfc` -- is superseded and its logs live in git history.
 
 The 50-frame drop came out of the 2026-08-15 video audit
 (`journal/2026-08-15-10-00-video-audit-verdicts.md`, all eleven viewer
@@ -222,19 +222,18 @@ Route-shaping facts the builds measured (all reproduced in `journal/`):
    (`data/maps/ViridianCity_Mart/scripts.inc:65-70`, and the clerk will
    not shop while the parcel is held, `:55`).
 
-### Tier 2 — 38812 queued 2026-08-15; last pass `route-38862f-8ee04c5b8bfc`
+### Tier 2 — `route-38812f-33133637dfeb` passed 2026-08-15
 
-The current 38812 is queued as `route-38812f-33133637dfeb` (ilog digest
-`33133637…`; the export round-trips). Until its result lands, the accepted
-run is the superseded 38862: BizHawk 2.11.1 replayed all 38862 frames to
-the ledger's final ram_hash (`868413a6…`, the `brock` segment's) with the
+The current 38812 is **accepted**: BizHawk 2.11.1 replayed all 38812 frames
+to the ledger's final ram_hash (`04f26499…`, the `brock` segment's) with the
 per-frame gRngValue probe matching every frame
-(`verify/results/route-38862f-8ee04c5b8bfc.json`, `fast+headless`, 67s).
+(`verify/results/route-38812f-33133637dfeb.json`, `fast+headless`, 67s).
 Re-exporting the committed logs reproduces the result's ilog digest
-(`8ee04c5b…`), so the pass belongs to exactly the logs in
-`route/defeat-brock/logs/`; the `.bk2` hash differs per export, as this
-contract warns. The superseded 38950, 43308, 49143, 45276, 44464 and 43346
-requests passed earlier; the 40940/40865/40106 requests were pulled unrun.
+(`33133637…`), so the pass belongs to exactly the logs in
+`route/defeat-brock/logs/`; the `.bk2` hash differs per export
+(`5b44485f…` against the queued `1af01412…`), as this contract warns. The
+superseded 38862, 38950, 43308, 49143, 45276, 44464 and 43346 requests
+passed earlier; the 40940/40865/40106 requests were pulled unrun.
 
 The export follows rival-1's contract (`docs/rival-1/route.md`): `.ilog`s are canonical,
 the `.bk2` is an export, the queue is drained by a human on the host.

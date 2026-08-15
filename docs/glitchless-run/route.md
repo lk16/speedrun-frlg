@@ -19,7 +19,7 @@
 `plan.md` §5 found no decomp-derivable difference in mandatory content between versions
 (trainer parties byte-identical; wilds differ only on Routes 4/22). The only *measured*
 numbers we own are the two prior targets, and `defeat-brock` — the larger objective —
-measured **FireRed + Squirtle** fastest to Brock (38862 frames, tier-2 accepted,
+measured **FireRed + Squirtle** fastest to Brock (38812 frames, tier-2 accepted,
 `route/defeat-brock/ledger.json`). Reusing that verified prefix is worth more for an
 initial route than re-guessing. **Marked for re-sweep** (§7): the full run's objective is
 different again (Misty is water-vs-water, the E4 shape matters), so version × starter must
@@ -118,7 +118,7 @@ to `bin/frlg-mapgraph`'s dump table this session and regenerate with the rest.
 
 | # | Leg | Era | Tiles (floor) | What happens |
 | --- | --- | --- | --- | --- |
-| 1 | Power-on → Brock beaten | walk | — (measured: 38862 frames as defeat-brock) | The `defeat-brock` accepted route wholesale: FR+Squirtle, naming, **lab rival**, parcel round trip, tutorial (5 free balls), **Sammy**, Brock. Re-decisions deferred (§7) |
+| 1 | Power-on → Brock beaten | walk | — (measured: 38812 frames as defeat-brock) | The `defeat-brock` accepted route wholesale: FR+Squirtle, naming, **lab rival**, parcel round trip, tutorial (5 free balls), **Sammy**, Brock. Re-decisions deferred (§7) |
 | 2 | Pewter → Cerulean | run | 492 | Running Shoes at east exit; Route 3, Mt Moon: **catch Paras on B1F** (100% slot), **Miguel + mandatory fossil pickup** at (13,7), exit Route 4 |
 | 3 | Cerulean arrival | run | ~30 | Heal/anchor at Cerulean PC (Teleport target for legs 4/6) |
 | 4 | Nugget Bridge → Bill | run | 156 one-way | **Cerulean rival**, **5 bridge trainers**; **catch Abra + Pidgey** in Route 24/25 grass; S.S. Ticket from Bill (`decompiled/data/maps/Route25_SeaCottage/scripts.inc:99-101`); **Teleport → Cerulean PC** |
