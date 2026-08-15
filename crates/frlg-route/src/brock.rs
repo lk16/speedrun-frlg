@@ -1372,13 +1372,31 @@ fn leg_targets(
             }
             // A warp near the via tile means "walk onto the warp"; otherwise
             // it is a map connection and the plan ends on the edge, one held
-            // step short of the next map.
-            let warps: Vec<(i16, i16)> = data
+            // step short of the next map. A warp *event* only fires from a
+            // tile whose metatile behavior activates it (doors, arrow and
+            // stair warps, 0x60..0x6F, `include/constants/`
+            // `metatile_behaviors.h:71-87`) -- Oak's lab lists warps on
+            // (5,12) and (7,12) too, but those are plain floor (behavior 0)
+            // and standing on them does nothing; measured on the r78 build,
+            // where targeting (7,12) cost a ~120-frame fumble before the
+            // executor found the real door. Keep the unfiltered set only if
+            // the filter empties it (a mis-decoded behavior must not brick
+            // the leg).
+            let all: Vec<(i16, i16)> = data
                 .warps
                 .iter()
                 .filter(|w| (w.x - vx).abs() + (w.y - vy).abs() <= 4)
                 .map(|w| (w.x, w.y))
                 .collect();
+            let live: Vec<(i16, i16)> = all
+                .iter()
+                .copied()
+                .filter(|&(x, y)| {
+                    data.tile(x, y)
+                        .is_some_and(|t| (0x60..=0x6F).contains(&t.behavior))
+                })
+                .collect();
+            let warps = if live.is_empty() { all } else { live };
             if !warps.is_empty() {
                 return Some((warps, false));
             }

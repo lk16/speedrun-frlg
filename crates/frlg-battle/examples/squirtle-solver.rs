@@ -366,8 +366,14 @@ fn main() {
 
     // ---- Emulator setup for phases 2 and 3. ----
     let root = repo_root();
-    let ledger = frlg_route::ledger::read(&root.join("route/defeat-brock/ledger.json"))
-        .expect("committed ledger");
+    // `FRLG_LEDGER` points the solver at a working build's ledger; the
+    // committed one is the default. Everything downstream is derived from
+    // the ledger it names (prefix replay, battle-start anchor, plan
+    // reconstruction), so a rebuild's arrival is analyzed the same way.
+    let ledger_path = std::env::var("FRLG_LEDGER")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| root.join("route/defeat-brock/ledger.json"));
+    let ledger = frlg_route::ledger::read(&ledger_path).expect("ledger");
     assert_eq!(ledger.starter, "squirtle");
     let rom = frlg_emu::rom_path_for_sha1(&ledger.rom_sha1).expect("ROM in $FRLG_ARTIFACTS/rom");
     let syms = frlg_emu::SymbolTable::load(&rom.with_extension("sym")).expect("syms");
