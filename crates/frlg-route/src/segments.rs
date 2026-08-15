@@ -31,7 +31,16 @@ const OAK_TRIGGER: (i16, i16) = (12, 1);
 /// `OBJ_EVENT_GFX_ITEM_BALL` object events, and the `coord_events` row that
 /// fires `..._EventScript_RivalBattleTrigger*` once the scene var is 3.
 const BALL_ROW_Y: i16 = 4;
-const BATTLE_TRIGGER: (i16, i16) = (6, 8);
+/// The right-hand trigger tile. The row is (5..7,8) and the choice moves
+/// three scripted walks (`data/maps/PalletTown_ProfessorOaksLab/scripts.inc`):
+/// with Squirtle the rival's approach is 5/4/3 steps for Left/Mid/Right
+/// (`Movement_RivalApproachForBattleBulbasaur*`) and his exit 6/7/6
+/// (`Movement_RivalExitAfterBattle*`); the door spans (5..7,12) so the exit
+/// walk is equal from all three, and from the Squirtle ball at (9,4) the
+/// right tile is one player step closer than mid. Right therefore beats the
+/// mid tile used through 38862 by 3 walk steps, ~48 frames (video audit,
+/// journal 2026-08-15).
+const BATTLE_TRIGGER: (i16, i16) = (7, 8);
 
 /// Which ball to take. The numbering is `VAR_STARTER_MON`'s
 /// (`decompiled/include/constants/vars.h:98`), and the rival always takes the

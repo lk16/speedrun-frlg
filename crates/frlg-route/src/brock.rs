@@ -1112,6 +1112,17 @@ pub fn walk_planned(
         };
         let wild_data = obs.wild_data(rec.emu());
         let wild = wild_table(map, version);
+        // `FRLG_TEST_BIAS_MAP_<group>_<num>`: extra model cost per rate test
+        // consumed on that one map, so a build can buy a smaller constraint
+        // surface (fewer tests and cooldown 5%-gate rolls for downstream
+        // dial sweeps to satisfy) exactly where it is cheap -- e.g. Route 2's
+        // north stub, where the grass-free line costs 2 steps (video audit,
+        // journal 2026-08-15) -- without distorting index-walled maps where
+        // avoidance detours are unbounded. 0 (off) when unset.
+        let test_bias: u32 = std::env::var(format!("FRLG_TEST_BIAS_MAP_{}_{}", map.0, map.1))
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
 
         // Plan on the current map. Everything that needs the borrowed map
         // happens inside; the plan comes out owned.
@@ -1134,7 +1145,7 @@ pub fn walk_planned(
                 targets,
                 blocked: blocked.clone(),
                 encounter_cost: plan::ENCOUNTER_COST,
-                test_bias: 0,
+                test_bias,
             };
             plan::plan(&req).map(|(steps, cost)| (steps, cost, crossing))
         });
