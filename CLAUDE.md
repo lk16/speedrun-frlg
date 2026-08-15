@@ -55,6 +55,7 @@ commit.
 | --- | --- |
 | `docs/sandbox.md` | the environment: mounts, image, network, disk, the two tiers |
 | `docs/harness.md` | the tier-1 emulator harness and the `.ilog` format |
+| `docs/tricks/` | cross-target tricks and externally sourced notes, decomp-checked |
 | `docs/<target>/route.md` | a target's route, its evidence, and what is not optimised |
 | `docs/<target>/journal/` | that target's lab notebook, one dated file per session entry |
 | `crates/` | `mgba-sys`, `frlg-emu`, `frlg-rng`, `frlg-battle`, `frlg-route`, `frlg-cli` |
