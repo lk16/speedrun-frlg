@@ -127,6 +127,7 @@ impl Ctx<'_> {
             | Kind::Stones
             | Kind::Mewtwo => 0.0,
             Kind::Special { .. } => 0.0,
+            Kind::TeleportOrWalk { frames, .. } => *frames as f64 * self.p.text_factor,
             Kind::Grind { .. } => 0.0,
         }
     }
@@ -718,6 +719,15 @@ pub fn attempt(
                         }
                     }
                 }
+            }
+            Kind::TeleportOrWalk { frames, tiles } => {
+                // Abra is national dex 63.
+                if st.caught.has(63) {
+                    bump(&mut st, *frames as f64 * ctx.p.text_factor);
+                } else {
+                    bump(&mut st, *tiles as f64 * Era::Run.frames_per_tile() * ctx.p.path_overhead);
+                }
+                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
             }
             Kind::Mewtwo => {
                 bump(&mut st, 1500.0 * ctx.p.text_factor);

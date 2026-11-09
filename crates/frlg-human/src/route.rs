@@ -86,6 +86,8 @@ pub enum Kind {
     OakCheck,
     /// Buy stones (Celadon 4F) and evolve whatever evolves by them.
     Stones,
+    /// Teleport with an Abra if one was caught on the way, else walk back (run speed).
+    TeleportOrWalk { frames: u32, tiles: u32 },
     /// Master Ball on Mewtwo.
     Mewtwo,
     /// A gift mon or a one-off wild battle.
@@ -282,7 +284,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.walk("bill", 56, b.era, Some(("MAP_ROUTE25", 40)), Src::Guess);
     b.text("bill-cottage", 2400, Src::Guess);
     if p.teleport_abra {
-        b.text("teleport-cerulean", 700, Src::Guess);
+        b.push("teleport-cerulean", Src::Guess, 15, Kind::TeleportOrWalk { frames: 700, tiles: 156 });
     } else {
         b.walk("bill-return", 156, b.era, None, Src::Tiles);
     }
@@ -308,7 +310,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.text("surge-badge", 600, Src::Guess);
     b.split();
     if p.teleport_abra {
-        b.text("teleport-cerulean-2", 700, Src::Guess);
+        b.push("teleport-cerulean-2", Src::Guess, 15, Kind::TeleportOrWalk { frames: 700, tiles: 260 });
     } else {
         b.walk("vermilion-return", 260, b.era, None, Src::Tiles);
     }
