@@ -1,7 +1,7 @@
 use frlg_human::data::Dex;
 use frlg_human::eval::*;
 use frlg_human::route::Src;
-use frlg_human::sim::{attempt, FPS};
+use frlg_human::sim::{attempt, Probe, FPS};
 use std::sync::OnceLock;
 
 static DEX: OnceLock<Dex> = OnceLock::new();
@@ -99,6 +99,19 @@ fn main() {
                     .map_or("inf".into(), |h| format!("{h:.3} h ({} fin)", t.finishes))
             };
             println!("rung {}: a {} | b {}", rung_name(rung), f(&d.a), f(&d.b));
+            let jh = |h: Option<f64>| h.map_or("null".to_string(), |v| format!("{v:.4}"));
+            println!(
+                "JSON {{\"rung\":\"{}\",\"R\":{},\"a_eht\":{},\"a_fin\":{},\"b_eht\":{},\"b_fin\":{},\"diff\":{},\"ci_lo\":{},\"ci_hi\":{}}}",
+                rung_name(rung),
+                r,
+                jh(d.a.eht_hours()),
+                d.a.finishes,
+                jh(d.b.eht_hours()),
+                d.b.finishes,
+                jh(d.diff_hours),
+                jh(d.ci.map(|c| c.0)),
+                jh(d.ci.map(|c| c.1))
+            );
             match (d.diff_hours, d.ci) {
                 (Some(x), Some((lo, hi))) => println!(
                     "diff a-b {x:+.3} h, 95% CI [{lo:+.3}, {hi:+.3}], significant: {}",
@@ -176,13 +189,22 @@ fn main() {
             let mut runs: Vec<f64> = vec![];
             let mut unfinished = 0;
             let (mut oak_sum, mut oak_n, mut wo) = (0u64, 0u64, 0u64);
+            let mut fill: Vec<(f64, f64, u64)> = vec![];
             for i in 0..r {
-                let mut oak = 0u32;
-                let o = attempt(&ctx, seed, i, None, None, None, Some(&mut oak));
+                let mut pr = Probe::default();
+                let o = attempt(&ctx, seed, i, None, None, None, Some(&mut pr));
                 wo += o.whiteouts as u64;
-                if oak > 0 {
-                    oak_sum += oak as u64;
+                if pr.oak_count > 0 {
+                    oak_sum += pr.oak_count as u64;
                     oak_n += 1;
+                }
+                if fill.len() < pr.fill.len() {
+                    fill.resize(pr.fill.len(), (0.0, 0.0, 0));
+                }
+                for (a, b) in fill.iter_mut().zip(&pr.fill) {
+                    a.0 += b.0;
+                    a.1 += b.1;
+                    a.2 += b.2;
                 }
                 if o.finished {
                     runs.push(o.run as f64);
@@ -196,6 +218,19 @@ fn main() {
                 oak_n,
                 wo as f64 / r as f64
             );
+            for (h, f) in plan.params.fill.iter().zip(&fill) {
+                if f.2 > 0 {
+                    println!(
+                        "  fill {:<28} {:<5} run {:>5.1}% mean {:>5.0}s gain {:>5.2} -> {:>6.0} s/species",
+                        h.site.trim_start_matches("MAP_"),
+                        h.area,
+                        f.2 as f64 / r as f64 * 100.0,
+                        f.0 / f.2 as f64 / FPS,
+                        f.1 / f.2 as f64,
+                        f.0 / FPS / f.1.max(1e-9)
+                    );
+                }
+            }
             runs.sort_by(|a, b| a.partial_cmp(b).unwrap());
             if runs.is_empty() {
                 println!("no finishes ({unfinished} unfinished)");

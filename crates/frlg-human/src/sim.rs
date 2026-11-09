@@ -55,6 +55,15 @@ pub struct SegStats {
     pub caught_sum: f64,
 }
 
+/// Optional extra measurements from an attempt.
+#[derive(Default)]
+pub struct Probe {
+    /// Kanto species caught when Oak's check starts.
+    pub oak_count: u32,
+    /// Per fill hunt: (frames spent, species gained, times run).
+    pub fill: Vec<(f64, f64, u64)>,
+}
+
 pub struct Outcome {
     pub wall: u64,
     pub run: u64,
@@ -446,7 +455,7 @@ pub fn attempt(
     target: Option<u64>,
     mut rec: Option<&mut Vec<SegStats>>,
     mut split_clock: Option<&mut Vec<u64>>,
-    mut oak_count: Option<&mut u32>,
+    mut probe: Option<&mut Probe>,
 ) -> Outcome {
     let mut st = State {
         clock: 0,
@@ -537,14 +546,41 @@ pub fn attempt(
                 }
             }
             Kind::OakCheck => {
-                if let Some(c) = oak_count.as_deref_mut() {
-                    *c = st.caught.count();
+                if let Some(pr) = probe.as_deref_mut() {
+                    pr.oak_count = st.caught.count();
                 }
-                for h in ctx.p.fill.clone() {
+                for (hi, h) in ctx.p.fill.iter().enumerate() {
                     if st.caught.count() >= 60 {
                         break;
                     }
-                    hunt(ctx, &mut st, &mut rng, &h, Era::Run);
+                    let (c0, n0) = (st.clock, st.caught.count());
+                    hunt(ctx, &mut st, &mut rng, h, Era::Run);
+                    if let Some(pr) = probe.as_deref_mut() {
+                        if pr.fill.len() <= hi {
+                            pr.fill.resize(hi + 1, (0.0, 0.0, 0));
+                        }
+                        let e = &mut pr.fill[hi];
+                        e.0 += (st.clock - c0) as f64;
+                        e.1 += (st.caught.count() - n0) as f64;
+                        e.2 += 1;
+                    }
+                    if let Some(t) = target {
+                        let rem = ctx.floor_after[i] as f64
+                            + ctx.p.reset_aggr
+                                * (ctx.mean_after[i] - ctx.floor_after[i] as f64).max(0.0);
+                        if st.caught.count() < 60 && st.clock as f64 + rem > t as f64 {
+                            if let Some(r) = rec.as_deref_mut() {
+                                r[i].resets += 1;
+                            }
+                            return Outcome {
+                                wall: st.clock + st.off,
+                                run: st.clock,
+                                finished: false,
+                                caught: st.caught.count(),
+                                whiteouts: st.whiteouts,
+                            };
+                        }
+                    }
                 }
                 if st.caught.count() < 60 {
                     st.abandoned = true;
