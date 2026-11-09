@@ -613,13 +613,18 @@ pub fn attempt(
                     }
                 }
             }
+            Kind::Special { special }
+                if special.requires.iter().any(|r| {
+                    let d = ctx.dex.species[ctx.dex.id(r)].dex;
+                    !st.caught.has(d)
+                }) => {}
             Kind::Special { special } => {
                 bump(&mut st, special.frames as f64 * ctx.p.text_factor);
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 for n in &special.species {
                     let id = ctx.dex.id(n);
                     let sp = &ctx.dex.species[id];
-                    if special.kind == "gift" {
+                    if special.kind == "gift" || special.kind == "trade" {
                         st.caught.insert(sp.dex);
                     } else {
                         bump(&mut st, ENC_INTRO as f64 + react(ctx, &mut rng) as f64);

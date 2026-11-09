@@ -46,6 +46,8 @@ pub struct Special {
     pub hp_frac: f64,
     pub ball: String,
     pub max_throws: u32,
+    /// Species that must already be caught or the event is skipped for free (in-game trades).
+    pub requires: Vec<String>,
 }
 
 impl Default for Special {
@@ -59,6 +61,7 @@ impl Default for Special {
             hp_frac: 0.2,
             ball: "ultra".into(),
             max_throws: 30,
+            requires: vec![],
         }
     }
 }
