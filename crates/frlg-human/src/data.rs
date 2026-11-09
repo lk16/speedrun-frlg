@@ -46,6 +46,7 @@ struct Raw {
     sites: HashMap<String, RawSite>,
     sites_lg: HashMap<String, RawSite>,
     trainers: HashMap<String, RawTrainer>,
+    map_trainers: HashMap<String, Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
@@ -79,6 +80,7 @@ pub struct Dex {
     sites: HashMap<String, RawSite>,
     sites_lg: HashMap<String, RawSite>,
     trainers: HashMap<String, Vec<(u32, usize)>>,
+    map_trainers: HashMap<String, Vec<String>>,
 }
 
 impl Dex {
@@ -129,6 +131,7 @@ impl Dex {
             sites: raw.sites,
             sites_lg: raw.sites_lg,
             trainers,
+            map_trainers: raw.map_trainers,
         }
     }
 
@@ -170,6 +173,22 @@ impl Dex {
             })
             .collect();
         Some((a.rate, slots, rates))
+    }
+
+    /// Parties of the trainers placed on the given maps (decomp `object_events` that resolve to
+    /// a `trainerbattle_*`), hardest first (by summed level).
+    pub fn map_parties(&self, maps: &[&str]) -> Vec<Vec<(u32, usize)>> {
+        let mut out: Vec<Vec<(u32, usize)>> = maps
+            .iter()
+            .flat_map(|m| {
+                self.map_trainers
+                    .get(*m)
+                    .unwrap_or_else(|| panic!("no trainers on map {m}"))
+            })
+            .filter_map(|t| self.trainers.get(t).cloned())
+            .collect();
+        out.sort_by_key(|p| std::cmp::Reverse(p.iter().map(|x| x.0).sum::<u32>()));
+        out
     }
 
     pub fn has_site(&self, site: &str) -> bool {

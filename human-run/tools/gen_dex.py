@@ -57,5 +57,35 @@ for m in re.finditer(r'\[(TRAINER_[A-Z0-9_]+)\] = \{(.*?)\n    \},', tr, re.S):
     dbl = 'doubleBattle = TRUE' in m.group(2)
     if pm and pm.group(1) in parties:
         trainers[m.group(1)] = dict(party=parties[pm.group(1)], double=dbl)
-json.dump(dict(kanto_count=len(kanto), species=species, sites=sites, sites_lg=sites_lg, trainers=trainers), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
+maps_dir = os.path.join(root, '..', '..', 'data')
+label_trainer = {}
+def scan(path):
+    cur = None
+    for line in open(path, errors='replace'):
+        m = re.match(r'^([A-Za-z0-9_]+)::', line)
+        if m:
+            cur = m.group(1)
+        t = re.search(r'trainerbattle_\w+\s+(TRAINER_[A-Z0-9_]+)', line)
+        if t and cur and cur not in label_trainer:
+            label_trainer[cur] = t.group(1)
+for dp, _, fs in os.walk(os.path.join(maps_dir, 'maps')):
+    for f in fs:
+        if f == 'scripts.inc':
+            scan(os.path.join(dp, f))
+for f in os.listdir(os.path.join(maps_dir, 'scripts')):
+    if f.endswith('.inc'):
+        scan(os.path.join(maps_dir, 'scripts', f))
+map_trainers = {}
+for d in sorted(os.listdir(os.path.join(maps_dir, 'maps'))):
+    mj = os.path.join(maps_dir, 'maps', d, 'map.json')
+    if not os.path.exists(mj):
+        continue
+    ids = []
+    for o in json.load(open(mj)).get('object_events', []):
+        t = label_trainer.get(o.get('script', ''))
+        if t and t in trainers and t not in ids:
+            ids.append(t)
+    if ids:
+        map_trainers[d] = ids
+json.dump(dict(kanto_count=len(kanto), species=species, sites=sites, sites_lg=sites_lg, trainers=trainers, map_trainers=map_trainers), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
 print(len(kanto), len(species), len(sites), len(trainers))

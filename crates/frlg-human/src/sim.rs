@@ -107,6 +107,14 @@ impl Ctx<'_> {
                     + party.len() as f64 * (self.turn() + self.mon_overhead())
                     + TRAINER_OUTRO as f64
             }
+            Kind::Parties { parties } => parties
+                .iter()
+                .map(|p| {
+                    600.0
+                        + p.len() as f64 * (self.turn() + self.mon_overhead())
+                        + TRAINER_OUTRO as f64
+                })
+                .sum(),
             Kind::Group { n, mons, .. } => {
                 *n as f64
                     * (600.0
@@ -548,6 +556,22 @@ pub fn attempt(
                     .map(|&(l, s)| (l, ctx.dex.species[s].exp_yield))
                     .collect();
                 if !battle(ctx, &mut st, &mut rng, &enemies, true, *intro, *adv) {
+                    break;
+                }
+            }
+            Kind::Parties { parties } => {
+                let mut ok = true;
+                for p in parties {
+                    let enemies: Vec<(u32, u32)> = p
+                        .iter()
+                        .map(|&(l, s)| (l, ctx.dex.species[s].exp_yield))
+                        .collect();
+                    if !battle(ctx, &mut st, &mut rng, &enemies, true, 600, 1.0) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if !ok {
                     break;
                 }
             }

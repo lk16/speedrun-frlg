@@ -65,6 +65,8 @@ pub enum Kind {
         /// Type-matchup multiplier on the player's effective level (guess).
         adv: f64,
     },
+    /// Several real parties fought back to back (trainers of the given maps, hardest first).
+    Parties { parties: Vec<Vec<(u32, usize)>> },
     /// Trainers we only know in aggregate (a guess).
     Group {
         n: u32,
@@ -184,6 +186,17 @@ impl<'a> B<'a> {
         );
     }
 
+    /// The `n` hardest trainers on the given maps. `n` is a routing assumption (which ones the
+    /// route cannot walk around), the parties are the decomp's.
+    fn maps_group(&mut self, name: &str, maps: &[&str], n: u32) {
+        if self.skip.iter().any(|s| s == name) {
+            return;
+        }
+        let n = *self.group_n.get(name).unwrap_or(&n) as usize;
+        let parties: Vec<_> = self.dex.map_parties(maps).into_iter().take(n).collect();
+        self.push(name, Src::Tiles, 6 * n as u32, Kind::Parties { parties });
+    }
+
     fn split(&mut self) {
         self.segs.last_mut().unwrap().split = true;
     }
@@ -222,7 +235,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.text("forest", 6708, Src::Ledger);
     b.wander("forest-encounters", "MAP_VIRIDIAN_FOREST", 100);
     b.text("to-pewter", 1531, Src::Ledger);
-    b.group("forest-trainers", 3, 2, 8, 50);
+    b.maps_group("forest-trainers", &["ViridianForest"], 3);
     b.trainer_adv("brock", "TRAINER_LEADER_BROCK", 600, 1.4);
     b.split();
     b.era = Era::Run;
@@ -252,7 +265,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         Src::Guess,
     );
     b.group("mt-moon-trainers", 5, 2, 11, 60);
-    b.group("mt-moon-miguel", 1, 3, 12, 60);
+    b.maps_group("mt-moon-miguel", &["MtMoon_B2F"], 1);
     b.walk("route4", 82, b.era, Some(("MAP_ROUTE4", 30)), Src::Guess);
     b.text("cerulean-heal", 500, Src::Guess);
 
@@ -265,7 +278,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         Some(("MAP_ROUTE24", 60)),
         Src::Guess,
     );
-    b.group("nugget-bridge-trainers", 5, 2, 13, 65);
+    b.maps_group("nugget-bridge-trainers", &["Route24"], 6);
     b.walk("bill", 56, b.era, Some(("MAP_ROUTE25", 40)), Src::Guess);
     b.text("bill-cottage", 2400, Src::Guess);
     if p.teleport_abra {
@@ -324,7 +337,11 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         Some(("MAP_ROCK_TUNNEL_1F", 138)),
         Src::Guess,
     );
-    b.group("rock-tunnel-trainers", 7, 2, 21, 70);
+    b.maps_group(
+        "rock-tunnel-trainers",
+        &["RockTunnel_1F", "RockTunnel_B1F"],
+        7,
+    );
     b.text("lavender-heal", 500, Src::Guess);
 
     // 6. Celadon: Tea, Hideout, Erika, HM02.
@@ -332,7 +349,16 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.walk("celadon-tea", 40, e, None, Src::Tiles);
     b.text("tea", 600, Src::Guess);
     b.walk("hideout-walk", 526, e, None, Src::Guess);
-    b.group("hideout-grunts", 8, 2, 24, 70);
+    b.maps_group(
+        "hideout-grunts",
+        &[
+            "RocketHideout_B1F",
+            "RocketHideout_B2F",
+            "RocketHideout_B3F",
+            "RocketHideout_B4F",
+        ],
+        8,
+    );
     b.trainer("hideout-giovanni", "TRAINER_BOSS_GIOVANNI", 700);
     b.text("scope-and-dig", 1800, Src::Guess);
     b.walk("erika-walk", 146, e, None, Src::Tiles);
@@ -348,7 +374,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.walk("tower-walk", 215, e, None, Src::Guess);
     b.wander("tower-encounters", "MAP_POKEMON_TOWER_5F", 80);
     b.trainer("rival-tower", &tn("TRAINER_RIVAL_POKEMON_TOWER"), 700);
-    b.group("tower-rockets", 3, 2, 25, 70);
+    b.maps_group("tower-rockets", &["PokemonTower_7F"], 3);
     b.text("fuji-flute", 1500, Src::Guess);
 
     // 8. Cycling Road to Fuchsia, Safari, HM03 and HM04, Koga.
@@ -423,7 +449,11 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         Some(("MAP_VICTORY_ROAD_1F", 150)),
         Src::Guess,
     );
-    b.group("victory-road-trainers", 8, 2, 42, 80);
+    b.maps_group(
+        "victory-road-trainers",
+        &["VictoryRoad_1F", "VictoryRoad_2F", "VictoryRoad_3F"],
+        8,
+    );
     b.text("indigo-heal", 500, Src::Guess);
     if p.grind_pre_e4 > 0 {
         b.push(
