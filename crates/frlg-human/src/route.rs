@@ -545,6 +545,29 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
             },
         );
     }
+    for g in p.grinds.iter().rev() {
+        let at = b
+            .segs
+            .iter()
+            .position(|s| s.name == g.after)
+            .unwrap_or_else(|| panic!("grind anchor {} matches no segment", g.after));
+        b.segs.insert(
+            at + 1,
+            Seg {
+                name: format!("grind@{}", g.after),
+                src: Src::Guess,
+                inputs: 0,
+                split: false,
+                off_timer: false,
+                starter_check: false,
+                kind: Kind::Grind {
+                    battles: g.battles,
+                    level: g.level,
+                    yield_: g.yield_,
+                },
+            },
+        );
+    }
     for sp in p.specials.iter().rev() {
         let at = b
             .segs

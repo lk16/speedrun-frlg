@@ -31,6 +31,27 @@ impl Default for Hunt {
     }
 }
 
+/// Wild fights for exp at a fixed point of the route.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct Grind {
+    pub after: String,
+    pub battles: u32,
+    pub level: u32,
+    pub yield_: u32,
+}
+
+impl Default for Grind {
+    fn default() -> Self {
+        Grind {
+            after: String::new(),
+            battles: 5,
+            level: 20,
+            yield_: 70,
+        }
+    }
+}
+
 /// A gift mon or a one-off wild battle (`givemon` / `setwildbattle` in the decomp scripts).
 #[derive(Deserialize, Clone, Debug)]
 #[serde(default)]
@@ -102,6 +123,7 @@ pub struct Params {
     pub team_bonus: f64,
     pub hunts: Vec<Hunt>,
     pub specials: Vec<Special>,
+    pub grinds: Vec<Grind>,
     /// Fallback hunts, tried in order when Oak's check finds fewer than 60 caught.
     pub fill: Vec<Hunt>,
     pub stones: Vec<String>,
@@ -146,6 +168,7 @@ impl Default for Params {
             team_bonus: 1.08,
             hunts: vec![],
             specials: vec![],
+            grinds: vec![],
             fill: vec![],
             stones: vec![],
             skip_groups: vec![],
