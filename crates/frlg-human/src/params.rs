@@ -112,6 +112,8 @@ pub struct Params {
     pub grind_yield: u32,
     /// Effective-level multiplier for a caught Mewtwo (guess).
     pub power_bonus: f64,
+    /// Scales battle turn and per-mon overhead frames (sensitivity knob; 1.0 is the guess).
+    pub battle_scale: f64,
 }
 
 impl Default for Params {
@@ -144,6 +146,7 @@ impl Default for Params {
             grind_level: 45,
             grind_yield: 90,
             power_bonus: 1.12,
+            battle_scale: 1.0,
         }
     }
 }

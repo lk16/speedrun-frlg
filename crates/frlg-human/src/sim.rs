@@ -85,6 +85,14 @@ struct State {
 }
 
 impl Ctx<'_> {
+    fn turn(&self) -> f64 {
+        TURN as f64 * self.p.battle_scale
+    }
+
+    fn mon_overhead(&self) -> f64 {
+        MON_OVERHEAD as f64 * self.p.battle_scale
+    }
+
     pub fn floor_frames(&self, seg: &Seg) -> f64 {
         let p = self.p;
         match &seg.kind {
@@ -94,12 +102,12 @@ impl Ctx<'_> {
             }
             Kind::Trainer { party, intro, .. } => {
                 (*intro as f64 * p.text_factor)
-                    + party.len() as f64 * (TURN + MON_OVERHEAD) as f64
+                    + party.len() as f64 * (self.turn() + self.mon_overhead())
                     + TRAINER_OUTRO as f64
             }
             Kind::Group { n, mons, .. } => {
                 *n as f64
-                    * (600.0 + *mons as f64 * (TURN + MON_OVERHEAD) as f64 + TRAINER_OUTRO as f64)
+                    * (600.0 + *mons as f64 * (self.turn() + self.mon_overhead()) + TRAINER_OUTRO as f64)
             }
             Kind::Wander { .. }
             | Kind::Hunt { .. }
@@ -224,7 +232,7 @@ fn encounter(
         let mut hp = 1.0;
         if ctx.p.weaken {
             let turns = 1 + rng.chance(0.5) as u32;
-            bump(st, (turns * TURN) as f64);
+            bump(st, turns as f64 * ctx.turn());
             if rng.chance(0.05 * turns as f64) {
                 return;
             }
@@ -236,7 +244,7 @@ fn encounter(
     } else if ctx.p.fight_wild || st.carry < ctx.p.fight_until_level {
         let e = exp_gain(sp.exp_yield as u8, level as u8, false);
         let t = turns_per_mon(level as f64, effective_level(st, ctx.p), st.strength, 1.0);
-        bump(st, t * TURN as f64 + MON_OVERHEAD as f64);
+        bump(st, t * ctx.turn() + ctx.mon_overhead());
         let g = add_exp(ctx, st, e);
         bump(st, (g * LEVEL_UP) as f64);
     } else {
@@ -342,12 +350,12 @@ fn battle(
                     }
                 }
             }
-            bump(st, turns * TURN as f64 + MON_OVERHEAD as f64);
+            bump(st, turns * ctx.turn() + ctx.mon_overhead());
             bump(st, jitter(ctx, rng, turns as u32 * 2 + 3) as f64);
             total_exp += exp_gain(yld as u8, lvl as u8, trainer);
         }
         let heal_turns = ((r - 0.95).max(0.0) * enemies.len() as f64 * 2.0).round();
-        bump(st, heal_turns * TURN as f64);
+        bump(st, heal_turns * ctx.turn());
         if trainer {
             bump(st, TRAINER_OUTRO as f64);
         }
@@ -540,7 +548,7 @@ pub fn attempt(
                     );
                     let t =
                         turns_per_mon(*level as f64, effective_level(&st, ctx.p), st.strength, 1.0);
-                    bump(&mut st, t * TURN as f64 + MON_OVERHEAD as f64);
+                    bump(&mut st, t * ctx.turn() + ctx.mon_overhead());
                     let g = add_exp(ctx, &mut st, exp_gain(*yield_ as u8, *level as u8, false));
                     bump(&mut st, (g * LEVEL_UP) as f64);
                 }
@@ -549,7 +557,9 @@ pub fn attempt(
                 if let Some(pr) = probe.as_deref_mut() {
                     pr.oak_count = st.caught.count();
                 }
-                for (hi, h) in ctx.p.fill.iter().enumerate() {
+                // Once the list is exhausted the human goes round it again (at most 6 times).
+                let rounds = if ctx.p.fill.is_empty() { 0 } else { 6 };
+                for (hi, h) in (0..rounds).flat_map(|_| ctx.p.fill.iter().enumerate()) {
                     if st.caught.count() >= 60 {
                         break;
                     }
@@ -629,7 +639,7 @@ pub fn attempt(
                     } else {
                         bump(&mut st, ENC_INTRO as f64 + react(ctx, &mut rng) as f64);
                         let turns = (((1.0 - special.hp_frac) / 0.25).ceil() as u32).max(1);
-                        bump(&mut st, (turns * TURN) as f64);
+                        bump(&mut st, turns as f64 * ctx.turn());
                         if rng.chance((0.04 * turns as f64).min(0.9)) {
                             continue;
                         }
