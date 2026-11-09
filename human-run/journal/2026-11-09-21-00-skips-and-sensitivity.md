@@ -45,3 +45,20 @@ use between battles, shopping, Safari step/ball limits, money (stones cost 2100 
 - **Correction:** Cerulean Cave was in the fill list; it is closed until the link flag. Plans 012-019
   were scored with it. 020 removes it.
 - Decomp facts added: LeafGreen wild tables (`sites_lg`), `version` param (LG chosen: -0.18 h, noise level).
+
+## Update 2: plans 023-025 and data grounding
+- 023 Mewtwo (Master Ball from Silph, Cerulean Cave after the link flag): accepted under calibrated battles.
+- 024 Hideout 3 forced grunts (plan.md §3 cites the audit), 025 Victory Road 4 (UNAUDITED assumption).
+- Trainer groups for forest, Route 24, Rock Tunnel, Tower 7F, Victory Road, Hideout and Miguel now use
+  the decomp's real parties (`map_trainers` in dex.json: every object_event that resolves to a
+  `trainerbattle_*`, hardest `n` per map). 025 scores WR+40m (205 finishes at R=160000, EHT 2140 h).
+- `group_n` experiments with Victory Road n=2 and Rock Tunnel n=5 came out "better" but are
+  **not accepted**: they assume routes no audit supports (plan.md §3 says Rock Tunnel forces >= 7).
+- Ranking stability: no-reset means of plans 001..023 fall monotonically at battle_scale 1.0, 1.75
+  and 2.2 (mistake_rate 1), so the accepted sequence is not an artefact of the battle constants.
+- A bug-shaped trap worth remembering: ideas that only change a model constant (path_overhead) must
+  not go through try.py (one did, and was manually un-accepted in scores.jsonl).
+
+## Next
+Audit Victory Road / Mt Moon / Silph forced trainers with `bin/frlg-mapgraph` (sight cones) so the
+`n` values stop being assumptions; model party exp split; calibrate a catch and a walking segment.
