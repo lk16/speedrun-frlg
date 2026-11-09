@@ -6,6 +6,9 @@ measured, not assumed; `docs/rival-1/route.md` tracks which version each number 
 `docs/sandbox.md` before doing anything** — it is also the sandbox's own prompt file, and almost
 nothing here is where a normal machine would put it. `README.md` says what the project is *for*.
 
+On branch `human-run`, also read `human-run/PROMPT.md`: that branch simulates a human Round 2
+run rather than building a TAS, and the prompt overrides the TAS workflow where they differ.
+
 Start every sandbox with `bin/frlg-doctor`. It is the fastest way to find out that a mount is
 missing, the image is the stock one, or the deps tree is stale.
 
