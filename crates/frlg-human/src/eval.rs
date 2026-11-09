@@ -53,6 +53,11 @@ impl Plan {
             segs: &self.segs,
             floor_after: vec![0; n],
             mean_after: vec![0.0; n],
+            aggr: self
+                .segs
+                .iter()
+                .map(|s| *self.params.reset_aggr_at.get(&s.name).unwrap_or(&self.params.reset_aggr))
+                .collect(),
             squirtle_line: [
                 self.dex.id("SPECIES_SQUIRTLE"),
                 self.dex.id("SPECIES_WARTORTLE"),

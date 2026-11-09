@@ -108,6 +108,7 @@ pub struct Seg {
 struct B<'a> {
     segs: Vec<Seg>,
     dex: &'a Dex,
+    skip: &'a [String],
     era: Era,
 }
 
@@ -165,6 +166,9 @@ impl<'a> B<'a> {
     }
 
     fn group(&mut self, name: &str, n: u32, mons: u32, level: u32, yield_: u32) {
+        if self.skip.iter().any(|s| s == name) {
+            return;
+        }
         self.push(
             name,
             Src::Guess,
@@ -190,6 +194,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     let mut b = B {
         segs: vec![],
         dex,
+        skip: &p.skip_groups,
         era: Era::Walk,
     };
 

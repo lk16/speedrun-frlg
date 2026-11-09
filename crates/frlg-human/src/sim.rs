@@ -41,6 +41,8 @@ pub struct Ctx<'a> {
     /// Mean frames remaining after segment i, from a no-reset pilot (for `reset_aggr`).
     pub mean_after: Vec<f64>,
     pub squirtle_line: [usize; 3],
+    /// Reset aggressiveness at each segment (the global value unless overridden).
+    pub aggr: Vec<f64>,
 }
 
 #[derive(Default, Clone)]
@@ -130,6 +132,27 @@ fn jitter(ctx: &Ctx, rng: &mut Rng, inputs: u32) -> u32 {
         return 0;
     }
     (0..inputs).map(|_| rng.below(n + 1)).sum()
+}
+
+/// Mistakes over `units` hundreds of tiles or inputs.
+fn mistakes(ctx: &Ctx, rng: &mut Rng, units: f64) -> f64 {
+    let rate = ctx.p.mistake_rate;
+    if rate <= 0.0 {
+        return 0.0;
+    }
+    let p = (rate / 100.0).min(0.5);
+    let n = (units * 100.0) as u64;
+    let mut total = 0.0;
+    let mut left = n;
+    loop {
+        let gap = rng.geometric(p);
+        if gap >= left {
+            break;
+        }
+        left -= gap + 1;
+        total += rng.range(60, 300) as f64 + react(ctx, rng) as f64;
+    }
+    total
 }
 
 fn react(ctx: &Ctx, rng: &mut Rng) -> u32 {
@@ -485,6 +508,7 @@ pub fn attempt(
             Kind::Text { frames } => {
                 bump(&mut st, *frames as f64 * ctx.p.text_factor);
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                bump(&mut st, mistakes(ctx, &mut rng, seg.inputs as f64 / 100.0));
             }
             Kind::Walk { tiles, era, enc } => {
                 bump(
@@ -492,6 +516,7 @@ pub fn attempt(
                     *tiles as f64 * era.frames_per_tile() * ctx.p.path_overhead,
                 );
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                bump(&mut st, mistakes(ctx, &mut rng, *tiles as f64 / 100.0));
                 if let Some(e) = enc {
                     let args = EncArgs {
                         site: &e.site,
@@ -576,7 +601,7 @@ pub fn attempt(
                     }
                     if let Some(t) = target {
                         let rem = ctx.floor_after[i] as f64
-                            + ctx.p.reset_aggr
+                            + ctx.aggr[i]
                                 * (ctx.mean_after[i] - ctx.floor_after[i] as f64).max(0.0);
                         if st.caught.count() < 60 && st.clock as f64 + rem > t as f64 {
                             if let Some(r) = rec.as_deref_mut() {
@@ -719,7 +744,7 @@ pub fn attempt(
         if seg.split {
             if let Some(t) = target {
                 let remaining = ctx.floor_after[i] as f64
-                    + ctx.p.reset_aggr * (ctx.mean_after[i] - ctx.floor_after[i] as f64).max(0.0);
+                    + ctx.aggr[i] * (ctx.mean_after[i] - ctx.floor_after[i] as f64).max(0.0);
                 if st.clock as f64 + remaining > t as f64 {
                     if let Some(r) = rec.as_deref_mut() {
                         r[i].resets += 1;

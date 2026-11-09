@@ -87,6 +87,8 @@ pub struct Params {
     /// Split-reset aggressiveness: 0 resets only when even the best case cannot make the
     /// target, 1 resets whenever the mean remaining time cannot.
     pub reset_aggr: f64,
+    /// Per-split override of `reset_aggr`, by segment name.
+    pub reset_aggr_at: std::collections::HashMap<String, f64>,
     /// `poke`, `great` or `ultra`.
     pub ball: String,
     pub weaken: bool,
@@ -103,6 +105,8 @@ pub struct Params {
     /// Fallback hunts, tried in order when Oak's check finds fewer than 60 caught.
     pub fill: Vec<Hunt>,
     pub stones: Vec<String>,
+    /// Trainer groups the human walks around (by segment name).
+    pub skip_groups: Vec<String>,
     pub mewtwo: bool,
     /// Extra wild battles for exp before the first Elite Four / before the rematch.
     pub grind_pre_e4: u32,
@@ -114,6 +118,9 @@ pub struct Params {
     pub power_bonus: f64,
     /// Scales battle turn and per-mon overhead frames (sensitivity knob; 1.0 is the guess).
     pub battle_scale: f64,
+    /// Human mistakes (wrong menu slot, wall bump, missed turn): events per 100 tiles walked
+    /// and per 100 menu inputs, each costing U{60..300} frames. 0 = the v1 model without them.
+    pub mistake_rate: f64,
 }
 
 impl Default for Params {
@@ -130,6 +137,7 @@ impl Default for Params {
             bike: true,
             teleport_abra: false,
             reset_aggr: 0.0,
+            reset_aggr_at: Default::default(),
             ball: "poke".into(),
             weaken: false,
             catch_on_pass: true,
@@ -140,6 +148,7 @@ impl Default for Params {
             specials: vec![],
             fill: vec![],
             stones: vec![],
+            skip_groups: vec![],
             mewtwo: false,
             grind_pre_e4: 0,
             grind_pre_rematch: 0,
@@ -147,6 +156,7 @@ impl Default for Params {
             grind_yield: 90,
             power_bonus: 1.12,
             battle_scale: 1.0,
+            mistake_rate: 0.0,
         }
     }
 }

@@ -1,0 +1,246 @@
+# Plan 015-skip
+
+Parent: `014-steps02`. Change: walk around dodgeable trainers (skip_groups): Silph grunts, optional gym trainers, Route 3/Mt Moon trainers
+
+The step-by-step description, citations and branch rules in `001-crude.md` still apply except
+where the parameters below differ; `frlg-human` reads only the block below. Every segment cost
+is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess).
+
+```json
+{
+ "name": "015-skip",
+ "starter_min_total": 72,
+ "hunts": [],
+ "specials": [
+  {
+   "after": "route4",
+   "kind": "gift",
+   "species": [
+    "SPECIES_MAGIKARP"
+   ],
+   "frames": 900,
+   "level": 30
+  },
+  {
+   "after": "celadon-tea",
+   "kind": "gift",
+   "species": [
+    "SPECIES_EEVEE"
+   ],
+   "frames": 1500,
+   "level": 30
+  },
+  {
+   "after": "silph-giovanni",
+   "kind": "gift",
+   "species": [
+    "SPECIES_LAPRAS"
+   ],
+   "frames": 700,
+   "level": 30
+  },
+  {
+   "after": "snorlax",
+   "kind": "static",
+   "species": [
+    "SPECIES_SNORLAX"
+   ],
+   "frames": 400,
+   "level": 30
+  },
+  {
+   "after": "blaine-walk",
+   "kind": "gift",
+   "species": [
+    "SPECIES_KABUTO"
+   ],
+   "frames": 1800,
+   "level": 30
+  },
+  {
+   "after": "to-pewter",
+   "kind": "gift",
+   "species": [
+    "SPECIES_AERODACTYL"
+   ],
+   "frames": 2800,
+   "level": 5
+  },
+  {
+   "after": "ss-anne",
+   "kind": "trade",
+   "species": [
+    "SPECIES_FARFETCHD"
+   ],
+   "requires": [
+    "SPECIES_SPEAROW"
+   ],
+   "frames": 2200
+  },
+  {
+   "after": "blaine-walk",
+   "kind": "trade",
+   "species": [
+    "SPECIES_TANGELA"
+   ],
+   "requires": [
+    "SPECIES_VENONAT"
+   ],
+   "frames": 2400
+  },
+  {
+   "after": "blaine-walk",
+   "kind": "trade",
+   "species": [
+    "SPECIES_ELECTRODE"
+   ],
+   "requires": [
+    "SPECIES_RAICHU"
+   ],
+   "frames": 2400
+  }
+ ],
+ "fill": [
+  {
+   "after": "",
+   "site": "MAP_SEAFOAM_ISLANDS_B4F",
+   "area": "land",
+   "steps": 50,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_POWER_PLANT",
+   "area": "land",
+   "steps": 50,
+   "detour_tiles": 80
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE11",
+   "area": "land",
+   "steps": 40,
+   "detour_tiles": 30
+  },
+  {
+   "after": "",
+   "site": "MAP_DIGLETTS_CAVE_B1F",
+   "area": "land",
+   "steps": 20,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_SAFARI_ZONE_CENTER",
+   "area": "land",
+   "steps": 60,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE13",
+   "area": "land",
+   "steps": 40,
+   "detour_tiles": 30
+  },
+  {
+   "after": "",
+   "site": "MAP_SAFARI_ZONE_CENTER",
+   "area": "fish",
+   "steps": 16,
+   "detour_tiles": 5
+  },
+  {
+   "after": "",
+   "site": "MAP_SAFARI_ZONE_EAST",
+   "area": "land",
+   "steps": 60,
+   "detour_tiles": 10
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE12",
+   "area": "fish",
+   "steps": 16,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_SAFARI_ZONE_NORTH",
+   "area": "land",
+   "steps": 60,
+   "detour_tiles": 10
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE6",
+   "area": "fish",
+   "steps": 16,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_SAFARI_ZONE_WEST",
+   "area": "land",
+   "steps": 60,
+   "detour_tiles": 10
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE21_SOUTH",
+   "area": "land",
+   "steps": 30,
+   "detour_tiles": 30
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE23",
+   "area": "land",
+   "steps": 30,
+   "detour_tiles": 40
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE10",
+   "area": "fish",
+   "steps": 16,
+   "detour_tiles": 40
+  },
+  {
+   "after": "",
+   "site": "MAP_CERULEAN_CAVE_B1F",
+   "area": "land",
+   "steps": 60,
+   "detour_tiles": 100
+  }
+ ],
+ "grind_pre_e4": 0,
+ "grind_level": 42,
+ "grind_yield": 90,
+ "stones": [
+  "FIRE",
+  "THUNDER",
+  "MOON",
+  "MOON"
+ ],
+ "reset_aggr": 0.5,
+ "weaken": true,
+ "ball": "ultra",
+ "fight_until_level": 7,
+ "skip_groups": [
+  "silph-grunts",
+  "cerulean-gym-trainer",
+  "surge-gym-trainers",
+  "celadon-gym-trainers",
+  "viridian-gym-trainers",
+  "blaine-quiz",
+  "route3-trainers",
+  "mt-moon-trainers"
+ ]
+}
+```
+
+## Score
+
+- rung **WR**, EHT 48.641 h at R=10000, 95% CI of the paired difference to the parent None (negative is better), parent EHT None
+- evaluation line: `human-run/scores.jsonl`, plan `r-skip1`; ledger of everything tried is in that file.
