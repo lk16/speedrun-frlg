@@ -1,0 +1,12 @@
+[package]
+name = "frlg-human"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+frlg-mon = { path = "../frlg-mon" }
+frlg-rng = { path = "../frlg-rng" }
+rayon.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
