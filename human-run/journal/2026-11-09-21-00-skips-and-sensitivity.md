@@ -35,3 +35,13 @@ use between battles, shopping, Safari step/ball limits, money (stones cost 2100 
 2. Variance-aware resets, and a larger-N check of rankings at `mistake_rate` 1.
 3. Sevii routing: Mt Ember/Five Island tile counts are guesses; cite and measure them.
 4. LeafGreen tables and other starters.
+
+## Update (later the same session)
+- **Calibration found.** The ledger has TAS frames for two battles the model also simulates: lab
+  rival 354+2463 = 2817 f (47 s) and Brock 4991 f (83 s, includes gym walking). The model said 35 s and
+  63 s, i.e. *faster than a TAS*, which is impossible. `battle_scale` 1.75 matches both (48 s / 89 s).
+  That is still only a TAS-level floor for a human, but it moves plan 021 from rung WR to **WR+40m**
+  (mean 4:30). Plans 016-021 were scored under the uncalibrated constants; 022-calib is the new baseline.
+- **Correction:** Cerulean Cave was in the fill list; it is closed until the link flag. Plans 012-019
+  were scored with it. 020 removes it.
+- Decomp facts added: LeafGreen wild tables (`sites_lg`), `version` param (LG chosen: -0.18 h, noise level).
