@@ -92,6 +92,8 @@ impl Default for Special {
 pub struct Params {
     pub name: String,
     pub starter: String,
+    /// `FR` or `LG`: selects the wild tables (trainers are identical, `docs/glitchless-run/plan.md` §5).
+    pub version: String,
     /// Reset the starter unless the sum of its six level-5 stats reaches this.
     pub starter_min_total: u32,
     /// Each mashed input is late by U{0..jitter_n} frames.
@@ -150,6 +152,7 @@ impl Default for Params {
         Params {
             name: "unnamed".into(),
             starter: "squirtle".into(),
+            version: "FR".into(),
             starter_min_total: 0,
             jitter_n: 4,
             react_lo: 15,

@@ -35,15 +35,17 @@ for n, s in species.items():
     s['dex'] = kanto.index(n) + 1 if n in kanto else 0
 wild = json.load(open(os.path.join(root, 'wild_encounters.json')))['wild_encounter_groups'][0]['encounters']
 sites = {}
+sites_lg = {}
 for e in wild:
-    if not e['base_label'].endswith('_FireRed'):
+    suffix = e['base_label'].rsplit('_', 1)[-1]
+    if suffix not in ('FireRed', 'LeafGreen'):
         continue
     d = {}
     for key in ('land_mons', 'water_mons', 'rock_smash_mons', 'fishing_mons'):
         if key in e and e[key]:
             d[key] = dict(rate=e[key]['encounter_rate'],
                           slots=[[m['min_level'], m['max_level'], m['species']] for m in e[key]['mons']])
-    sites[e['map']] = d
+    (sites if suffix == 'FireRed' else sites_lg)[e['map']] = d
 tp = open(os.path.join(root, 'trainer_parties.h')).read()
 parties = {}
 for m in re.finditer(r'static const struct TrainerMon\w+ (sParty_\w+)\[\] = \{(.*?)\n\};', tp, re.S):
@@ -55,5 +57,5 @@ for m in re.finditer(r'\[(TRAINER_[A-Z0-9_]+)\] = \{(.*?)\n    \},', tr, re.S):
     dbl = 'doubleBattle = TRUE' in m.group(2)
     if pm and pm.group(1) in parties:
         trainers[m.group(1)] = dict(party=parties[pm.group(1)], double=dbl)
-json.dump(dict(kanto_count=len(kanto), species=species, sites=sites, trainers=trainers), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
+json.dump(dict(kanto_count=len(kanto), species=species, sites=sites, sites_lg=sites_lg, trainers=trainers), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
 print(len(kanto), len(species), len(sites), len(trainers))

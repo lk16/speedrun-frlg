@@ -44,6 +44,7 @@ struct RawTrainer {
 struct Raw {
     species: HashMap<String, RawSpecies>,
     sites: HashMap<String, RawSite>,
+    sites_lg: HashMap<String, RawSite>,
     trainers: HashMap<String, RawTrainer>,
 }
 
@@ -76,6 +77,7 @@ pub struct Dex {
     pub species: Vec<Species>,
     by_name: HashMap<String, usize>,
     sites: HashMap<String, RawSite>,
+    sites_lg: HashMap<String, RawSite>,
     trainers: HashMap<String, Vec<(u32, usize)>>,
 }
 
@@ -125,6 +127,7 @@ impl Dex {
             species,
             by_name,
             sites: raw.sites,
+            sites_lg: raw.sites_lg,
             trainers,
         }
     }
@@ -143,8 +146,13 @@ impl Dex {
     }
 
     /// Slots of a site's area, with the cumulative-weight table that applies to it.
-    pub fn area(&self, site: &str, area: Area) -> Option<(u32, Vec<Slot>, &'static [u32])> {
-        let s = self.sites.get(site)?;
+    pub fn area(
+        &self,
+        site: &str,
+        area: Area,
+        lg: bool,
+    ) -> Option<(u32, Vec<Slot>, &'static [u32])> {
+        let s = if lg { &self.sites_lg } else { &self.sites }.get(site)?;
         let (a, rates): (&RawArea, &'static [u32]) = match area {
             Area::Land => (s.land_mons.as_ref()?, &LAND_RATES),
             Area::Water => (s.water_mons.as_ref()?, &WATER_RATES),
@@ -206,7 +214,7 @@ mod tests {
         assert_eq!(d.species[sq].dex, 7);
         assert!(d.species[sq].medium_slow);
         assert_eq!(d.trainer("TRAINER_LEADER_BROCK").len(), 2);
-        let (rate, slots, w) = d.area("MAP_ROUTE24", Area::Land).unwrap();
+        let (rate, slots, w) = d.area("MAP_ROUTE24", Area::Land, false).unwrap();
         assert_eq!(rate, 21);
         assert_eq!(slots.len(), w.len());
         assert_eq!(w.iter().sum::<u32>(), 100);

@@ -56,7 +56,13 @@ impl Plan {
             aggr: self
                 .segs
                 .iter()
-                .map(|s| *self.params.reset_aggr_at.get(&s.name).unwrap_or(&self.params.reset_aggr))
+                .map(|s| {
+                    *self
+                        .params
+                        .reset_aggr_at
+                        .get(&s.name)
+                        .unwrap_or(&self.params.reset_aggr)
+                })
                 .collect(),
             squirtle_line: [
                 self.dex.id("SPECIES_SQUIRTLE"),

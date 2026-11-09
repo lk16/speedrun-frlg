@@ -109,7 +109,9 @@ impl Ctx<'_> {
             }
             Kind::Group { n, mons, .. } => {
                 *n as f64
-                    * (600.0 + *mons as f64 * (self.turn() + self.mon_overhead()) + TRAINER_OUTRO as f64)
+                    * (600.0
+                        + *mons as f64 * (self.turn() + self.mon_overhead())
+                        + TRAINER_OUTRO as f64)
             }
             Kind::Wander { .. }
             | Kind::Hunt { .. }
@@ -297,7 +299,7 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
         skip,
         stop_when_done,
     } = *a;
-    let Some((rate, slots, weights)) = ctx.dex.area(site, area) else {
+    let Some((rate, slots, weights)) = ctx.dex.area(site, area, ctx.p.version == "LG") else {
         return 0;
     };
     let mut p = rate as f64 * 16.0 / 1600.0;
