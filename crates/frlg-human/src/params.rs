@@ -131,6 +131,8 @@ pub struct Params {
     pub stones: Vec<String>,
     /// Trainer groups the human walks around (by segment name).
     pub skip_groups: Vec<String>,
+    /// Trainer count override per aggregated group (the others in the group are walked around).
+    pub group_n: std::collections::HashMap<String, u32>,
     pub mewtwo: bool,
     /// Extra wild battles for exp before the first Elite Four / before the rematch.
     pub grind_pre_e4: u32,
@@ -175,6 +177,7 @@ impl Default for Params {
             fill: vec![],
             stones: vec![],
             skip_groups: vec![],
+            group_n: Default::default(),
             mewtwo: false,
             grind_pre_e4: 0,
             grind_pre_rematch: 0,

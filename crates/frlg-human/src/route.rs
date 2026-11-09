@@ -109,6 +109,7 @@ struct B<'a> {
     segs: Vec<Seg>,
     dex: &'a Dex,
     skip: &'a [String],
+    group_n: &'a std::collections::HashMap<String, u32>,
     era: Era,
 }
 
@@ -169,6 +170,7 @@ impl<'a> B<'a> {
         if self.skip.iter().any(|s| s == name) {
             return;
         }
+        let n = *self.group_n.get(name).unwrap_or(&n);
         self.push(
             name,
             Src::Guess,
@@ -195,6 +197,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         segs: vec![],
         dex,
         skip: &p.skip_groups,
+        group_n: &p.group_n,
         era: Era::Walk,
     };
 
