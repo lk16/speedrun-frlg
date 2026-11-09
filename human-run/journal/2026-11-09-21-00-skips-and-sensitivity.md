@@ -62,3 +62,20 @@ use between battles, shopping, Safari step/ball limits, money (stones cost 2100 
 ## Next
 Audit Victory Road / Mt Moon / Silph forced trainers with `bin/frlg-mapgraph` (sight cones) so the
 `n` values stop being assumptions; model party exp split; calibrate a catch and a walking segment.
+
+## Update 3: plans 026-035
+- 026 Teleport with an Abra (honest: walks if none caught), 027 Abra hunt (-0.7%, noise-level), 028 starter
+  threshold 73, 029-031 per-badge reset aggressiveness 0.7, 032 no stones, 033 no weakening (interaction:
+  weakening won with Poke Balls, loses with Ultra Balls), 034 fill budgets x1.6, 035 fight_until_level 6.
+- Current best `035-fight6`: rung **WR+40m**, EHT 54 h (351 finishes at R=10000); no-reset finishing time
+  p10 4:07, mean 4:18 under battle_scale 1.75 + mistake_rate 1. WR (3:25) is NOT reached under the
+  calibrated model; the earlier "WR rung" was the uncalibrated one.
+- Interactions matter: re-tune old knobs (weaken, fill budgets, fight level) after each structural change.
+- Refuted this stretch: fight_wild, great balls, WATER stone, aggr 0.5/0.9 at badge splits, grinds,
+  Zapdos/Electrode statics, LG-vs-FR noise.
+
+## Where the remaining ~50 minutes to WR are (model, calibrated)
+Fights ~1.75 h (mostly trainers: Victory Road, Hideout, Rock Tunnel, rivals, E4), Oak fill ~28 min,
+walking/encounters ~1 h. The fight share is the largest lever and rests on `battle_scale` (fitted to two
+TAS data points, i.e. a lower bound for humans) and on assumed forced-trainer counts (Victory Road n=4 and
+the skipped gym/Silph/Mansion/Mt Ember groups are unaudited).
