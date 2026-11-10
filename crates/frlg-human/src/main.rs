@@ -269,6 +269,41 @@ fn main() {
                         + s.spd as u32,
                 );
             }
+            {
+                let base = calc_stats(
+                    sq,
+                    frlg_mon::stats::Ivs {
+                        hp: 15,
+                        atk: 15,
+                        def: 15,
+                        spe: 15,
+                        spa: 15,
+                        spd: 15,
+                    },
+                    50,
+                    0,
+                );
+                let score = |s: &frlg_mon::stats::Stats| s.spa as f64 + 0.6 * s.hp as f64;
+                let mut st = vec![];
+                let mut spa = [0u32; 20];
+                for i in 0..100_000u64 {
+                    let mut rng = frlg_human::rng::Rng::new(1, i, 7);
+                    let mut g = frlg_rng::Rng(rng.next_u64() as u32);
+                    let genome = frlg_mon::create::gift_mon(&mut g);
+                    let s5 = calc_stats(sq, genome.ivs, 5, genome.nature());
+                    spa[(s5.spa as usize).min(19)] += 1;
+                    st.push(score(&calc_stats(sq, genome.ivs, 50, genome.nature())) / score(&base));
+                }
+                st.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                for p in [0.1, 0.5, 0.75, 0.9, 0.99] {
+                    println!(
+                        "p{:<3} strength {:.3}",
+                        (p * 100.0) as u32,
+                        st[((st.len() - 1) as f64 * p) as usize]
+                    );
+                }
+                println!("L5 SpA histogram: {:?}", &spa[8..16]);
+            }
             totals.sort();
             for p in [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 1.0] {
                 println!(

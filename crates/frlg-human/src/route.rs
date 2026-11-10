@@ -284,7 +284,15 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.walk("bill", 56, b.era, Some(("MAP_ROUTE25", 40)), Src::Guess);
     b.text("bill-cottage", 2400, Src::Guess);
     if p.teleport_abra {
-        b.push("teleport-cerulean", Src::Guess, 15, Kind::TeleportOrWalk { frames: 700, tiles: 156 });
+        b.push(
+            "teleport-cerulean",
+            Src::Guess,
+            15,
+            Kind::TeleportOrWalk {
+                frames: 700,
+                tiles: 156,
+            },
+        );
     } else {
         b.walk("bill-return", 156, b.era, None, Src::Tiles);
     }
@@ -310,7 +318,15 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.text("surge-badge", 600, Src::Guess);
     b.split();
     if p.teleport_abra {
-        b.push("teleport-cerulean-2", Src::Guess, 15, Kind::TeleportOrWalk { frames: 700, tiles: 260 });
+        b.push(
+            "teleport-cerulean-2",
+            Src::Guess,
+            15,
+            Kind::TeleportOrWalk {
+                frames: 700,
+                tiles: 260,
+            },
+        );
     } else {
         b.walk("vermilion-return", 260, b.era, None, Src::Tiles);
     }

@@ -486,7 +486,13 @@ fn starter_ok(ctx: &Ctx, rng: &mut Rng) -> (bool, f64) {
     );
     let score = |s: &frlg_mon::stats::Stats| s.spa as f64 + 0.6 * s.hp as f64;
     let strength = (score(&s50) / score(&base)).clamp(0.85, 1.15);
-    (total >= ctx.p.starter_min_total, strength)
+    let m = &ctx.p.starter_min_stats;
+    let stats_ok = [s5.hp, s5.atk, s5.def, s5.spe, s5.spa, s5.spd]
+        .iter()
+        .zip(m)
+        .all(|(&v, &lo)| v as u32 >= lo);
+    let ok = total >= ctx.p.starter_min_total && stats_ok;
+    (ok, strength)
 }
 
 /// Runs one attempt. `target` is the active T in frames; `None` disables resets.
@@ -725,7 +731,10 @@ pub fn attempt(
                 if st.caught.has(63) {
                     bump(&mut st, *frames as f64 * ctx.p.text_factor);
                 } else {
-                    bump(&mut st, *tiles as f64 * Era::Run.frames_per_tile() * ctx.p.path_overhead);
+                    bump(
+                        &mut st,
+                        *tiles as f64 * Era::Run.frames_per_tile() * ctx.p.path_overhead,
+                    );
                 }
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
             }

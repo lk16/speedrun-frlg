@@ -96,6 +96,8 @@ pub struct Params {
     pub version: String,
     /// Reset the starter unless the sum of its six level-5 stats reaches this.
     pub starter_min_total: u32,
+    /// Per-stat minimums at level 5, in the order HP, Atk, Def, Spe, SpA, SpD (0 = no check).
+    pub starter_min_stats: [u32; 6],
     /// Each mashed input is late by U{0..jitter_n} frames.
     pub jitter_n: u32,
     /// Reaction delay after an unpredictable event: U{react_lo..react_hi} frames.
@@ -156,6 +158,7 @@ impl Default for Params {
             starter: "squirtle".into(),
             version: "FR".into(),
             starter_min_total: 0,
+            starter_min_stats: [0; 6],
             jitter_n: 4,
             react_lo: 15,
             react_hi: 30,
