@@ -284,10 +284,11 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
             short
         }
     };
-    let enc = |site: &'static str, short: u32, avoid: u32, guess: u32| -> Option<(&'static str, u32)> {
-        let n = g(short, avoid, guess);
-        (n > 0).then_some((site, n))
-    };
+    let enc =
+        |site: &'static str, short: u32, avoid: u32, guess: u32| -> Option<(&'static str, u32)> {
+            let n = g(short, avoid, guess);
+            (n > 0).then_some((site, n))
+        };
     // Extra tiles walked to stay out of grass.
     let detour = |b: &mut B, name: &str, tiles: u32| {
         if p.enc_path && p.avoid_grass && tiles > 0 {
@@ -333,7 +334,13 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.era = Era::Run;
 
     // 2. Pewter to Cerulean: 492 tiles (distances.json pewter-gym_to_cerulean-pc), split by guess.
-    b.walk("route3", 120, b.era, enc("MAP_ROUTE3", 0, 0, 50), Src::Guess);
+    b.walk(
+        "route3",
+        120,
+        b.era,
+        enc("MAP_ROUTE3", 0, 0, 50),
+        Src::Guess,
+    );
     if p.audited_forced {
         b.forced(
             "route3-trainers",
@@ -450,7 +457,13 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.split();
 
     // 4. Vermilion: S.S. Anne and Surge, no Vermilion heal.
-    b.walk("route5-6", 260, b.era, enc("MAP_ROUTE5", 6, 0, 40), Src::Tiles);
+    b.walk(
+        "route5-6",
+        260,
+        b.era,
+        enc("MAP_ROUTE5", 6, 0, 40),
+        Src::Tiles,
+    );
     detour(&mut b, "route5-6-detour", 21);
     b.wander("route6-encounters", "MAP_ROUTE6", g(3, 0, 40));
     if p.audited_forced {
@@ -735,7 +748,13 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.walk("route23", 167, Era::Surf, None, Src::Tiles);
     if p.enc_path {
         // 39 water-encounter steps on Route 23 (`pathenc.py`, route22-gate_to_victoryroad).
-        b.wander_area("route23-water", "MAP_ROUTE23", Area::Water, g(39, 31, 39), Era::Surf);
+        b.wander_area(
+            "route23-water",
+            "MAP_ROUTE23",
+            Area::Water,
+            g(39, 31, 39),
+            Era::Surf,
+        );
     }
     b.text("badge-gates", 900, Src::Guess);
     b.walk(

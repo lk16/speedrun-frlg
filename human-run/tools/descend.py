@@ -76,7 +76,7 @@ def candidates(p):
             q[i]['steps'] = max(8, int(round(h['steps'] * f)))
             if q[i]['steps'] != h['steps']:
                 out.append(('fillsteps', f"fill[{i}] {h['site']} {h['area']} steps x{f}", {'fill': q}))
-        for f in (0.5, 1.6):
+        for f in ((0.5, 1.6) if not p.get('detour_map') else ()):
             q = copy.deepcopy(fill)
             q[i]['detour_tiles'] = int(round(h.get('detour_tiles', 0) * f))
             if q[i]['detour_tiles'] != h.get('detour_tiles', 0):

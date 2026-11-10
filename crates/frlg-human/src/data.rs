@@ -196,7 +196,8 @@ impl Dex {
         struct Fly {
             tiles: Option<u32>,
         }
-        let fly: HashMap<String, Fly> = serde_json::from_str(FLYDIST_JSON).expect("flydist.json parses");
+        let fly: HashMap<String, Fly> =
+            serde_json::from_str(FLYDIST_JSON).expect("flydist.json parses");
         let fly_tiles = fly
             .into_iter()
             .filter_map(|(k, v)| v.tiles.map(|t| (k, t)))
