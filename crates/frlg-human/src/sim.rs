@@ -1150,7 +1150,17 @@ pub fn attempt(
             st.clock = before;
         }
         if seg.starter_check {
-            let (ok, strength) = starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747));
+            let (mut ok, mut strength) = starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747));
+            if !ok && ctx.p.starter_save_reroll {
+                // Saved in the lab before choosing: soft reset, Continue, choose again. The timer
+                // keeps running, so every re-roll is run time but not a lost attempt.
+                let mut k = 0u64;
+                while !ok && k < 20_000 {
+                    k += 1;
+                    bump(&mut st, ctx.p.reroll_frames as f64 * ctx.p.text_factor);
+                    (ok, strength) = starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747 + k * 7919));
+                }
+            }
             st.strength = strength;
             if !ok {
                 let wall = st.clock + st.off;

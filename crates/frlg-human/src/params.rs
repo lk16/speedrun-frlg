@@ -96,6 +96,13 @@ pub struct Params {
     pub version: String,
     /// Reset the starter unless the sum of its six level-5 stats reaches this.
     pub starter_min_total: u32,
+    /// Instead of restarting from New Game, save in Oak's lab before choosing and soft-reset to
+    /// Continue for every bad starter. The run timer keeps going (an assumption about the rules:
+    /// the category starts the timer at New Game), each re-roll costs `reroll_frames`.
+    pub starter_save_reroll: bool,
+    /// Boot, logo, title, Continue, and choosing the ball again (guess: 646 boot + ~400 load +
+    /// ~900 choose, before `text_factor`).
+    pub reroll_frames: u32,
     /// Per-stat minimums at level 5, in the order HP, Atk, Def, Spe, SpA, SpD (0 = no check).
     pub starter_min_stats: [u32; 6],
     /// Each mashed input is late by U{0..jitter_n} frames.
@@ -208,6 +215,8 @@ impl Default for Params {
             starter: "squirtle".into(),
             version: "FR".into(),
             starter_min_total: 0,
+            starter_save_reroll: false,
+            reroll_frames: 1950,
             starter_min_stats: [0; 6],
             jitter_n: 4,
             react_lo: 15,
