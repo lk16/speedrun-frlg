@@ -239,33 +239,47 @@ fn shakes_catch(rng: &mut Rng, odds: u32) -> bool {
     (0..4).all(|_| rng.below(65536) < thr)
 }
 
-/// Safari Zone encounter: rocks, then Safari Balls until caught, out of balls or the mon flees.
+/// Safari Zone encounter: `safari_rocks` rocks first, then Safari Balls until caught, out of
+/// balls or the mon flees. A rock doubles the catch factor and the flee factor for 2-6 turns (the
+/// counter runs down once per enemy turn, then the catch factor resets), a ball uses the current
+/// factor (`decompiled/src/battle_main.c:4339-4408`, `battle_ai_script_commands.c:1715-1732`,
+/// `battle_script_commands.c:9497`, ball multiplier 15 at `:808-814`).
 fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Species) -> bool {
-    let mut factor = (sp.catch_rate * 100 / 1275).max(0);
+    let base = sp.catch_rate * 100 / 1275;
+    let mut factor = base;
     let esc = (sp.safari_flee * 100 / 1275).max(2);
-    let mut rocks = 0;
-    for _ in 0..ctx.p.safari_rocks {
-        bump(st, THROW as f64 * 0.5);
-        factor = (factor * 2).min(20);
-        rocks += 1;
-    }
+    let mut counter = 0u32;
+    let mut rocks = ctx.p.safari_rocks;
     loop {
-        if st.safari_balls == 0 {
-            return false;
+        if rocks > 0 {
+            rocks -= 1;
+            bump(st, THROW as f64 * 0.6);
+            counter = (counter + rng.range(2, 6)).min(6);
+            factor = (factor * 2).min(20);
+        } else {
+            if st.safari_balls == 0 {
+                return false;
+            }
+            st.safari_balls -= 1;
+            bump(st, THROW as f64);
+            let rate = (factor * 1275 / 100).min(255);
+            let odds = (rate * 15 / 10) * 100 / 300;
+            if shakes_catch(rng, odds) {
+                bump(st, CATCH_END as f64 * ctx.p.text_factor);
+                return true;
+            }
+            bump(st, react(ctx, rng) as f64);
         }
-        st.safari_balls -= 1;
-        bump(st, THROW as f64);
-        let rate = (factor * 1275 / 100).min(255);
-        let odds = (rate * 15 / 10) * 100 / 300;
-        if shakes_catch(rng, odds) {
-            bump(st, CATCH_END as f64 * ctx.p.text_factor);
-            return true;
-        }
-        bump(st, react(ctx, rng) as f64);
-        let flee_factor = if rocks > 0 { (esc * 2).min(20) } else { esc };
+        let flee_factor = if counter > 0 { (esc * 2).min(20) } else { esc };
         if rng.below(100) < flee_factor * 5 {
             bump(st, FLEE as f64);
             return false;
+        }
+        if counter > 0 {
+            counter -= 1;
+            if counter == 0 {
+                factor = base;
+            }
         }
     }
 }
