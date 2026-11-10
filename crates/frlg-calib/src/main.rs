@@ -3,10 +3,41 @@
 //!
 //! These are floors: inputs are mashed with no human delay, so a human takes longer
 //! (`text_factor` in the plans). usage: frlg-calib <state> [trials] [png-dir]
+//!
+//! Start: `route-defeat-brock-r78/to-forest.state`, Viridian Forest's south entrance with five Poke
+//! Balls and a level-6ish starter (a TAS state; the battle UI is the same everywhere).
 
 use frlg_emu::{boot_with_default_bios, default_rom_path, default_sym_path, keys, Emu, SymbolTable};
 use frlg_route::Observer;
 use std::path::PathBuf;
+
+struct Ctx {
+    emu: Emu,
+    obs: Observer,
+    g_battle_mons: u32,
+}
+
+impl Ctx {
+    /// Steps with `key` mashed (pressed on even frames) until `done` or `limit` frames.
+    fn mash(&mut self, key: u16, limit: u32, mut done: impl FnMut(&mut Emu, &Observer) -> bool) -> u32 {
+        let t = self.emu.frame();
+        let mut n = 0;
+        while !done(&mut self.emu, &self.obs) && n < limit {
+            self.emu.step(if n % 2 == 0 { key } else { 0 });
+            n += 1;
+        }
+        self.emu.frame() - t
+    }
+
+    fn tap(&mut self, key: u16) {
+        self.emu.step(key);
+        self.emu.step(0);
+    }
+}
+
+fn mean(v: &[u32]) -> f64 {
+    v.iter().sum::<u32>() as f64 / v.len().max(1) as f64
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -16,117 +47,79 @@ fn main() {
     let rom = default_rom_path().expect("rom");
     let mut emu = Emu::new(&rom).expect("emu");
     boot_with_default_bios(&mut emu).expect("bios");
-    let syms = SymbolTable::load(&default_sym_path().expect("sym")).expect("syms");
-    let obs = Observer::new(syms).expect("observer");
+    let sym_path = default_sym_path().expect("sym");
+    let g_battle_mons = SymbolTable::load(&sym_path).unwrap().get("gBattleMons").unwrap().addr;
+    let obs = Observer::new(SymbolTable::load(&sym_path).unwrap()).expect("observer");
     emu.load_state_file(&state).expect("state");
     emu.idle(260);
-    if let Some(d) = &png_dir {
-        let _ = emu.write_png(&d.join("start.png"));
-        println!("pos {:?} map {:?}", obs.pos(&mut emu), obs.map(&mut emu));
-    }
     let base = emu.save_state().expect("save");
-    let mut results: Vec<(String, u32, u32, u32, u32)> = vec![];
+    let mut c = Ctx { emu, obs, g_battle_mons };
+
+    let (mut intro, mut throw_cycle, mut catch_end, mut flee_ok, mut flee_fail) = (vec![], vec![], vec![], vec![], vec![]);
     for trial in 0..trials {
-        let mode = ["flee", "throw", "throw2"][(trial % 3) as usize];
-        emu.load_state(&base).expect("load");
-        emu.idle(trial * 5);
-        // Walk up and down until a battle starts.
+        c.emu.load_state(&base).expect("load");
+        c.emu.idle(trial * 7);
         let mut battle_at = None;
-        for leg in 0..80u32 {
-            // Two steps up onto the grass row, then back and forth sideways along it.
+        'walk: for leg in 0..80u32 {
             let (dir, steps) = match leg {
-                0 => (keys::UP, 4),
-                l if l % 2 == 1 => (keys::LEFT, 4),
-                _ => (keys::RIGHT, 4),
+                0 => (keys::UP, 3),
+                1 => (keys::LEFT, 8),
+                2 => (keys::UP, 3),
+                l if l % 2 == 1 => (keys::LEFT, 3),
+                _ => (keys::RIGHT, 3),
             };
             for _ in 0..16 * steps {
-                emu.step(dir);
-                if obs.in_battle(&mut emu) {
-                    battle_at = Some(emu.frame());
+                c.emu.step(dir);
+                if c.obs.in_battle(&mut c.emu) {
+                    battle_at = Some(c.emu.frame());
+                    break 'walk;
+                }
+            }
+        }
+        let Some(t0) = battle_at else { continue };
+        c.mash(keys::A, 3000, |e, o| o.battle_choosing_actions(e));
+        intro.push(c.emu.frame() - t0);
+        let enemy = c.g_battle_mons + 0x58;
+        if trial % 2 == 0 {
+            // Catch: one HP left, so the 255-rate forest bugs are caught on the first ball.
+            c.emu.write8(enemy + 0x28, 1);
+            c.emu.write8(enemy + 0x29, 0);
+            let t1 = c.emu.frame();
+            c.tap(keys::RIGHT); // Bag
+            c.mash(keys::A, 3000, |e, o| !o.in_battle(e) || (o.battle_choosing_actions(e) && e.frame() > t1 + 30));
+            if !c.obs.in_battle(&mut c.emu) {
+                throw_cycle.push(c.emu.frame() - t1);
+                let t2 = c.emu.frame();
+                c.mash(keys::B, 3000, |e, o| o.player_can_step(e));
+                catch_end.push(c.emu.frame() - t2);
+            }
+        } else {
+            // Run: bottom-right, retried until it works.
+            for _ in 0..6 {
+                let t1 = c.emu.frame();
+                c.tap(keys::DOWN);
+                c.tap(keys::RIGHT);
+                c.mash(keys::A, 3000, |e, o| !o.in_battle(e) || (o.battle_choosing_actions(e) && e.frame() > t1 + 30));
+                if !c.obs.in_battle(&mut c.emu) {
+                    c.mash(keys::A, 3000, |e, o| o.player_can_step(e));
+                    flee_ok.push(c.emu.frame() - t1);
                     break;
                 }
-            }
-            if battle_at.is_some() {
-                break;
-            }
-            if trial == 0 && leg < 6 {
-                println!("leg {leg} pos {:?}", obs.pos(&mut emu));
-                if let Some(d) = &png_dir {
-                    let _ = emu.write_png(&d.join(format!("leg{leg}.png")));
-                }
+                flee_fail.push(c.emu.frame() - t1);
             }
         }
-        let Some(t0) = battle_at else {
-            println!("trial {trial}: no encounter");
-            continue;
-        };
-        // Intro: mash A until the action menu.
-        let mut n = 0u32;
-        while !obs.battle_choosing_actions(&mut emu) && n < 3000 {
-            emu.step(if n % 2 == 0 { keys::A } else { 0 });
-            n += 1;
-        }
-        let intro = emu.frame() - t0;
-        if let Some(d) = &png_dir {
-            let _ = emu.write_png(&d.join(format!("t{trial}-menu.png")));
-        }
-        let t1 = emu.frame();
-        let mut throws = 0;
-        match mode {
-            "flee" => {
-                // Down, Right: bottom-right is Run.
-                emu.step(keys::DOWN);
-                emu.step(0);
-                emu.step(keys::RIGHT);
-                emu.step(0);
-                let mut k = 0u32;
-                while obs.in_battle(&mut emu) && k < 3000 {
-                    emu.step(if k % 2 == 0 { keys::A } else { 0 });
-                    k += 1;
-                }
-                let end = emu.frame() - t1;
-                // Until the player can step again.
-                let mut j = 0;
-                while !obs.player_can_step(&mut emu) && j < 600 {
-                    emu.step(0);
-                    j += 1;
-                }
-                results.push(("flee".into(), intro, end, emu.frame() - t1, 0));
-            }
-            _ => {
-                // Bag (top right), then mash A through the pocket, the item and USE.
-                emu.step(keys::RIGHT);
-                emu.step(0);
-                let mut k = 0u32;
-                let mut shot = false;
-                loop {
-                    emu.step(if k % 2 == 0 { keys::A } else { 0 });
-                    k += 1;
-                    if let (Some(d), false, true) = (&png_dir, shot, k == 40) {
-                        let _ = emu.write_png(&d.join(format!("t{trial}-bag.png")));
-                        shot = true;
-                    }
-                    if !obs.in_battle(&mut emu) || obs.battle_choosing_actions(&mut emu) && k > 20 || k > 3000 {
-                        break;
-                    }
-                }
-                throws += 1;
-                let cycle = emu.frame() - t1;
-                if !obs.in_battle(&mut emu) {
-                    // Caught (or the battle ended): until the player can step again; B declines the nickname.
-                    let mut j = 0;
-                    while !obs.player_can_step(&mut emu) && j < 3000 {
-                        emu.step(if j % 2 == 0 { keys::B } else { 0 });
-                        j += 1;
-                    }
-                    results.push(("throw-end".into(), intro, cycle, emu.frame() - t1, throws));
-                } else {
-                    results.push(("throw-fail".into(), intro, cycle, cycle, throws));
-                }
-            }
+        if let (Some(d), true) = (&png_dir, trial < 2) {
+            let _ = c.emu.write_png(&d.join(format!("t{trial}.png")));
         }
     }
-    for r in &results {
-        println!("{:11} intro {:4} cycle {:4} total {:4}", r.0, r.1, r.2, r.3);
-    }
+    let show = |name: &str, v: &Vec<u32>| {
+        let mut s = v.clone();
+        s.sort();
+        println!("{name:12} n={:3} mean {:7.1} min {:?} max {:?} {:?}", v.len(), mean(v), s.first(), s.last(), &s[..s.len().min(8)]);
+    };
+    show("intro", &intro);
+    show("throw+catch", &throw_cycle);
+    show("catch-end", &catch_end);
+    show("flee-ok", &flee_ok);
+    show("flee-fail", &flee_fail);
 }
