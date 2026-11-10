@@ -39,6 +39,7 @@ read these lists (`audited_forced: true`, `crates/frlg-human/src/route.rs`, `B::
 | Rocket Hideout B1F to B4F stairs | 0 on the stairs side (plus the Lift Key grunt and Giovanni, `plan.md` §3) | 3 |
 | Silph Co 1F to 11F (doors NOT modelled) | 0 (lower bound) | 4 |
 | Victory Road (boulders ignored or not: same) | 0 | 4-8 |
+| Mt Ember exterior to the summit entrance | Logan (1) | 3 |
 | Cerulean to Vermilion (Routes 5/6), Celadon to Fuchsia (Cycling Road), Lavender to Fuchsia | Jeff on Route 6 only; others 0 | 0 |
 | Vermilion gym (switch barrier opened) | 0 (the rotating trainers excepted) | 2 |
 
@@ -53,5 +54,6 @@ read these lists (`audited_forced: true`, `crates/frlg-human/src/route.rs`, `B::
 * `coord_events` that start a fight on their own (the Route 24 Rocket, rivals, the Dig grunt, Silph
   7F rival, Giovanni) are not seen by the cone search; the route lists them explicitly from
   `docs/glitchless-run/plan.md` §3.
-* Mt Ember, the Mansion, the Blaine quiz and the Silph grunts are still unaudited assumptions
-  (skipped in the plans).
+* The Mansion (switch-driven barriers: `no path` without them, 156 `setmetatile` calls in
+  `decompiled/data/scripts/pokemon_mansion.inc`), the Blaine quiz and the Silph grunts are still
+  unaudited assumptions (skipped in the plans).
