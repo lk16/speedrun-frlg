@@ -64,6 +64,9 @@ pub struct SegStats {
     pub abandons: u64,
     pub level_sum: f64,
     pub caught_sum: f64,
+    /// Money model: prize money and balls in the bag after the segment (summed).
+    pub money_sum: f64,
+    pub balls_sum: f64,
 }
 
 /// Optional extra measurements from an attempt.
@@ -1204,6 +1207,8 @@ pub fn attempt(
             r[i].whiteouts += (st.whiteouts - wo_before) as u64;
             r[i].level_sum += st.carry as f64;
             r[i].caught_sum += st.caught.count() as f64;
+            r[i].money_sum += st.money as f64;
+            r[i].balls_sum += st.balls.iter().sum::<u32>() as f64;
         }
         if let Some(sc) = split_clock.as_deref_mut() {
             sc[i] = st.clock;

@@ -273,6 +273,8 @@ pub fn report(ctx: &Ctx, seed: u64, attempts: u64, target: u64) -> Report {
                     x[i].abandons += y[i].abandons;
                     x[i].level_sum += y[i].level_sum;
                     x[i].caught_sum += y[i].caught_sum;
+                    x[i].money_sum += y[i].money_sum;
+                    x[i].balls_sum += y[i].balls_sum;
                 }
                 x
             },

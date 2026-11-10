@@ -131,7 +131,7 @@ fn main() {
             let rep = report(&ctx, seed, r, rung_frames(rung));
             let total_runs: f64 = rep.segs.iter().map(|s| s.sum).sum::<f64>() / rep.attempts as f64;
             println!(
-                "{:<28}{:>9}{:>10}{:>9}{:>8}{:>8}{:>8}{:>6}{:>6}{:>8}",
+                "{:<28}{:>9}{:>10}{:>9}{:>8}{:>8}{:>8}{:>6}{:>6}{:>8}{:>8}{:>6}",
                 "segment",
                 "reached",
                 "mean",
@@ -141,7 +141,9 @@ fn main() {
                 "aband",
                 "lvl",
                 "dex",
-                "%time"
+                "%time",
+                "money",
+                "balls"
             );
             let mut by_src = [0.0f64; 3];
             for (seg, s) in plan.segs.iter().zip(&rep.segs) {
@@ -157,7 +159,7 @@ fn main() {
                     Src::Guess => 2,
                 }] += s.sum;
                 println!(
-                    "{:<28}{:>8.1}%{:>10}{:>9.1}{:>8}{:>8}{:>8}{:>6.1}{:>6.1}{:>7.1}%",
+                    "{:<28}{:>8.1}%{:>10}{:>9.1}{:>8}{:>8}{:>8}{:>6.1}{:>6.1}{:>7.1}%{:>8.0}{:>6.0}",
                     seg.name,
                     s.n as f64 / rep.attempts as f64 * 100.0,
                     hms(mean),
@@ -167,7 +169,9 @@ fn main() {
                     s.abandons,
                     s.level_sum / s.n as f64,
                     s.caught_sum / s.n as f64,
-                    share
+                    share,
+                    s.money_sum / s.n as f64,
+                    s.balls_sum / s.n as f64
                 );
             }
             println!(
