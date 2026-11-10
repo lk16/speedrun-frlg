@@ -19,7 +19,7 @@ fn main() {
     let syms = SymbolTable::load(&default_sym_path().expect("sym")).expect("syms");
     let obs = Observer::new(syms).expect("observer");
     emu.load_state_file(&state).expect("state");
-    emu.idle(90);
+    emu.idle(260);
     if let Some(d) = &png_dir {
         let _ = emu.write_png(&d.join("start.png"));
         println!("pos {:?} map {:?}", obs.pos(&mut emu), obs.map(&mut emu));
@@ -35,7 +35,7 @@ fn main() {
         for leg in 0..80u32 {
             // Two steps up onto the grass row, then back and forth sideways along it.
             let (dir, steps) = match leg {
-                0 => (keys::UP, 2),
+                0 => (keys::UP, 4),
                 l if l % 2 == 1 => (keys::LEFT, 4),
                 _ => (keys::RIGHT, 4),
             };
