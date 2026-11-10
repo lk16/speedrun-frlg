@@ -167,6 +167,19 @@ def candidates(p):
             new = copy.deepcopy(p.get('specials', []))
             new.append({'after': after, 'kind': 'trade', 'species': [sp], 'requires': [req], 'frames': frames})
             out.append(('special', f'trade for {sp} (needs {req}) after {after}', {'specials': new}))
+    # In-route hunts at grass the shortest path does not cross (pathenc.py): stand in the grass of a route
+    # while passing until its new species are caught or the step budget runs out.
+    hs = list(p.get('hunts', []))
+    have_h = {(h['after'], h['site']) for h in hs}
+    for after, site in (('route3', 'MAP_ROUTE3'), ('route4', 'MAP_ROUTE4'), ('nugget-bridge', 'MAP_ROUTE24'),
+                        ('route5-6', 'MAP_ROUTE5'), ('route9', 'MAP_ROUTE9'), ('route10-north', 'MAP_ROUTE10'),
+                        ('route8-7', 'MAP_ROUTE8'), ('cycling-road', 'MAP_ROUTE16'), ('cycling-road', 'MAP_ROUTE17'),
+                        ('cycling-road', 'MAP_ROUTE18'), ('route22', 'MAP_ROUTE22')):
+        if (after, site) in have_h:
+            continue
+        new = copy.deepcopy(hs)
+        new.append(dict(after=after, site=site, area='land', steps=60, detour_tiles=2, skip=[]))
+        out.append(('hunt', f'add an in-route hunt at {site} after {after}', {'hunts': new}))
     # Celadon Game Corner prizes (LeafGreen coin prices x 20 money per coin).
     have = {x['species'][0] for x in p.get('specials', []) if x.get('kind') == 'buy'}
     for sp, cost in (('SPECIES_ABRA', 2400), ('SPECIES_CLEFAIRY', 15000), ('SPECIES_PINSIR', 50000)):
