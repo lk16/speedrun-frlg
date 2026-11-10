@@ -158,6 +158,9 @@ pub struct Params {
     /// Lowest matchup multiplier: the human swaps in a covering team mon rather than fight a
     /// 4x-resisted matchup with the carry. guess.
     pub type_floor: f64,
+    /// Use the sight-cone audit (`human-run/tools/forced.py`) for which trainers the route cannot
+    /// walk around, instead of the earlier guessed groups.
+    pub audited_forced: bool,
 }
 
 impl Default for Params {
@@ -201,6 +204,7 @@ impl Default for Params {
             type_strength: 0.0,
             ability_bonus: 0.0,
             type_floor: 0.0,
+            audited_forced: false,
         }
     }
 }

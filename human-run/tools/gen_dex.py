@@ -49,7 +49,7 @@ for e in wild:
     (sites if suffix == 'FireRed' else sites_lg)[e['map']] = d
 tp = open(os.path.join(root, 'trainer_parties.h')).read()
 parties = {}
-for m in re.finditer(r'static const struct TrainerMon\w+ (sParty_\w+)\[\] = \{(.*?)\n\};', tp, re.S):
+for m in re.finditer(r'static const struct TrainerMon\w+ (sParty_\w+)\[\] = \{((?:[^\n]*\};)|(?:\n.*?\n\};))', tp, re.S):
     parties[m.group(1)] = [[int(l), sp] for l, sp in re.findall(r'\.lvl = (\d+),\s*\.species = (SPECIES_[A-Z0-9_]+)', m.group(2))]
 tr = open(os.path.join(root, 'trainers.h')).read()
 trainers = {}
@@ -92,5 +92,6 @@ bm = open(os.path.join(root, '..', 'battle_main.c')).read()
 chart_src = bm.split('const u8 gTypeEffectiveness[336] =')[1].split('};')[0]
 mul = dict(TYPE_MUL_SUPER_EFFECTIVE=20, TYPE_MUL_NOT_EFFECTIVE=5, TYPE_MUL_NO_EFFECT=0, TYPE_MUL_NORMAL=10)
 chart = [[a, d, mul[m]] for a, d, m in re.findall(r'(TYPE_[A-Z]+),\s*(TYPE_[A-Z]+),\s*(TYPE_MUL_[A-Z_]+)', chart_src) if a not in ('TYPE_FORESIGHT', 'TYPE_ENDTABLE')]
-json.dump(dict(type_chart=chart, kanto_count=len(kanto), species=species, sites=sites, sites_lg=sites_lg, trainers=trainers, map_trainers=map_trainers), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
+scripts = {k: v for k, v in label_trainer.items() if v in trainers}
+json.dump(dict(scripts=scripts, type_chart=chart, kanto_count=len(kanto), species=species, sites=sites, sites_lg=sites_lg, trainers=trainers, map_trainers=map_trainers), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
 print(len(kanto), len(species), len(sites), len(trainers))

@@ -188,6 +188,27 @@ impl<'a> B<'a> {
         );
     }
 
+    /// Trainers the sight-cone audit (`human-run/tools/forced.py`) says the leg cannot avoid:
+    /// `always` all fought, and from each `(k, options)` the `k` weakest options (the human walks
+    /// into the cheapest of the interchangeable ones).
+    fn forced(&mut self, name: &str, always: &[&str], alts: &[(usize, &[&str])]) {
+        let mut parties: Vec<Vec<(u32, usize)>> = always
+            .iter()
+            .map(|l| self.dex.script_party(l).to_vec())
+            .collect();
+        for (k, opts) in alts {
+            let mut o: Vec<_> = opts
+                .iter()
+                .map(|l| self.dex.script_party(l).to_vec())
+                .collect();
+            o.sort_by_key(|p| p.iter().map(|x| x.0).sum::<u32>());
+            parties.extend(o.into_iter().take(*k));
+        }
+        parties.sort_by_key(|p| std::cmp::Reverse(p.iter().map(|x| x.0).sum::<u32>()));
+        let n = parties.len() as u32;
+        self.push(name, Src::Tiles, 6 * n, Kind::Parties { parties });
+    }
+
     /// The `n` hardest trainers on the given maps. `n` is a routing assumption (which ones the
     /// route cannot walk around), the parties are the decomp's.
     fn maps_group(&mut self, name: &str, maps: &[&str], n: u32) {
@@ -244,14 +265,30 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.text("forest", 6708, Src::Ledger);
     b.wander("forest-encounters", "MAP_VIRIDIAN_FOREST", 100);
     b.text("to-pewter", 1531, Src::Ledger);
-    b.maps_group("forest-trainers", &["ViridianForest"], 3);
+    if p.audited_forced {
+        b.forced(
+            "forest-trainers",
+            &["ViridianForest_EventScript_Sammy"],
+            &[],
+        );
+    } else {
+        b.maps_group("forest-trainers", &["ViridianForest"], 3);
+    }
     b.trainer_adv("brock", "TRAINER_LEADER_BROCK", 600, 1.4);
     b.split();
     b.era = Era::Run;
 
     // 2. Pewter to Cerulean: 492 tiles (distances.json pewter-gym_to_cerulean-pc), split by guess.
     b.walk("route3", 120, b.era, Some(("MAP_ROUTE3", 50)), Src::Guess);
-    b.group("route3-trainers", 4, 2, 9, 55);
+    if p.audited_forced {
+        b.forced(
+            "route3-trainers",
+            &["Route3_EventScript_Colton", "Route3_EventScript_James"],
+            &[(1, &["Route3_EventScript_Greg", "Route3_EventScript_Sally"])],
+        );
+    } else {
+        b.group("route3-trainers", 4, 2, 9, 55);
+    }
     b.walk(
         "mt-moon-1f",
         90,
@@ -273,8 +310,19 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         Some(("MAP_MT_MOON_B2F", 100)),
         Src::Guess,
     );
-    b.group("mt-moon-trainers", 5, 2, 11, 60);
-    b.maps_group("mt-moon-miguel", &["MtMoon_B2F"], 1);
+    if p.audited_forced {
+        b.forced(
+            "mt-moon-miguel",
+            &[
+                "MtMoon_B2F_EventScript_BattleMiguel",
+                "MtMoon_B2F_EventScript_Grunt1",
+            ],
+            &[],
+        );
+    } else {
+        b.group("mt-moon-trainers", 5, 2, 11, 60);
+        b.maps_group("mt-moon-miguel", &["MtMoon_B2F"], 1);
+    }
     b.walk("route4", 82, b.era, Some(("MAP_ROUTE4", 30)), Src::Guess);
     b.text("cerulean-heal", 500, Src::Guess);
 
@@ -287,8 +335,38 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         Some(("MAP_ROUTE24", 60)),
         Src::Guess,
     );
-    b.maps_group("nugget-bridge-trainers", &["Route24"], 6);
+    if p.audited_forced {
+        b.forced(
+            "nugget-bridge-trainers",
+            &[
+                "Route24_EventScript_Ethan",
+                "Route24_EventScript_Reli",
+                "Route24_EventScript_Timmy",
+                "Route24_EventScript_Ali",
+                "Route24_EventScript_Cale",
+                "Route24_EventScript_BattleRocket",
+            ],
+            &[],
+        );
+    } else {
+        b.maps_group("nugget-bridge-trainers", &["Route24"], 6);
+    }
     b.walk("bill", 56, b.era, Some(("MAP_ROUTE25", 40)), Src::Guess);
+    if p.audited_forced {
+        b.forced(
+            "route25-trainers",
+            &["Route25_EventScript_Haley", "Route25_EventScript_Kelsey"],
+            &[(
+                2,
+                &[
+                    "Route25_EventScript_Flint",
+                    "Route25_EventScript_Franklin",
+                    "Route25_EventScript_Nob",
+                    "Route25_EventScript_Wayne",
+                ],
+            )],
+        );
+    }
     b.text("bill-cottage", 2400, Src::Guess);
     if p.teleport_abra {
         b.push(
@@ -304,7 +382,15 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         b.walk("bill-return", 156, b.era, None, Src::Tiles);
     }
     b.walk("misty-walk", 26, b.era, None, Src::Tiles);
-    b.group("cerulean-gym-trainer", 1, 2, 16, 65);
+    if p.audited_forced {
+        b.forced(
+            "cerulean-gym-trainer",
+            &["CeruleanCity_Gym_EventScript_Diana"],
+            &[],
+        );
+    } else {
+        b.group("cerulean-gym-trainer", 1, 2, 16, 65);
+    }
     b.trainer("misty", "TRAINER_LEADER_MISTY", 600);
     b.text("misty-badge", 600, Src::Guess);
     b.split();
@@ -312,6 +398,9 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     // 4. Vermilion: S.S. Anne and Surge, no Vermilion heal.
     b.walk("route5-6", 260, b.era, Some(("MAP_ROUTE5", 40)), Src::Tiles);
     b.wander("route6-encounters", "MAP_ROUTE6", 40);
+    if p.audited_forced {
+        b.forced("route6-trainers", &["Route6_EventScript_Jeff"], &[]);
+    }
     if p.bike {
         b.walk("fan-club", 60, b.era, None, Src::Tiles);
         b.text("bike-voucher", 900, Src::Guess);
@@ -362,15 +451,54 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         Some(("MAP_ROCK_TUNNEL_1F", 138)),
         Src::Guess,
     );
-    b.maps_group(
-        "rock-tunnel-trainers",
-        &["RockTunnel_1F", "RockTunnel_B1F"],
-        7,
-    );
+    if p.audited_forced {
+        b.forced(
+            "rock-tunnel-trainers",
+            &[
+                "Route9_EventScript_Alicia",
+                "Route9_EventScript_Conner",
+                "RockTunnel_1F_EventScript_Ashton",
+                "RockTunnel_1F_EventScript_Dana",
+                "RockTunnel_B1F_EventScript_Dudley",
+                "RockTunnel_B1F_EventScript_Martha",
+                "RockTunnel_B1F_EventScript_Sofia",
+                "RockTunnel_B1F_EventScript_Winston",
+            ],
+            &[
+                (
+                    1,
+                    &[
+                        "RockTunnel_1F_EventScript_Lenny",
+                        "RockTunnel_1F_EventScript_Oliver",
+                    ],
+                ),
+                (
+                    1,
+                    &[
+                        "RockTunnel_B1F_EventScript_Allen",
+                        "RockTunnel_B1F_EventScript_Eric",
+                    ],
+                ),
+            ],
+        );
+    } else {
+        b.maps_group(
+            "rock-tunnel-trainers",
+            &["RockTunnel_1F", "RockTunnel_B1F"],
+            7,
+        );
+    }
     b.text("lavender-heal", 500, Src::Guess);
 
     // 6. Celadon: Tea, Hideout, Erika, HM02.
     b.walk("route8-7", 227, e, Some(("MAP_ROUTE8", 40)), Src::Tiles);
+    if p.audited_forced {
+        b.forced(
+            "route8-trainers",
+            &[],
+            &[(1, &["Route8_EventScript_Julia", "Route8_EventScript_Rich"])],
+        );
+    }
     b.walk("celadon-tea", 40, e, None, Src::Tiles);
     b.text("tea", 600, Src::Guess);
     b.walk("hideout-walk", 526, e, None, Src::Guess);
@@ -387,7 +515,26 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.trainer("hideout-giovanni", "TRAINER_BOSS_GIOVANNI", 700);
     b.text("scope-and-dig", 1800, Src::Guess);
     b.walk("erika-walk", 146, e, None, Src::Tiles);
-    b.group("celadon-gym-trainers", 2, 2, 25, 75);
+    if p.audited_forced {
+        b.forced(
+            "celadon-gym-trainers",
+            &[],
+            &[(
+                2,
+                &[
+                    "CeladonCity_Gym_EventScript_Bridget",
+                    "CeladonCity_Gym_EventScript_Kay",
+                    "CeladonCity_Gym_EventScript_Lisa",
+                    "CeladonCity_Gym_EventScript_Lori",
+                    "CeladonCity_Gym_EventScript_Mary",
+                    "CeladonCity_Gym_EventScript_Tamia",
+                    "CeladonCity_Gym_EventScript_Tina",
+                ],
+            )],
+        );
+    } else {
+        b.group("celadon-gym-trainers", 2, 2, 25, 75);
+    }
     b.trainer("erika", "TRAINER_LEADER_ERIKA", 600);
     b.text("erika-badge", 600, Src::Guess);
     b.split();
@@ -399,6 +546,22 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.walk("tower-walk", 215, e, None, Src::Guess);
     b.wander("tower-encounters", "MAP_POKEMON_TOWER_5F", 80);
     b.trainer("rival-tower", &tn("TRAINER_RIVAL_POKEMON_TOWER"), 700);
+    if p.audited_forced {
+        b.forced(
+            "tower-channelers",
+            &[
+                "PokemonTower_6F_EventScript_Emilia",
+                "PokemonTower_6F_EventScript_Jennifer",
+            ],
+            &[(
+                1,
+                &[
+                    "PokemonTower_5F_EventScript_Karina",
+                    "PokemonTower_5F_EventScript_Tammy",
+                ],
+            )],
+        );
+    }
     b.maps_group("tower-rockets", &["PokemonTower_7F"], 3);
     b.text("fuji-flute", 1500, Src::Guess);
 
@@ -418,7 +581,15 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.walk("warden", 18, e, None, Src::Tiles);
     b.text("warden-strength", 1400, Src::Guess);
     b.walk("koga-walk", 119, e, None, Src::Guess);
-    b.group("fuchsia-gym-trainers", 3, 2, 34, 75);
+    if p.audited_forced {
+        b.forced(
+            "fuchsia-gym-trainers",
+            &["FuchsiaCity_Gym_EventScript_Kirk"],
+            &[],
+        );
+    } else {
+        b.group("fuchsia-gym-trainers", 3, 2, 34, 75);
+    }
     b.trainer("koga", "TRAINER_LEADER_KOGA", 600);
     b.text("koga-badge", 600, Src::Guess);
     b.split();
@@ -431,7 +602,10 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.trainer("silph-giovanni", "TRAINER_BOSS_GIOVANNI_2", 700);
     b.text("master-ball", 1800, Src::Guess);
     b.walk("sabrina-walk", 123, e, None, Src::Guess);
-    b.group("saffron-gym-trainers", 2, 2, 36, 75);
+    // The audit reaches Sabrina through the teleport pads without crossing any cone.
+    if !p.audited_forced {
+        b.group("saffron-gym-trainers", 2, 2, 36, 75);
+    }
     b.trainer("sabrina", "TRAINER_LEADER_SABRINA", 600);
     b.text("sabrina-badge", 600, Src::Guess);
     b.split();
@@ -457,7 +631,15 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     // 11. Viridian Gym.
     b.text("fly-viridian", 700, Src::Guess);
     b.walk("viridian-gym-walk", 55, e, None, Src::Tiles);
-    b.group("viridian-gym-trainers", 3, 2, 42, 80);
+    if p.audited_forced {
+        b.forced(
+            "viridian-gym-trainers",
+            &["ViridianCity_Gym_EventScript_Takashi"],
+            &[],
+        );
+    } else {
+        b.group("viridian-gym-trainers", 3, 2, 42, 80);
+    }
     b.trainer("giovanni", "TRAINER_LEADER_GIOVANNI", 600);
     b.text("giovanni-badge", 600, Src::Guess);
     b.split();
@@ -474,11 +656,14 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         Some(("MAP_VICTORY_ROAD_1F", 150)),
         Src::Guess,
     );
-    b.maps_group(
-        "victory-road-trainers",
-        &["VictoryRoad_1F", "VictoryRoad_2F", "VictoryRoad_3F"],
-        8,
-    );
+    // The audit finds no trainer on Victory Road the route cannot walk around.
+    if !p.audited_forced {
+        b.maps_group(
+            "victory-road-trainers",
+            &["VictoryRoad_1F", "VictoryRoad_2F", "VictoryRoad_3F"],
+            8,
+        );
+    }
     b.text("indigo-heal", 500, Src::Guess);
     if p.grind_pre_e4 > 0 {
         b.push(

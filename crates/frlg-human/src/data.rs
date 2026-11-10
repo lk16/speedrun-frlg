@@ -49,6 +49,7 @@ struct Raw {
     sites_lg: HashMap<String, RawSite>,
     trainers: HashMap<String, RawTrainer>,
     map_trainers: HashMap<String, Vec<String>>,
+    scripts: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug)]
@@ -109,6 +110,7 @@ pub struct Dex {
     sites_lg: HashMap<String, RawSite>,
     trainers: HashMap<String, Vec<(u32, usize)>>,
     map_trainers: HashMap<String, Vec<String>>,
+    scripts: HashMap<String, String>,
     /// Damage multiplier of attacking type (row) on defending type (column),
     /// `decompiled/src/battle_main.c:312` `gTypeEffectiveness`.
     chart: [[f64; 18]; 18],
@@ -178,6 +180,7 @@ impl Dex {
             sites_lg: raw.sites_lg,
             trainers,
             map_trainers: raw.map_trainers,
+            scripts: raw.scripts,
         }
     }
 
@@ -235,6 +238,16 @@ impl Dex {
             .collect();
         out.sort_by_key(|p| std::cmp::Reverse(p.iter().map(|x| x.0).sum::<u32>()));
         out
+    }
+
+    /// The party of the trainer a map script label fights
+    /// (`trainerbattle_*` in the label's body, `human-run/tools/gen_dex.py`).
+    pub fn script_party(&self, label: &str) -> &[(u32, usize)] {
+        let t = self
+            .scripts
+            .get(label)
+            .unwrap_or_else(|| panic!("no trainer script {label}"));
+        self.trainer(t)
     }
 
     pub fn has_site(&self, site: &str) -> bool {

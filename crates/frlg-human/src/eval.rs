@@ -80,7 +80,11 @@ impl Plan {
                 .collect(),
             starter_line: line,
             evo_at,
-            stab_from: if self.params.starter == "bulbasaur" { 10 } else { 7 },
+            stab_from: if self.params.starter == "bulbasaur" {
+                10
+            } else {
+                7
+            },
         };
         let floors: Vec<f64> = self
             .segs
