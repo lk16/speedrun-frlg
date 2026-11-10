@@ -52,6 +52,14 @@ pub struct Ctx<'a> {
     pub stab_from: u32,
     /// Reset aggressiveness at each segment (the global value unless overridden).
     pub aggr: Vec<f64>,
+    /// Index of Oak's check, and (from the no-reset pilot) the fill time as `base + slope * missing
+    /// species`, the mean species still to be caught before Oak after segment i, and the mean remaining
+    /// frames after segment i without the fill (for `dex_resets`).
+    pub oak_idx: usize,
+    pub fill_base: f64,
+    pub fill_slope: f64,
+    pub gain_after: Vec<f64>,
+    pub mean_nofill_after: Vec<f64>,
 }
 
 #[derive(Default, Clone)]
@@ -76,6 +84,8 @@ pub struct Probe {
     pub oak_count: u32,
     /// Per fill hunt: (frames spent, species gained, times run).
     pub fill: Vec<(f64, f64, u64)>,
+    /// Kanto species caught after each segment (filled when a probe is passed).
+    pub caught_at: Vec<u32>,
 }
 
 pub struct Outcome {
@@ -1041,9 +1051,14 @@ pub fn attempt(
                         e.2 += 1;
                     }
                     if let Some(t) = target {
+                        let left = if ctx.p.dex_resets {
+                            ctx.fill_slope * (60.0 - st.caught.count() as f64).max(0.0)
+                        } else {
+                            0.0
+                        };
                         let rem = ctx.floor_after[i] as f64
                             + ctx.aggr[i]
-                                * (ctx.mean_after[i] - ctx.floor_after[i] as f64).max(0.0);
+                                * (ctx.mean_after[i] + left - ctx.floor_after[i] as f64).max(0.0);
                         if st.caught.count() < 60 && st.clock as f64 + rem > t as f64 {
                             if let Some(r) = rec.as_deref_mut() {
                                 r[i].resets += 1;
@@ -1236,10 +1251,25 @@ pub fn attempt(
         if let Some(sc) = split_clock.as_deref_mut() {
             sc[i] = st.clock;
         }
+        if let Some(pr) = probe.as_deref_mut() {
+            if pr.caught_at.len() <= i {
+                pr.caught_at.resize(i + 1, 0);
+            }
+            pr.caught_at[i] = st.caught.count();
+        }
         if seg.split {
             if let Some(t) = target {
+                let mean = if ctx.p.dex_resets && i < ctx.oak_idx {
+                    // The fill still to come depends on how many species are in the bag by then.
+                    let dex_proj = st.caught.count() as f64 + ctx.gain_after[i];
+                    ctx.mean_nofill_after[i]
+                        + ctx.fill_base
+                        + ctx.fill_slope * (60.0 - dex_proj).max(0.0)
+                } else {
+                    ctx.mean_after[i]
+                };
                 let remaining = ctx.floor_after[i] as f64
-                    + ctx.aggr[i] * (ctx.mean_after[i] - ctx.floor_after[i] as f64).max(0.0);
+                    + ctx.aggr[i] * (mean - ctx.floor_after[i] as f64).max(0.0);
                 if st.clock as f64 + remaining > t as f64 {
                     if let Some(r) = rec.as_deref_mut() {
                         r[i].resets += 1;

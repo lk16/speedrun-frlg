@@ -142,6 +142,10 @@ pub struct Params {
     /// More segments after which the human checks the reset rule (the badge splits, the Hall of
     /// Fame and Oak's check are always splits).
     pub extra_splits: Vec<String>,
+    /// Reset estimates before Oak's check use the species caught so far: the fill still to come is a
+    /// fitted `base + slope * (60 - species)` from the pilot, instead of the average fill. At Oak's
+    /// check the remaining fill is added too.
+    pub dex_resets: bool,
     /// `poke`, `great` or `ultra`.
     pub ball: String,
     pub weaken: bool,
@@ -261,6 +265,7 @@ impl Default for Params {
             reset_aggr: 0.0,
             reset_aggr_at: Default::default(),
             extra_splits: vec![],
+            dex_resets: false,
             ball: "poke".into(),
             weaken: false,
             catch_on_pass: true,

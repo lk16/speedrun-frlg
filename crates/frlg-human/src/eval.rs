@@ -3,7 +3,7 @@
 use crate::data::Dex;
 use crate::params::Params;
 use crate::route::{build, Seg};
-use crate::sim::{attempt, Ctx, SegStats, FPS};
+use crate::sim::{attempt, Ctx, Probe, SegStats, FPS};
 use rayon::prelude::*;
 
 /// The target ladder, seconds: WR (3:25:25) then WR plus 1, 2, 5, 10, 20, 40, 80, 160 minutes.
@@ -67,6 +67,15 @@ impl Plan {
             segs: &self.segs,
             floor_after: vec![0; n],
             mean_after: vec![0.0; n],
+            oak_idx: self
+                .segs
+                .iter()
+                .position(|s| matches!(s.kind, crate::route::Kind::OakCheck))
+                .unwrap_or(0),
+            fill_base: 0.0,
+            fill_slope: 0.0,
+            gain_after: vec![0.0; n],
+            mean_nofill_after: vec![0.0; n],
             aggr: self
                 .segs
                 .iter()
@@ -106,18 +115,46 @@ impl Plan {
         let mut sum = vec![0.0f64; n];
         let mut cnt = 0u64;
         let mut sc = vec![0u64; n];
+        let oak = ctx.oak_idx;
+        let mut gain = vec![0.0f64; n];
+        // (missing species at Oak, fill frames) per finished attempt, for the linear fit.
+        let mut pairs: Vec<(f64, f64)> = vec![];
         for i in 0..PILOT_ATTEMPTS {
-            let o = attempt(&ctx, PILOT_SEED, i, None, None, Some(&mut sc), None);
+            let mut probe = Probe::default();
+            let o = attempt(&ctx, PILOT_SEED, i, None, None, Some(&mut sc), Some(&mut probe));
             if o.finished {
                 cnt += 1;
                 for (acc, c) in sum.iter_mut().zip(&sc) {
                     *acc += (o.run - c) as f64;
+                }
+                if oak > 0 && probe.caught_at.len() > oak {
+                    let fill = (sc[oak] - sc[oak - 1]) as f64;
+                    pairs.push(((60.0 - probe.oak_count as f64).max(0.0), fill));
+                    for (g, c) in gain.iter_mut().zip(&probe.caught_at).take(oak) {
+                        *g += (probe.oak_count as f64 - *c as f64).max(0.0);
+                    }
                 }
             }
         }
         if cnt > 0 {
             for (m, s) in ctx.mean_after.iter_mut().zip(&sum) {
                 *m = s / cnt as f64;
+            }
+            if oak > 0 && pairs.len() > 10 {
+                let k = pairs.len() as f64;
+                let (mx, my) = (
+                    pairs.iter().map(|p| p.0).sum::<f64>() / k,
+                    pairs.iter().map(|p| p.1).sum::<f64>() / k,
+                );
+                let sxx: f64 = pairs.iter().map(|p| (p.0 - mx) * (p.0 - mx)).sum();
+                let sxy: f64 = pairs.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum();
+                ctx.fill_slope = if sxx > 0.0 { (sxy / sxx).max(0.0) } else { 0.0 };
+                ctx.fill_base = (my - ctx.fill_slope * mx).max(0.0);
+                let mean_fill = my;
+                for i in 0..oak {
+                    ctx.gain_after[i] = gain[i] / pairs.len() as f64;
+                    ctx.mean_nofill_after[i] = (ctx.mean_after[i] - mean_fill).max(0.0);
+                }
             }
         }
         ctx
