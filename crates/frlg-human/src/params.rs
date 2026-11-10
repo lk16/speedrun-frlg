@@ -137,6 +137,9 @@ pub struct Params {
     /// allow instead of being free and unlimited. Prices `items.json`, prize money
     /// `battle_script_commands.c:5373`.
     pub money_model: bool,
+    /// Wild-encounter frame costs measured on libmgba (`human-run/calibration.md`) instead of the
+    /// original guesses.
+    pub calib_enc: bool,
     /// Balls bought per mart visit.
     pub ball_batch: u32,
     /// Throw bait first at species whose escape factor (`safariZoneFleeRate * 100 / 1275`, at
@@ -213,6 +216,7 @@ impl Default for Params {
             safari_model: false,
             safari_rocks: 0,
             money_model: false,
+            calib_enc: false,
             ball_batch: 10,
             safari_bait_from: 0,
             fight_wild: false,

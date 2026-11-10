@@ -105,6 +105,35 @@ struct State {
 }
 
 impl Ctx<'_> {
+    /// Frames from the battle starting to the first action menu. Measured on libmgba with A
+    /// mashed: 358 (`human-run/calibration.md`), times 1.25 for a human; the older guess was 220.
+    fn enc_intro(&self) -> f64 {
+        if self.p.calib_enc {
+            450.0
+        } else {
+            ENC_INTRO as f64
+        }
+    }
+
+    /// One ball thrown and its result back at the menu: 397-416 measured, x1.2.
+    fn throw_cost(&self) -> f64 {
+        if self.p.calib_enc {
+            480.0
+        } else {
+            THROW as f64
+        }
+    }
+
+    /// After the last shake: Gotcha text, dex page, nickname prompt. The measured throw-to-overworld
+    /// total is 409-549, so what comes after the throw cycle is small.
+    fn catch_end(&self) -> f64 {
+        if self.p.calib_enc {
+            150.0
+        } else {
+            CATCH_END as f64 * self.p.text_factor
+        }
+    }
+
     fn turn(&self) -> f64 {
         TURN as f64 * self.p.battle_scale
     }
@@ -274,11 +303,11 @@ fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Spec
                 return false;
             }
             st.safari_balls -= 1;
-            bump(st, THROW as f64);
+            bump(st, ctx.throw_cost());
             let rate = (factor * 1275 / 100).min(255);
             let odds = (rate * 15 / 10) * 100 / 300;
             if shakes_catch(rng, odds) {
-                bump(st, CATCH_END as f64 * ctx.p.text_factor);
+                bump(st, ctx.catch_end());
                 return true;
             }
             bump(st, react(ctx, rng) as f64);
@@ -362,7 +391,7 @@ fn throw_balls(
             },
         };
         let odds = (catch_rate * b / 10) * (max_hp * 3 - hp * 2) / (3 * max_hp);
-        bump(st, THROW as f64);
+        bump(st, ctx.throw_cost());
         let caught = if odds > 254 {
             true
         } else {
@@ -372,7 +401,7 @@ fn throw_balls(
             (0..4).all(|_| rng.below(65536) < thr)
         };
         if caught {
-            bump(st, CATCH_END as f64 * ctx.p.text_factor);
+            bump(st, ctx.catch_end());
             return true;
         }
         bump(st, react(ctx, rng) as f64);
@@ -393,7 +422,7 @@ fn encounter(
 ) {
     let sp = &ctx.dex.species[slot.species];
     let level = rng.range(slot.min, slot.max);
-    bump(st, ENC_INTRO as f64 + react(ctx, rng) as f64);
+    bump(st, ctx.enc_intro() + react(ctx, rng) as f64);
     let wanted =
         want_catch && sp.dex != 0 && !st.caught.has(sp.dex) && !skip.contains(&slot.species);
     if wanted && safari {
@@ -421,7 +450,27 @@ fn encounter(
         let g = add_exp(ctx, st, e);
         bump(st, (g * LEVEL_UP) as f64);
     } else {
+        flee(ctx, st, rng);
+    }
+}
+
+/// Running from a wild battle. Measured on libmgba with a level-6 starter in Viridian Forest:
+/// a successful Run costs 400-1013 frames from the menu (mean 598 with retries), a failed one
+/// 277-585 (mean 374); 10 of 54 attempts worked. The escape formula guarantees an escape when the
+/// player is faster, which a carry past level 15 nearly always is vs a wild mon of the area
+/// (`decompiled/src/battle_main.c`, `TryRunFromBattle`). guess for the 15 and the 0.2.
+fn flee(ctx: &Ctx, st: &mut State, rng: &mut Rng) {
+    if !ctx.p.calib_enc {
         bump(st, FLEE as f64);
+        return;
+    }
+    let p_ok = if st.carry < 15 { 0.2 } else { 1.0 };
+    loop {
+        if rng.chance(p_ok) {
+            bump(st, 500.0);
+            return;
+        }
+        bump(st, 470.0);
     }
 }
 
@@ -848,7 +897,7 @@ pub fn attempt(
                     let gap = rng.geometric(0.07) + 1;
                     bump(
                         &mut st,
-                        gap as f64 * Era::Run.frames_per_tile() + ENC_INTRO as f64,
+                        gap as f64 * Era::Run.frames_per_tile() + ctx.enc_intro(),
                     );
                     let t =
                         turns_per_mon(*level as f64, effective_level(&st, ctx.p), st.strength, 1.0);
@@ -947,7 +996,7 @@ pub fn attempt(
                     if special.kind == "gift" || special.kind == "trade" {
                         st.caught.insert(sp.dex);
                     } else {
-                        bump(&mut st, ENC_INTRO as f64 + react(ctx, &mut rng) as f64);
+                        bump(&mut st, ctx.enc_intro() + react(ctx, &mut rng) as f64);
                         let turns = (((1.0 - special.hp_frac) / 0.25).ceil() as u32).max(1);
                         bump(&mut st, turns as f64 * ctx.turn());
                         if rng.chance((0.04 * turns as f64).min(0.9)) {
@@ -992,7 +1041,7 @@ pub fn attempt(
             }
             Kind::Mewtwo => {
                 bump(&mut st, 1500.0 * ctx.p.text_factor);
-                bump(&mut st, THROW as f64 + CATCH_END as f64);
+                bump(&mut st, ctx.throw_cost() + ctx.catch_end());
                 st.caught.insert(150);
                 st.power = 70.0 * ctx.p.power_bonus;
             }
