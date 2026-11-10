@@ -7,7 +7,9 @@
 //! Start: `route-defeat-brock-r78/to-forest.state`, Viridian Forest's south entrance with five Poke
 //! Balls and a level-6ish starter (a TAS state; the battle UI is the same everywhere).
 
-use frlg_emu::{boot_with_default_bios, default_rom_path, default_sym_path, keys, Emu, SymbolTable};
+use frlg_emu::{
+    boot_with_default_bios, default_rom_path, default_sym_path, keys, Emu, SymbolTable,
+};
 use frlg_route::Observer;
 use std::path::PathBuf;
 
@@ -19,7 +21,12 @@ struct Ctx {
 
 impl Ctx {
     /// Steps with `key` mashed (pressed on even frames) until `done` or `limit` frames.
-    fn mash(&mut self, key: u16, limit: u32, mut done: impl FnMut(&mut Emu, &Observer) -> bool) -> u32 {
+    fn mash(
+        &mut self,
+        key: u16,
+        limit: u32,
+        mut done: impl FnMut(&mut Emu, &Observer) -> bool,
+    ) -> u32 {
         let t = self.emu.frame();
         let mut n = 0;
         while !done(&mut self.emu, &self.obs) && n < limit {
@@ -48,14 +55,23 @@ fn main() {
     let mut emu = Emu::new(&rom).expect("emu");
     boot_with_default_bios(&mut emu).expect("bios");
     let sym_path = default_sym_path().expect("sym");
-    let g_battle_mons = SymbolTable::load(&sym_path).unwrap().get("gBattleMons").unwrap().addr;
+    let g_battle_mons = SymbolTable::load(&sym_path)
+        .unwrap()
+        .get("gBattleMons")
+        .unwrap()
+        .addr;
     let obs = Observer::new(SymbolTable::load(&sym_path).unwrap()).expect("observer");
     emu.load_state_file(&state).expect("state");
     emu.idle(260);
     let base = emu.save_state().expect("save");
-    let mut c = Ctx { emu, obs, g_battle_mons };
+    let mut c = Ctx {
+        emu,
+        obs,
+        g_battle_mons,
+    };
 
-    let (mut intro, mut throw_cycle, mut catch_end, mut flee_ok, mut flee_fail) = (vec![], vec![], vec![], vec![], vec![]);
+    let (mut intro, mut throw_cycle, mut catch_end, mut flee_ok, mut flee_fail) =
+        (vec![], vec![], vec![], vec![], vec![]);
     for trial in 0..trials {
         c.emu.load_state(&base).expect("load");
         c.emu.idle(trial * 7);
@@ -86,7 +102,9 @@ fn main() {
             c.emu.write8(enemy + 0x29, 0);
             let t1 = c.emu.frame();
             c.tap(keys::RIGHT); // Bag
-            c.mash(keys::A, 3000, |e, o| !o.in_battle(e) || (o.battle_choosing_actions(e) && e.frame() > t1 + 30));
+            c.mash(keys::A, 3000, |e, o| {
+                !o.in_battle(e) || (o.battle_choosing_actions(e) && e.frame() > t1 + 30)
+            });
             if !c.obs.in_battle(&mut c.emu) {
                 throw_cycle.push(c.emu.frame() - t1);
                 let t2 = c.emu.frame();
@@ -99,7 +117,9 @@ fn main() {
                 let t1 = c.emu.frame();
                 c.tap(keys::DOWN);
                 c.tap(keys::RIGHT);
-                c.mash(keys::A, 3000, |e, o| !o.in_battle(e) || (o.battle_choosing_actions(e) && e.frame() > t1 + 30));
+                c.mash(keys::A, 3000, |e, o| {
+                    !o.in_battle(e) || (o.battle_choosing_actions(e) && e.frame() > t1 + 30)
+                });
                 if !c.obs.in_battle(&mut c.emu) {
                     c.mash(keys::A, 3000, |e, o| o.player_can_step(e));
                     flee_ok.push(c.emu.frame() - t1);
@@ -115,7 +135,14 @@ fn main() {
     let show = |name: &str, v: &Vec<u32>| {
         let mut s = v.clone();
         s.sort();
-        println!("{name:12} n={:3} mean {:7.1} min {:?} max {:?} {:?}", v.len(), mean(v), s.first(), s.last(), &s[..s.len().min(8)]);
+        println!(
+            "{name:12} n={:3} mean {:7.1} min {:?} max {:?} {:?}",
+            v.len(),
+            mean(v),
+            s.first(),
+            s.last(),
+            &s[..s.len().min(8)]
+        );
     };
     show("intro", &intro);
     show("throw+catch", &throw_cycle);
