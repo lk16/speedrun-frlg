@@ -136,6 +136,13 @@ def candidates(p):
         for r in (0, 1):
             if p.get('safari_rocks', 0) != r:
                 out.append(('safari', f'safari_rocks {p.get("safari_rocks", 0)}->{r}', {'safari_rocks': r}))
+    # Celadon Game Corner prizes (LeafGreen coin prices x 20 money per coin).
+    have = {x['species'][0] for x in p.get('specials', []) if x.get('kind') == 'buy'}
+    for sp, cost in (('SPECIES_ABRA', 2400), ('SPECIES_CLEFAIRY', 15000), ('SPECIES_PINSIR', 50000)):
+        if sp not in have:
+            new = copy.deepcopy(p.get('specials', []))
+            new.append({'after': 'hall-of-fame-1', 'kind': 'buy', 'species': [sp], 'cost': cost, 'frames': 2400})
+            out.append(('special', f'buy {sp} at the Game Corner', {'specials': new}))
     segs = grass_segments()
     cur = list(p.get('repel_on', []))
     for sname in segs:
