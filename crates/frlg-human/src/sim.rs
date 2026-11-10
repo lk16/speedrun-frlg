@@ -345,7 +345,9 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
             rng,
             slot,
             skip,
-            ctx.p.catch_on_pass || stop_when_done,
+            stop_when_done
+                || (ctx.p.catch_on_pass
+                    && ctx.dex.species[slot.species].catch_rate >= ctx.p.pass_min_catch),
         );
         if stop_when_done && left == 0 {
             break;
