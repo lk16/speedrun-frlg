@@ -87,6 +87,19 @@ impl Default for Special {
     }
 }
 
+/// A stop at a Poké Mart after the named segment, buying balls with the money on hand
+/// (money model only): up to `poke`, `great`, `ultra` balls in that order, if the mart on that leg
+/// of the route sells them (`LavenderTown_Mart` Great from Lavender, `FuchsiaCity_Mart` Ultra from
+/// Fuchsia). With any visit listed the on-demand buying of `money_model` is off.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct Mart {
+    pub after: String,
+    pub poke: u32,
+    pub great: u32,
+    pub ultra: u32,
+}
+
 #[derive(Deserialize, Clone, Debug)]
 #[serde(default)]
 pub struct Params {
@@ -144,6 +157,7 @@ pub struct Params {
     /// allow instead of being free and unlimited. Prices `items.json`, prize money
     /// `battle_script_commands.c:5373`.
     pub money_model: bool,
+    pub marts: Vec<Mart>,
     /// Wild-encounter frame costs measured on libmgba (`human-run/calibration.md`) instead of the
     /// original guesses.
     pub calib_enc: bool,
@@ -236,6 +250,7 @@ impl Default for Params {
             safari_model: false,
             safari_rocks: 0,
             money_model: false,
+            marts: vec![],
             calib_enc: false,
             calib_battle: false,
             rod: "mixed".into(),

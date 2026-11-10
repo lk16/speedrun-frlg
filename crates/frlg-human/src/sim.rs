@@ -199,7 +199,7 @@ impl Ctx<'_> {
             | Kind::OakCheck
             | Kind::Stones
             | Kind::Mewtwo => 0.0,
-            Kind::Special { .. } => 0.0,
+            Kind::Special { .. } | Kind::Mart { .. } => 0.0,
             Kind::TeleportOrWalk { frames, .. } => *frames as f64 * self.p.text_factor,
             Kind::Grind { .. } => 0.0,
         }
@@ -380,6 +380,14 @@ fn take_ball(ctx: &Ctx, st: &mut State) -> Option<u32> {
         if st.balls[t] > 0 {
             st.balls[t] -= 1;
             return Some(BALL_MULT[t]);
+        }
+        if !ctx.p.marts.is_empty() {
+            // Scheduled mart stops only: use whatever is in the bag.
+            if t == 0 {
+                return None;
+            }
+            t -= 1;
+            continue;
         }
         let qty = (st.money / BALL_PRICE[t]).min(ctx.p.ball_batch);
         if qty > 0 {
@@ -1108,6 +1116,18 @@ pub fn attempt(
                             }
                         }
                     }
+                }
+            }
+            Kind::Mart { mart } => {
+                bump(&mut st, MART as f64 * ctx.p.text_factor);
+                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                for (t, want) in [(0, mart.poke), (1, mart.great), (2, mart.ultra)] {
+                    if t > st.max_tier {
+                        continue;
+                    }
+                    let qty = want.min(st.money / BALL_PRICE[t]);
+                    st.money -= qty * BALL_PRICE[t];
+                    st.balls[t] += qty;
                 }
             }
             Kind::TeleportOrWalk { frames, tiles } => {

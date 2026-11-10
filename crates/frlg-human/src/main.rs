@@ -250,6 +250,12 @@ fn main() {
                 hms(WR_SECONDS * FPS)
             );
         }
+        Some("names") => {
+            let plan = load(&args[1]);
+            for sg in &plan.segs {
+                println!("{}", sg.name);
+            }
+        }
         Some("segs") => {
             // Segment names with their kind, for tools that enumerate knobs.
             let plan = load(&args[1]);

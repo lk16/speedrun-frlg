@@ -97,6 +97,8 @@ pub enum Kind {
     Mewtwo,
     /// A gift mon or a one-off wild battle.
     Special { special: Special },
+    /// A Poké Mart stop: buy balls with the money on hand.
+    Mart { mart: crate::params::Mart },
 }
 
 #[derive(Clone, Debug)]
@@ -852,6 +854,25 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
                     level: g.level,
                     yield_: g.yield_,
                 },
+            },
+        );
+    }
+    for m in p.marts.iter().rev() {
+        let at = b
+            .segs
+            .iter()
+            .position(|s| s.name == m.after)
+            .unwrap_or_else(|| panic!("mart anchor {} matches no segment", m.after));
+        b.segs.insert(
+            at + 1,
+            Seg {
+                name: format!("mart@{}", m.after),
+                src: Src::Guess,
+                inputs: 10,
+                split: false,
+                off_timer: false,
+                starter_check: false,
+                kind: Kind::Mart { mart: m.clone() },
             },
         );
     }
