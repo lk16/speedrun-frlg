@@ -536,7 +536,8 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
         stop_when_done,
         repel,
     } = *a;
-    let Some((rate, slots, weights)) = ctx.dex.area(site, area, ctx.p.version == "LG", &ctx.p.rod) else {
+    let Some((rate, slots, weights)) = ctx.dex.area(site, area, ctx.p.version == "LG", &ctx.p.rod)
+    else {
         return 0;
     };
     let mut p = rate as f64 * 16.0 / 1600.0;

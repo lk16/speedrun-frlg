@@ -236,7 +236,8 @@ impl Dex {
             (Area::Fish, "super") => 5..10,
             _ => 0..a.slots.len(),
         };
-        let weights: Vec<u32> = rates[range.start.min(rates.len())..range.end.min(rates.len())].to_vec();
+        let weights: Vec<u32> =
+            rates[range.start.min(rates.len())..range.end.min(rates.len())].to_vec();
         let slots = a
             .slots
             .iter()

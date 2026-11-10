@@ -44,6 +44,22 @@ def next_number():
     return max(int(f.split('-')[0]) for f in os.listdir(PLANS) if f[:3].isdigit()) + 1
 
 
+_SEGS = None
+
+
+def grass_segments():
+    global _SEGS
+    if _SEGS is None:
+        try:
+            plan = os.path.join(PLANS, current() + '.md')
+            r = subprocess.run([os.path.join(ROOT, 'target', 'release', 'frlg-human'), 'segs', plan],
+                               capture_output=True, text=True)
+            _SEGS = [l.split()[0] for l in r.stdout.splitlines() if l.strip()]
+        except Exception:
+            _SEGS = []
+    return _SEGS
+
+
 def candidates(p):
     """(kind, label, patch) for single-knob changes around plan params p."""
     out = []
@@ -120,6 +136,13 @@ def candidates(p):
         for r in (0, 1):
             if p.get('safari_rocks', 0) != r:
                 out.append(('safari', f'safari_rocks {p.get("safari_rocks", 0)}->{r}', {'safari_rocks': r}))
+    segs = grass_segments()
+    cur = list(p.get('repel_on', []))
+    for sname in segs:
+        if sname in ('route1-encounters', 'route2-encounters', 'forest-encounters'):
+            continue  # before the first mart that sells Repels
+        new = [x for x in cur if x != sname] if sname in cur else cur + [sname]
+        out.append(('repel', f"repel_on {'-' if sname in cur else '+'}{sname}", {'repel_on': new}))
     if only:
         out = [c for c in out if c[0] in only]
     return out
