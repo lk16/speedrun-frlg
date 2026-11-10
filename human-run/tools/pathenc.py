@@ -77,7 +77,7 @@ def search(start, goals, opts, lam):
             nxt.append((mid, nx, ny))
         for n in nxt:
             nm = mg.Map.get(n[0])
-            c = 1 + (lam if enc_type(nm, n[1], n[2]) in (1, 2) else 0)
+            c = (1000 if lam == 0 else 1) + (lam if lam else 1) * (1 if enc_type(nm, n[1], n[2]) in (1, 2) else 0)
             nd = d + c
             if nd < dist.get(n, 1e18):
                 dist[n] = nd
@@ -118,7 +118,7 @@ def main(names):
         if names and name not in names:
             continue
         row = {'name': name, 'from': list(a), 'to': list(b)}
-        for lam, key in ((0, 'shortest'), (3, 'avoid_grass')):
+        for lam, key in ((0, 'shortest'), (3, 'avoid_grass'), (50, 'avoid_grass_hard')):
             p = search(a, [b], opts, lam)
             row[key] = per_map(p) if p else None
         res.append(row)
