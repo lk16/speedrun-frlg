@@ -20,6 +20,10 @@ fn main() {
     let obs = Observer::new(syms).expect("observer");
     emu.load_state_file(&state).expect("state");
     emu.idle(90);
+    if let Some(d) = &png_dir {
+        let _ = emu.write_png(&d.join("start.png"));
+        println!("pos {:?} map {:?}", obs.pos(&mut emu), obs.map(&mut emu));
+    }
     let base = emu.save_state().expect("save");
     let mut results: Vec<(String, u32, u32, u32, u32)> = vec![];
     for trial in 0..trials {
@@ -28,9 +32,14 @@ fn main() {
         emu.idle(trial * 5);
         // Walk up and down until a battle starts.
         let mut battle_at = None;
-        for leg in 0..60u32 {
-            let dir = if leg % 2 == 0 { keys::UP } else { keys::DOWN };
-            for _ in 0..16 * 3 {
+        for leg in 0..80u32 {
+            // Two steps up onto the grass row, then back and forth sideways along it.
+            let (dir, steps) = match leg {
+                0 => (keys::UP, 2),
+                l if l % 2 == 1 => (keys::LEFT, 4),
+                _ => (keys::RIGHT, 4),
+            };
+            for _ in 0..16 * steps {
                 emu.step(dir);
                 if obs.in_battle(&mut emu) {
                     battle_at = Some(emu.frame());
