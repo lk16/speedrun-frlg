@@ -14,7 +14,23 @@ pub const WATER_RATES: [u32; 5] = [60, 30, 5, 4, 1];
 pub const FISH_RATES: [u32; 10] = [70, 30, 60, 20, 20, 40, 40, 15, 4, 1];
 
 #[derive(Deserialize)]
+struct RawMove {
+    power: u32,
+    #[serde(rename = "type")]
+    mtype: String,
+    acc: u32,
+    effect: String,
+    prio: i32,
+}
+
+#[derive(Deserialize)]
 struct RawSpecies {
+    #[serde(default)]
+    base: [u32; 6],
+    #[serde(default)]
+    ev: [u32; 6],
+    #[serde(default)]
+    learnset: Vec<(u32, String)>,
     safari_flee: u32,
     types: (String, String),
     catch: u32,
@@ -42,12 +58,16 @@ pub struct RawSite {
 #[derive(Deserialize)]
 struct RawTrainer {
     party: Vec<(u32, String)>,
+    #[serde(default)]
+    party_full: Vec<(u32, String, u32, Option<Vec<String>>)>,
     money: u32,
 }
 
 #[derive(Deserialize)]
 struct Raw {
     species: HashMap<String, RawSpecies>,
+    #[serde(default)]
+    moves: HashMap<String, RawMove>,
     type_chart: Vec<(String, String, u32)>,
     sites: HashMap<String, RawSite>,
     sites_lg: HashMap<String, RawSite>,
@@ -69,6 +89,42 @@ pub struct Species {
     pub types: (u8, u8),
     /// `safariZoneFleeRate` (`species_info.h`).
     pub safari_flee: u32,
+    /// Base stats HP, Atk, Def, Spe, SpA, SpD (`species_info.h`) and the effort values a defeated one
+    /// gives in the same order.
+    pub base: [u32; 6],
+    pub ev_yield: [u32; 6],
+    /// Level-up learnset, `(level, move index)` (`level_up_learnsets.h`).
+    pub learnset: Vec<(u32, usize)>,
+}
+
+/// A move from `battle_moves.h`.
+#[derive(Clone, Debug)]
+pub struct MoveData {
+    pub name: String,
+    pub power: u32,
+    pub mtype: u8,
+    pub acc: u32,
+    pub prio: i32,
+    /// A plain damaging move: the effect is one of the `*HIT*` family (no recoil, charge, status only).
+    pub plain_hit: bool,
+}
+
+/// One mon of a trainer's party with what a battle needs (`trainer_parties.h`).
+#[derive(Clone, Debug)]
+pub struct PartyMon {
+    pub level: u32,
+    pub species: usize,
+    /// 0..=31 (`iv * 31 / 255`).
+    pub iv: u32,
+    pub moves: Vec<usize>,
+}
+
+/// A trainer fight: the real party, prize money, and the detailed mons.
+#[derive(Clone, Debug)]
+pub struct Fight {
+    pub party: Vec<(u32, usize)>,
+    pub money: u32,
+    pub full: Vec<PartyMon>,
 }
 
 /// `TYPE_*` numbers, `decompiled/include/constants/pokemon.h:96-114`.
@@ -122,6 +178,9 @@ pub struct Dex {
     /// Damage multiplier of attacking type (row) on defending type (column),
     /// `decompiled/src/battle_main.c:312` `gTypeEffectiveness`.
     chart: [[f64; 18]; 18],
+    pub moves: Vec<MoveData>,
+    move_by_name: HashMap<String, usize>,
+    trainer_full: HashMap<String, Vec<PartyMon>>,
     fly_tiles: HashMap<String, u32>,
 }
 
@@ -148,6 +207,34 @@ impl Dex {
         for (i, n) in names.iter().enumerate() {
             by_name.insert((*n).clone(), i);
         }
+        let mut move_names: Vec<&String> = raw.moves.keys().collect();
+        move_names.sort();
+        let move_by_name: HashMap<String, usize> = move_names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| ((*n).clone(), i))
+            .collect();
+        let moves: Vec<MoveData> = move_names
+            .iter()
+            .map(|n| {
+                let m = &raw.moves[*n];
+                MoveData {
+                    name: (*n).clone(),
+                    power: m.power,
+                    mtype: type_num(&m.mtype),
+                    acc: m.acc,
+                    prio: m.prio,
+                    plain_hit: (m.effect.contains("HIT") && !m.effect.contains("MULTI"))
+                        || matches!(
+                            m.effect.as_str(),
+                            "EFFECT_EARTHQUAKE"
+                                | "EFFECT_THUNDER"
+                                | "EFFECT_GUST"
+                                | "EFFECT_TWISTER"
+                        ),
+                }
+            })
+            .collect();
         let species = names
             .iter()
             .map(|n| {
@@ -160,6 +247,13 @@ impl Dex {
                     dex: s.dex,
                     types: (type_num(&s.types.0), type_num(&s.types.1)),
                     safari_flee: s.safari_flee,
+                    base: s.base,
+                    ev_yield: s.ev,
+                    learnset: s
+                        .learnset
+                        .iter()
+                        .filter_map(|(l, m)| move_by_name.get(m).map(|&i| (*l, i)))
+                        .collect(),
                     evo: s
                         .evo
                         .iter()
@@ -202,7 +296,10 @@ impl Dex {
             .into_iter()
             .filter_map(|(k, v)| v.tiles.map(|t| (k, t)))
             .collect();
-        Dex {
+        let mut dex = Dex {
+            moves,
+            move_by_name,
+            trainer_full: HashMap::new(),
             fly_tiles,
             money,
             chart,
@@ -213,6 +310,64 @@ impl Dex {
             trainers,
             map_trainers: raw.map_trainers,
             scripts: raw.scripts,
+        };
+        let mut full = HashMap::new();
+        for (k, t) in &raw.trainers {
+            let mons = t
+                .party_full
+                .iter()
+                .filter_map(|(lvl, sp, iv, mv)| {
+                    let species = *dex.by_name.get(sp)?;
+                    let moves: Vec<usize> = match mv {
+                        Some(list) => list
+                            .iter()
+                            .filter_map(|m| dex.move_by_name.get(m).copied())
+                            .collect(),
+                        None => dex.default_moves(species, *lvl),
+                    };
+                    Some(PartyMon {
+                        level: *lvl,
+                        species,
+                        iv: iv * 31 / 255,
+                        moves,
+                    })
+                })
+                .collect();
+            full.insert(k.clone(), mons);
+        }
+        dex.trainer_full = full;
+        dex
+    }
+
+    pub fn move_id(&self, name: &str) -> usize {
+        *self
+            .move_by_name
+            .get(name)
+            .unwrap_or_else(|| panic!("unknown move {name}"))
+    }
+
+    /// The four most recently learned level-up moves at `level`
+    /// (what `NO_ITEM_DEFAULT_MOVES` trainers and wild mons know).
+    pub fn default_moves(&self, species: usize, level: u32) -> Vec<usize> {
+        let mut known: Vec<usize> = vec![];
+        for &(l, m) in &self.species[species].learnset {
+            if l <= level {
+                if let Some(pos) = known.iter().position(|&x| x == m) {
+                    known.remove(pos);
+                }
+                known.push(m);
+            }
+        }
+        let n = known.len();
+        known.split_off(n.saturating_sub(4))
+    }
+
+    /// A trainer's fight with the detailed mons, by decomp trainer id.
+    pub fn fight(&self, id: &str) -> Fight {
+        Fight {
+            party: self.trainer(id).to_vec(),
+            money: self.trainer_money(id),
+            full: self.trainer_full.get(id).cloned().unwrap_or_default(),
         }
     }
 
@@ -276,21 +431,18 @@ impl Dex {
 
     /// Parties of the trainers placed on the given maps (decomp `object_events` that resolve to
     /// a `trainerbattle_*`), hardest first (by summed level).
-    pub fn map_parties(&self, maps: &[&str]) -> Vec<(Vec<(u32, usize)>, u32)> {
-        let mut out: Vec<(Vec<(u32, usize)>, u32)> = maps
+    pub fn map_parties(&self, maps: &[&str]) -> Vec<Fight> {
+        let mut out: Vec<Fight> = maps
             .iter()
             .flat_map(|m| {
                 self.map_trainers
                     .get(*m)
                     .unwrap_or_else(|| panic!("no trainers on map {m}"))
             })
-            .filter_map(|t| {
-                self.trainers
-                    .get(t)
-                    .map(|p| (p.clone(), self.trainer_money(t)))
-            })
+            .filter(|t| self.trainers.contains_key(*t))
+            .map(|t| self.fight(t))
             .collect();
-        out.sort_by_key(|p| std::cmp::Reverse(p.0.iter().map(|x| x.0).sum::<u32>()));
+        out.sort_by_key(|f| std::cmp::Reverse(f.party.iter().map(|x| x.0).sum::<u32>()));
         out
     }
 

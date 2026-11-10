@@ -66,11 +66,14 @@ pub enum Kind {
         adv: f64,
         /// Prize money (`battle_script_commands.c:5373`).
         money: u32,
+        /// The mons with IVs and moves, for the battle simulation.
+        full: Vec<crate::data::PartyMon>,
     },
     /// Several real parties fought back to back (trainers of the given maps, hardest first).
     Parties {
         parties: Vec<Vec<(u32, usize)>>,
         money: u32,
+        fulls: Vec<Vec<crate::data::PartyMon>>,
     },
     /// Trainers we only know in aggregate (a guess).
     Group {
@@ -177,17 +180,17 @@ impl<'a> B<'a> {
     }
 
     fn trainer_adv(&mut self, name: &str, id: &str, intro: u32, adv: f64) {
-        let party = self.dex.trainer(id).to_vec();
-        let money = self.dex.trainer_money(id);
+        let f = self.dex.fight(id);
         self.push(
             name,
             Src::Guess,
             8,
             Kind::Trainer {
-                party,
+                party: f.party,
                 intro,
                 adv,
-                money,
+                money: f.money,
+                full: f.full,
             },
         );
     }
@@ -214,21 +217,28 @@ impl<'a> B<'a> {
     /// `always` all fought, and from each `(k, options)` the `k` weakest options (the human walks
     /// into the cheapest of the interchangeable ones).
     fn forced(&mut self, name: &str, always: &[&str], alts: &[(usize, &[&str])]) {
-        let fight = |l: &&str| {
-            let t = self.dex.script_trainer(l);
-            (self.dex.trainer(t).to_vec(), self.dex.trainer_money(t))
-        };
-        let mut fights: Vec<(Vec<(u32, usize)>, u32)> = always.iter().map(fight).collect();
+        let fight = |l: &&str| self.dex.fight(self.dex.script_trainer(l));
+        let mut fights: Vec<crate::data::Fight> = always.iter().map(fight).collect();
         for (k, opts) in alts {
             let mut o: Vec<_> = opts.iter().map(fight).collect();
-            o.sort_by_key(|p| p.0.iter().map(|x| x.0).sum::<u32>());
+            o.sort_by_key(|f| f.party.iter().map(|x| x.0).sum::<u32>());
             fights.extend(o.into_iter().take(*k));
         }
-        fights.sort_by_key(|p| std::cmp::Reverse(p.0.iter().map(|x| x.0).sum::<u32>()));
+        fights.sort_by_key(|f| std::cmp::Reverse(f.party.iter().map(|x| x.0).sum::<u32>()));
         let n = fights.len() as u32;
-        let money = fights.iter().map(|f| f.1).sum();
-        let parties = fights.into_iter().map(|f| f.0).collect();
-        self.push(name, Src::Tiles, 6 * n, Kind::Parties { parties, money });
+        let money = fights.iter().map(|f| f.money).sum();
+        let parties = fights.iter().map(|f| f.party.clone()).collect();
+        let fulls = fights.into_iter().map(|f| f.full).collect();
+        self.push(
+            name,
+            Src::Tiles,
+            6 * n,
+            Kind::Parties {
+                parties,
+                money,
+                fulls,
+            },
+        );
     }
 
     /// The `n` hardest trainers on the given maps. `n` is a routing assumption (which ones the
@@ -239,13 +249,18 @@ impl<'a> B<'a> {
         }
         let n = *self.group_n.get(name).unwrap_or(&n) as usize;
         let fights: Vec<_> = self.dex.map_parties(maps).into_iter().take(n).collect();
-        let money = fights.iter().map(|f| f.1).sum();
-        let parties = fights.into_iter().map(|f| f.0).collect();
+        let money = fights.iter().map(|f| f.money).sum();
+        let parties = fights.iter().map(|f| f.party.clone()).collect();
+        let fulls = fights.into_iter().map(|f| f.full).collect();
         self.push(
             name,
             Src::Tiles,
             6 * n as u32,
-            Kind::Parties { parties, money },
+            Kind::Parties {
+                parties,
+                money,
+                fulls,
+            },
         );
     }
 

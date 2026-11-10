@@ -254,6 +254,82 @@ fn main() {
                 hms(WR_SECONDS * FPS)
             );
         }
+        Some("battle") => {
+            // battle <TRAINER_ID> <carry level> [--n 2000] [--iv 20] [--surf] [--badges mask]
+            let id = &args[1];
+            let level: u32 = args[2].parse().unwrap();
+            let n: u64 = arg(&args, "--n", 2000);
+            let iv: u32 = arg(&args, "--iv", 20);
+            let badges: u32 = arg(&args, "--badges", 0);
+            let dexr = dex();
+            let fightd = dexr.fight(id);
+            let foes: Vec<_> = fightd
+                .full
+                .iter()
+                .map(|m| frlg_human::battle::enemy_mon(dexr, m))
+                .collect();
+            let line =
+                ["SPECIES_SQUIRTLE", "SPECIES_WARTORTLE", "SPECIES_BLASTOISE"].map(|s| dexr.id(s));
+            let species = line[(level >= 16) as usize + (level >= 36) as usize];
+            let mut moves: Vec<usize> = vec![];
+            for &(l, m) in &dexr.species[species].learnset {
+                if l <= level
+                    && dexr.moves[m].plain_hit
+                    && dexr.moves[m].power > 0
+                    && !moves.contains(&m)
+                {
+                    moves.push(m);
+                }
+            }
+            if args.iter().any(|a| a == "--surf") {
+                moves.push(dexr.move_id("MOVE_SURF"));
+            }
+            if moves.is_empty() {
+                moves.push(dexr.move_id("MOVE_TACKLE"));
+            }
+            let names: Vec<_> = moves.iter().map(|&m| dexr.moves[m].name.clone()).collect();
+            println!(
+                "carry {} L{level} moves {names:?}",
+                dexr.species[species].name
+            );
+            let pl = frlg_human::battle::Player {
+                species,
+                level,
+                ivs: [iv; 6],
+                evs: [0; 6],
+                nature: 0,
+                badge: [
+                    if badges & 1 != 0 { 110 } else { 100 },
+                    if badges & 16 != 0 { 110 } else { 100 },
+                    if badges & 64 != 0 { 110 } else { 100 },
+                    if badges & 64 != 0 { 110 } else { 100 },
+                ],
+                moves: &moves,
+                ability_type: dexr.species[line[0]].types.0,
+            };
+            let (mut won, mut turns, mut hp) = (0.0, 0.0, 0.0);
+            for i in 0..n {
+                let mut rng = frlg_human::rng::Rng::new(seed, i, 99);
+                let o = frlg_human::battle::fight(
+                    dexr,
+                    &pl,
+                    1.0,
+                    &foes,
+                    args.iter().any(|a| a == "--league"),
+                    &mut rng,
+                );
+                won += o.won as u32 as f64;
+                turns += o.turns as f64;
+                hp += o.hp_frac;
+            }
+            let foe_lv: Vec<_> = foes.iter().map(|f| f.level).collect();
+            println!(
+                "{id} foes L{foe_lv:?}: win {:.3}  turns {:.1}  hp left {:.2}",
+                won / n as f64,
+                turns / n as f64,
+                hp / n as f64
+            );
+        }
         Some("names") => {
             let plan = load(&args[1]);
             for sg in &plan.segs {

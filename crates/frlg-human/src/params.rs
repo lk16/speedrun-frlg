@@ -146,6 +146,10 @@ pub struct Params {
     /// fitted `base + slope * (60 - species)` from the pilot, instead of the average fill. At Oak's
     /// check the remaining fill is added too.
     pub dex_resets: bool,
+    /// Fight with the turn-level simulation of `battle.rs` (decomp damage formula, stats, moves, the
+    /// trainers' real mons) instead of the level-ratio shortcuts; `type_floor`, `team_bonus`,
+    /// `type_strength` and the logistic loss curve are then unused.
+    pub battle_sim: bool,
     /// Experimental overrides of uncalibrated model constants by name (sensitivity studies):
     /// `level_up`, `trainer_outro`, `whiteout`, `p_event`, `p_lose_center`, `p_lose_slope`,
     /// `weaken_ko`, `weaken_hp`.
@@ -270,6 +274,7 @@ impl Default for Params {
             reset_aggr_at: Default::default(),
             extra_splits: vec![],
             dex_resets: false,
+            battle_sim: false,
             tune: Default::default(),
             ball: "poke".into(),
             weaken: false,

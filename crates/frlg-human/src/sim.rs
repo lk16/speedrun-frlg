@@ -118,6 +118,16 @@ struct State {
     /// Repel steps left, and whether a mart on the route has sold them yet.
     repel_left: u32,
     repel_ok: bool,
+    /// Battle simulation: the carry's IVs and nature (rolled at the starter), effort values earned,
+    /// HP as a fraction, badges (bit 0 Boulder, 4 Soul, 6 Volcano) and whether Surf is known.
+    ivs: [u32; 6],
+    nature: u8,
+    evs: [u32; 6],
+    hp_frac: f64,
+    badges: u8,
+    surf: bool,
+    eq: bool,
+    league_items: bool,
 }
 
 impl Ctx<'_> {
@@ -500,6 +510,11 @@ fn encounter(
         if throw_balls(ctx, st, rng, sp.catch_rate, hp, ball, 8) {
             st.caught.insert(sp.dex);
         }
+    } else if (ctx.p.fight_wild || st.carry < ctx.p.fight_until_level) && ctx.p.battle_sim {
+        let mut foe = crate::battle::make_mon(ctx.dex, slot.species, level, [15; 6], [0; 6], 0);
+        foe.moves = ctx.dex.default_moves(slot.species, level);
+        // A lost wild fight is a whiteout like any other; the human does not give up the run over it.
+        sim_battle(ctx, st, rng, &[foe], false, 0, None, false);
     } else if ctx.p.fight_wild || st.carry < ctx.p.fight_until_level {
         let e = exp_gain(sp.exp_yield as u8, level as u8, false);
         let t = turns_per_mon(level as f64, effective_level(st, ctx.p), st.strength, 1.0);
@@ -753,6 +768,148 @@ fn battle(
     }
 }
 
+/// The carry's species at `level` (`starter_line`, evolving at `evo_at`).
+fn carry_species(ctx: &Ctx, level: u32) -> usize {
+    let stage = (level >= ctx.evo_at[0]) as usize + (level >= ctx.evo_at[1]) as usize;
+    ctx.starter_line[stage]
+}
+
+/// Damaging moves the fighter can use: level-up moves known at `level` plus Surf once it is taught.
+fn carry_moves(ctx: &Ctx, st: &State, species: usize, level: u32) -> Vec<usize> {
+    let dex = ctx.dex;
+    let mut v: Vec<usize> = vec![];
+    for &(l, m) in &dex.species[species].learnset {
+        if l <= level && dex.moves[m].plain_hit && dex.moves[m].power > 0 && !v.contains(&m) {
+            v.push(m);
+        }
+    }
+    if st.surf {
+        v.push(dex.move_id("MOVE_SURF"));
+    }
+    if st.eq {
+        v.push(dex.move_id("MOVE_EARTHQUAKE"));
+    }
+    if v.is_empty() {
+        v.push(dex.move_id("MOVE_TACKLE"));
+    }
+    v
+}
+
+#[allow(clippy::too_many_arguments)]
+/// `battle_sim` fight against `foes`. Returns false when the human gives up (three whiteouts).
+/// `yield_` overrides the species' exp yield (the guessed trainer groups).
+fn sim_battle(
+    ctx: &Ctx,
+    st: &mut State,
+    rng: &mut Rng,
+    foes: &[crate::battle::Mon],
+    trainer: bool,
+    intro: u32,
+    yield_: Option<u32>,
+    league: bool,
+) -> bool {
+    use crate::battle::{fight, heal_amount, make_mon, Player};
+    let dex = ctx.dex;
+    if trainer {
+        bump(st, ctx.trainer_intro(intro));
+        bump(st, jitter(ctx, rng, 8) as f64);
+    }
+    let mut tries = 0;
+    loop {
+        // Mewtwo takes over once it is caught; otherwise the starter line carries.
+        let mewtwo = ctx.p.mewtwo && st.power > 0.0;
+        let (species, level, ivs, evs, nature) = if mewtwo {
+            (dex.id("SPECIES_MEWTWO"), 70, [20; 6], [0; 6], 0)
+        } else {
+            (
+                carry_species(ctx, st.carry),
+                st.carry,
+                st.ivs,
+                st.evs,
+                st.nature,
+            )
+        };
+        let moves: Vec<usize> = if mewtwo {
+            [
+                "MOVE_PSYCHIC",
+                "MOVE_ICE_BEAM",
+                "MOVE_THUNDERBOLT",
+                "MOVE_FLAMETHROWER",
+            ]
+            .iter()
+            .map(|m| dex.move_id(m))
+            .collect()
+        } else {
+            carry_moves(ctx, st, species, level)
+        };
+        let starter_type = dex.species[ctx.starter_line[0]].types.0;
+        let pl = Player {
+            species,
+            level,
+            ivs,
+            evs,
+            nature,
+            badge: [
+                if st.badges & 1 != 0 { 110 } else { 100 },
+                if st.badges & (1 << 4) != 0 { 110 } else { 100 },
+                if st.badges & (1 << 6) != 0 { 110 } else { 100 },
+                if st.badges & (1 << 6) != 0 { 110 } else { 100 },
+            ],
+            moves: &moves,
+            ability_type: if mewtwo { 255 } else { starter_type },
+        };
+        // Heal with items before the fight when low (each use is a bag trip).
+        if st.hp_frac < 0.5 {
+            let max_hp = make_mon(dex, species, level, ivs, evs, nature).max_hp as f64;
+            let uses = (((0.85 - st.hp_frac) * max_hp)
+                / heal_amount(level, st.league_items) as f64)
+                .ceil();
+            bump(st, uses * ctx.turn());
+            st.hp_frac = 0.85;
+        }
+        let out = fight(dex, &pl, st.hp_frac, foes, st.league_items, rng);
+        bump(st, out.turns as f64 * ctx.turn());
+        bump(st, out.kos.len() as f64 * ctx.mon_overhead());
+        for _ in 0..out.events {
+            bump(st, react(ctx, rng) as f64);
+        }
+        bump(st, jitter(ctx, rng, out.turns * 2 + 3) as f64);
+        if out.won {
+            st.hp_frac = out.hp_frac;
+            for &(sp, lvl) in &out.kos {
+                let yld = yield_.unwrap_or(dex.species[sp].exp_yield);
+                if !mewtwo {
+                    let e = exp_gain(yld as u8, lvl as u8, trainer);
+                    let g = add_exp(ctx, st, e);
+                    bump(st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
+                    let ev = dex.species[sp].ev_yield;
+                    for (e, y) in st.evs.iter_mut().zip(ev) {
+                        *e = (*e + y).min(255);
+                    }
+                }
+            }
+            if trainer {
+                bump(st, ctx.k("trainer_outro", TRAINER_OUTRO as f64));
+            }
+            return true;
+        }
+        st.whiteouts += 1;
+        bump(st, ctx.k("whiteout", WHITEOUT as f64));
+        st.hp_frac = 1.0;
+        tries += 1;
+        // A whiteout in the League sends the player back to the first room: the human resets.
+        if tries >= 3 || league {
+            st.abandoned = true;
+            return false;
+        }
+    }
+}
+
+fn is_league(name: &str) -> bool {
+    let n = name.trim_end_matches("-2");
+    matches!(n, "lorelei" | "bruno" | "agatha" | "lance" | "champion")
+}
+
 fn group_battle(
     ctx: &Ctx,
     st: &mut State,
@@ -763,6 +920,15 @@ fn group_battle(
     yld: u32,
 ) -> bool {
     for _ in 0..n {
+        if ctx.p.battle_sim {
+            let foes: Vec<crate::battle::Mon> = (0..mons)
+                .map(|_| crate::battle::generic_mon(ctx.dex, level))
+                .collect();
+            if !sim_battle(ctx, st, rng, &foes, true, 600, Some(yld), false) {
+                return false;
+            }
+            continue;
+        }
         let enemies: Vec<(u32, u32, f64)> = (0..mons).map(|_| (level, yld, 1.0)).collect();
         if !battle(ctx, st, rng, &enemies, true, 600, 1.0) {
             return false;
@@ -852,7 +1018,7 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
     }
 }
 
-fn starter_ok(ctx: &Ctx, rng: &mut Rng) -> (bool, f64) {
+fn starter_ok(ctx: &Ctx, rng: &mut Rng) -> (bool, f64, [u32; 6], u8) {
     let squirtle = frlg_mon::species::by_id(match ctx.p.starter.as_str() {
         "bulbasaur" => frlg_mon::species::BULBASAUR,
         "charmander" => frlg_mon::species::CHARMANDER,
@@ -890,7 +1056,20 @@ fn starter_ok(ctx: &Ctx, rng: &mut Rng) -> (bool, f64) {
         .zip(m)
         .all(|(&v, &lo)| v as u32 >= lo);
     let ok = total >= ctx.p.starter_min_total && stats_ok;
-    (ok, strength)
+    let iv = genome.ivs;
+    (
+        ok,
+        strength,
+        [
+            iv.hp as u32,
+            iv.atk as u32,
+            iv.def as u32,
+            iv.spe as u32,
+            iv.spa as u32,
+            iv.spd as u32,
+        ],
+        genome.nature(),
+    )
 }
 
 /// Runs one attempt. `target` is the active T in frames; `None` disables resets.
@@ -922,6 +1101,14 @@ pub fn attempt(
         max_tier: 0,
         repel_left: 0,
         repel_ok: false,
+        ivs: [15; 6],
+        nature: 0,
+        evs: [0; 6],
+        hp_frac: 1.0,
+        badges: 0,
+        surf: false,
+        eq: false,
+        league_items: false,
         whiteouts: 0,
     };
     st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
@@ -980,17 +1167,61 @@ pub fn attempt(
                 intro,
                 adv,
                 money,
+                full,
             } => {
-                let enemies = enemy_list(ctx, &st, party);
-                let hand = if ctx.p.type_strength > 0.0 { 1.0 } else { *adv };
-                if !battle(ctx, &mut st, &mut rng, &enemies, true, *intro, hand) {
-                    break;
+                if ctx.p.battle_sim && !full.is_empty() {
+                    let foes: Vec<_> = full
+                        .iter()
+                        .map(|m| crate::battle::enemy_mon(ctx.dex, m))
+                        .collect();
+                    if !sim_battle(
+                        ctx,
+                        &mut st,
+                        &mut rng,
+                        &foes,
+                        true,
+                        *intro,
+                        None,
+                        is_league(&seg.name),
+                    ) {
+                        break;
+                    }
+                } else {
+                    let enemies = enemy_list(ctx, &st, party);
+                    let hand = if ctx.p.type_strength > 0.0 { 1.0 } else { *adv };
+                    if !battle(ctx, &mut st, &mut rng, &enemies, true, *intro, hand) {
+                        break;
+                    }
                 }
                 st.money += *money;
             }
-            Kind::Parties { parties, money } => {
+            Kind::Parties {
+                parties,
+                money,
+                fulls,
+            } => {
                 let mut ok = true;
-                for p in parties {
+                for (pi, p) in parties.iter().enumerate() {
+                    if ctx.p.battle_sim && fulls.get(pi).is_some_and(|f| !f.is_empty()) {
+                        let foes: Vec<_> = fulls[pi]
+                            .iter()
+                            .map(|m| crate::battle::enemy_mon(ctx.dex, m))
+                            .collect();
+                        if !sim_battle(
+                            ctx,
+                            &mut st,
+                            &mut rng,
+                            &foes,
+                            true,
+                            600,
+                            None,
+                            is_league(&seg.name),
+                        ) {
+                            ok = false;
+                            break;
+                        }
+                        continue;
+                    }
                     let enemies = enemy_list(ctx, &st, p);
                     if !battle(ctx, &mut st, &mut rng, &enemies, true, 600, 1.0) {
                         ok = false;
@@ -1210,10 +1441,23 @@ pub fn attempt(
         // Marts that sell better balls: Lavender (Great), Fuchsia (Ultra)
         // (`decompiled/data/maps/LavenderTown_Mart/scripts.inc:29`, `FuchsiaCity_Mart/scripts.inc:25`).
         match seg.name.as_str() {
-            "brock" => st.repel_ok = true,
+            "brock" => {
+                st.repel_ok = true;
+                st.badges |= 1;
+            }
+            "koga-badge" => {
+                st.max_tier = 2;
+                st.badges |= 1 << 4;
+            }
+            "blaine-badge-and-sevii-scene" => st.badges |= 1 << 6,
+            "giovanni-badge" => st.eq = true,
+            "indigo-heal" => st.league_items = true,
+            "safari-walk" => st.surf = true,
             "lavender-heal" => st.max_tier = st.max_tier.max(1),
-            "koga-badge" => st.max_tier = 2,
             _ => {}
+        }
+        if seg.name.contains("heal") {
+            st.hp_frac = 1.0;
         }
         if seg.off_timer {
             let d = st.clock - before;
@@ -1221,7 +1465,8 @@ pub fn attempt(
             st.clock = before;
         }
         if seg.starter_check {
-            let (mut ok, mut strength) = starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747));
+            let (mut ok, mut strength, mut ivs, mut nat) =
+                starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747));
             if !ok && ctx.p.starter_save_reroll {
                 // Saved in the lab before choosing: soft reset, Continue, choose again. The timer
                 // keeps running, so every re-roll is run time but not a lost attempt.
@@ -1229,10 +1474,13 @@ pub fn attempt(
                 while !ok && k < 20_000 {
                     k += 1;
                     bump(&mut st, ctx.p.reroll_frames as f64 * ctx.p.text_factor);
-                    (ok, strength) = starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747 + k * 7919));
+                    (ok, strength, ivs, nat) =
+                        starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747 + k * 7919));
                 }
             }
             st.strength = strength;
+            st.ivs = ivs;
+            st.nature = nat;
             if !ok {
                 let wall = st.clock + st.off;
                 if let Some(r) = rec.as_deref_mut() {
