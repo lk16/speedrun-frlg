@@ -77,7 +77,10 @@ fn trainer(state: &PathBuf) {
         emu.step(if j % 2 == 0 { keys::A } else { 0 });
         j += 1;
     }
-    println!("trainer battle: menu frames {menus:?}, battle over at {over}, free at {}", emu.frame() - t0);
+    println!(
+        "trainer battle: menu frames {menus:?}, battle over at {over}, free at {}",
+        emu.frame() - t0
+    );
     let mut prev = 0;
     for m in &menus {
         println!("  menu at {m} (+{})", m - prev);
@@ -146,7 +149,9 @@ fn main() {
             c.emu.write8(enemy + 0x28, 200);
             c.emu.write8(enemy + 0x29, 0);
             c.emu.write8(enemy + 0x2C, 200);
-            c.mash(keys::A, 3000, |e, o| !o.in_battle(e) || (o.battle_choosing_actions(e) && e.frame() > t1 + 30));
+            c.mash(keys::A, 3000, |e, o| {
+                !o.in_battle(e) || (o.battle_choosing_actions(e) && e.frame() > t1 + 30)
+            });
             if c.obs.in_battle(&mut c.emu) {
                 turn_cycle.push(c.emu.frame() - t1);
                 let t2 = c.emu.frame();
