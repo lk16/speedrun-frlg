@@ -273,11 +273,26 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         era: Era::Walk,
     };
 
-    // Grass steps: the path table (`pathenc.py`, shortest path in tiles) or the original guess.
-    let st = |path: u32, guess: u32| if p.enc_path { path } else { guess };
-    let enc = |site: &'static str, path: u32, guess: u32| -> Option<(&'static str, u32)> {
-        let n = st(path, guess);
+    // Grass steps: the path table (`pathenc.py`: shortest path in tiles, fewest grass tiles among the
+    // shortest; `avoid` = a path that pays up to 50 tiles per grass tile) or the original guess.
+    let g = |short: u32, avoid: u32, guess: u32| {
+        if !p.enc_path {
+            guess
+        } else if p.avoid_grass {
+            avoid
+        } else {
+            short
+        }
+    };
+    let enc = |site: &'static str, short: u32, avoid: u32, guess: u32| -> Option<(&'static str, u32)> {
+        let n = g(short, avoid, guess);
         (n > 0).then_some((site, n))
+    };
+    // Extra tiles walked to stay out of grass.
+    let detour = |b: &mut B, name: &str, tiles: u32| {
+        if p.enc_path && p.avoid_grass && tiles > 0 {
+            b.walk(name, tiles, Era::Walk, None, Src::Tiles);
+        }
     };
 
     // 1. Power-on to Brock beaten. Non-battle segments are the defeat-brock ledger's frames
@@ -292,14 +307,17 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.trainer("rival-lab", &tn("TRAINER_RIVAL_OAKS_LAB"), 354);
     b.text("exit-lab", 864, Src::Ledger);
     b.text("to-viridian", 2671, Src::Ledger);
-    b.wander("route1-encounters", "MAP_ROUTE1", st(23, 50));
+    detour(&mut b, "route1-detour", 16);
+    b.wander("route1-encounters", "MAP_ROUTE1", g(22, 20, 50));
     b.text("parcel", 1278, Src::Ledger);
     b.text("deliver", 4422, Src::Ledger);
     b.text("tutorial", 5551, Src::Ledger);
     b.text("to-forest", 1161, Src::Ledger);
-    b.wander("route2-encounters", "MAP_ROUTE2", st(16, 60));
+    detour(&mut b, "route2-detour", 4);
+    b.wander("route2-encounters", "MAP_ROUTE2", g(5, 0, 60));
     b.text("forest", 6708, Src::Ledger);
-    b.wander("forest-encounters", "MAP_VIRIDIAN_FOREST", st(90, 100));
+    detour(&mut b, "forest-detour", 20);
+    b.wander("forest-encounters", "MAP_VIRIDIAN_FOREST", g(81, 48, 100));
     b.text("to-pewter", 1531, Src::Ledger);
     if p.audited_forced {
         b.forced(
@@ -315,7 +333,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.era = Era::Run;
 
     // 2. Pewter to Cerulean: 492 tiles (distances.json pewter-gym_to_cerulean-pc), split by guess.
-    b.walk("route3", 120, b.era, enc("MAP_ROUTE3", 0, 50), Src::Guess);
+    b.walk("route3", 120, b.era, enc("MAP_ROUTE3", 0, 0, 50), Src::Guess);
     if p.audited_forced {
         b.forced(
             "route3-trainers",
@@ -329,21 +347,21 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         "mt-moon-1f",
         90,
         b.era,
-        enc("MAP_MT_MOON_1F", 66, 90),
+        enc("MAP_MT_MOON_1F", 65, 65, 90),
         Src::Guess,
     );
     b.walk(
         "mt-moon-b1f",
         100,
         b.era,
-        enc("MAP_MT_MOON_B1F", 13, 100),
+        enc("MAP_MT_MOON_B1F", 13, 13, 100),
         Src::Guess,
     );
     b.walk(
         "mt-moon-b2f",
         100,
         b.era,
-        enc("MAP_MT_MOON_B2F", 116, 100),
+        enc("MAP_MT_MOON_B2F", 116, 116, 100),
         Src::Guess,
     );
     if p.audited_forced {
@@ -359,7 +377,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         b.group("mt-moon-trainers", 5, 2, 11, 60);
         b.maps_group("mt-moon-miguel", &["MtMoon_B2F"], 1);
     }
-    b.walk("route4", 82, b.era, enc("MAP_ROUTE4", 0, 30), Src::Guess);
+    b.walk("route4", 82, b.era, enc("MAP_ROUTE4", 0, 0, 30), Src::Guess);
     b.text("cerulean-heal", 500, Src::Guess);
 
     // 3. Cerulean: rival, Nugget Bridge, Bill, Misty.
@@ -368,7 +386,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         "nugget-bridge",
         100,
         b.era,
-        enc("MAP_ROUTE24", 0, 60),
+        enc("MAP_ROUTE24", 0, 0, 60),
         Src::Guess,
     );
     if p.audited_forced {
@@ -387,7 +405,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     } else {
         b.maps_group("nugget-bridge-trainers", &["Route24"], 6);
     }
-    b.walk("bill", 56, b.era, enc("MAP_ROUTE25", 0, 40), Src::Guess);
+    b.walk("bill", 56, b.era, enc("MAP_ROUTE25", 0, 0, 40), Src::Guess);
     if p.audited_forced {
         b.forced(
             "route25-trainers",
@@ -432,8 +450,9 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.split();
 
     // 4. Vermilion: S.S. Anne and Surge, no Vermilion heal.
-    b.walk("route5-6", 260, b.era, enc("MAP_ROUTE5", 6, 40), Src::Tiles);
-    b.wander("route6-encounters", "MAP_ROUTE6", st(8, 40));
+    b.walk("route5-6", 260, b.era, enc("MAP_ROUTE5", 6, 0, 40), Src::Tiles);
+    detour(&mut b, "route5-6-detour", 21);
+    b.wander("route6-encounters", "MAP_ROUTE6", g(3, 0, 40));
     if p.audited_forced {
         b.forced("route6-trainers", &["Route6_EventScript_Jeff"], &[]);
     }
@@ -472,19 +491,19 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.group("dig-grunt", 1, 2, 17, 70);
     b.text("tm28-dig", 900, Src::Guess);
     let e = b.era;
-    b.walk("route9", 60, e, enc("MAP_ROUTE9", 0, 30), Src::Guess);
+    b.walk("route9", 60, e, enc("MAP_ROUTE9", 0, 0, 30), Src::Guess);
     b.walk(
         "route10-north",
         20,
         e,
-        enc("MAP_ROUTE10", 0, 10),
+        enc("MAP_ROUTE10", 0, 0, 10),
         Src::Guess,
     );
     b.walk(
         "rock-tunnel",
         138,
         e,
-        enc("MAP_ROCK_TUNNEL_1F", 252, 138),
+        enc("MAP_ROCK_TUNNEL_1F", 252, 252, 138),
         Src::Guess,
     );
     if p.audited_forced {
@@ -527,7 +546,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.text("lavender-heal", 500, Src::Guess);
 
     // 6. Celadon: Tea, Hideout, Erika, HM02.
-    b.walk("route8-7", 227, e, enc("MAP_ROUTE8", 10, 40), Src::Tiles);
+    b.walk("route8-7", 227, e, enc("MAP_ROUTE8", 0, 0, 40), Src::Tiles);
     if p.audited_forced {
         b.forced(
             "route8-trainers",
@@ -580,7 +599,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     // 7. Pokémon Tower and the flute.
     b.text("fly-lavender", 700, Src::Guess);
     b.walk("tower-walk", 215, e, None, Src::Guess);
-    b.wander("tower-encounters", "MAP_POKEMON_TOWER_5F", st(108, 80));
+    b.wander("tower-encounters", "MAP_POKEMON_TOWER_5F", g(108, 108, 80));
     b.trainer("rival-tower", &tn("TRAINER_RIVAL_POKEMON_TOWER"), 700);
     if p.audited_forced {
         b.forced(
@@ -607,7 +626,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         "cycling-road",
         374,
         e,
-        enc("MAP_ROUTE16", 0, 60),
+        enc("MAP_ROUTE16", 0, 0, 60),
         Src::Tiles,
     );
     b.text("snorlax", 1500, Src::Guess);
@@ -668,14 +687,14 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
             "surf-route21-n",
             "MAP_ROUTE21_NORTH",
             Area::Water,
-            47,
+            g(47, 38, 47),
             Era::Surf,
         );
         b.wander_area(
             "surf-route21-s",
             "MAP_ROUTE21_SOUTH",
             Area::Water,
-            42,
+            g(36, 38, 36),
             Era::Surf,
         );
     }
@@ -711,19 +730,19 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.split();
 
     // 12. League approach.
-    b.walk("route22", 113, e, enc("MAP_ROUTE22", 10, 20), Src::Tiles);
+    b.walk("route22", 113, e, enc("MAP_ROUTE22", 10, 9, 20), Src::Tiles);
     b.trainer("rival-route22", &tn("TRAINER_RIVAL_ROUTE22_LATE"), 700);
     b.walk("route23", 167, Era::Surf, None, Src::Tiles);
     if p.enc_path {
         // 39 water-encounter steps on Route 23 (`pathenc.py`, route22-gate_to_victoryroad).
-        b.wander_area("route23-water", "MAP_ROUTE23", Area::Water, 39, Era::Surf);
+        b.wander_area("route23-water", "MAP_ROUTE23", Area::Water, g(39, 31, 39), Era::Surf);
     }
     b.text("badge-gates", 900, Src::Guess);
     b.walk(
         "victory-road",
         255,
         e,
-        enc("MAP_VICTORY_ROAD_1F", 91, 150),
+        enc("MAP_VICTORY_ROAD_1F", 91, 91, 150),
         Src::Guess,
     );
     // The audit finds no trainer on Victory Road the route cannot walk around.

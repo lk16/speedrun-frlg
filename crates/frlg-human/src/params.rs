@@ -172,6 +172,9 @@ pub struct Params {
     /// Grass steps per walking segment from the decomp's metatile encounter attribute along the shortest
     /// path (`human-run/tools/pathenc.py`, `human-run/data/pathenc.json`) instead of guesses.
     pub enc_path: bool,
+    /// With `enc_path`: walk the path that pays up to 50 tiles per grass tile (more tiles, fewer
+    /// encounters) instead of the shortest.
+    pub avoid_grass: bool,
     /// Battle turn, per-mon and trainer-intro frames measured on libmgba (`calibration.md`)
     /// instead of `battle_scale` times the guessed constants.
     pub calib_battle: bool,
@@ -265,6 +268,7 @@ impl Default for Params {
             marts: vec![],
             calib_enc: false,
             enc_path: false,
+            avoid_grass: false,
             calib_battle: false,
             rod: "mixed".into(),
             repel_on: vec![],
