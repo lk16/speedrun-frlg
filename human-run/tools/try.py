@@ -12,7 +12,7 @@ stdlib only.
 import json, os, subprocess, sys, hashlib
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
-BIN = os.path.join(ROOT, 'target', 'release', 'frlg-human')
+BIN = os.environ.get('FRLG_BIN', os.path.join(ROOT, 'target', 'release', 'frlg-human'))
 SCRATCH = os.environ.get('FRLG_SCRATCH', '/tmp/frlg-human-scratch')
 RUNGS = ['WR', 'WR+1m', 'WR+2m', 'WR+5m', 'WR+10m', 'WR+20m', 'WR+40m', 'WR+80m', 'WR+160m']
 os.makedirs(SCRATCH, exist_ok=True)

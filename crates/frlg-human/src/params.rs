@@ -126,6 +126,13 @@ pub struct Params {
     pub hunt_min_catch: u32,
     /// Fill hunts ride the bike where the map allows it (`allow_cycling`).
     pub hunt_bike: bool,
+    /// Model the Safari Zone's own rules for hunts in it: 600 steps and 30 Safari Balls per
+    /// entry, the Safari catch factor and the species' flee rate
+    /// (`decompiled/src/battle_main.c:2284-2287`, `battle_script_commands.c:9497`,
+    /// `battle_ai_script_commands.c:1715-1732`).
+    pub safari_model: bool,
+    /// Rocks thrown before the first Safari Ball (each doubles the catch factor and the flee rate).
+    pub safari_rocks: u32,
     /// Fight (instead of fleeing) wild encounters that are not catch targets.
     pub fight_wild: bool,
     /// Fight non-target wild encounters while the carry is below this level (else flee).
@@ -193,6 +200,8 @@ impl Default for Params {
             pass_min_catch: 0,
             hunt_min_catch: 0,
             hunt_bike: false,
+            safari_model: false,
+            safari_rocks: 0,
             fight_wild: false,
             fight_until_level: 30,
             team_bonus: 1.08,

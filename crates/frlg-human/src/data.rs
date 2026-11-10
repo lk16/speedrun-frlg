@@ -13,6 +13,7 @@ pub const FISH_RATES: [u32; 10] = [70, 30, 60, 20, 20, 40, 40, 15, 4, 1];
 
 #[derive(Deserialize)]
 struct RawSpecies {
+    safari_flee: u32,
     types: (String, String),
     catch: u32,
     #[serde(rename = "yield_")]
@@ -63,6 +64,8 @@ pub struct Species {
     pub evo: Vec<(String, String, usize)>,
     /// `decompiled/include/constants/pokemon.h` type numbers.
     pub types: (u8, u8),
+    /// `safariZoneFleeRate` (`species_info.h`).
+    pub safari_flee: u32,
 }
 
 /// `TYPE_*` numbers, `decompiled/include/constants/pokemon.h:96-114`.
@@ -145,6 +148,7 @@ impl Dex {
                     medium_slow: s.growth == "GROWTH_MEDIUM_SLOW",
                     dex: s.dex,
                     types: (type_num(&s.types.0), type_num(&s.types.1)),
+                    safari_flee: s.safari_flee,
                     evo: s
                         .evo
                         .iter()

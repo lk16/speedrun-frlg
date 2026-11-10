@@ -21,6 +21,10 @@ const MON_OVERHEAD: u32 = 450;
 const TRAINER_OUTRO: u32 = 300;
 /// Stat screen and move prompts per level gained. guess.
 const LEVEL_UP: u32 = 300;
+/// Paying at the Safari gate, the Warden's text and walking in. guess.
+const SAFARI_ENTRY: u32 = 1500;
+/// The Warden calling time and walking out. guess.
+const SAFARI_EXIT: u32 = 900;
 /// A Poké Ball throw with its shakes. guess.
 const THROW: u32 = 420;
 /// Dex entry and nickname prompt after a catch. guess.
@@ -89,6 +93,10 @@ struct State {
     caught: Caught,
     abandoned: bool,
     whiteouts: u32,
+    /// Inside the Safari Zone on the current entry (steps and balls left).
+    safari_open: bool,
+    safari_steps: u32,
+    safari_balls: u32,
 }
 
 impl Ctx<'_> {
@@ -219,6 +227,49 @@ fn ball_mult(p: &Params) -> u32 {
     }
 }
 
+/// The four shake checks of `Cmd_handleballthrow`
+/// (`decompiled/src/battle_script_commands.c:9549-9640`).
+fn shakes_catch(rng: &mut Rng, odds: u32) -> bool {
+    if odds > 254 {
+        return true;
+    }
+    let o = odds.max(1);
+    let s = isqrt(isqrt(16_711_680 / o)).max(1);
+    let thr = 1_048_560 / s;
+    (0..4).all(|_| rng.below(65536) < thr)
+}
+
+/// Safari Zone encounter: rocks, then Safari Balls until caught, out of balls or the mon flees.
+fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Species) -> bool {
+    let mut factor = (sp.catch_rate * 100 / 1275).max(0);
+    let esc = (sp.safari_flee * 100 / 1275).max(2);
+    let mut rocks = 0;
+    for _ in 0..ctx.p.safari_rocks {
+        bump(st, THROW as f64 * 0.5);
+        factor = (factor * 2).min(20);
+        rocks += 1;
+    }
+    loop {
+        if st.safari_balls == 0 {
+            return false;
+        }
+        st.safari_balls -= 1;
+        bump(st, THROW as f64);
+        let rate = (factor * 1275 / 100).min(255);
+        let odds = (rate * 15 / 10) * 100 / 300;
+        if shakes_catch(rng, odds) {
+            bump(st, CATCH_END as f64 * ctx.p.text_factor);
+            return true;
+        }
+        bump(st, react(ctx, rng) as f64);
+        let flee_factor = if rocks > 0 { (esc * 2).min(20) } else { esc };
+        if rng.below(100) < flee_factor * 5 {
+            bump(st, FLEE as f64);
+            return false;
+        }
+    }
+}
+
 /// Throws until caught or patience (8 throws) runs out. Formula:
 /// `decompiled/src/battle_script_commands.c:9549-9640`.
 fn throw_balls(
@@ -261,13 +312,18 @@ fn encounter(
     slot: &Slot,
     skip: &[usize],
     want_catch: bool,
+    safari: bool,
 ) {
     let sp = &ctx.dex.species[slot.species];
     let level = rng.range(slot.min, slot.max);
     bump(st, ENC_INTRO as f64 + react(ctx, rng) as f64);
     let wanted =
         want_catch && sp.dex != 0 && !st.caught.has(sp.dex) && !skip.contains(&slot.species);
-    if wanted {
+    if wanted && safari {
+        if safari_catch(ctx, st, rng, sp) {
+            st.caught.insert(sp.dex);
+        }
+    } else if wanted {
         let mut hp = 1.0;
         if ctx.p.weaken {
             let turns = 1 + rng.chance(0.5) as u32;
@@ -348,6 +404,7 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
             stop_when_done
                 || (ctx.p.catch_on_pass
                     && ctx.dex.species[slot.species].catch_rate >= ctx.p.pass_min_catch),
+            ctx.p.safari_model && site.starts_with("MAP_SAFARI_ZONE"),
         );
         if stop_when_done && left == 0 {
             break;
@@ -499,6 +556,22 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
                 .filter(|&i| ctx.dex.species[i].catch_rate < ctx.p.hunt_min_catch),
         );
     }
+    let safari = ctx.p.safari_model && h.site.starts_with("MAP_SAFARI_ZONE");
+    let mut steps = h.steps;
+    if !safari {
+        st.safari_open = false;
+    } else {
+        if !st.safari_open {
+            bump(st, SAFARI_ENTRY as f64 * ctx.p.text_factor);
+            st.safari_open = true;
+            st.safari_steps = 600;
+            st.safari_balls = 30;
+        }
+        st.safari_steps = st.safari_steps.saturating_sub(h.detour_tiles * 2);
+        if area == Area::Land {
+            steps = steps.min(st.safari_steps);
+        }
+    }
     bump(
         st,
         h.detour_tiles as f64 * 2.0 * Era::Run.frames_per_tile() * ctx.p.path_overhead,
@@ -512,13 +585,22 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
     let args = EncArgs {
         site: &h.site,
         area,
-        steps: h.steps,
+        steps,
         era,
         skip: &skip,
         stop_when_done: true,
     };
     let used = run_encounters(ctx, st, rng, &args);
     bump(st, used as f64 * per_step);
+    if safari {
+        if area == Area::Land {
+            st.safari_steps = st.safari_steps.saturating_sub(used);
+        }
+        if st.safari_steps == 0 || st.safari_balls == 0 {
+            bump(st, SAFARI_EXIT as f64 * ctx.p.text_factor);
+            st.safari_open = false;
+        }
+    }
 }
 
 fn starter_ok(ctx: &Ctx, rng: &mut Rng) -> (bool, f64) {
@@ -581,6 +663,9 @@ pub fn attempt(
         power: 0.0,
         caught: Caught::default(),
         abandoned: false,
+        safari_open: false,
+        safari_steps: 0,
+        safari_balls: 0,
         whiteouts: 0,
     };
     st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
