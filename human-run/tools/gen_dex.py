@@ -53,12 +53,19 @@ parties = {}
 for m in re.finditer(r'static const struct TrainerMon\w+ (sParty_\w+)\[\] = \{((?:[^\n]*\};)|(?:\n.*?\n\};))', tp, re.S):
     parties[m.group(1)] = [[int(l), sp] for l, sp in re.findall(r'\.lvl = (\d+),\s*\.species = (SPECIES_[A-Z0-9_]+)', m.group(2))]
 tr = open(os.path.join(root, 'trainers.h')).read()
+bm0 = open(os.path.join(root, '..', 'battle_main.c')).read()
+mt_src = bm0.split('const struct TrainerMoney gTrainerMoneyTable[] =')[1].split('};')[0]
+money_table = {c: int(v) for c, v in re.findall(r'\{(TRAINER_CLASS_[A-Z0-9_]+),\s*(\d+)\}', mt_src)}
 trainers = {}
 for m in re.finditer(r'\[(TRAINER_[A-Z0-9_]+)\] = \{(.*?)\n    \},', tr, re.S):
     pm = re.search(r'\.party = \w+\((sParty_\w+)\)', m.group(2))
     dbl = 'doubleBattle = TRUE' in m.group(2)
     if pm and pm.group(1) in parties:
-        trainers[m.group(1)] = dict(party=parties[pm.group(1)], double=dbl)
+        cls = re.search(r'\.trainerClass = (TRAINER_CLASS_[A-Z0-9_]+)', m.group(2))
+        # decompiled/src/battle_script_commands.c:5373: 4 * lastMonLevel * moneyMultiplier(1) * (double ? 2 : 1) * table value
+        val = money_table.get(cls.group(1), 0) if cls else 0
+        last = parties[pm.group(1)][-1][0] if parties[pm.group(1)] else 0
+        trainers[m.group(1)] = dict(party=parties[pm.group(1)], double=dbl, money=4 * last * (2 if dbl else 1) * val)
 maps_dir = os.path.join(root, '..', '..', 'data')
 label_trainer = {}
 def scan(path):

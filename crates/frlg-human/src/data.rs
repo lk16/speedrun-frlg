@@ -40,6 +40,7 @@ pub struct RawSite {
 #[derive(Deserialize)]
 struct RawTrainer {
     party: Vec<(u32, String)>,
+    money: u32,
 }
 
 #[derive(Deserialize)]
@@ -112,6 +113,8 @@ pub struct Dex {
     sites: HashMap<String, RawSite>,
     sites_lg: HashMap<String, RawSite>,
     trainers: HashMap<String, Vec<(u32, usize)>>,
+    /// Prize money per trainer id (`battle_script_commands.c:5373`).
+    money: HashMap<String, u32>,
     map_trainers: HashMap<String, Vec<String>>,
     scripts: HashMap<String, String>,
     /// Damage multiplier of attacking type (row) on defending type (column),
@@ -176,7 +179,13 @@ impl Dex {
         for (a, d, m) in &raw.type_chart {
             chart[type_num(a) as usize][type_num(d) as usize] = *m as f64 / 10.0;
         }
+        let money = raw
+            .trainers
+            .iter()
+            .map(|(k, t)| (k.clone(), t.money))
+            .collect();
         Dex {
+            money,
             chart,
             species,
             by_name,
@@ -193,6 +202,10 @@ impl Dex {
             .by_name
             .get(name)
             .unwrap_or_else(|| panic!("unknown species {name}"))
+    }
+
+    pub fn trainer_money(&self, name: &str) -> u32 {
+        self.money.get(name).copied().unwrap_or(0)
     }
 
     pub fn trainer(&self, name: &str) -> &[(u32, usize)] {
@@ -230,28 +243,30 @@ impl Dex {
 
     /// Parties of the trainers placed on the given maps (decomp `object_events` that resolve to
     /// a `trainerbattle_*`), hardest first (by summed level).
-    pub fn map_parties(&self, maps: &[&str]) -> Vec<Vec<(u32, usize)>> {
-        let mut out: Vec<Vec<(u32, usize)>> = maps
+    pub fn map_parties(&self, maps: &[&str]) -> Vec<(Vec<(u32, usize)>, u32)> {
+        let mut out: Vec<(Vec<(u32, usize)>, u32)> = maps
             .iter()
             .flat_map(|m| {
                 self.map_trainers
                     .get(*m)
                     .unwrap_or_else(|| panic!("no trainers on map {m}"))
             })
-            .filter_map(|t| self.trainers.get(t).cloned())
+            .filter_map(|t| self.trainers.get(t).map(|p| (p.clone(), self.trainer_money(t))))
             .collect();
-        out.sort_by_key(|p| std::cmp::Reverse(p.iter().map(|x| x.0).sum::<u32>()));
+        out.sort_by_key(|p| std::cmp::Reverse(p.0.iter().map(|x| x.0).sum::<u32>()));
         out
     }
 
     /// The party of the trainer a map script label fights
     /// (`trainerbattle_*` in the label's body, `human-run/tools/gen_dex.py`).
     pub fn script_party(&self, label: &str) -> &[(u32, usize)] {
-        let t = self
-            .scripts
+        self.trainer(self.script_trainer(label))
+    }
+
+    pub fn script_trainer(&self, label: &str) -> &str {
+        self.scripts
             .get(label)
-            .unwrap_or_else(|| panic!("no trainer script {label}"));
-        self.trainer(t)
+            .unwrap_or_else(|| panic!("no trainer script {label}"))
     }
 
     pub fn has_site(&self, site: &str) -> bool {

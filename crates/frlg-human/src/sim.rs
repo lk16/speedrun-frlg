@@ -97,6 +97,11 @@ struct State {
     safari_open: bool,
     safari_steps: u32,
     safari_balls: u32,
+    /// Money model: prize money, ball stock (Poké, Great, Ultra) and the best ball a mart on the
+    /// route so far sells.
+    money: u32,
+    balls: [u32; 3],
+    max_tier: usize,
 }
 
 impl Ctx<'_> {
@@ -120,7 +125,7 @@ impl Ctx<'_> {
                     + party.len() as f64 * (self.turn() + self.mon_overhead())
                     + TRAINER_OUTRO as f64
             }
-            Kind::Parties { parties } => parties
+            Kind::Parties { parties, .. } => parties
                 .iter()
                 .map(|p| {
                     600.0
@@ -300,6 +305,41 @@ fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Spec
     }
 }
 
+/// Mart prices, `decompiled/src/data/items.json`.
+const BALL_PRICE: [u32; 3] = [200, 600, 1200];
+const BALL_MULT: [u32; 3] = [10, 15, 20];
+/// Walking into a mart, buying, walking out. guess.
+const MART: u32 = 900;
+
+/// The ball for the next throw under the money model: the best type the plan allows and a
+/// mart on the route has sold so far, bought in batches of `ball_batch` as money allows, else a
+/// cheaper one. `None` when not even a Poké Ball is affordable.
+fn take_ball(ctx: &Ctx, st: &mut State) -> Option<u32> {
+    let mut t = match ctx.p.ball.as_str() {
+        "great" => 1,
+        "ultra" => 2,
+        _ => 0,
+    }
+    .min(st.max_tier);
+    loop {
+        if st.balls[t] > 0 {
+            st.balls[t] -= 1;
+            return Some(BALL_MULT[t]);
+        }
+        let qty = (st.money / BALL_PRICE[t]).min(ctx.p.ball_batch);
+        if qty > 0 {
+            st.money -= qty * BALL_PRICE[t];
+            st.balls[t] += qty;
+            bump(st, MART as f64 * ctx.p.text_factor);
+            continue;
+        }
+        if t == 0 {
+            return None;
+        }
+        t -= 1;
+    }
+}
+
 /// Throws until caught or patience (8 throws) runs out. Formula:
 /// `decompiled/src/battle_script_commands.c:9549-9640`.
 fn throw_balls(
@@ -308,13 +348,20 @@ fn throw_balls(
     rng: &mut Rng,
     catch_rate: u32,
     hp_frac: f64,
-    ball: u32,
+    ball: Option<u32>,
     max_throws: u32,
 ) -> bool {
     let max_hp = 100u32;
     let hp = ((hp_frac * max_hp as f64) as u32).max(1);
-    let odds = (catch_rate * ball / 10) * (max_hp * 3 - hp * 2) / (3 * max_hp);
     for _ in 0..max_throws {
+        let b = match ball {
+            Some(b) => b,
+            None => match take_ball(ctx, st) {
+                Some(b) => b,
+                None => return false,
+            },
+        };
+        let odds = (catch_rate * b / 10) * (max_hp * 3 - hp * 2) / (3 * max_hp);
         bump(st, THROW as f64);
         let caught = if odds > 254 {
             true
@@ -363,7 +410,8 @@ fn encounter(
             }
             hp = 0.3;
         }
-        if throw_balls(ctx, st, rng, sp.catch_rate, hp, ball_mult(ctx.p), 8) {
+        let ball = (!ctx.p.money_model).then(|| ball_mult(ctx.p));
+        if throw_balls(ctx, st, rng, sp.catch_rate, hp, ball, 8) {
             st.caught.insert(sp.dex);
         }
     } else if ctx.p.fight_wild || st.carry < ctx.p.fight_until_level {
@@ -696,6 +744,11 @@ pub fn attempt(
         safari_open: false,
         safari_steps: 0,
         safari_balls: 0,
+        // `decompiled/src/new_game.c:128`, five Poké Balls from Oak
+        // (`PalletTown_ProfessorOaksLab/scripts.inc:660`).
+        money: 3000,
+        balls: [5, 0, 0],
+        max_tier: 0,
         whiteouts: 0,
     };
     st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
@@ -739,14 +792,20 @@ pub fn attempt(
                 };
                 run_encounters(ctx, &mut st, &mut rng, &args);
             }
-            Kind::Trainer { party, intro, adv } => {
+            Kind::Trainer {
+                party,
+                intro,
+                adv,
+                money,
+            } => {
                 let enemies = enemy_list(ctx, &st, party);
                 let hand = if ctx.p.type_strength > 0.0 { 1.0 } else { *adv };
                 if !battle(ctx, &mut st, &mut rng, &enemies, true, *intro, hand) {
                     break;
                 }
+                st.money += *money;
             }
-            Kind::Parties { parties } => {
+            Kind::Parties { parties, money } => {
                 let mut ok = true;
                 for p in parties {
                     let enemies = enemy_list(ctx, &st, p);
@@ -758,6 +817,7 @@ pub fn attempt(
                 if !ok {
                     break;
                 }
+                st.money += *money;
             }
             Kind::Group {
                 n,
@@ -895,7 +955,7 @@ pub fn attempt(
                             &mut rng,
                             sp.catch_rate,
                             special.hp_frac,
-                            ball,
+                            Some(ball),
                             special.max_throws,
                         ) {
                             st.caught.insert(sp.dex);
