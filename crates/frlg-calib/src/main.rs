@@ -96,7 +96,22 @@ fn main() {
         c.mash(keys::A, 3000, |e, o| o.battle_choosing_actions(e));
         intro.push(c.emu.frame() - t0);
         let enemy = c.g_battle_mons + 0x58;
-        if trial % 2 == 0 {
+        if trial % 4 == 3 {
+            // Fight: a turn that does not kill (enemy HP 200), then a kill (HP 1).
+            let t1 = c.emu.frame();
+            c.emu.write8(enemy + 0x28, 200);
+            c.emu.write8(enemy + 0x29, 0);
+            c.emu.write8(enemy + 0x2C, 200);
+            c.mash(keys::A, 3000, |e, o| !o.in_battle(e) || (o.battle_choosing_actions(e) && e.frame() > t1 + 30));
+            if c.obs.in_battle(&mut c.emu) {
+                turn_cycle.push(c.emu.frame() - t1);
+                let t2 = c.emu.frame();
+                c.emu.write8(enemy + 0x28, 1);
+                c.emu.write8(enemy + 0x29, 0);
+                c.mash(keys::A, 3000, |e, o| !o.in_battle(e));
+                kill_cycle.push(c.emu.frame() - t2);
+            }
+        } else if trial % 2 == 0 {
             // Catch: one HP left, so the 255-rate forest bugs are caught on the first ball.
             c.emu.write8(enemy + 0x28, 1);
             c.emu.write8(enemy + 0x29, 0);
@@ -144,6 +159,8 @@ fn main() {
             &s[..s.len().min(8)]
         );
     };
+    show("fight-turn", &turn_cycle);
+    show("fight-kill", &kill_cycle);
     show("intro", &intro);
     show("throw+catch", &throw_cycle);
     show("catch-end", &catch_end);
