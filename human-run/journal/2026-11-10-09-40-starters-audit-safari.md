@@ -39,5 +39,38 @@ Torrent/Blaze/Overgrow are not a plan choice. A sensitivity run (`ability_bonus`
 is very sensitive to small effective-level gains in close fights (a 5% bonus: -7 h) because `p_lose` is
 a steep logistic around level ratio 1.25. Those lines are marked SENSITIVITY ONLY.
 
+## More model corrections found by checking the model against the decomp or libmgba
+
+5. **Money** (plan 065): prize money `4 x last level x class value x (double ? 2 : 1)`
+   (`battle_script_commands.c:5373`), start 3000 (`new_game.c:128`), balls 200/600/1200 (`items.json`),
+   Great Balls only from Lavender, Ultra only from Fuchsia (mart scripts), Safari fee 500. "Ultra balls
+   everywhere" was free in the old model. Under it Great Balls beat Ultra Balls early (EHT 27 h -> 10.6 h
+   at WR+80m before re-tuning).
+6. **Wild-encounter costs measured on libmgba** (plan 084, `calibration.md`, `crates/frlg-calib`):
+   battle start to first menu is 358 frames (guess was 220), a ball throw cycle ~400, running from a
+   wild battle works ~19% of the time at level 6 and costs 400+ frames per attempt (guess: instant, 150).
+7. **Fishing** (plan 087): the game picks fishing slots by rod (old 0-1, good 2-4, super 5-9,
+   `wild_encounter.c:120-150`); the model mixed all ten. Now `rod` (default super, Route 12 house).
+8. **Repels** (code only): a Repel blocks encounters below the lead's level
+   (`wild_encounter.c:286,601`). Used everywhere it kills the passing catches the dex needs; kept as a
+   per-segment knob (`repel_on`) for the descent.
+9. **Fights** (`calib_battle`, optional): turn 280-406, kill cycle 889-1177, rival intro 1040 frames,
+   measured on libmgba. Consistent with the TAS ledger at a 1.2 human factor.
+
+## Abilities, again
+
+Lead-mon abilities do exist in the encounter code (`wild_encounter.c:305-340`): Stench halves and
+Illuminate doubles the encounter rate. Not used: a hunt's time is dominated by what an encounter costs
+(~450 intro + ~500 flee or ~650 catch) not by walking (9 frames/step at ~20% per step), so doubling the
+rate saves little, and Staryu (the Illuminate lead) needs a Super Rod trip.
+
+## Automation (tools)
+
+`tools/descend.py` is a coordinate descent over single knobs (fill step budgets, detours, order, drops,
+reset aggressiveness, starter gates, hunts, specials, balls, toggles, Repel segments) that applies the
+PROMPT rules, requires the win on seeds 1 *and* 2, promotes and commits each accepted plan. Many of
+the plans 046-091 come from it. It is greedy, so a plan that sits in a local optimum of the model is not a
+claim about the game.
+
 ## Open
 See the end of this file for the final state (updated as the session runs).
