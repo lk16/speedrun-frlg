@@ -1,0 +1,74 @@
+{
+ "MAP_DIGLETTS_CAVE_B1F|land": {
+  "tiles": 50,
+  "from": "HEAL_LOCATION_PEWTER_CITY"
+ },
+ "MAP_POKEMON_TOWER_7F|land": {
+  "tiles": 158,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
+ },
+ "MAP_POWER_PLANT|land": {
+  "tiles": 102,
+  "from": "HEAL_LOCATION_ROUTE10"
+ },
+ "MAP_ROUTE11|land": {
+  "tiles": 63,
+  "from": "HEAL_LOCATION_VERMILION_CITY"
+ },
+ "MAP_ROUTE12|fish": {
+  "tiles": 27,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
+ },
+ "MAP_ROUTE18|land": {
+  "tiles": 56,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_ROUTE21_NORTH|land": {
+  "tiles": 22,
+  "from": "HEAL_LOCATION_PALLET_TOWN"
+ },
+ "MAP_ROUTE23|land": {
+  "tiles": 186,
+  "from": "HEAL_LOCATION_INDIGO_PLATEAU"
+ },
+ "MAP_ROUTE25|land": {
+  "tiles": 110,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_ROUTE5|land": {
+  "tiles": 33,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_ROUTE6|fish": {
+  "tiles": 27,
+  "from": "HEAL_LOCATION_VERMILION_CITY"
+ },
+ "MAP_SAFARI_ZONE_CENTER|fish": {
+  "tiles": 66,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_SAFARI_ZONE_CENTER|land": {
+  "tiles": 54,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_SAFARI_ZONE_WEST|land": {
+  "tiles": 127,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_SEAFOAM_ISLANDS_B2F|land": {
+  "tiles": 107,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_SEAFOAM_ISLANDS_B4F|land": {
+  "tiles": 124,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_VERMILION_CITY|fish": {
+  "tiles": 4,
+  "from": "HEAL_LOCATION_VERMILION_CITY"
+ },
+ "MAP_VICTORY_ROAD_2F|land": {
+  "tiles": 57,
+  "from": "HEAL_LOCATION_INDIGO_PLATEAU"
+ }
+}
