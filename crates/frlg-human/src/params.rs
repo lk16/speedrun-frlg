@@ -175,6 +175,8 @@ pub struct Params {
     /// Hunts walk the tiles from the nearest Fly point to the site (`flydist.py`) instead of the plan's
     /// guessed `detour_tiles` (the table wins; sites it lacks keep their guess).
     pub detour_map: bool,
+    /// The walk to a hunting site is by bike (6 frames per tile instead of the run's 8).
+    pub detour_bike: bool,
     /// With `enc_path`: walk the path that pays up to 50 tiles per grass tile (more tiles, fewer
     /// encounters) instead of the shortest.
     pub avoid_grass: bool,
@@ -272,6 +274,7 @@ impl Default for Params {
             calib_enc: false,
             enc_path: false,
             detour_map: false,
+            detour_bike: false,
             avoid_grass: false,
             calib_battle: false,
             rod: "mixed".into(),

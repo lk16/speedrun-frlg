@@ -794,9 +794,15 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
     } else {
         h.detour_tiles
     };
+    // On the bike where the map allows it (the Power Plant forbids cycling).
+    let walk_era = if ctx.p.detour_bike && ctx.p.bike && h.site != "MAP_POWER_PLANT" {
+        Era::Bike
+    } else {
+        Era::Run
+    };
     bump(
         st,
-        walk_tiles as f64 * 2.0 * Era::Run.frames_per_tile() * ctx.p.path_overhead,
+        walk_tiles as f64 * 2.0 * walk_era.frames_per_tile() * ctx.p.path_overhead,
     );
     let per_step = if area == Area::Land {
         era.frames_per_tile() * ctx.p.path_overhead

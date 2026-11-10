@@ -140,7 +140,7 @@ def candidates(p):
         for b in (5, 10, 20, 40):
             if p.get('ball_batch', 10) != b:
                 out.append(('ball', f'ball_batch {p.get("ball_batch", 10)}->{b}', {'ball_batch': b}))
-    for k in ('weaken', 'mewtwo', 'teleport_abra', 'bike'):
+    for k in ('weaken', 'mewtwo', 'teleport_abra', 'bike', 'detour_bike', 'hunt_bike'):
         out.append(('toggle', f'{k} {p.get(k)}->{not p.get(k)}', {k: not p.get(k)}))
     if p.get('safari_model'):
         for r in (0, 1):
