@@ -1,0 +1,353 @@
+# Plan 248-fillsteps13
+
+Parent: `247-repel173`. Change: fill[6] MAP_ROUTE11 land steps x1.5 (descend.py; confirmed on seeds 1 and 2)
+
+The step-by-step description, citations and branch rules in `001-crude.md` still apply except
+where the parameters below differ; `frlg-human` reads only the block below. Every segment cost
+is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess).
+
+```json
+{
+ "name": "248-fillsteps13",
+ "starter_min_total": 71,
+ "hunts": [
+  {
+   "after": "bill",
+   "site": "MAP_ROUTE25",
+   "area": "land",
+   "steps": 120,
+   "detour_tiles": 2,
+   "skip": [
+    "SPECIES_ODDISH",
+    "SPECIES_PIDGEY",
+    "SPECIES_CATERPIE",
+    "SPECIES_WEEDLE",
+    "SPECIES_KAKUNA",
+    "SPECIES_METAPOD"
+   ]
+  },
+  {
+   "after": "route5-6",
+   "site": "MAP_ROUTE5",
+   "area": "land",
+   "steps": 60,
+   "detour_tiles": 2,
+   "skip": []
+  }
+ ],
+ "specials": [
+  {
+   "after": "celadon-tea",
+   "kind": "gift",
+   "species": [
+    "SPECIES_EEVEE"
+   ],
+   "frames": 1500,
+   "level": 30
+  },
+  {
+   "after": "silph-giovanni",
+   "kind": "gift",
+   "species": [
+    "SPECIES_LAPRAS"
+   ],
+   "frames": 700,
+   "level": 30
+  },
+  {
+   "after": "snorlax",
+   "kind": "static",
+   "species": [
+    "SPECIES_SNORLAX"
+   ],
+   "frames": 400,
+   "level": 30
+  },
+  {
+   "after": "blaine-walk",
+   "kind": "gift",
+   "species": [
+    "SPECIES_KABUTO"
+   ],
+   "frames": 1800,
+   "level": 30
+  },
+  {
+   "after": "to-pewter",
+   "kind": "gift",
+   "species": [
+    "SPECIES_AERODACTYL"
+   ],
+   "frames": 2800,
+   "level": 5
+  },
+  {
+   "after": "ss-anne",
+   "kind": "trade",
+   "species": [
+    "SPECIES_FARFETCHD"
+   ],
+   "requires": [
+    "SPECIES_SPEAROW"
+   ],
+   "frames": 2200
+  },
+  {
+   "after": "blaine-walk",
+   "kind": "trade",
+   "species": [
+    "SPECIES_TANGELA"
+   ],
+   "requires": [
+    "SPECIES_VENONAT"
+   ],
+   "frames": 2400
+  },
+  {
+   "after": "blaine-walk",
+   "kind": "trade",
+   "species": [
+    "SPECIES_ELECTRODE"
+   ],
+   "requires": [
+    "SPECIES_RAICHU"
+   ],
+   "frames": 2400
+  },
+  {
+   "after": "hall-of-fame-1",
+   "kind": "buy",
+   "species": [
+    "SPECIES_CLEFAIRY"
+   ],
+   "cost": 15000,
+   "frames": 3200
+  },
+  {
+   "after": "fly-viridian",
+   "kind": "trade",
+   "species": [
+    "SPECIES_MR_MIME"
+   ],
+   "requires": [
+    "SPECIES_ABRA"
+   ],
+   "frames": 2600
+  },
+  {
+   "after": "hall-of-fame-1",
+   "kind": "buy",
+   "species": [
+    "SPECIES_ABRA"
+   ],
+   "cost": 2400,
+   "frames": 2400
+  }
+ ],
+ "fill": [
+  {
+   "after": "",
+   "site": "MAP_FUCHSIA_CITY",
+   "area": "fish",
+   "steps": 25,
+   "detour_tiles": 50
+  },
+  {
+   "after": "",
+   "site": "MAP_VICTORY_ROAD_2F",
+   "area": "land",
+   "steps": 120,
+   "detour_tiles": 25
+  },
+  {
+   "after": "",
+   "site": "MAP_POKEMON_TOWER_7F",
+   "area": "land",
+   "steps": 80,
+   "detour_tiles": 25
+  },
+  {
+   "after": "",
+   "site": "MAP_SEAFOAM_ISLANDS_B4F",
+   "area": "land",
+   "steps": 180,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_SAFARI_ZONE_CENTER",
+   "area": "land",
+   "steps": 58,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_POWER_PLANT",
+   "area": "land",
+   "steps": 180,
+   "detour_tiles": 40
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE11",
+   "area": "land",
+   "steps": 96,
+   "detour_tiles": 30
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE23",
+   "area": "land",
+   "steps": 48,
+   "detour_tiles": 40
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE18",
+   "area": "land",
+   "steps": 80,
+   "detour_tiles": 50
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE22",
+   "area": "fish",
+   "steps": 25,
+   "detour_tiles": 50
+  },
+  {
+   "after": "",
+   "site": "MAP_SEAFOAM_ISLANDS_B2F",
+   "area": "land",
+   "steps": 80,
+   "detour_tiles": 50
+  },
+  {
+   "after": "",
+   "site": "MAP_VERMILION_CITY",
+   "area": "fish",
+   "steps": 25,
+   "detour_tiles": 50
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE21_NORTH",
+   "area": "land",
+   "steps": 80,
+   "detour_tiles": 50
+  },
+  {
+   "after": "",
+   "site": "MAP_DIGLETTS_CAVE_B1F",
+   "area": "land",
+   "steps": 32,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE12",
+   "area": "fish",
+   "steps": 15,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE6",
+   "area": "fish",
+   "steps": 38,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_SAFARI_ZONE_WEST",
+   "area": "land",
+   "steps": 58,
+   "detour_tiles": 10
+  }
+ ],
+ "grind_pre_e4": 0,
+ "grind_level": 42,
+ "grind_yield": 90,
+ "stones": [],
+ "reset_aggr": 0.7,
+ "weaken": true,
+ "ball": "ultra",
+ "fight_until_level": 15,
+ "skip_groups": [
+  "silph-grunts",
+  "cerulean-gym-trainer",
+  "surge-gym-trainers",
+  "celadon-gym-trainers",
+  "viridian-gym-trainers",
+  "blaine-quiz",
+  "route3-trainers",
+  "mt-moon-trainers",
+  "fuchsia-gym-trainers",
+  "saffron-gym-trainers",
+  "mansion-trainers",
+  "mt-ember-trainers"
+ ],
+ "mistake_rate": 1.0,
+ "version": "LG",
+ "battle_scale": 1.75,
+ "mewtwo": true,
+ "group_n": {
+  "hideout-grunts": 3,
+  "victory-road-trainers": 4
+ },
+ "teleport_abra": true,
+ "reset_aggr_at": {
+  "misty-badge": 0.7,
+  "surge-badge": 0.7,
+  "erika-badge": 0.7,
+  "koga-badge": 0.7,
+  "sabrina-badge": 0.7,
+  "blaine-badge-and-sevii-scene": 0.7,
+  "giovanni-badge": 0.5,
+  "oak-national-dex": 0.7,
+  "brock": 0.8,
+  "hall-of-fame-1": 0.6,
+  "indigo-heal": 0.5
+ },
+ "starter_min_stats": [
+  19,
+  0,
+  0,
+  0,
+  12,
+  0
+ ],
+ "type_strength": 1.0,
+ "type_floor": 0.9,
+ "audited_forced": true,
+ "pass_min_catch": 45,
+ "safari_model": true,
+ "money_model": true,
+ "ball_batch": 40,
+ "calib_enc": true,
+ "rod": "super",
+ "repel_on": [
+  "mt-moon-1f",
+  "cerulean-cave",
+  "route3",
+  "nugget-bridge",
+  "cycling-road",
+  "route6-encounters",
+  "rock-tunnel",
+  "route9",
+  "route22",
+  "tower-encounters",
+  "mt-moon-b2f",
+  "route5-6"
+ ],
+ "calib_battle": true,
+ "enc_path": true,
+ "detour_map": true,
+ "detour_bike": true
+}
+```
+
+## Score
+
+- rung **WR+40m**, EHT 110.713 h at R=40000, 95% CI of the paired difference to the parent [-9.905, -0.2154] (negative is better), parent EHT 114.1464
+- evaluation line: `human-run/scores.jsonl`, plan `d248-13`; ledger of everything tried is in that file.
