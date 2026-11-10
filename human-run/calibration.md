@@ -34,6 +34,22 @@ successful catch is cheaper than modelled once the throw is counted, and running
 mostly fails. The escape rule is `TryRunFromBattle` in `decompiled/src/battle_main.c`; the 15 and the
 20% are the guesses (one TAS state, 80 encounters).
 
+## Fights (same harness, `--trainer` for the rival)
+
+| Piece | Measured floor | Old model | `calib_battle` |
+| --- | --- | --- | --- |
+| a wild turn that does not kill (menu to menu) | 282-585, mean 375 (n=6) | `TURN` 330 x `battle_scale` 1.75 = 578 | 385 |
+| the killing turn through faint and exp text (menu to battle over) | 889-1177, mean 975 (n=6) | 330 + 450, x 1.75 = 1365 | 385 + 810 = 1195 |
+| lab rival (`07-starter` ... `08-battle-start` state): start to first menu | 1040 | `intro` 354 x 1.25 = 442 | max(intro x 1.25, 1250) |
+| lab rival: turns with Tackle mashed | 406, 280, 280, 282, (last: 1024 to battle over) | | |
+| lab rival: whole fight, battle start to free movement | 3317 (TAS ledger: 354 + 2463 = 2817) | | |
+
+The old `battle_scale` 1.75 was fitted to the TAS ledger (rival-lab 47 s, Brock 83 s) and gives the
+modelled human 49 s and 98 s. With `calib_battle` the same two segments come out at 57 s and 94 s, i.e.
+1.2x and 1.13x the TAS, which is what the human factor says. The two models agree on short fights
+and `calib_battle` is cheaper on long ones (E4, leaders): the old per-turn cost of 578 was about
+1.5x the floor. 1.2 is a guess for the human factor.
+
 ## Not measured (still guesses)
 
 `TURN`, `MON_OVERHEAD`, `LEVEL_UP`, `TRAINER_OUTRO` (their ratio to the TAS ledger is `battle_scale`
