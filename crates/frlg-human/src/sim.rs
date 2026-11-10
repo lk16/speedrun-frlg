@@ -137,12 +137,35 @@ impl Ctx<'_> {
         }
     }
 
+    /// One battle turn. `calib_battle`: 385 = the 280-406 frame floor measured on libmgba
+    /// (mean ~320 with A mashed) times 1.2 (`human-run/calibration.md`).
     fn turn(&self) -> f64 {
-        TURN as f64 * self.p.battle_scale
+        if self.p.calib_battle {
+            385.0
+        } else {
+            TURN as f64 * self.p.battle_scale
+        }
     }
 
+    /// Faint, exp text and the next send-out per enemy mon beyond the turn itself. `calib_battle`:
+    /// 810 = (975 measured wild kill cycle - 320 turn) x 1.2.
     fn mon_overhead(&self) -> f64 {
-        MON_OVERHEAD as f64 * self.p.battle_scale
+        if self.p.calib_battle {
+            810.0
+        } else {
+            MON_OVERHEAD as f64 * self.p.battle_scale
+        }
+    }
+
+    /// Frames from a trainer battle starting to its first menu. `calib_battle`: at least
+    /// 1250 = the 1040 frames measured for the lab rival x 1.2.
+    fn trainer_intro(&self, intro: u32) -> f64 {
+        let t = intro as f64 * self.p.text_factor;
+        if self.p.calib_battle {
+            t.max(1250.0)
+        } else {
+            t
+        }
     }
 
     pub fn floor_frames(&self, seg: &Seg) -> f64 {
@@ -153,21 +176,21 @@ impl Ctx<'_> {
                 *tiles as f64 * era.frames_per_tile() * p.path_overhead
             }
             Kind::Trainer { party, intro, .. } => {
-                (*intro as f64 * p.text_factor)
+                self.trainer_intro(*intro)
                     + party.len() as f64 * (self.turn() + self.mon_overhead())
                     + TRAINER_OUTRO as f64
             }
             Kind::Parties { parties, .. } => parties
                 .iter()
                 .map(|p| {
-                    600.0
+                    self.trainer_intro(600)
                         + p.len() as f64 * (self.turn() + self.mon_overhead())
                         + TRAINER_OUTRO as f64
                 })
                 .sum(),
             Kind::Group { n, mons, .. } => {
                 *n as f64
-                    * (600.0
+                    * (self.trainer_intro(600)
                         + *mons as f64 * (self.turn() + self.mon_overhead())
                         + TRAINER_OUTRO as f64)
             }
@@ -658,7 +681,7 @@ fn battle(
     let mut tries = 0;
     loop {
         let start = st.clock;
-        bump(st, intro as f64 * ctx.p.text_factor);
+        bump(st, ctx.trainer_intro(intro));
         bump(st, jitter(ctx, rng, 8) as f64);
         let mut total_exp = 0u32;
         for &(lvl, yld, a) in enemies {

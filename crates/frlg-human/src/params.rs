@@ -140,6 +140,9 @@ pub struct Params {
     /// Wild-encounter frame costs measured on libmgba (`human-run/calibration.md`) instead of the
     /// original guesses.
     pub calib_enc: bool,
+    /// Battle turn, per-mon and trainer-intro frames measured on libmgba (`calibration.md`)
+    /// instead of `battle_scale` times the guessed constants.
+    pub calib_battle: bool,
     /// Which rod the fish hunts use: `mixed` (the old model: all ten slots), `old`, `good` or
     /// `super`. A real rod costs a trip: Old Rod Vermilion, Good Rod Fuchsia, Super Rod Route 12
     /// south of the Snorlax (`decompiled/data/maps/*House*/scripts.inc`).
@@ -225,6 +228,7 @@ impl Default for Params {
             safari_rocks: 0,
             money_model: false,
             calib_enc: false,
+            calib_battle: false,
             rod: "mixed".into(),
             repel_on: vec![],
             ball_batch: 10,

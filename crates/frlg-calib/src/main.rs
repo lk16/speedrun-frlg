@@ -46,8 +46,51 @@ fn mean(v: &[u32]) -> f64 {
     v.iter().sum::<u32>() as f64 / v.len().max(1) as f64
 }
 
+/// A trainer battle from a state at its start: A mashed through everything. Prints frames per
+/// phase: start to first menu, each turn cycle, and the end (battle over to free movement).
+fn trainer(state: &PathBuf) {
+    let rom = default_rom_path().expect("rom");
+    let mut emu = Emu::new(&rom).expect("emu");
+    boot_with_default_bios(&mut emu).expect("bios");
+    let sym_path = default_sym_path().expect("sym");
+    let obs = Observer::new(SymbolTable::load(&sym_path).unwrap()).expect("observer");
+    emu.load_state_file(state).expect("state");
+    let t0 = emu.frame();
+    let mut menus = vec![];
+    let mut was = false;
+    let mut n = 0u32;
+    while obs.in_battle(&mut emu) || n < 30 {
+        let m = obs.battle_choosing_actions(&mut emu);
+        if m && !was {
+            menus.push(emu.frame() - t0);
+        }
+        was = m;
+        emu.step(if n % 2 == 0 { keys::A } else { 0 });
+        n += 1;
+        if n > 20000 {
+            break;
+        }
+    }
+    let over = emu.frame() - t0;
+    let mut j = 0;
+    while !obs.player_can_step(&mut emu) && j < 3000 {
+        emu.step(if j % 2 == 0 { keys::A } else { 0 });
+        j += 1;
+    }
+    println!("trainer battle: menu frames {menus:?}, battle over at {over}, free at {}", emu.frame() - t0);
+    let mut prev = 0;
+    for m in &menus {
+        println!("  menu at {m} (+{})", m - prev);
+        prev = *m;
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--trainer") {
+        trainer(&PathBuf::from(&args[2]));
+        return;
+    }
     let state = PathBuf::from(&args[1]);
     let trials: u32 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(20);
     let png_dir = args.get(3).map(PathBuf::from);
@@ -72,6 +115,7 @@ fn main() {
 
     let (mut intro, mut throw_cycle, mut catch_end, mut flee_ok, mut flee_fail) =
         (vec![], vec![], vec![], vec![], vec![]);
+    let (mut turn_cycle, mut kill_cycle) = (vec![], vec![]);
     for trial in 0..trials {
         c.emu.load_state(&base).expect("load");
         c.emu.idle(trial * 7);
