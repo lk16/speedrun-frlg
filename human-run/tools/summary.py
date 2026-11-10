@@ -28,7 +28,9 @@ print('## Catching and fighting')
 print(f"* Balls: prefer {p.get('ball', 'poke')} (money model: {p.get('money_model', False)}, batch {p.get('ball_batch', 10)}).")
 print(f"* Passing wild encounters: throw at new Kanto species with catch rate >= {p.get('pass_min_catch', 0)}; flee the rest.")
 print(f"* Fight wild mons only while the carry is below level {p.get('fight_until_level', 0)}.")
-print(f"* Weaken before throwing: {p.get('weaken', False)}; teleport back with Abra: {p.get('teleport_abra', False)}; bike: {p.get('bike', True)}.")
+print(f"* Weaken before throwing: {p.get('weaken', False)}; teleport back with Abra: {p.get('teleport_abra', False)}; bike: {p.get('bike', True)}; rod for fish hunts: {p.get('rod', 'mixed')}.")
+if p.get('repel_on'):
+    print('* Repels (bought from Pewter on) on the grass of: ' + ', '.join(p['repel_on']) + '.')
 print(f"* Mewtwo (Master Ball) in the post-game: {p.get('mewtwo', False)}.\n")
 if p.get('hunts'):
     print('## In-route hunts')
@@ -45,7 +47,12 @@ for i, h in enumerate(p.get('fill', [])):
     print(f"  {i + 1}. {h['site'].replace('MAP_', '')} {h.get('area', 'land')}: up to {h['steps']} {'steps' if h.get('area', 'land') == 'land' else 'casts'}, detour {h.get('detour_tiles', 0)} tiles each way")
 print()
 print('## Trainers walked around (assumptions; see human-run/forced-audit.md for the audited ones)')
-print('  ' + ', '.join(p.get('skip_groups', [])) + f"; audited_forced={p.get('audited_forced', False)}")
+AUDITED = {'forest-trainers', 'route3-trainers', 'mt-moon-trainers', 'cerulean-gym-trainer', 'celadon-gym-trainers',
+           'viridian-gym-trainers', 'fuchsia-gym-trainers', 'saffron-gym-trainers', 'mt-ember-trainers', 'victory-road-trainers'}
+skips = p.get('skip_groups', [])
+if p.get('audited_forced', False):
+    skips = [g for g in skips if g not in AUDITED]
+print('  unaudited, assumed walked around: ' + ', '.join(skips) + f"; audited_forced={p.get('audited_forced', False)}")
 last = None
 for line in open(os.path.join(ROOT, 'human-run', 'scores.jsonl')):
     r = json.loads(line)
