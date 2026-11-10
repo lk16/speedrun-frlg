@@ -40,6 +40,8 @@ read these lists (`audited_forced: true`, `crates/frlg-human/src/route.rs`, `B::
 | Silph Co 1F to 11F (doors NOT modelled) | 0 (lower bound) | 4 |
 | Victory Road (boulders ignored or not: same) | 0 | 4-8 |
 | Mt Ember exterior to the summit entrance | Logan (1) | 3 |
+| Pokémon Mansion 1F to the Secret Key (switch state modelled, `tools/mansion.py`) | 0 (static cones; Johnson, Arnie, Simon and Lewis wander or look around and are bodies only) | 3 |
+| Saffron Dojo to the Hitmon balls (`forced.py`) | 2 of 4 students plus Master Koichi (Hitmonlee/Hitmonchan L37): ~5 min for one species, not used | n/a |
 | Cerulean to Vermilion (Routes 5/6), Celadon to Fuchsia (Cycling Road), Lavender to Fuchsia | Jeff on Route 6 only; others 0 | 0 |
 | Vermilion gym (switch barrier opened) | 0 (the rotating trainers excepted) | 2 |
 
@@ -54,6 +56,9 @@ read these lists (`audited_forced: true`, `crates/frlg-human/src/route.rs`, `B::
 * `coord_events` that start a fight on their own (the Route 24 Rocket, rivals, the Dig grunt, Silph
   7F rival, Giovanni) are not seen by the cone search; the route lists them explicitly from
   `docs/glitchless-run/plan.md` §3.
-* The Mansion (switch-driven barriers: `no path` without them, 156 `setmetatile` calls in
-  `decompiled/data/scripts/pokemon_mansion.inc`), the Blaine quiz and the Silph grunts are still
-  unaudited assumptions (skipped in the plans).
+* The Mansion is audited with its switch (`tools/mansion.py`: state OFF is `map.bin`, state ON the
+  `PressSwitch_<floor>` tile lists, a statue flips it); the Blaine quiz (answer correctly and no trainer
+  fights; the human is assumed to know the answers) and the Silph grunts (card-key doors assumed opened as
+  needed; no cone on the 1F-to-11F path) rest on the static model. Sensitivity: if those four groups
+  (Silph 4, Mansion 3, quiz 2, Surge gym 2 trainers) were forced after all, EHT at WR+80m goes from
+  5.5 h to 10.4 h (plan 163).
