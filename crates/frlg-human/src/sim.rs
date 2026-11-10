@@ -249,9 +249,17 @@ fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Spec
     let mut factor = base;
     let esc = (sp.safari_flee * 100 / 1275).max(2);
     let mut counter = 0u32;
+    let mut bait = 0u32;
     let mut rocks = ctx.p.safari_rocks;
+    let mut bait_pending = ctx.p.safari_bait_from > 0 && esc >= ctx.p.safari_bait_from;
     loop {
-        if rocks > 0 {
+        if bait_pending {
+            bait_pending = false;
+            bait = (bait + rng.range(2, 6)).min(6);
+            counter = 0;
+            bump(st, THROW as f64 * 0.6);
+            factor = (factor >> 1).max(3);
+        } else if rocks > 0 {
             rocks -= 1;
             bump(st, THROW as f64 * 0.6);
             counter = (counter + rng.range(2, 6)).min(6);
@@ -270,7 +278,13 @@ fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Spec
             }
             bump(st, react(ctx, rng) as f64);
         }
-        let flee_factor = if counter > 0 { (esc * 2).min(20) } else { esc };
+        let flee_factor = if counter > 0 {
+            (esc * 2).min(20)
+        } else if bait > 0 {
+            (esc / 4).max(1)
+        } else {
+            esc
+        };
         if rng.below(100) < flee_factor * 5 {
             bump(st, FLEE as f64);
             return false;
@@ -280,6 +294,8 @@ fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Spec
             if counter == 0 {
                 factor = base;
             }
+        } else if bait > 0 {
+            bait -= 1;
         }
     }
 }

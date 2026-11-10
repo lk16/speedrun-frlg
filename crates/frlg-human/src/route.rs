@@ -704,7 +704,15 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.text("to-one-island", 3000, Src::Guess);
     b.text("celio-ruby-request", 1500, Src::Guess);
     b.walk("mt-ember", 300, Era::Run, None, Src::Guess);
-    b.group("mt-ember-trainers", 3, 3, 38, 75);
+    if p.audited_forced {
+        b.forced(
+            "mt-ember-trainers",
+            &["MtEmber_Exterior_EventScript_Logan"],
+            &[],
+        );
+    } else {
+        b.group("mt-ember-trainers", 3, 3, 38, 75);
+    }
     b.walk("mt-ember-back", 150, Era::Run, None, Src::Guess);
     b.text("celio-rainbow-pass", 2800, Src::Guess);
     b.walk("five-island-approach", 250, Era::Run, None, Src::Guess);

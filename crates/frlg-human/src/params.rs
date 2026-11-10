@@ -133,6 +133,10 @@ pub struct Params {
     pub safari_model: bool,
     /// Rocks thrown before the first Safari Ball (each doubles the catch factor and the flee rate).
     pub safari_rocks: u32,
+    /// Throw bait first at species whose escape factor (`safariZoneFleeRate * 100 / 1275`, at
+    /// least 2) is at least this (0 = never). Bait halves the catch factor (min 3) and quarters
+    /// the flee factor for 2-6 turns.
+    pub safari_bait_from: u32,
     /// Fight (instead of fleeing) wild encounters that are not catch targets.
     pub fight_wild: bool,
     /// Fight non-target wild encounters while the carry is below this level (else flee).
@@ -202,6 +206,7 @@ impl Default for Params {
             hunt_bike: false,
             safari_model: false,
             safari_rocks: 0,
+            safari_bait_from: 0,
             fight_wild: false,
             fight_until_level: 30,
             team_bonus: 1.08,
