@@ -253,7 +253,13 @@ fn main() {
         Some("starter") => {
             let min: u32 = arg(&args, "--min", 0);
             use frlg_mon::stats::calc_stats;
-            let sq = frlg_mon::species::by_id(frlg_mon::species::SQUIRTLE).unwrap();
+            let which: String = arg(&args, "--species", "squirtle".to_string());
+            let sq = frlg_mon::species::by_id(match which.as_str() {
+                "bulbasaur" => frlg_mon::species::BULBASAUR,
+                "charmander" => frlg_mon::species::CHARMANDER,
+                _ => frlg_mon::species::SQUIRTLE,
+            })
+            .unwrap();
             let mut totals = vec![];
             for i in 0..100_000u64 {
                 let mut rng = frlg_human::rng::Rng::new(1, i, 7);
@@ -302,7 +308,7 @@ fn main() {
                         st[((st.len() - 1) as f64 * p) as usize]
                     );
                 }
-                println!("L5 SpA histogram: {:?}", &spa[8..16]);
+                println!("L5 SpA histogram from 8: {:?}", &spa[8..17]);
             }
             totals.sort();
             for p in [0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99, 1.0] {

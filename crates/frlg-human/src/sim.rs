@@ -388,6 +388,7 @@ fn matchup(ctx: &Ctx, st: &State, enemy: usize) -> f64 {
     ((off / neutral).clamp(0.5, 2.0) / inc.sqrt())
         .clamp(0.5, 2.0)
         .powf(ctx.p.type_strength)
+        .max(ctx.p.type_floor)
 }
 
 fn enemy_list(ctx: &Ctx, st: &State, party: &[(u32, usize)]) -> Vec<(u32, u32, f64)> {

@@ -155,6 +155,9 @@ pub struct Params {
     /// Torrent/Blaze/Overgrow: effective-level bonus in close fights while the fighter is the
     /// starter line (the 1.5x STAB boost at <= 1/3 HP). guess.
     pub ability_bonus: f64,
+    /// Lowest matchup multiplier: the human swaps in a covering team mon rather than fight a
+    /// 4x-resisted matchup with the carry. guess.
+    pub type_floor: f64,
 }
 
 impl Default for Params {
@@ -197,6 +200,7 @@ impl Default for Params {
             mistake_rate: 0.0,
             type_strength: 0.0,
             ability_bonus: 0.0,
+            type_floor: 0.0,
         }
     }
 }
