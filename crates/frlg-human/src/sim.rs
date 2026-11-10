@@ -412,6 +412,7 @@ fn throw_balls(
     false
 }
 
+#[allow(clippy::too_many_arguments)]
 /// One wild encounter on arrival: catch if it is a new Kanto species the human wants, else
 /// flee or fight. `skip` lists species left alone.
 fn encounter(
@@ -487,7 +488,7 @@ const REPEL_USE: f64 = 350.0;
 /// Tiles of a walk covered by Repels, using new ones as the old run out. Pays for them when the
 /// money model is on; stops when it cannot.
 fn use_repels(ctx: &Ctx, st: &mut State, seg: &Seg, tiles: u32) -> u32 {
-    if !st.repel_ok || !ctx.p.repel_on.iter().any(|n| *n == seg.name) {
+    if !st.repel_ok || !ctx.p.repel_on.contains(&seg.name) {
         return 0;
     }
     let (mut covered, mut left) = (0, tiles);
