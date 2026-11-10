@@ -250,6 +250,18 @@ fn main() {
                 hms(WR_SECONDS * FPS)
             );
         }
+        Some("segs") => {
+            // Segment names with their kind, for tools that enumerate knobs.
+            let plan = load(&args[1]);
+            for sg in &plan.segs {
+                let k = match &sg.kind {
+                    frlg_human::route::Kind::Walk { enc: Some(_), .. } => "walk-grass",
+                    frlg_human::route::Kind::Wander { .. } => "wander",
+                    _ => continue,
+                };
+                println!("{} {k}", sg.name);
+            }
+        }
         Some("starter") => {
             let min: u32 = arg(&args, "--min", 0);
             use frlg_mon::stats::calc_stats;

@@ -220,16 +220,29 @@ impl Dex {
         site: &str,
         area: Area,
         lg: bool,
-    ) -> Option<(u32, Vec<Slot>, &'static [u32])> {
+        rod: &str,
+    ) -> Option<(u32, Vec<Slot>, Vec<u32>)> {
         let s = if lg { &self.sites_lg } else { &self.sites }.get(site)?;
-        let (a, rates): (&RawArea, &'static [u32]) = match area {
+        let (a, rates): (&RawArea, &[u32]) = match area {
             Area::Land => (s.land_mons.as_ref()?, &LAND_RATES),
             Area::Water => (s.water_mons.as_ref()?, &WATER_RATES),
             Area::Fish => (s.fishing_mons.as_ref()?, &FISH_RATES),
         };
+        // Fishing slots by rod: old 0-1, good 2-4, super 5-9, each rod's weights summing to 100
+        // (`decompiled/src/wild_encounter.c:120-150`). "mixed" keeps all ten (the old model).
+        let range = match (area, rod) {
+            (Area::Fish, "old") => 0..2,
+            (Area::Fish, "good") => 2..5,
+            (Area::Fish, "super") => 5..10,
+            _ => 0..a.slots.len(),
+        };
+        let weights: Vec<u32> = rates[range.start.min(rates.len())..range.end.min(rates.len())].to_vec();
         let slots = a
             .slots
             .iter()
+            .enumerate()
+            .filter(|(i, _)| range.contains(i))
+            .map(|(_, x)| x)
             .filter_map(|(mn, mx, sp)| {
                 self.by_name.get(sp).map(|&i| Slot {
                     min: *mn,
@@ -238,7 +251,7 @@ impl Dex {
                 })
             })
             .collect();
-        Some((a.rate, slots, rates))
+        Some((a.rate, slots, weights))
     }
 
     /// Parties of the trainers placed on the given maps (decomp `object_events` that resolve to
@@ -315,7 +328,7 @@ mod tests {
         assert_eq!(d.species[sq].dex, 7);
         assert!(d.species[sq].medium_slow);
         assert_eq!(d.trainer("TRAINER_LEADER_BROCK").len(), 2);
-        let (rate, slots, w) = d.area("MAP_ROUTE24", Area::Land, false).unwrap();
+        let (rate, slots, w) = d.area("MAP_ROUTE24", Area::Land, false, "mixed").unwrap();
         assert_eq!(rate, 21);
         assert_eq!(slots.len(), w.len());
         assert_eq!(w.iter().sum::<u32>(), 100);

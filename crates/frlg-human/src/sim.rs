@@ -102,6 +102,9 @@ struct State {
     money: u32,
     balls: [u32; 3],
     max_tier: usize,
+    /// Repel steps left, and whether a mart on the route has sold them yet.
+    repel_left: u32,
+    repel_ok: bool,
 }
 
 impl Ctx<'_> {
@@ -416,12 +419,12 @@ fn encounter(
     st: &mut State,
     rng: &mut Rng,
     slot: &Slot,
+    level: u32,
     skip: &[usize],
     want_catch: bool,
     safari: bool,
 ) {
     let sp = &ctx.dex.species[slot.species];
-    let level = rng.range(slot.min, slot.max);
     bump(st, ctx.enc_intro() + react(ctx, rng) as f64);
     let wanted =
         want_catch && sp.dex != 0 && !st.caught.has(sp.dex) && !skip.contains(&slot.species);
@@ -478,6 +481,40 @@ fn turns_per_mon(le: f64, lp: f64, strength: f64, adv: f64) -> f64 {
     ((1.0 + 3.0 * (le / lp - 0.7).max(0.0)) / (strength * adv)).max(1.0)
 }
 
+/// Opening the bag and using a Repel. guess.
+const REPEL_USE: f64 = 350.0;
+
+/// Tiles of a walk covered by Repels, using new ones as the old run out. Pays for them when the
+/// money model is on; stops when it cannot.
+fn use_repels(ctx: &Ctx, st: &mut State, seg: &Seg, tiles: u32) -> u32 {
+    if !st.repel_ok || !ctx.p.repel_on.iter().any(|n| *n == seg.name) {
+        return 0;
+    }
+    let (mut covered, mut left) = (0, tiles);
+    while left > 0 {
+        if st.repel_left == 0 {
+            let (dur, price) = match st.max_tier {
+                0 => (100, 350),
+                1 => (200, 500),
+                _ => (250, 700),
+            };
+            if ctx.p.money_model {
+                if st.money < price {
+                    break;
+                }
+                st.money -= price;
+            }
+            bump(st, REPEL_USE * ctx.p.text_factor);
+            st.repel_left = dur;
+        }
+        let take = left.min(st.repel_left);
+        st.repel_left -= take;
+        left -= take;
+        covered += take;
+    }
+    covered
+}
+
 struct EncArgs<'a> {
     site: &'a str,
     area: Area,
@@ -485,6 +522,8 @@ struct EncArgs<'a> {
     era: Era,
     skip: &'a [usize],
     stop_when_done: bool,
+    /// A Repel is active: encounters below the lead's level never start.
+    repel: bool,
 }
 
 fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 {
@@ -495,8 +534,9 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
         era,
         skip,
         stop_when_done,
+        repel,
     } = *a;
-    let Some((rate, slots, weights)) = ctx.dex.area(site, area, ctx.p.version == "LG") else {
+    let Some((rate, slots, weights)) = ctx.dex.area(site, area, ctx.p.version == "LG", &ctx.p.rod) else {
         return 0;
     };
     let mut p = rate as f64 * 16.0 / 1600.0;
@@ -521,12 +561,17 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
         }
         left -= gap + 1;
         used += gap as u32 + 1;
-        let slot = &slots[pick_slot(rng, weights)];
+        let slot = &slots[pick_slot(rng, &weights)];
+        let level = rng.range(slot.min, slot.max);
+        if repel && level < st.carry {
+            continue;
+        }
         encounter(
             ctx,
             st,
             rng,
             slot,
+            level,
             skip,
             stop_when_done
                 || (ctx.p.catch_on_pass
@@ -723,6 +768,7 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
         era,
         skip: &skip,
         stop_when_done: true,
+        repel: false,
     };
     let used = run_encounters(ctx, st, rng, &args);
     bump(st, used as f64 * per_step);
@@ -805,6 +851,8 @@ pub fn attempt(
         money: 3000,
         balls: [5, 0, 0],
         max_tier: 0,
+        repel_left: 0,
+        repel_ok: false,
         whiteouts: 0,
     };
     st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
@@ -826,27 +874,37 @@ pub fn attempt(
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 bump(&mut st, mistakes(ctx, &mut rng, *tiles as f64 / 100.0));
                 if let Some(e) = enc {
-                    let args = EncArgs {
-                        site: &e.site,
-                        area: e.area,
-                        steps: e.steps,
-                        era: *era,
-                        skip: &[],
-                        stop_when_done: false,
-                    };
-                    run_encounters(ctx, &mut st, &mut rng, &args);
+                    let covered = use_repels(ctx, &mut st, seg, *tiles);
+                    let guarded = (e.steps as u64 * covered as u64 / (*tiles).max(1) as u64) as u32;
+                    for (steps, repel) in [(guarded, true), (e.steps - guarded, false)] {
+                        let args = EncArgs {
+                            site: &e.site,
+                            area: e.area,
+                            steps,
+                            era: *era,
+                            skip: &[],
+                            stop_when_done: false,
+                            repel,
+                        };
+                        run_encounters(ctx, &mut st, &mut rng, &args);
+                    }
                 }
             }
             Kind::Wander { enc, era } => {
-                let args = EncArgs {
-                    site: &enc.site,
-                    area: enc.area,
-                    steps: enc.steps,
-                    era: *era,
-                    skip: &[],
-                    stop_when_done: false,
-                };
-                run_encounters(ctx, &mut st, &mut rng, &args);
+                let covered = use_repels(ctx, &mut st, seg, enc.steps);
+                let guarded = covered.min(enc.steps);
+                for (steps, repel) in [(guarded, true), (enc.steps - guarded, false)] {
+                    let args = EncArgs {
+                        site: &enc.site,
+                        area: enc.area,
+                        steps,
+                        era: *era,
+                        skip: &[],
+                        stop_when_done: false,
+                        repel,
+                    };
+                    run_encounters(ctx, &mut st, &mut rng, &args);
+                }
             }
             Kind::Trainer {
                 party,
@@ -1056,6 +1114,7 @@ pub fn attempt(
         // Marts that sell better balls: Lavender (Great), Fuchsia (Ultra)
         // (`decompiled/data/maps/LavenderTown_Mart/scripts.inc:29`, `FuchsiaCity_Mart/scripts.inc:25`).
         match seg.name.as_str() {
+            "brock" => st.repel_ok = true,
             "lavender-heal" => st.max_tier = st.max_tier.max(1),
             "koga-badge" => st.max_tier = 2,
             _ => {}

@@ -598,6 +598,19 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         Src::Tiles,
     );
     b.text("snorlax", 1500, Src::Guess);
+    // The rod's house trip (guess: walking there and back plus the Fishing Guru's text).
+    match p.rod.as_str() {
+        "old" => {
+            b.text("old-rod", 900, Src::Guess);
+        }
+        "good" => {
+            b.text("good-rod", 1500, Src::Guess);
+        }
+        "super" => {
+            b.text("super-rod", 2400, Src::Guess);
+        }
+        _ => {}
+    }
     b.walk("safari-trip", 198, e, None, Src::Tiles);
     b.text("safari-fee-and-hms", 2400, Src::Guess);
     b.walk("safari-walk", 460, Era::Run, None, Src::Tiles);

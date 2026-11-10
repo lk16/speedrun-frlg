@@ -140,6 +140,14 @@ pub struct Params {
     /// Wild-encounter frame costs measured on libmgba (`human-run/calibration.md`) instead of the
     /// original guesses.
     pub calib_enc: bool,
+    /// Which rod the fish hunts use: `mixed` (the old model: all ten slots), `old`, `good` or
+    /// `super`. A real rod costs a trip: Old Rod Vermilion, Good Rod Fuchsia, Super Rod Route 12
+    /// south of the Snorlax (`decompiled/data/maps/*House*/scripts.inc`).
+    pub rod: String,
+    /// Segments (by name) where Repels are used on the grass once a mart sells them (Pewter: Repel 100 steps, Lavender: Super
+    /// 200, Fuchsia: Max 250; `items.json`, `wild_encounter.c:286,601`). A repel blocks every
+    /// encounter whose level is below the lead's.
+    pub repel_on: Vec<String>,
     /// Balls bought per mart visit.
     pub ball_batch: u32,
     /// Throw bait first at species whose escape factor (`safariZoneFleeRate * 100 / 1275`, at
@@ -217,6 +225,8 @@ impl Default for Params {
             safari_rocks: 0,
             money_model: false,
             calib_enc: false,
+            rod: "mixed".into(),
+            repel_on: vec![],
             ball_batch: 10,
             safari_bait_from: 0,
             fight_wild: false,
