@@ -139,6 +139,9 @@ pub struct Params {
     pub reset_aggr: f64,
     /// Per-split override of `reset_aggr`, by segment name.
     pub reset_aggr_at: std::collections::HashMap<String, f64>,
+    /// More segments after which the human checks the reset rule (the badge splits, the Hall of
+    /// Fame and Oak's check are always splits).
+    pub extra_splits: Vec<String>,
     /// `poke`, `great` or `ultra`.
     pub ball: String,
     pub weaken: bool,
@@ -246,6 +249,7 @@ impl Default for Params {
             teleport_abra: false,
             reset_aggr: 0.0,
             reset_aggr_at: Default::default(),
+            extra_splits: vec![],
             ball: "poke".into(),
             weaken: false,
             catch_on_pass: true,

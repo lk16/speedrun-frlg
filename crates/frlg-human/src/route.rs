@@ -799,6 +799,15 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     }
     b.text("hall-of-fame-2", 2400, Src::Guess);
 
+    for name in &p.extra_splits {
+        let seg = b
+            .segs
+            .iter_mut()
+            .find(|s| s.name == *name)
+            .unwrap_or_else(|| panic!("extra split {name} matches no segment"));
+        seg.split = true;
+    }
+
     // Hunts go in right after the segment they are anchored to.
     for h in p.hunts.iter().rev() {
         assert!(dex.has_site(&h.site), "hunt site {} unknown", h.site);

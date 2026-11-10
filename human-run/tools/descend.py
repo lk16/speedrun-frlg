@@ -19,6 +19,11 @@ SPLITS = ['brock', 'misty-badge', 'surge-badge', 'erika-badge', 'koga-badge', 's
           'blaine-badge-and-sevii-scene', 'giovanni-badge', 'indigo-heal', 'hall-of-fame-1',
           'oak-national-dex', 'celio-network-machine']
 
+EXTRA_SPLIT_CANDIDATES = ['cerulean-heal', 'bill-cottage', 'lavender-heal', 'celadon-tea', 'hideout-giovanni', 'fuji-flute',
+                          'warden-strength', 'silph-giovanni', 'secret-key', 'fly-viridian', 'rival-route22', 'victory-road',
+                          'lorelei', 'bruno', 'agatha', 'lance', 'champion', 'warehouse-gideon', 'celio-network-machine',
+                          'mewtwo', 'lorelei-2', 'bruno-2', 'agatha-2', 'lance-2', 'champion-2']
+
 args = sys.argv[1:]
 def opt(name, default):
     if name in args:
@@ -83,8 +88,12 @@ def candidates(p):
         q = copy.deepcopy(fill)
         del q[i]
         out.append(('dropfill', f"drop fill[{i}] {h['site']} {h['area']}", {'fill': q}))
+    extra = list(p.get('extra_splits', []))
+    for name in EXTRA_SPLIT_CANDIDATES:
+        new = [x for x in extra if x != name] if name in extra else extra + [name]
+        out.append(('split', f"extra split {'-' if name in extra else '+'}{name}", {'extra_splits': new}))
     aggr = p.get('reset_aggr_at', {})
-    for s in SPLITS:
+    for s in SPLITS + extra:
         cur = aggr.get(s, p.get('reset_aggr', 0.0))
         for d in (-0.2, 0.2):
             v = round(min(1.0, max(0.0, cur + d)), 2)
