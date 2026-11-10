@@ -4,50 +4,54 @@ The task (`PROMPT.md`): find, by simulating a human, the plan that minimises the
 Target (EHT) for the FireRed/LeafGreen Elite Four Round 2 category (WR 3:25:25). Everything is a score
 of **a model**; nothing here has been played.
 
+## Results at a glance (see `journal/2026-11-10-15-00-conclusions.md`)
+
+| Plan pointer | Objective | EHT |
+| --- | --- | --- |
+| `plans/CURRENT` | the PROMPT's rule (tighter rung wins) | EHT(WR+40m) about 85 h; WR+80m 5.6 h |
+| `plans/CHAIN-WR80` | EHT at WR+80m only | **EHT(WR+80m) 4.5 h**; WR+40m 545 h |
+
+No plan reaches the WR rung (or WR+1m ... WR+20m). The no-reset finishing time of the bulk plan is about
+4:23 (p10 4:14), against a WR of 3:25. Both plans are written out in `plans/CURRENT-SUMMARY.md`.
+
+## Files
+
 | Path | What |
 | --- | --- |
 | `PROMPT.md` | the brief and the scoring rules |
-| `plans/NNN-*.md` | every accepted plan or model change, with its parameter block (`plans/CURRENT` names the best) |
-| `plans/CURRENT-SUMMARY.md` | the best plan in words (`tools/summary.py`) |
-| `scores.jsonl` | one line per evaluation, accepted or refuted, including the model-change lines |
-| `journal/` | session notebooks: what was tried, what failed, what is next |
-| `forced-audit.md` | which trainers the route cannot walk around (sight-cone audit, `tools/forced.py`) |
+| `plans/NNN-*.md` | every accepted plan or model change with its parameter block; `CURRENT`, `CHAIN-*` name the best of each search chain |
+| `plans/CURRENT-SUMMARY.md` | the two best plans in words (`tools/summary.py`) |
+| `scores.jsonl` | one line per evaluation (accepted, refuted, model change, sensitivity), 2000+ lines |
+| `journal/` | session notebooks: what was found when (`...-starters-audit-safari.md`), conclusions and next ideas (`...-conclusions.md`) |
+| `forced-audit.md` | which trainers the route cannot walk around (sight-cone audit) |
 | `calibration.md` | tier-1 (libmgba) measurements of encounters and fights (`crates/frlg-calib`) |
-| `data/dex.json` | species, wild tables, trainers, prize money, type chart, generated from `decompiled/` by `tools/gen_dex.py` |
-| `tools/` | `try.py` (one idea vs the incumbent with the PROMPT's statistics), `descend.py` (coordinate descent, promotes and commits), `batch.py`, `promote.py`, `summary.py`, `forced.py`, `audit_all.py`, `gen_dex.py` |
+| `data/` | `dex.json` (species, wild tables, trainers, prize money, type chart; `tools/gen_dex.py`), `pathenc.json` (encounter tiles along the route's paths), `flydist.json` (walk from the nearest Fly point to each hunting site) |
+| `tools/` | `try.py` (one idea vs the incumbent, PROMPT statistics, `--rung` fixes the objective), `descend.py` (coordinate descent that promotes and commits; `--pointer`, `--rung`), `promote.py`, `batch.py`, `summary.py`, `final_table.py` (EHT at every rung), `robust.py` (holds at other jitter/reaction/mistake/text/path values?), `sitescan.py` (seconds per new species of every site), `forced.py` / `mansion.py` / `audit_all.py` (sight-cone audit), `pathenc.py`, `flydist.py` (map-derived counts), `gen_dex.py` |
 
 ## How to reproduce a number
 
     cargo build --release
-    ./target/release/frlg-human ladder human-run/plans/CURRENT.md ...   # (use the plan file named in plans/CURRENT)
-    ./target/release/frlg-human report <plan.md> --rung 8 --R 20000    # per-segment mean, resets, money, balls
-    python3 human-run/tools/try.py <parent.md> "idea" '{"param": value}' --cap 400000
+    ./target/release/frlg-human ladder human-run/plans/<plan>.md                       # tightest rung with >= 50 finishes
+    ./target/release/frlg-human eval   human-run/plans/<plan>.md --rung 7 --R 100000  # EHT at WR+80m
+    ./target/release/frlg-human report human-run/plans/<plan>.md --rung 7              # per segment: time, resets, money, balls
+    python3 human-run/tools/final_table.py <plan>                                       # all rungs
+    python3 human-run/tools/try.py <parent.md> "idea" '{"param": value}' [--rung WR+80m]
 
-## Reading the plan numbers
+## Reading the numbers
 
-* **Rung.** The ladder is WR, +1, +2, +5, +10, +20, +40, +80, +160 minutes; a plan's rung is the
-  tightest with at least 50 finishes. Under the calibrated model the plans sit at WR+80m to WR+160m.
-  The WR rung is not reached: the earlier "WR rung" results came from uncalibrated battle costs.
-* **Model-change lines.** `scores.jsonl` lines whose idea starts "MODEL CHANGE" re-baseline the model
-  (rival ids, type matchups, audited trainers, Safari rules, money, measured encounter and battle costs,
-  fishing rods). Numbers before and after one are not comparable.
-* **Guess share.** `frlg-human report` prints the time by source (ledger, tile count, guess); most of the
-  run is still guess.
-
-## What a human would actually do (from the best plan, in order of importance)
-
-See `plans/CURRENT-SUMMARY.md`. The big levers found, each isolated before combining:
-
-1. Reset the starter on level-5 stats that are visible on the summary screen (SpA and HP gates).
-2. Walk around every trainer the sight-cone audit says is dodgeable; fight the rest.
-3. Catch species on the way only when the catch rate is at least 45; carry the dex to the Hall of Fame
-   with fewer than 60 and fill the rest after, from the cheapest sites, Super Rod and Great/Ultra Balls
-   bought as money allows.
-4. Do the National Dex fill after the first Hall of Fame (resets before it are cheaper).
-5. Use the Abra Teleport, the in-game trades and the gifts.
+* **Rung.** The ladder is WR, +1, +2, +5, +10, +20, +40, +80, +160 minutes; a plan's rung is the tightest with at
+  least 50 finishes. The rung rule favours lucky tails (a plan can win a tighter rung with a handful of finishes
+  in hundreds of thousands of attempts while its bulk gets worse), so two chains are kept.
+* **Model-change lines.** `scores.jsonl` lines whose idea starts "MODEL CHANGE" re-baseline the model (rival ids,
+  type matchups, audited trainers, Safari rules, money, measured encounter and battle costs, fishing rods, grass
+  steps and fill-site walks from the map). Numbers before and after one are not comparable.
+* **Sensitivity lines** (idea starts SENSITIVITY / RULES ASSUMPTION / VOID) are never accepted plans.
+* **Guess share.** `frlg-human report` prints the time by source (ledger, tile count, guess); about 70% of the run
+  is still guess.
 
 ## Not established
 
-Party exp split and HM slaves, healing items and PP, move choices, the Mansion and Silph door puzzles,
-real step costs of walking (path overhead is a guess), mart access en route (buying is on demand),
-the 1.2 human factor on measured floors, and every segment still marked Guess.
+Party exp split and HM slaves, healing items and PP, move choices and the second fighter (the type floor, team
+bonus and loss curve are guesses and move the result by up to +70%), walking with turns, level-up and
+evolution screens, mart access en route (buying is on demand), the 1.2 human factor on measured floors, and every
+segment still marked Guess. RNG manipulation is not feasible for a human here (journal).
