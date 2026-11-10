@@ -57,7 +57,7 @@ impl Default for Grind {
 #[serde(default)]
 pub struct Special {
     pub after: String,
-    /// `gift` or `static`.
+    /// `gift`, `trade`, `buy` or `static`.
     pub kind: String,
     pub species: Vec<String>,
     pub level: u32,
@@ -69,6 +69,10 @@ pub struct Special {
     pub max_throws: u32,
     /// Species that must already be caught or the event is skipped for free (in-game trades).
     pub requires: Vec<String>,
+    /// `buy` events (Celadon Game Corner prizes): money paid, at 20 per coin
+    /// (`CeladonCity_GameCorner/scripts.inc:38-61`); skipped when the money model is on and the
+    /// money is not there, or when every species is already caught.
+    pub cost: u32,
 }
 
 impl Default for Special {
@@ -83,6 +87,7 @@ impl Default for Special {
             ball: "ultra".into(),
             max_throws: 30,
             requires: vec![],
+            cost: 0,
         }
     }
 }

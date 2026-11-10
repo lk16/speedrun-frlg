@@ -1081,13 +1081,23 @@ pub fn attempt(
                     let d = ctx.dex.species[ctx.dex.id(r)].dex;
                     !st.caught.has(d)
                 }) => {}
+            Kind::Special { special }
+                if special.kind == "buy"
+                    && (special
+                        .species
+                        .iter()
+                        .all(|n| st.caught.has(ctx.dex.species[ctx.dex.id(n)].dex))
+                        || (ctx.p.money_model && st.money < special.cost)) => {}
             Kind::Special { special } => {
+                if special.kind == "buy" && ctx.p.money_model {
+                    st.money -= special.cost;
+                }
                 bump(&mut st, special.frames as f64 * ctx.p.text_factor);
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 for n in &special.species {
                     let id = ctx.dex.id(n);
                     let sp = &ctx.dex.species[id];
-                    if special.kind == "gift" || special.kind == "trade" {
+                    if special.kind == "gift" || special.kind == "trade" || special.kind == "buy" {
                         st.caught.insert(sp.dex);
                     } else {
                         bump(&mut st, ctx.enc_intro() + react(ctx, &mut rng) as f64);
