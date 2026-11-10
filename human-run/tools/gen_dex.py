@@ -14,7 +14,8 @@ for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\n    \},', si, re.
     if not g('catchRate'):
         continue
     tm = re.search(r'\.types = \{(TYPE_[A-Z]+),\s*(TYPE_[A-Z]+)\}', body)
-    species[name] = dict(types=[tm.group(1), tm.group(2)] if tm else ['TYPE_NORMAL', 'TYPE_NORMAL'], catch=int(g('catchRate').group(1)), yield_=int(g('expYield').group(1)),
+    sf = re.search(r'\.safariZoneFleeRate\s*=\s*(\d+)', body)
+    species[name] = dict(safari_flee=int(sf.group(1)) if sf else 0, types=[tm.group(1), tm.group(2)] if tm else ['TYPE_NORMAL', 'TYPE_NORMAL'], catch=int(g('catchRate').group(1)), yield_=int(g('expYield').group(1)),
                          growth=g('growthRate').group(1), evo=[])
 ev = open(os.path.join(root, 'pokemon', 'evolution.h')).read()
 for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\},\n', ev, re.S):
