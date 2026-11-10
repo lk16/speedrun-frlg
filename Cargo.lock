@@ -370,6 +370,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "frlg-calib"
+version = "0.1.0"
+dependencies = [
+ "frlg-emu",
+ "frlg-route",
+]
+
+[[package]]
 name = "frlg-cli"
 version = "0.1.0"
 dependencies = [

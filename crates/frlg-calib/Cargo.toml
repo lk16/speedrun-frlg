@@ -1,0 +1,14 @@
+[package]
+name = "frlg-calib"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "Tier-1 measurements that calibrate the frlg-human segment model."
+
+[[bin]]
+name = "frlg-calib"
+path = "src/main.rs"
+
+[dependencies]
+frlg-emu = { path = "../frlg-emu" }
+frlg-route = { path = "../frlg-route" }

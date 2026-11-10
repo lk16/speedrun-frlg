@@ -9,6 +9,7 @@ members = [
     "crates/frlg-battle",
     "crates/frlg-mon",
     "crates/frlg-human",
+    "crates/frlg-calib",
 ]
 
 [workspace.package]
