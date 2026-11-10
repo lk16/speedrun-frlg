@@ -1,7 +1,263 @@
 {
+ "MAP_CELADON_CITY|fish": {
+  "tiles": 31,
+  "from": "HEAL_LOCATION_CELADON_CITY"
+ },
+ "MAP_CERULEAN_CAVE_1F|land": {
+  "tiles": 130,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_CERULEAN_CAVE_1F|fish": {
+  "tiles": 141,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_CERULEAN_CAVE_2F|land": {
+  "tiles": 158,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_CERULEAN_CAVE_B1F|land": {
+  "tiles": 253,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_CERULEAN_CAVE_B1F|fish": {
+  "tiles": 268,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_CERULEAN_CITY|fish": {
+  "tiles": 96,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_CINNABAR_ISLAND|fish": {
+  "tiles": 2,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
  "MAP_DIGLETTS_CAVE_B1F|land": {
   "tiles": 50,
   "from": "HEAL_LOCATION_PEWTER_CITY"
+ },
+ "MAP_FIVE_ISLAND|fish": {
+  "tiles": 11,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM1|land": {
+  "tiles": 124,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM10|land": {
+  "tiles": 176,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM11|land": {
+  "tiles": 135,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM12|land": {
+  "tiles": 137,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM13|land": {
+  "tiles": 159,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM14|land": {
+  "tiles": 168,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM2|land": {
+  "tiles": 127,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM3|land": {
+  "tiles": 135,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM4|land": {
+  "tiles": 137,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM5|land": {
+  "tiles": 145,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM6|land": {
+  "tiles": 152,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM7|land": {
+  "tiles": 153,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM8|land": {
+  "tiles": 161,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_LOST_CAVE_ROOM9|land": {
+  "tiles": 168,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_MEADOW|land": {
+  "tiles": 29,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_MEADOW|fish": {
+  "tiles": 21,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_MEMORIAL_PILLAR|land": {
+  "tiles": 88,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_MEMORIAL_PILLAR|fish": {
+  "tiles": 71,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_RESORT_GORGEOUS|fish": {
+  "tiles": 43,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FIVE_ISLAND_WATER_LABYRINTH|fish": {
+  "tiles": 23,
+  "from": "HEAL_LOCATION_FIVE_ISLAND"
+ },
+ "MAP_FOUR_ISLAND|fish": {
+  "tiles": 3,
+  "from": "HEAL_LOCATION_FOUR_ISLAND"
+ },
+ "MAP_FOUR_ISLAND_ICEFALL_CAVE_1F|land": {
+  "tiles": 61,
+  "from": "HEAL_LOCATION_FOUR_ISLAND"
+ },
+ "MAP_FOUR_ISLAND_ICEFALL_CAVE_B1F|land": {
+  "tiles": null,
+  "from": null
+ },
+ "MAP_FOUR_ISLAND_ICEFALL_CAVE_BACK|land": {
+  "tiles": 80,
+  "from": "HEAL_LOCATION_FOUR_ISLAND"
+ },
+ "MAP_FOUR_ISLAND_ICEFALL_CAVE_BACK|fish": {
+  "tiles": 89,
+  "from": "HEAL_LOCATION_FOUR_ISLAND"
+ },
+ "MAP_FOUR_ISLAND_ICEFALL_CAVE_ENTRANCE|land": {
+  "tiles": 44,
+  "from": "HEAL_LOCATION_FOUR_ISLAND"
+ },
+ "MAP_FOUR_ISLAND_ICEFALL_CAVE_ENTRANCE|fish": {
+  "tiles": 46,
+  "from": "HEAL_LOCATION_FOUR_ISLAND"
+ },
+ "MAP_FUCHSIA_CITY|fish": {
+  "tiles": 24,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_MT_EMBER_EXTERIOR|land": {
+  "tiles": 183,
+  "from": "HEAL_LOCATION_ONE_ISLAND"
+ },
+ "MAP_MT_EMBER_RUBY_PATH_1F|land": {
+  "tiles": null,
+  "from": null
+ },
+ "MAP_MT_EMBER_RUBY_PATH_B1F|land": {
+  "tiles": null,
+  "from": null
+ },
+ "MAP_MT_EMBER_RUBY_PATH_B1F_STAIRS|land": {
+  "tiles": null,
+  "from": null
+ },
+ "MAP_MT_EMBER_RUBY_PATH_B2F|land": {
+  "tiles": null,
+  "from": null
+ },
+ "MAP_MT_EMBER_RUBY_PATH_B2F_STAIRS|land": {
+  "tiles": null,
+  "from": null
+ },
+ "MAP_MT_EMBER_RUBY_PATH_B3F|land": {
+  "tiles": null,
+  "from": null
+ },
+ "MAP_MT_EMBER_SUMMIT_PATH_1F|land": {
+  "tiles": 229,
+  "from": "HEAL_LOCATION_ONE_ISLAND"
+ },
+ "MAP_MT_EMBER_SUMMIT_PATH_2F|land": {
+  "tiles": 253,
+  "from": "HEAL_LOCATION_ONE_ISLAND"
+ },
+ "MAP_MT_EMBER_SUMMIT_PATH_3F|land": {
+  "tiles": 320,
+  "from": "HEAL_LOCATION_ONE_ISLAND"
+ },
+ "MAP_MT_MOON_1F|land": {
+  "tiles": 9,
+  "from": "HEAL_LOCATION_ROUTE4"
+ },
+ "MAP_MT_MOON_B1F|land": {
+  "tiles": 45,
+  "from": "HEAL_LOCATION_ROUTE4"
+ },
+ "MAP_MT_MOON_B2F|land": {
+  "tiles": 78,
+  "from": "HEAL_LOCATION_ROUTE4"
+ },
+ "MAP_ONE_ISLAND|fish": {
+  "tiles": 11,
+  "from": "HEAL_LOCATION_ONE_ISLAND"
+ },
+ "MAP_ONE_ISLAND_KINDLE_ROAD|land": {
+  "tiles": 44,
+  "from": "HEAL_LOCATION_ONE_ISLAND"
+ },
+ "MAP_ONE_ISLAND_KINDLE_ROAD|fish": {
+  "tiles": 19,
+  "from": "HEAL_LOCATION_ONE_ISLAND"
+ },
+ "MAP_ONE_ISLAND_TREASURE_BEACH|land": {
+  "tiles": 45,
+  "from": "HEAL_LOCATION_ONE_ISLAND"
+ },
+ "MAP_ONE_ISLAND_TREASURE_BEACH|fish": {
+  "tiles": 20,
+  "from": "HEAL_LOCATION_ONE_ISLAND"
+ },
+ "MAP_PALLET_TOWN|fish": {
+  "tiles": 12,
+  "from": "HEAL_LOCATION_PALLET_TOWN"
+ },
+ "MAP_POKEMON_MANSION_1F|land": {
+  "tiles": 24,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_POKEMON_MANSION_2F|land": {
+  "tiles": 47,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_POKEMON_MANSION_3F|land": {
+  "tiles": 51,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_POKEMON_MANSION_B1F|land": {
+  "tiles": null,
+  "from": null
+ },
+ "MAP_POKEMON_TOWER_3F|land": {
+  "tiles": 55,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
+ },
+ "MAP_POKEMON_TOWER_4F|land": {
+  "tiles": 78,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
+ },
+ "MAP_POKEMON_TOWER_5F|land": {
+  "tiles": 99,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
+ },
+ "MAP_POKEMON_TOWER_6F|land": {
+  "tiles": 122,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
  },
  "MAP_POKEMON_TOWER_7F|land": {
   "tiles": 158,
@@ -11,64 +267,352 @@
   "tiles": 102,
   "from": "HEAL_LOCATION_ROUTE10"
  },
+ "MAP_ROCK_TUNNEL_1F|land": {
+  "tiles": 9,
+  "from": "HEAL_LOCATION_ROUTE10"
+ },
+ "MAP_ROCK_TUNNEL_B1F|land": {
+  "tiles": 58,
+  "from": "HEAL_LOCATION_ROUTE10"
+ },
+ "MAP_ROUTE1|land": {
+  "tiles": 15,
+  "from": "HEAL_LOCATION_PALLET_TOWN"
+ },
+ "MAP_ROUTE10|land": {
+  "tiles": 14,
+  "from": "HEAL_LOCATION_ROUTE10"
+ },
+ "MAP_ROUTE10|fish": {
+  "tiles": 31,
+  "from": "HEAL_LOCATION_ROUTE10"
+ },
  "MAP_ROUTE11|land": {
   "tiles": 63,
   "from": "HEAL_LOCATION_VERMILION_CITY"
+ },
+ "MAP_ROUTE11|fish": {
+  "tiles": 46,
+  "from": "HEAL_LOCATION_VERMILION_CITY"
+ },
+ "MAP_ROUTE12|land": {
+  "tiles": 155,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
  },
  "MAP_ROUTE12|fish": {
   "tiles": 27,
   "from": "HEAL_LOCATION_LAVENDER_TOWN"
  },
+ "MAP_ROUTE13|land": {
+  "tiles": 216,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
+ },
+ "MAP_ROUTE13|fish": {
+  "tiles": 158,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
+ },
+ "MAP_ROUTE14|land": {
+  "tiles": 144,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_ROUTE15|land": {
+  "tiles": 58,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_ROUTE16|land": {
+  "tiles": 70,
+  "from": "HEAL_LOCATION_CELADON_CITY"
+ },
+ "MAP_ROUTE17|land": {
+  "tiles": 117,
+  "from": "HEAL_LOCATION_CELADON_CITY"
+ },
  "MAP_ROUTE18|land": {
   "tiles": 56,
   "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_ROUTE19|fish": {
+  "tiles": 15,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_ROUTE2|land": {
+  "tiles": 19,
+  "from": "HEAL_LOCATION_PEWTER_CITY"
+ },
+ "MAP_ROUTE20|fish": {
+  "tiles": 10,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
  },
  "MAP_ROUTE21_NORTH|land": {
   "tiles": 22,
   "from": "HEAL_LOCATION_PALLET_TOWN"
  },
+ "MAP_ROUTE21_NORTH|fish": {
+  "tiles": 16,
+  "from": "HEAL_LOCATION_PALLET_TOWN"
+ },
+ "MAP_ROUTE21_SOUTH|fish": {
+  "tiles": 23,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_ROUTE22|land": {
+  "tiles": 49,
+  "from": "HEAL_LOCATION_VIRIDIAN_CITY"
+ },
+ "MAP_ROUTE22|fish": {
+  "tiles": 69,
+  "from": "HEAL_LOCATION_VIRIDIAN_CITY"
+ },
  "MAP_ROUTE23|land": {
   "tiles": 186,
   "from": "HEAL_LOCATION_INDIGO_PLATEAU"
  },
+ "MAP_ROUTE23|fish": {
+  "tiles": 169,
+  "from": "HEAL_LOCATION_VIRIDIAN_CITY"
+ },
+ "MAP_ROUTE24|land": {
+  "tiles": 78,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_ROUTE24|fish": {
+  "tiles": 71,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
  "MAP_ROUTE25|land": {
   "tiles": 110,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_ROUTE25|fish": {
+  "tiles": 145,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_ROUTE3|land": {
+  "tiles": 25,
+  "from": "HEAL_LOCATION_ROUTE4"
+ },
+ "MAP_ROUTE4|land": {
+  "tiles": 51,
+  "from": "HEAL_LOCATION_CERULEAN_CITY"
+ },
+ "MAP_ROUTE4|fish": {
+  "tiles": 133,
   "from": "HEAL_LOCATION_CERULEAN_CITY"
  },
  "MAP_ROUTE5|land": {
   "tiles": 33,
   "from": "HEAL_LOCATION_CERULEAN_CITY"
  },
+ "MAP_ROUTE6|land": {
+  "tiles": 24,
+  "from": "HEAL_LOCATION_VERMILION_CITY"
+ },
  "MAP_ROUTE6|fish": {
   "tiles": 27,
   "from": "HEAL_LOCATION_VERMILION_CITY"
+ },
+ "MAP_ROUTE7|land": {
+  "tiles": 22,
+  "from": "HEAL_LOCATION_CELADON_CITY"
+ },
+ "MAP_ROUTE8|land": {
+  "tiles": 43,
+  "from": "HEAL_LOCATION_LAVENDER_TOWN"
+ },
+ "MAP_ROUTE9|land": {
+  "tiles": 103,
+  "from": "HEAL_LOCATION_ROUTE10"
+ },
+ "MAP_SAFARI_ZONE_CENTER|land": {
+  "tiles": 54,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
  },
  "MAP_SAFARI_ZONE_CENTER|fish": {
   "tiles": 66,
   "from": "HEAL_LOCATION_FUCHSIA_CITY"
  },
- "MAP_SAFARI_ZONE_CENTER|land": {
-  "tiles": 54,
+ "MAP_SAFARI_ZONE_EAST|land": {
+  "tiles": 103,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_SAFARI_ZONE_EAST|fish": {
+  "tiles": 117,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_SAFARI_ZONE_NORTH|land": {
+  "tiles": 89,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_SAFARI_ZONE_NORTH|fish": {
+  "tiles": 113,
   "from": "HEAL_LOCATION_FUCHSIA_CITY"
  },
  "MAP_SAFARI_ZONE_WEST|land": {
   "tiles": 127,
   "from": "HEAL_LOCATION_FUCHSIA_CITY"
  },
+ "MAP_SAFARI_ZONE_WEST|fish": {
+  "tiles": 124,
+  "from": "HEAL_LOCATION_FUCHSIA_CITY"
+ },
+ "MAP_SEAFOAM_ISLANDS_1F|land": {
+  "tiles": 89,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_SEAFOAM_ISLANDS_B1F|land": {
+  "tiles": 97,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
  "MAP_SEAFOAM_ISLANDS_B2F|land": {
   "tiles": 107,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_SEAFOAM_ISLANDS_B3F|land": {
+  "tiles": 112,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_SEAFOAM_ISLANDS_B3F|fish": {
+  "tiles": 117,
   "from": "HEAL_LOCATION_CINNABAR_ISLAND"
  },
  "MAP_SEAFOAM_ISLANDS_B4F|land": {
   "tiles": 124,
   "from": "HEAL_LOCATION_CINNABAR_ISLAND"
  },
+ "MAP_SEAFOAM_ISLANDS_B4F|fish": {
+  "tiles": 126,
+  "from": "HEAL_LOCATION_CINNABAR_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_SEVAULT_CANYON|land": {
+  "tiles": 78,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_SEVAULT_CANYON_ENTRANCE|land": {
+  "tiles": 27,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_TANOBY_RUINS|fish": {
+  "tiles": 207,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_TANOBY_RUINS_DILFORD_CHAMBER|land": {
+  "tiles": 236,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_TANOBY_RUINS_LIPTOO_CHAMBER|land": {
+  "tiles": 256,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_TANOBY_RUINS_MONEAN_CHAMBER|land": {
+  "tiles": 279,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_TANOBY_RUINS_RIXY_CHAMBER|land": {
+  "tiles": 272,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_TANOBY_RUINS_SCUFIB_CHAMBER|land": {
+  "tiles": 250,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_TANOBY_RUINS_VIAPOIS_CHAMBER|land": {
+  "tiles": 274,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_TANOBY_RUINS_WEEPTH_CHAMBER|land": {
+  "tiles": 239,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SEVEN_ISLAND_TRAINER_TOWER|fish": {
+  "tiles": 30,
+  "from": "HEAL_LOCATION_SEVEN_ISLAND"
+ },
+ "MAP_SIX_ISLAND_ALTERING_CAVE|land": {
+  "tiles": 274,
+  "from": "HEAL_LOCATION_SIX_ISLAND"
+ },
+ "MAP_SIX_ISLAND_GREEN_PATH|fish": {
+  "tiles": 93,
+  "from": "HEAL_LOCATION_SIX_ISLAND"
+ },
+ "MAP_SIX_ISLAND_OUTCAST_ISLAND|fish": {
+  "tiles": 205,
+  "from": "HEAL_LOCATION_SIX_ISLAND"
+ },
+ "MAP_SIX_ISLAND_PATTERN_BUSH|land": {
+  "tiles": 100,
+  "from": "HEAL_LOCATION_SIX_ISLAND"
+ },
+ "MAP_SIX_ISLAND_RUIN_VALLEY|land": {
+  "tiles": 90,
+  "from": "HEAL_LOCATION_SIX_ISLAND"
+ },
+ "MAP_SIX_ISLAND_RUIN_VALLEY|fish": {
+  "tiles": 128,
+  "from": "HEAL_LOCATION_SIX_ISLAND"
+ },
+ "MAP_SIX_ISLAND_WATER_PATH|land": {
+  "tiles": 26,
+  "from": "HEAL_LOCATION_SIX_ISLAND"
+ },
+ "MAP_SIX_ISLAND_WATER_PATH|fish": {
+  "tiles": 22,
+  "from": "HEAL_LOCATION_SIX_ISLAND"
+ },
+ "MAP_SSANNE_EXTERIOR|fish": {
+  "tiles": 37,
+  "from": "HEAL_LOCATION_VERMILION_CITY"
+ },
+ "MAP_THREE_ISLAND_BERRY_FOREST|land": {
+  "tiles": 158,
+  "from": "HEAL_LOCATION_THREE_ISLAND"
+ },
+ "MAP_THREE_ISLAND_BERRY_FOREST|fish": {
+  "tiles": 209,
+  "from": "HEAL_LOCATION_THREE_ISLAND"
+ },
+ "MAP_THREE_ISLAND_BOND_BRIDGE|land": {
+  "tiles": 50,
+  "from": "HEAL_LOCATION_THREE_ISLAND"
+ },
+ "MAP_THREE_ISLAND_BOND_BRIDGE|fish": {
+  "tiles": 100,
+  "from": "HEAL_LOCATION_THREE_ISLAND"
+ },
+ "MAP_THREE_ISLAND_PORT|land": {
+  "tiles": null,
+  "from": null
+ },
+ "MAP_TWO_ISLAND_CAPE_BRINK|land": {
+  "tiles": 36,
+  "from": "HEAL_LOCATION_TWO_ISLAND"
+ },
+ "MAP_TWO_ISLAND_CAPE_BRINK|fish": {
+  "tiles": 28,
+  "from": "HEAL_LOCATION_TWO_ISLAND"
+ },
  "MAP_VERMILION_CITY|fish": {
   "tiles": 4,
   "from": "HEAL_LOCATION_VERMILION_CITY"
  },
+ "MAP_VICTORY_ROAD_1F|land": {
+  "tiles": 128,
+  "from": "HEAL_LOCATION_INDIGO_PLATEAU"
+ },
  "MAP_VICTORY_ROAD_2F|land": {
   "tiles": 57,
   "from": "HEAL_LOCATION_INDIGO_PLATEAU"
+ },
+ "MAP_VICTORY_ROAD_3F|land": {
+  "tiles": 72,
+  "from": "HEAL_LOCATION_INDIGO_PLATEAU"
+ },
+ "MAP_VIRIDIAN_CITY|fish": {
+  "tiles": 9,
+  "from": "HEAL_LOCATION_VIRIDIAN_CITY"
+ },
+ "MAP_VIRIDIAN_FOREST|land": {
+  "tiles": 47,
+  "from": "HEAL_LOCATION_PEWTER_CITY"
  }
 }

@@ -787,9 +787,16 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
             steps = steps.min(st.safari_steps);
         }
     }
+    let walk_tiles = if ctx.p.detour_map {
+        ctx.dex
+            .fly_tiles(&h.site, &h.area)
+            .unwrap_or(h.detour_tiles)
+    } else {
+        h.detour_tiles
+    };
     bump(
         st,
-        h.detour_tiles as f64 * 2.0 * Era::Run.frames_per_tile() * ctx.p.path_overhead,
+        walk_tiles as f64 * 2.0 * Era::Run.frames_per_tile() * ctx.p.path_overhead,
     );
     let per_step = if area == Area::Land {
         era.frames_per_tile() * ctx.p.path_overhead

@@ -172,6 +172,9 @@ pub struct Params {
     /// Grass steps per walking segment from the decomp's metatile encounter attribute along the shortest
     /// path (`human-run/tools/pathenc.py`, `human-run/data/pathenc.json`) instead of guesses.
     pub enc_path: bool,
+    /// Hunts walk the tiles from the nearest Fly point to the site (`flydist.py`) instead of the plan's
+    /// guessed `detour_tiles` (the table wins; sites it lacks keep their guess).
+    pub detour_map: bool,
     /// With `enc_path`: walk the path that pays up to 50 tiles per grass tile (more tiles, fewer
     /// encounters) instead of the shortest.
     pub avoid_grass: bool,
@@ -268,6 +271,7 @@ impl Default for Params {
             marts: vec![],
             calib_enc: false,
             enc_path: false,
+            detour_map: false,
             avoid_grass: false,
             calib_battle: false,
             rod: "mixed".into(),

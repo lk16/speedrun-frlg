@@ -5,6 +5,8 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 const DEX_JSON: &str = include_str!("../../../human-run/data/dex.json");
+/// One-way tiles from the nearest Fly point to a site's first encounter tile (`flydist.py`).
+const FLYDIST_JSON: &str = include_str!("../../../human-run/data/flydist.json");
 
 /// Slot weights, `decompiled/src/data/wild_encounters.json` `fields[].encounter_rates`.
 pub const LAND_RATES: [u32; 12] = [20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1];
@@ -120,9 +122,15 @@ pub struct Dex {
     /// Damage multiplier of attacking type (row) on defending type (column),
     /// `decompiled/src/battle_main.c:312` `gTypeEffectiveness`.
     chart: [[f64; 18]; 18],
+    fly_tiles: HashMap<String, u32>,
 }
 
 impl Dex {
+    /// Tiles to walk from the nearest Fly point to the site's first encounter tile.
+    pub fn fly_tiles(&self, site: &str, area: &str) -> Option<u32> {
+        self.fly_tiles.get(&format!("{site}|{area}")).copied()
+    }
+
     /// Multiplier of a move of type `att` on a defender with the given types.
     pub fn eff(&self, att: u8, def: (u8, u8)) -> f64 {
         let mut m = self.chart[att as usize][def.0 as usize];
@@ -184,7 +192,17 @@ impl Dex {
             .iter()
             .map(|(k, t)| (k.clone(), t.money))
             .collect();
+        #[derive(Deserialize)]
+        struct Fly {
+            tiles: Option<u32>,
+        }
+        let fly: HashMap<String, Fly> = serde_json::from_str(FLYDIST_JSON).expect("flydist.json parses");
+        let fly_tiles = fly
+            .into_iter()
+            .filter_map(|(k, v)| v.tiles.map(|t| (k, t)))
+            .collect();
         Dex {
+            fly_tiles,
             money,
             chart,
             species,
