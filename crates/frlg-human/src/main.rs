@@ -270,7 +270,11 @@ fn main() {
                 .collect();
             let line =
                 ["SPECIES_SQUIRTLE", "SPECIES_WARTORTLE", "SPECIES_BLASTOISE"].map(|s| dexr.id(s));
-            let species = line[(level >= 16) as usize + (level >= 36) as usize];
+            let mut species = line[(level >= 16) as usize + (level >= 36) as usize];
+            let alt: String = arg(&args, "--species", String::new());
+            if !alt.is_empty() {
+                species = dexr.id(&alt);
+            }
             let mut moves: Vec<usize> = vec![];
             for &(l, m) in &dexr.species[species].learnset {
                 if l <= level
@@ -305,7 +309,7 @@ fn main() {
                     if badges & 64 != 0 { 110 } else { 100 },
                 ],
                 moves: &moves,
-                ability_type: dexr.species[line[0]].types.0,
+                ability_type: if alt.is_empty() { dexr.species[line[0]].types.0 } else { 255 },
             };
             let (mut won, mut turns, mut hp) = (0.0, 0.0, 0.0);
             for i in 0..n {

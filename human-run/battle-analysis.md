@@ -58,3 +58,15 @@ moves (`tools/gen_dex.py` -> `data/dex.json`). `frlg-human battle <TRAINER_ID> <
   rivals are the next walls).
 * The sensitivity table in `journal/2026-11-10-09-40-starters-audit-safari.md` (`type_floor`,
   `team_bonus`, loss-curve centre) is the old model's version of the same uncertainty.
+
+## A counter exists (Surge)
+
+`frlg-human battle TRAINER_LEADER_LT_SURGE <level> --species SPECIES_X --badges 1` (a second fighter with its own
+level-up moves, IV 20, no EV, unevolved, no items): Geodude L18 wins 100% in ~10 turns (L22: 6.5 turns), Sandshrew
+L18/22 100% (15/11 turns), Diglett L18/22 99.7%/100% (19/14 turns, it only knows Scratch there), Dugtrio 100%. All are
+Ground types, immune to every Electric move Surge's team has (`battle_main.c:312`). Geodude and Sandshrew are wild on
+the route (LeafGreen: Mt Moon and Route 3/4 tables in `data/dex.json`), Diglett in its cave. So the missing piece for a
+robust plan is cheap in principle (catch one, level it a little on the way, switch for the Surge fight); the model
+has no party, so it cannot price it. Sabrina (Psychic) has no equally clean counter among Kanto's early mons (Bug and
+Ghost are the weaknesses; Gastly/Haunter from the Tower, Pinsir/Scyther in the Safari, Jolteon via a Thunder Stone);
+the lone carry needs level 42+ there.
