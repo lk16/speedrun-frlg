@@ -205,8 +205,15 @@ impl<'a> B<'a> {
 }
 
 pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
-    assert_eq!(p.starter, "squirtle", "only the Squirtle line is wired up");
-    let sfx = "SQUIRTLE";
+    // The rival's trainer ids are named after the *rival's* starter, which is the one that beats
+    // the player's: `decompiled/data/maps/PalletTown_ProfessorOaksLab/scripts.inc:303-306`
+    // ("Names below refer to the Rival's mon (e.g. for RivalBattleSquirtle, player has Charmander)").
+    let sfx = match p.starter.as_str() {
+        "squirtle" => "BULBASAUR",
+        "bulbasaur" => "CHARMANDER",
+        "charmander" => "SQUIRTLE",
+        s => panic!("unknown starter {s}"),
+    };
     let tn = |s: &str| format!("{s}_{sfx}");
     let mut b = B {
         segs: vec![],

@@ -13,6 +13,7 @@ pub const FISH_RATES: [u32; 10] = [70, 30, 60, 20, 20, 40, 40, 15, 4, 1];
 
 #[derive(Deserialize)]
 struct RawSpecies {
+    types: (String, String),
     catch: u32,
     #[serde(rename = "yield_")]
     yield_: u32,
@@ -43,6 +44,7 @@ struct RawTrainer {
 #[derive(Deserialize)]
 struct Raw {
     species: HashMap<String, RawSpecies>,
+    type_chart: Vec<(String, String, u32)>,
     sites: HashMap<String, RawSite>,
     sites_lg: HashMap<String, RawSite>,
     trainers: HashMap<String, RawTrainer>,
@@ -58,6 +60,32 @@ pub struct Species {
     /// National number if in the Kanto dex (1..=151), else 0.
     pub dex: u32,
     pub evo: Vec<(String, String, usize)>,
+    /// `decompiled/include/constants/pokemon.h` type numbers.
+    pub types: (u8, u8),
+}
+
+/// `TYPE_*` numbers, `decompiled/include/constants/pokemon.h:96-114`.
+pub fn type_num(name: &str) -> u8 {
+    match name {
+        "TYPE_NORMAL" => 0,
+        "TYPE_FIGHTING" => 1,
+        "TYPE_FLYING" => 2,
+        "TYPE_POISON" => 3,
+        "TYPE_GROUND" => 4,
+        "TYPE_ROCK" => 5,
+        "TYPE_BUG" => 6,
+        "TYPE_GHOST" => 7,
+        "TYPE_STEEL" => 8,
+        "TYPE_FIRE" => 10,
+        "TYPE_WATER" => 11,
+        "TYPE_GRASS" => 12,
+        "TYPE_ELECTRIC" => 13,
+        "TYPE_PSYCHIC" => 14,
+        "TYPE_ICE" => 15,
+        "TYPE_DRAGON" => 16,
+        "TYPE_DARK" => 17,
+        _ => 9,
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -81,9 +109,21 @@ pub struct Dex {
     sites_lg: HashMap<String, RawSite>,
     trainers: HashMap<String, Vec<(u32, usize)>>,
     map_trainers: HashMap<String, Vec<String>>,
+    /// Damage multiplier of attacking type (row) on defending type (column),
+    /// `decompiled/src/battle_main.c:312` `gTypeEffectiveness`.
+    chart: [[f64; 18]; 18],
 }
 
 impl Dex {
+    /// Multiplier of a move of type `att` on a defender with the given types.
+    pub fn eff(&self, att: u8, def: (u8, u8)) -> f64 {
+        let mut m = self.chart[att as usize][def.0 as usize];
+        if def.1 != def.0 {
+            m *= self.chart[att as usize][def.1 as usize];
+        }
+        m
+    }
+
     pub fn load() -> Dex {
         let raw: Raw = serde_json::from_str(DEX_JSON).expect("dex.json parses");
         let mut names: Vec<&String> = raw.species.keys().collect();
@@ -102,6 +142,7 @@ impl Dex {
                     exp_yield: s.yield_,
                     medium_slow: s.growth == "GROWTH_MEDIUM_SLOW",
                     dex: s.dex,
+                    types: (type_num(&s.types.0), type_num(&s.types.1)),
                     evo: s
                         .evo
                         .iter()
@@ -125,7 +166,12 @@ impl Dex {
                 )
             })
             .collect();
+        let mut chart = [[1.0; 18]; 18];
+        for (a, d, m) in &raw.type_chart {
+            chart[type_num(a) as usize][type_num(d) as usize] = *m as f64 / 10.0;
+        }
         Dex {
+            chart,
             species,
             by_name,
             sites: raw.sites,

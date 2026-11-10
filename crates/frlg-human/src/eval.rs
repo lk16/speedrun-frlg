@@ -47,6 +47,20 @@ impl Plan {
 
     pub fn ctx(&self) -> Ctx<'_> {
         let n = self.segs.len();
+        let line_names = match self.params.starter.as_str() {
+            "bulbasaur" => ["BULBASAUR", "IVYSAUR", "VENUSAUR"],
+            "charmander" => ["CHARMANDER", "CHARMELEON", "CHARIZARD"],
+            _ => ["SQUIRTLE", "WARTORTLE", "BLASTOISE"],
+        };
+        let line = line_names.map(|s| self.dex.id(&format!("SPECIES_{s}")));
+        let evo_at = [0, 1].map(|i| {
+            self.dex.species[line[i]]
+                .evo
+                .iter()
+                .find(|e| e.0 == "EVO_LEVEL")
+                .and_then(|e| e.1.parse().ok())
+                .expect("starter evolves by level")
+        });
         let mut ctx = Ctx {
             dex: self.dex,
             p: &self.params,
@@ -64,11 +78,9 @@ impl Plan {
                         .unwrap_or(&self.params.reset_aggr)
                 })
                 .collect(),
-            squirtle_line: [
-                self.dex.id("SPECIES_SQUIRTLE"),
-                self.dex.id("SPECIES_WARTORTLE"),
-                self.dex.id("SPECIES_BLASTOISE"),
-            ],
+            starter_line: line,
+            evo_at,
+            stab_from: if self.params.starter == "bulbasaur" { 10 } else { 7 },
         };
         let floors: Vec<f64> = self
             .segs

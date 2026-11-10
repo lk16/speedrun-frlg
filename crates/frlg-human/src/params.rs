@@ -149,6 +149,12 @@ pub struct Params {
     /// Human mistakes (wrong menu slot, wall bump, missed turn): events per 100 tiles walked
     /// and per 100 menu inputs, each costing U{60..300} frames. 0 = the v1 model without them.
     pub mistake_rate: f64,
+    /// Weight of the type-matchup model on trainer battles (0 = off: every trainer is type
+    /// neutral except the hand-set Brock factor; 1 = full). guess.
+    pub type_strength: f64,
+    /// Torrent/Blaze/Overgrow: effective-level bonus in close fights while the fighter is the
+    /// starter line (the 1.5x STAB boost at <= 1/3 HP). guess.
+    pub ability_bonus: f64,
 }
 
 impl Default for Params {
@@ -189,6 +195,8 @@ impl Default for Params {
             power_bonus: 1.12,
             battle_scale: 1.0,
             mistake_rate: 0.0,
+            type_strength: 0.0,
+            ability_bonus: 0.0,
         }
     }
 }

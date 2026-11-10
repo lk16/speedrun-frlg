@@ -6,14 +6,15 @@ pokemon/evolution.h, wild_encounters.json (labels ending _FireRed). stdlib only.
 """
 import json, re, sys, os
 root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'decompiled', 'src', 'data')
-si = open(os.path.join(root, 'pokemon', 'species_info.h')).read()
+si = open(os.path.join(root, 'pokemon', 'species_info.h')).read().replace('[SPECIES_NONE] = {0},', '')
 species = {}
 for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\n    \},', si, re.S):
     name, body = m.groups()
     g = lambda k: re.search(r'\.' + k + r'\s*=\s*([A-Z0-9_]+)', body)
     if not g('catchRate'):
         continue
-    species[name] = dict(catch=int(g('catchRate').group(1)), yield_=int(g('expYield').group(1)),
+    tm = re.search(r'\.types = \{(TYPE_[A-Z]+),\s*(TYPE_[A-Z]+)\}', body)
+    species[name] = dict(types=[tm.group(1), tm.group(2)] if tm else ['TYPE_NORMAL', 'TYPE_NORMAL'], catch=int(g('catchRate').group(1)), yield_=int(g('expYield').group(1)),
                          growth=g('growthRate').group(1), evo=[])
 ev = open(os.path.join(root, 'pokemon', 'evolution.h')).read()
 for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\},\n', ev, re.S):
@@ -87,5 +88,9 @@ for d in sorted(os.listdir(os.path.join(maps_dir, 'maps'))):
             ids.append(t)
     if ids:
         map_trainers[d] = ids
-json.dump(dict(kanto_count=len(kanto), species=species, sites=sites, sites_lg=sites_lg, trainers=trainers, map_trainers=map_trainers), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
+bm = open(os.path.join(root, '..', 'battle_main.c')).read()
+chart_src = bm.split('const u8 gTypeEffectiveness[336] =')[1].split('};')[0]
+mul = dict(TYPE_MUL_SUPER_EFFECTIVE=20, TYPE_MUL_NOT_EFFECTIVE=5, TYPE_MUL_NO_EFFECT=0, TYPE_MUL_NORMAL=10)
+chart = [[a, d, mul[m]] for a, d, m in re.findall(r'(TYPE_[A-Z]+),\s*(TYPE_[A-Z]+),\s*(TYPE_MUL_[A-Z_]+)', chart_src) if a not in ('TYPE_FORESIGHT', 'TYPE_ENDTABLE')]
+json.dump(dict(type_chart=chart, kanto_count=len(kanto), species=species, sites=sites, sites_lg=sites_lg, trainers=trainers, map_trainers=map_trainers), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
 print(len(kanto), len(species), len(sites), len(trainers))

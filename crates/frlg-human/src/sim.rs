@@ -40,7 +40,12 @@ pub struct Ctx<'a> {
     pub floor_after: Vec<u64>,
     /// Mean frames remaining after segment i, from a no-reset pilot (for `reset_aggr`).
     pub mean_after: Vec<f64>,
-    pub squirtle_line: [usize; 3],
+    /// The starter and its two evolutions.
+    pub starter_line: [usize; 3],
+    /// Levels at which the starter evolves (`decompiled/src/data/pokemon/evolution.h:3-8`).
+    pub evo_at: [u32; 2],
+    /// First level with a damaging STAB move (`level_up_learnsets.h`: Bubble/Ember 7, Vine Whip 10).
+    pub stab_from: u32,
     /// Reset aggressiveness at each segment (the global value unless overridden).
     pub aggr: Vec<f64>,
 }
@@ -179,11 +184,11 @@ fn add_exp(ctx: &Ctx, st: &mut State, e: u32) -> u32 {
     let new = level_from_exp(Growth::MediumSlow, st.exp) as u32;
     let gained = new.saturating_sub(st.carry);
     st.carry = new.max(st.carry);
-    let [_sq, war, bla] = ctx.squirtle_line;
-    if st.carry >= 16 {
+    let [_sq, war, bla] = ctx.starter_line;
+    if st.carry >= ctx.evo_at[0] {
         st.caught.insert(ctx.dex.species[war].dex);
     }
-    if st.carry >= 36 {
+    if st.carry >= ctx.evo_at[1] {
         st.caught.insert(ctx.dex.species[bla].dex);
     }
     gained
@@ -349,6 +354,49 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
     used
 }
 
+/// Type-matchup multiplier on the fighter's effective level against one enemy species: its best
+/// damaging type against the enemy over a neutral baseline, divided by the root of the enemy's
+/// best STAB against it. Move power, accuracy and AI choices are ignored. guess.
+fn matchup(ctx: &Ctx, st: &State, enemy: usize) -> f64 {
+    if ctx.p.type_strength == 0.0 {
+        return 1.0;
+    }
+    let e = ctx.dex.species[enemy].types;
+    let dex = ctx.dex;
+    let (mine, off, neutral) = if st.power > st.carry as f64 * ctx.p.team_bonus {
+        // Mewtwo: Psychic STAB plus TM coverage.
+        let off = (1.5 * dex.eff(14, e))
+            .max(dex.eff(15, e))
+            .max(dex.eff(13, e))
+            .max(dex.eff(10, e));
+        ((14, 14), off, 1.5)
+    } else {
+        let stage = (st.carry >= ctx.evo_at[0]) as usize + (st.carry >= ctx.evo_at[1]) as usize;
+        let mine = dex.species[ctx.starter_line[stage]].types;
+        let normal = dex.eff(0, e);
+        if st.carry >= ctx.stab_from {
+            let mut stab = dex.eff(mine.0, e);
+            if stage > 0 {
+                stab = stab.max(dex.eff(mine.1, e));
+            }
+            ((mine.0, mine.1), (1.5 * stab).max(normal), 1.5)
+        } else {
+            (mine, normal, 1.0)
+        }
+    };
+    let inc = dex.eff(e.0, mine).max(dex.eff(e.1, mine)).clamp(0.5, 2.0);
+    ((off / neutral).clamp(0.5, 2.0) / inc.sqrt())
+        .clamp(0.5, 2.0)
+        .powf(ctx.p.type_strength)
+}
+
+fn enemy_list(ctx: &Ctx, st: &State, party: &[(u32, usize)]) -> Vec<(u32, u32, f64)> {
+    party
+        .iter()
+        .map(|&(l, s)| (l, ctx.dex.species[s].exp_yield, matchup(ctx, st, s)))
+        .collect()
+}
+
 fn p_lose(r: f64) -> f64 {
     1.0 / (1.0 + (-(r - 1.25) / 0.05).exp())
 }
@@ -359,22 +407,28 @@ fn battle(
     ctx: &Ctx,
     st: &mut State,
     rng: &mut Rng,
-    enemies: &[(u32, u32)],
+    enemies: &[(u32, u32, f64)],
     trainer: bool,
     intro: u32,
     adv: f64,
 ) -> bool {
-    let lp = effective_level(st, ctx.p) * adv.sqrt();
-    let max_le = enemies.iter().map(|e| e.0).max().unwrap_or(1) as f64;
-    let r = max_le / lp;
+    let lp0 = effective_level(st, ctx.p);
+    let lp_of = |a: f64| lp0 * (a * adv).sqrt();
+    let mut r = enemies
+        .iter()
+        .map(|e| e.0 as f64 / lp_of(e.2))
+        .fold(0.0, f64::max);
+    if r > 0.9 && st.power <= st.carry as f64 * ctx.p.team_bonus && st.carry >= ctx.stab_from {
+        r /= 1.0 + ctx.p.ability_bonus;
+    }
     let mut tries = 0;
     loop {
         let start = st.clock;
         bump(st, intro as f64 * ctx.p.text_factor);
         bump(st, jitter(ctx, rng, 8) as f64);
         let mut total_exp = 0u32;
-        for &(lvl, yld) in enemies {
-            let mean = turns_per_mon(lvl as f64, lp, st.strength, 1.0);
+        for &(lvl, yld, a) in enemies {
+            let mean = turns_per_mon(lvl as f64, lp_of(a), st.strength, 1.0);
             let mut turns = mean.floor() + rng.chance(mean - mean.floor()) as u32 as f64;
             for _ in 0..turns as u32 {
                 if rng.chance(P_EVENT) {
@@ -421,7 +475,7 @@ fn group_battle(
     yld: u32,
 ) -> bool {
     for _ in 0..n {
-        let enemies: Vec<(u32, u32)> = (0..mons).map(|_| (level, yld)).collect();
+        let enemies: Vec<(u32, u32, f64)> = (0..mons).map(|_| (level, yld, 1.0)).collect();
         if !battle(ctx, st, rng, &enemies, true, 600, 1.0) {
             return false;
         }
@@ -459,8 +513,12 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
 }
 
 fn starter_ok(ctx: &Ctx, rng: &mut Rng) -> (bool, f64) {
-    let squirtle =
-        frlg_mon::species::by_id(frlg_mon::species::SQUIRTLE).expect("squirtle base stats");
+    let squirtle = frlg_mon::species::by_id(match ctx.p.starter.as_str() {
+        "bulbasaur" => frlg_mon::species::BULBASAUR,
+        "charmander" => frlg_mon::species::CHARMANDER,
+        _ => frlg_mon::species::SQUIRTLE,
+    })
+    .expect("starter base stats");
     let mut g = frlg_rng::Rng(rng.next_u64() as u32);
     let genome = frlg_mon::create::gift_mon(&mut g);
     let s5 = calc_stats(squirtle, genome.ivs, 5, genome.nature());
@@ -516,7 +574,7 @@ pub fn attempt(
         abandoned: false,
         whiteouts: 0,
     };
-    st.caught.insert(ctx.dex.species[ctx.squirtle_line[0]].dex);
+    st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
     for (i, seg) in ctx.segs.iter().enumerate() {
         let mut rng = Rng::new(seed, idx, hash_str(&seg.name));
         let before = st.clock;
@@ -558,21 +616,16 @@ pub fn attempt(
                 run_encounters(ctx, &mut st, &mut rng, &args);
             }
             Kind::Trainer { party, intro, adv } => {
-                let enemies: Vec<(u32, u32)> = party
-                    .iter()
-                    .map(|&(l, s)| (l, ctx.dex.species[s].exp_yield))
-                    .collect();
-                if !battle(ctx, &mut st, &mut rng, &enemies, true, *intro, *adv) {
+                let enemies = enemy_list(ctx, &st, party);
+                let hand = if ctx.p.type_strength > 0.0 { 1.0 } else { *adv };
+                if !battle(ctx, &mut st, &mut rng, &enemies, true, *intro, hand) {
                     break;
                 }
             }
             Kind::Parties { parties } => {
                 let mut ok = true;
                 for p in parties {
-                    let enemies: Vec<(u32, u32)> = p
-                        .iter()
-                        .map(|&(l, s)| (l, ctx.dex.species[s].exp_yield))
-                        .collect();
+                    let enemies = enemy_list(ctx, &st, p);
                     if !battle(ctx, &mut st, &mut rng, &enemies, true, 600, 1.0) {
                         ok = false;
                         break;
