@@ -136,6 +136,21 @@ def candidates(p):
         for r in (0, 1):
             if p.get('safari_rocks', 0) != r:
                 out.append(('safari', f'safari_rocks {p.get("safari_rocks", 0)}->{r}', {'safari_rocks': r}))
+    # Extra mainland fill sites (sitescan.py ranking; Cerulean Cave and the Sevii islands open only
+    # after the Oak check, `human-run/journal`), tried at the front and the middle of the list.
+    present = {(h['site'], h.get('area', 'land')) for h in fill}
+    for site, area in (('MAP_SEAFOAM_ISLANDS_B2F', 'land'), ('MAP_SEAFOAM_ISLANDS_B3F', 'land'),
+                       ('MAP_SEAFOAM_ISLANDS_B1F', 'land'), ('MAP_ROUTE18', 'land'), ('MAP_ROUTE21_NORTH', 'land'),
+                       ('MAP_ROUTE16', 'land'), ('MAP_ROUTE14', 'land'), ('MAP_POKEMON_TOWER_7F', 'land'),
+                       ('MAP_ROUTE22', 'fish'), ('MAP_ROUTE23', 'fish'), ('MAP_ROUTE25', 'fish'),
+                       ('MAP_VICTORY_ROAD_2F', 'land'), ('MAP_VIRIDIAN_CITY', 'fish'), ('MAP_ROUTE15', 'land'),
+                       ('MAP_FUCHSIA_CITY', 'fish'), ('MAP_VERMILION_CITY', 'fish'), ('MAP_PALLET_TOWN', 'fish')):
+        if (site, area) in present:
+            continue
+        for pos in (0, len(fill) // 2):
+            q = copy.deepcopy(fill)
+            q.insert(pos, dict(after='', site=site, area=area, steps=80 if area == 'land' else 25, detour_tiles=50))
+            out.append(('addsite', f'add {site} {area} at position {pos}', {'fill': q}))
     # Celadon Game Corner prizes (LeafGreen coin prices x 20 money per coin).
     have = {x['species'][0] for x in p.get('specials', []) if x.get('kind') == 'buy'}
     for sp, cost in (('SPECIES_ABRA', 2400), ('SPECIES_CLEFAIRY', 15000), ('SPECIES_PINSIR', 50000)):
