@@ -338,6 +338,35 @@ fn main() {
                 hp / n as f64
             );
         }
+        Some("pace") => {
+            // pace <plan> --rung r: at every split, the latest run clock at which the plan's reset rule
+            // still lets the attempt continue (reset when elapsed + floor + aggr * (mean - floor) > T).
+            let plan = load(&args[1]);
+            let ctx = plan.ctx();
+            let rung = rung_arg(&args);
+            let t = rung_frames(rung) as f64;
+            println!("target T = {}", hms(t));
+            println!(
+                "{:<34}{:>6}{:>12}{:>12}{:>14}",
+                "split (after segment)", "aggr", "floor left", "mean left", "reset if clock >"
+            );
+            for (i, sg) in plan.segs.iter().enumerate() {
+                if !sg.split {
+                    continue;
+                }
+                let floor = ctx.floor_after[i] as f64;
+                let mean = ctx.mean_after[i];
+                let rem = floor + ctx.aggr[i] * (mean - floor).max(0.0);
+                println!(
+                    "{:<34}{:>6.2}{:>12}{:>12}{:>18}",
+                    sg.name,
+                    ctx.aggr[i],
+                    hms(floor),
+                    hms(mean),
+                    hms(t - rem)
+                );
+            }
+        }
         Some("names") => {
             let plan = load(&args[1]);
             for sg in &plan.segs {
