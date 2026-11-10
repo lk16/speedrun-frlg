@@ -492,7 +492,13 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
         "fish" => Area::Fish,
         _ => Area::Land,
     };
-    let skip: Vec<usize> = h.skip.iter().map(|s| ctx.dex.id(s)).collect();
+    let mut skip: Vec<usize> = h.skip.iter().map(|s| ctx.dex.id(s)).collect();
+    if ctx.p.hunt_min_catch > 0 {
+        skip.extend(
+            (0..ctx.dex.species.len())
+                .filter(|&i| ctx.dex.species[i].catch_rate < ctx.p.hunt_min_catch),
+        );
+    }
     bump(
         st,
         h.detour_tiles as f64 * 2.0 * Era::Run.frames_per_tile() * ctx.p.path_overhead,
@@ -678,7 +684,13 @@ pub fn attempt(
                         break;
                     }
                     let (c0, n0) = (st.clock, st.caught.count());
-                    hunt(ctx, &mut st, &mut rng, h, Era::Run);
+                    // The Power Plant forbids cycling (`allow_cycling` in its map.json).
+                    let era = if ctx.p.hunt_bike && ctx.p.bike && h.site != "MAP_POWER_PLANT" {
+                        Era::Bike
+                    } else {
+                        Era::Run
+                    };
+                    hunt(ctx, &mut st, &mut rng, h, era);
                     if let Some(pr) = probe.as_deref_mut() {
                         if pr.fill.len() <= hi {
                             pr.fill.resize(hi + 1, (0.0, 0.0, 0));

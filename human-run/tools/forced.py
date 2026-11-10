@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Which trainers can a leg not avoid? Sight-cone-aware BFS over the decomp's map data.
 
-usage: forced.py MAP_A x,y MAP_B x,y [--surf] [--cut] [--ignore SCRIPTTAG ...] [--avoid MAP ...]
+usage: forced.py MAP_A x,y MAP_B x,y [--surf] [--cut] [--ignore SCRIPTTAG ...] [--avoid MAP ...] [--open MAP:x0-x1,y0-y1 ...]
                  [--ignore-boulders]
 
 Reuses bin/frlg-mapgraph's tile model (collision bits, warps, connections, static objects as
@@ -47,6 +47,17 @@ def _blocked(self, opts):
 
 
 mg.Map.blocked_tiles = _blocked
+
+# Tiles a script opens (gym barriers, switches): treated as plain floor. --open MAP:x1-x2,y1-y2
+OPEN = set()
+_orig_enterable = mg.Map.enterable
+
+
+def _enterable(self, x, y, surf):
+    return (self.id, x, y) in OPEN or _orig_enterable(self, x, y, surf)
+
+
+mg.Map.enterable = _enterable
 
 
 def trainers_in(map_ids, opts):
@@ -143,6 +154,16 @@ def main(argv):
     i = 0
     while i < len(argv):
         a = argv[i]
+        if a == '--open':
+            mid, rng = argv[i + 1].split(':')
+            xs, ys = rng.split(',')
+            x0, x1 = (xs.split('-') + [xs])[:2] if '-' in xs else (xs, xs)
+            y0, y1 = (ys.split('-') + [ys])[:2] if '-' in ys else (ys, ys)
+            for x in range(int(x0), int(x1) + 1):
+                for y in range(int(y0), int(y1) + 1):
+                    OPEN.add((mid, x, y))
+            i += 2
+            continue
         if a == '--avoid':
             opts.setdefault('avoid_maps', []).append(argv[i + 1])
             i += 2

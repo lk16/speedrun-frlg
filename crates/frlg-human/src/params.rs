@@ -122,6 +122,10 @@ pub struct Params {
     /// While passing (not in a dedicated hunt) only throw at species with at least this catch
     /// rate (`species_info.h` `catchRate`).
     pub pass_min_catch: u32,
+    /// Hunts leave species below this catch rate alone (and do not wait for them).
+    pub hunt_min_catch: u32,
+    /// Fill hunts ride the bike where the map allows it (`allow_cycling`).
+    pub hunt_bike: bool,
     /// Fight (instead of fleeing) wild encounters that are not catch targets.
     pub fight_wild: bool,
     /// Fight non-target wild encounters while the carry is below this level (else flee).
@@ -187,6 +191,8 @@ impl Default for Params {
             weaken: false,
             catch_on_pass: true,
             pass_min_catch: 0,
+            hunt_min_catch: 0,
+            hunt_bike: false,
             fight_wild: false,
             fight_until_level: 30,
             team_bonus: 1.08,
