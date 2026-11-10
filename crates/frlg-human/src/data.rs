@@ -251,7 +251,11 @@ impl Dex {
                     .get(*m)
                     .unwrap_or_else(|| panic!("no trainers on map {m}"))
             })
-            .filter_map(|t| self.trainers.get(t).map(|p| (p.clone(), self.trainer_money(t))))
+            .filter_map(|t| {
+                self.trainers
+                    .get(t)
+                    .map(|p| (p.clone(), self.trainer_money(t)))
+            })
             .collect();
         out.sort_by_key(|p| std::cmp::Reverse(p.0.iter().map(|x| x.0).sum::<u32>()));
         out

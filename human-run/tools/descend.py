@@ -107,6 +107,19 @@ def candidates(p):
         v = p.get('pass_min_catch', 0) + d
         if v >= 0:
             out.append(('catch', f"pass_min_catch {p.get('pass_min_catch', 0)}->{v}", {'pass_min_catch': v}))
+    for ball in ('poke', 'great', 'ultra'):
+        if p.get('ball', 'poke') != ball:
+            out.append(('ball', f'ball {p.get("ball", "poke")}->{ball}', {'ball': ball}))
+    if p.get('money_model'):
+        for b in (5, 10, 20, 40):
+            if p.get('ball_batch', 10) != b:
+                out.append(('ball', f'ball_batch {p.get("ball_batch", 10)}->{b}', {'ball_batch': b}))
+    for k in ('weaken', 'mewtwo', 'teleport_abra', 'bike'):
+        out.append(('toggle', f'{k} {p.get(k)}->{not p.get(k)}', {k: not p.get(k)}))
+    if p.get('safari_model'):
+        for r in (0, 1):
+            if p.get('safari_rocks', 0) != r:
+                out.append(('safari', f'safari_rocks {p.get("safari_rocks", 0)}->{r}', {'safari_rocks': r}))
     if only:
         out = [c for c in out if c[0] in only]
     return out

@@ -299,8 +299,8 @@ fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Spec
             if counter == 0 {
                 factor = base;
             }
-        } else if bait > 0 {
-            bait -= 1;
+        } else {
+            bait = bait.saturating_sub(1);
         }
     }
 }
