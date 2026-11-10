@@ -159,8 +159,8 @@ impl Plan {
                 ctx.fill_slope = if sxx > 0.0 { (sxy / sxx).max(0.0) } else { 0.0 };
                 ctx.fill_base = (my - ctx.fill_slope * mx).max(0.0);
                 let mean_fill = my;
-                for i in 0..oak {
-                    ctx.gain_after[i] = gain[i] / pairs.len() as f64;
+                for (i, g) in gain.iter().enumerate().take(oak) {
+                    ctx.gain_after[i] = g / pairs.len() as f64;
                     ctx.mean_nofill_after[i] = (ctx.mean_after[i] - mean_fill).max(0.0);
                 }
             }
