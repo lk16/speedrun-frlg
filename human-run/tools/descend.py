@@ -19,10 +19,8 @@ SPLITS = ['brock', 'misty-badge', 'surge-badge', 'erika-badge', 'koga-badge', 's
           'blaine-badge-and-sevii-scene', 'giovanni-badge', 'indigo-heal', 'hall-of-fame-1',
           'oak-national-dex', 'celio-network-machine']
 
-EXTRA_SPLIT_CANDIDATES = ['cerulean-heal', 'bill-cottage', 'lavender-heal', 'celadon-tea', 'hideout-giovanni', 'fuji-flute',
-                          'warden-strength', 'silph-giovanni', 'secret-key', 'fly-viridian', 'rival-route22', 'victory-road',
-                          'lorelei', 'bruno', 'agatha', 'lance', 'champion', 'warehouse-gideon', 'celio-network-machine',
-                          'mewtwo', 'lorelei-2', 'bruno-2', 'agatha-2', 'lance-2', 'champion-2']
+# Extra splits were tried (extra_splits, aggr 0.7: no resets triggered; aggr 1.0: slightly worse), so none here.
+EXTRA_SPLIT_CANDIDATES = []
 
 args = sys.argv[1:]
 def opt(name, default):
