@@ -151,6 +151,15 @@ def candidates(p):
             q = copy.deepcopy(fill)
             q.insert(pos, dict(after='', site=site, area=area, steps=80 if area == 'land' else 25, detour_tiles=50))
             out.append(('addsite', f'add {site} {area} at position {pos}', {'fill': q}))
+    # In-game trades not yet in the plan (decompiled/src/data/ingame_trades.h; Mr. Mime for an Abra at the
+    # Route 2 house, Nidoran F for a Nidoran M at the Underground Path north entrance).
+    have_sp = {x['species'][0] for x in p.get('specials', [])}
+    for sp, req, after, frames in (('SPECIES_MR_MIME', 'SPECIES_ABRA', 'fly-viridian', 2600),
+                                   ('SPECIES_NIDORAN_F', 'SPECIES_NIDORAN_M', 'route5-6', 1500)):
+        if sp not in have_sp:
+            new = copy.deepcopy(p.get('specials', []))
+            new.append({'after': after, 'kind': 'trade', 'species': [sp], 'requires': [req], 'frames': frames})
+            out.append(('special', f'trade for {sp} (needs {req}) after {after}', {'specials': new}))
     # Celadon Game Corner prizes (LeafGreen coin prices x 20 money per coin).
     have = {x['species'][0] for x in p.get('specials', []) if x.get('kind') == 'buy'}
     for sp, cost in (('SPECIES_ABRA', 2400), ('SPECIES_CLEFAIRY', 15000), ('SPECIES_PINSIR', 50000)):
