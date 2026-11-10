@@ -9,7 +9,7 @@ for the run clock: reset if your clock at the split is above it. Model numbers, 
 
 ```
 target T = 4:45:24
-split (after segment)               aggr  floor left   mean leftreset if clock >
+split (after segment)               aggr  floor left   mean left  reset if clock >
 brock                               0.80     2:23:22     3:59:57           1:04:46
 misty-badge                         0.70     1:58:46     3:22:42           1:47:53
 surge-badge                         0.70     1:51:42     3:12:46           1:56:58
@@ -28,7 +28,7 @@ celio-network-machine               0.80     0:13:31     0:16:43           4:29:
 
 ```
 target T = 4:05:24
-split (after segment)               aggr  floor left   mean leftreset if clock >
+split (after segment)               aggr  floor left   mean left  reset if clock >
 brock                               0.80     2:23:22     3:57:05           0:27:04
 misty-badge                         0.70     1:58:46     3:25:40           1:05:49
 surge-badge                         0.70     1:51:42     3:16:24           1:14:25

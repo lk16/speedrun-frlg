@@ -347,7 +347,7 @@ fn main() {
             let t = rung_frames(rung) as f64;
             println!("target T = {}", hms(t));
             println!(
-                "{:<34}{:>6}{:>12}{:>12}{:>14}",
+                "{:<34}{:>6}{:>12}{:>12}{:>18}",
                 "split (after segment)", "aggr", "floor left", "mean left", "reset if clock >"
             );
             for (i, sg) in plan.segs.iter().enumerate() {
