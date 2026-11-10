@@ -121,7 +121,15 @@ impl Plan {
         let mut pairs: Vec<(f64, f64)> = vec![];
         for i in 0..PILOT_ATTEMPTS {
             let mut probe = Probe::default();
-            let o = attempt(&ctx, PILOT_SEED, i, None, None, Some(&mut sc), Some(&mut probe));
+            let o = attempt(
+                &ctx,
+                PILOT_SEED,
+                i,
+                None,
+                None,
+                Some(&mut sc),
+                Some(&mut probe),
+            );
             if o.finished {
                 cnt += 1;
                 for (acc, c) in sum.iter_mut().zip(&sc) {

@@ -146,6 +146,10 @@ pub struct Params {
     /// fitted `base + slope * (60 - species)` from the pilot, instead of the average fill. At Oak's
     /// check the remaining fill is added too.
     pub dex_resets: bool,
+    /// Experimental overrides of uncalibrated model constants by name (sensitivity studies):
+    /// `level_up`, `trainer_outro`, `whiteout`, `p_event`, `p_lose_center`, `p_lose_slope`,
+    /// `weaken_ko`, `weaken_hp`.
+    pub tune: std::collections::HashMap<String, f64>,
     /// `poke`, `great` or `ultra`.
     pub ball: String,
     pub weaken: bool,
@@ -266,6 +270,7 @@ impl Default for Params {
             reset_aggr_at: Default::default(),
             extra_splits: vec![],
             dex_resets: false,
+            tune: Default::default(),
             ball: "poke".into(),
             weaken: false,
             catch_on_pass: true,

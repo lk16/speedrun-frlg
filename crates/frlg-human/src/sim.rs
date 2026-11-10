@@ -121,6 +121,15 @@ struct State {
 }
 
 impl Ctx<'_> {
+    /// A model constant, overridable through `Params::tune` for sensitivity studies.
+    fn k(&self, name: &str, default: f64) -> f64 {
+        if self.p.tune.is_empty() {
+            default
+        } else {
+            self.p.tune.get(name).copied().unwrap_or(default)
+        }
+    }
+
     /// Frames from the battle starting to the first action menu. Measured on libmgba with A
     /// mashed: 358 (`human-run/calibration.md`), times 1.25 for a human; the older guess was 220.
     fn enc_intro(&self) -> f64 {
@@ -191,21 +200,21 @@ impl Ctx<'_> {
             Kind::Trainer { party, intro, .. } => {
                 self.trainer_intro(*intro)
                     + party.len() as f64 * (self.turn() + self.mon_overhead())
-                    + TRAINER_OUTRO as f64
+                    + self.k("trainer_outro", TRAINER_OUTRO as f64)
             }
             Kind::Parties { parties, .. } => parties
                 .iter()
                 .map(|p| {
                     self.trainer_intro(600)
                         + p.len() as f64 * (self.turn() + self.mon_overhead())
-                        + TRAINER_OUTRO as f64
+                        + self.k("trainer_outro", TRAINER_OUTRO as f64)
                 })
                 .sum(),
             Kind::Group { n, mons, .. } => {
                 *n as f64
                     * (self.trainer_intro(600)
                         + *mons as f64 * (self.turn() + self.mon_overhead())
-                        + TRAINER_OUTRO as f64)
+                        + self.k("trainer_outro", TRAINER_OUTRO as f64))
             }
             Kind::Wander { .. }
             | Kind::Hunt { .. }
@@ -482,10 +491,10 @@ fn encounter(
         if ctx.p.weaken {
             let turns = 1 + rng.chance(0.5) as u32;
             bump(st, turns as f64 * ctx.turn());
-            if rng.chance(0.05 * turns as f64) {
+            if rng.chance(ctx.k("weaken_ko", 0.05) * turns as f64) {
                 return;
             }
-            hp = 0.3;
+            hp = ctx.k("weaken_hp", 0.3);
         }
         let ball = (!ctx.p.money_model).then(|| ball_mult(ctx.p));
         if throw_balls(ctx, st, rng, sp.catch_rate, hp, ball, 8) {
@@ -496,7 +505,7 @@ fn encounter(
         let t = turns_per_mon(level as f64, effective_level(st, ctx.p), st.strength, 1.0);
         bump(st, t * ctx.turn() + ctx.mon_overhead());
         let g = add_exp(ctx, st, e);
-        bump(st, (g * LEVEL_UP) as f64);
+        bump(st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
     } else {
         flee(ctx, st, rng);
     }
@@ -675,8 +684,8 @@ fn enemy_list(ctx: &Ctx, st: &State, party: &[(u32, usize)]) -> Vec<(u32, u32, f
         .collect()
 }
 
-fn p_lose(r: f64) -> f64 {
-    1.0 / (1.0 + (-(r - 1.25) / 0.05).exp())
+fn p_lose(r: f64, center: f64, slope: f64) -> f64 {
+    1.0 / (1.0 + (-(r - center) / slope).exp())
 }
 
 /// A set of enemy mons fought in sequence by the best fighter. Returns false if the human
@@ -709,7 +718,7 @@ fn battle(
             let mean = turns_per_mon(lvl as f64, lp_of(a), st.strength, 1.0);
             let mut turns = mean.floor() + rng.chance(mean - mean.floor()) as u32 as f64;
             for _ in 0..turns as u32 {
-                if rng.chance(P_EVENT) {
+                if rng.chance(ctx.k("p_event", P_EVENT)) {
                     bump(st, react(ctx, rng) as f64);
                     if rng.chance(0.5) {
                         turns += 1.0;
@@ -723,13 +732,14 @@ fn battle(
         let heal_turns = ((r - 0.95).max(0.0) * enemies.len() as f64 * 2.0).round();
         bump(st, heal_turns * ctx.turn());
         if trainer {
-            bump(st, TRAINER_OUTRO as f64);
+            bump(st, ctx.k("trainer_outro", TRAINER_OUTRO as f64));
         }
-        let danger = p_lose(r) * 0.5f64.powi(tries);
+        let danger = p_lose(r, ctx.k("p_lose_center", 1.25), ctx.k("p_lose_slope", 0.05))
+            * 0.5f64.powi(tries);
         if rng.chance(danger) {
             let spent = st.clock - start;
             st.whiteouts += 1;
-            bump(st, WHITEOUT as f64 + spent as f64 * 0.0);
+            bump(st, ctx.k("whiteout", WHITEOUT as f64) + spent as f64 * 0.0);
             tries += 1;
             if tries >= 3 {
                 st.abandoned = true;
@@ -738,7 +748,7 @@ fn battle(
             continue;
         }
         let g = add_exp(ctx, st, total_exp);
-        bump(st, (g * LEVEL_UP) as f64);
+        bump(st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
         return true;
     }
 }
@@ -1020,7 +1030,7 @@ pub fn attempt(
                         turns_per_mon(*level as f64, effective_level(&st, ctx.p), st.strength, 1.0);
                     bump(&mut st, t * ctx.turn() + ctx.mon_overhead());
                     let g = add_exp(ctx, &mut st, exp_gain(*yield_ as u8, *level as u8, false));
-                    bump(&mut st, (g * LEVEL_UP) as f64);
+                    bump(&mut st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
                 }
             }
             Kind::OakCheck => {

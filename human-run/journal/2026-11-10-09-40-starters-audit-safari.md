@@ -95,5 +95,20 @@ claim about the game.
 * Starter alternatives under the final model: Charmander +4%, Bulbasaur +5-7% EHT vs Squirtle (refuted but
   close); FireRed +3% (untuned fill list).
 
+## Sensitivity of the final bulk plan (239-fillsteps11, EHT at WR+80m = 4.50 h)
+
+Model switches (each flips one modelling choice; guessed-vs-corrected): type model off 4.54; type_floor 1.0
+4.43 / 0.8 4.89 / **0.7 7.76**; money limits off 4.45; Safari rules off 4.39; guessed encounter costs 4.15;
+guessed battle costs (battle_scale 1.75) 5.32; **guessed grass steps 6.03**; guessed detours 4.39; mixed
+fishing rods 4.58; Charmander 4.72. Unaudited trainer groups forced after all: Silph 4.65, Mansion 4.61,
+all four (Silph, Mansion, quiz, Surge) 5.16. Constants (tune): level_up 200/450 -> 4.46/4.59; trainer_outro
+150/600 -> 4.42/4.77; whiteout, p_event, power_bonus, text_factor, mistakes: within 3%;
+**team_bonus 1.0 -> 5.76**, 1.2 -> 4.35; p_lose centre 1.15 -> 5.41, 1.35 -> 4.43; p_lose slope 0.1 -> 4.85;
+weaken KO chance 0.15 -> 5.16. The plan's ranking against its ancestors holds at jitter 0/2/8, reaction
+0 and 30-60, mistakes 0/2, text 1.0/1.5, path 1.0/1.3 (`tools/robust.py`). The type_floor and team_bonus
+guesses (how a lone carry copes with bad matchups) and the loss curve are the model's weakest
+battle assumptions. Re-tuning the plan under type_floor 0.8 (chain `CHAIN-F08`) changed one fill budget
+only, so the plan's structure does not depend on it.
+
 ## Open
 See the end of this file for the final state (updated as the session runs).
