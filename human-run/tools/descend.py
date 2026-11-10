@@ -237,10 +237,15 @@ for ps in range(max_passes):
         pname = f"{num:03d}-{kind}{ci}"
         subprocess.run([sys.executable, os.path.join(HERE, 'promote.py'), os.path.join(SCRATCH, name + '.md'), pname,
                         f'{label} (descend.py; confirmed on seeds 1 and 2)'], check=True, capture_output=True)
-        subprocess.run(['git', '-C', ROOT, 'add', '-A'], check=True)
-        subprocess.run(['git', '-C', ROOT, 'commit', '-qm',
-                        f'human-run: plan {pname}: {label}\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>'],
-                       check=True)
+        import time
+        for attempt_ in range(8):  # another process may hold the index lock for a moment
+            a = subprocess.run(['git', '-C', ROOT, 'add', '-A'], capture_output=True)
+            b = subprocess.run(['git', '-C', ROOT, 'commit', '-qm',
+                                f'human-run: plan {pname}: {label}\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>'],
+                               capture_output=True)
+            if a.returncode == 0 and b.returncode in (0, 1):
+                break
+            time.sleep(3)
         print(f'  ==> promoted {pname}', flush=True)
         accepts += 1
         changed = True
