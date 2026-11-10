@@ -8,8 +8,8 @@ of **a model**; nothing here has been played.
 
 | Plan pointer | Objective | EHT |
 | --- | --- | --- |
-| `plans/CURRENT` | the PROMPT's rule (tighter rung wins) | EHT(WR+40m) about 85 h; WR+80m 5.6 h |
-| `plans/CHAIN-WR80` | EHT at WR+80m only | **EHT(WR+80m) 4.5 h**; WR+40m 545 h |
+| `plans/CURRENT` | the PROMPT's rule (tighter rung wins) | EHT(WR+40m) about 83 h; WR+80m 5.6 h |
+| `plans/CHAIN-WR80` | EHT at WR+80m only | **EHT(WR+80m) 4.5 h**; WR+40m 539 h |
 
 No plan reaches the WR rung (or WR+1m ... WR+20m). The no-reset finishing time of the bulk plan is about
 4:23 (p10 4:14), against a WR of 3:25. Both plans are written out in `plans/CURRENT-SUMMARY.md`.
