@@ -48,7 +48,7 @@ fn mean(v: &[u32]) -> f64 {
 
 /// A trainer battle from a state at its start: A mashed through everything. Prints frames per
 /// phase: start to first menu, each turn cycle, and the end (battle over to free movement).
-fn trainer(state: &PathBuf) {
+fn trainer(state: &std::path::Path) {
     let rom = default_rom_path().expect("rom");
     let mut emu = Emu::new(&rom).expect("emu");
     boot_with_default_bios(&mut emu).expect("bios");
@@ -65,16 +65,16 @@ fn trainer(state: &PathBuf) {
             menus.push(emu.frame() - t0);
         }
         was = m;
-        emu.step(if n % 2 == 0 { keys::A } else { 0 });
+        emu.step(if n.is_multiple_of(2) { keys::A } else { 0 });
         n += 1;
         if n > 20000 {
             break;
         }
     }
     let over = emu.frame() - t0;
-    let mut j = 0;
+    let mut j = 0u32;
     while !obs.player_can_step(&mut emu) && j < 3000 {
-        emu.step(if j % 2 == 0 { keys::A } else { 0 });
+        emu.step(if j.is_multiple_of(2) { keys::A } else { 0 });
         j += 1;
     }
     println!(
