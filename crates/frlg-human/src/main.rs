@@ -309,7 +309,11 @@ fn main() {
                     if badges & 64 != 0 { 110 } else { 100 },
                 ],
                 moves: &moves,
-                ability_type: if alt.is_empty() { dexr.species[line[0]].types.0 } else { 255 },
+                ability_type: if alt.is_empty() {
+                    dexr.species[line[0]].types.0
+                } else {
+                    255
+                },
             };
             let (mut won, mut turns, mut hp) = (0.0, 0.0, 0.0);
             for i in 0..n {
