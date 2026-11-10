@@ -133,6 +133,12 @@ pub struct Params {
     pub safari_model: bool,
     /// Rocks thrown before the first Safari Ball (each doubles the catch factor and the flee rate).
     pub safari_rocks: u32,
+    /// Track prize money, ball stock and prices: balls are bought in batches as marts (and money)
+    /// allow instead of being free and unlimited. Prices `items.json`, prize money
+    /// `battle_script_commands.c:5373`.
+    pub money_model: bool,
+    /// Balls bought per mart visit.
+    pub ball_batch: u32,
     /// Throw bait first at species whose escape factor (`safariZoneFleeRate * 100 / 1275`, at
     /// least 2) is at least this (0 = never). Bait halves the catch factor (min 3) and quarters
     /// the flee factor for 2-6 turns.
@@ -206,6 +212,8 @@ impl Default for Params {
             hunt_bike: false,
             safari_model: false,
             safari_rocks: 0,
+            money_model: false,
+            ball_batch: 10,
             safari_bait_from: 0,
             fight_wild: false,
             fight_until_level: 30,

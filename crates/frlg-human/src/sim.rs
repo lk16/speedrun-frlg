@@ -640,6 +640,13 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
         st.safari_open = false;
     } else {
         if !st.safari_open {
+            if ctx.p.money_model {
+                // 500 at the gate (`decompiled/data/maps/FuchsiaCity_SafariZone_Entrance/scripts.inc`).
+                if st.money < 500 {
+                    return;
+                }
+                st.money -= 500;
+            }
             bump(st, SAFARI_ENTRY as f64 * ctx.p.text_factor);
             st.safari_open = true;
             st.safari_steps = 600;
@@ -828,6 +835,8 @@ pub fn attempt(
                 if !group_battle(ctx, &mut st, &mut rng, *n, *mons, *level, *yield_) {
                     break;
                 }
+                // Class value 5 is a guess; the formula is `battle_script_commands.c:5373`.
+                st.money += n * 4 * level * 5;
             }
             Kind::Hunt { hunt: h, era } => hunt(ctx, &mut st, &mut rng, h, *era),
             Kind::Grind {
@@ -994,6 +1003,13 @@ pub fn attempt(
                 r[i].whiteouts += (st.whiteouts - wo_before) as u64;
             }
             break;
+        }
+        // Marts that sell better balls: Lavender (Great), Fuchsia (Ultra)
+        // (`decompiled/data/maps/LavenderTown_Mart/scripts.inc:29`, `FuchsiaCity_Mart/scripts.inc:25`).
+        match seg.name.as_str() {
+            "lavender-heal" => st.max_tier = st.max_tier.max(1),
+            "koga-badge" => st.max_tier = 2,
+            _ => {}
         }
         if seg.off_timer {
             let d = st.clock - before;
