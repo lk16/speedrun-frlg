@@ -25,6 +25,7 @@ No plan reaches the WR rung (or WR+1m ... WR+20m). The no-reset finishing time o
 | `journal/` | session notebooks: what was found when (`...-starters-audit-safari.md`), conclusions and next ideas (`...-conclusions.md`) |
 | `forced-audit.md` | which trainers the route cannot walk around (sight-cone audit) |
 | `calibration.md` | tier-1 (libmgba) measurements of encounters and fights (`crates/frlg-calib`) |
+| `battle-analysis.md` | win probability of a lone carry against every gym, rival and Elite Four fight (turn-level simulation, `crates/frlg-human/src/battle.rs`) and what it implies |
 | `data/` | `dex.json` (species, wild tables, trainers, prize money, type chart; `tools/gen_dex.py`), `pathenc.json` (encounter tiles along the route's paths), `flydist.json` (walk from the nearest Fly point to each hunting site) |
 | `tools/` | `try.py` (one idea vs the incumbent, PROMPT statistics, `--rung` fixes the objective), `descend.py` (coordinate descent that promotes and commits; `--pointer`, `--rung`), `promote.py`, `batch.py`, `summary.py`, `final_table.py` (EHT at every rung), `robust.py` (holds at other jitter/reaction/mistake/text/path values?), `sitescan.py` (seconds per new species of every site), `forced.py` / `mansion.py` / `audit_all.py` (sight-cone audit), `pathenc.py`, `flydist.py` (map-derived counts), `gen_dex.py` |
 
