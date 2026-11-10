@@ -67,6 +67,6 @@ L18/22 100% (15/11 turns), Diglett L18/22 99.7%/100% (19/14 turns, it only knows
 Ground types, immune to every Electric move Surge's team has (`battle_main.c:312`). Geodude and Sandshrew are wild on
 the route (LeafGreen: Mt Moon and Route 3/4 tables in `data/dex.json`), Diglett in its cave. So the missing piece for a
 robust plan is cheap in principle (catch one, level it a little on the way, switch for the Surge fight); the model
-has no party, so it cannot price it. Sabrina (Psychic) has no equally clean counter among Kanto's early mons (Bug and
-Ghost are the weaknesses; Gastly/Haunter from the Tower, Pinsir/Scyther in the Safari, Jolteon via a Thunder Stone);
-the lone carry needs level 42+ there.
+has no party, so it cannot price it. Sabrina (Psychic) has no equally clean counter in what I tried (Pinsir, Scyther, Haunter, Jolteon, Arbok and Nidoking
+at levels 30 and 36 with their own level-up moves all lose to her team in the simulation, which does not model TMs or
+status moves); the lone carry needs level 42+ there.
