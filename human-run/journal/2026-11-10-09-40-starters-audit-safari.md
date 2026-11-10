@@ -72,5 +72,28 @@ PROMPT rules, requires the win on seeds 1 *and* 2, promotes and commits each acc
 the plans 046-091 come from it. It is greedy, so a plan that sits in a local optimum of the model is not a
 claim about the game.
 
+## Later in the session (12:00-13:00)
+
+* **Grass steps from the map data** (plan 166, `tools/pathenc.py`, `data/pathenc.json`): the metatile
+  encounter attribute along the shortest path of each leg. The old guesses were far off: Routes 3, 4, 9, 10,
+  24, 25 and the Cycling Road have no grass on the shortest path (guess 30-60 each), Route 1 has 22 (50),
+  Route 2 5 (60), Mt Moon 65+13+116 (290), Rock Tunnel 252 (138), Tower 3F-7F 108 (80), Victory Road 91
+  (150), Route 21 and 23 water 36-47 and 39 that the model never rolled. Dex at Oak's check falls from 34 to
+  29 (fewer passing catches) but the run is ~8 min faster. A walk that pays up to 50 tiles per grass tile
+  (`avoid_grass`) is slightly worse than the shortest path (EHT 5.31 vs 5.05 h at WR+80m).
+* **Mansion** (`tools/mansion.py`): with its switch modelled the Secret Key is reachable without crossing any
+  static cone; Silph, Surge's gym and the Blaine quiz were already 0. If those four groups were forced after
+  all (Silph 4, Mansion 3, quiz 2, Surge 2) the EHT at WR+80m doubles (5.5 -> 10.4 h).
+* **Game Corner prizes** (LeafGreen coin prices x 20 money): a Clefairy for 15000 money after the first
+  Hall of Fame is a small win (plan 131, -17% at the time); Pinsir (50000) drains the ball money.
+* **Trades**: Mr. Mime for the Abra at the Route 2 house is accepted (plan ~160); Seel needs a Ponyta (Sevii
+  only), Jynx a Poliwhirl, Lickitung a Slowbro/Golduck.
+* **Not levers**: extra reset checks (`extra_splits`), save-in-the-lab starter re-rolls (also needs a rules
+  ruling; it is not better anyway), the Saffron Dojo Hitmon gift (~5 min), a scheduled mart itinerary
+  instead of on-demand buying (worse in the model, but it exposes that early money is what limits balls:
+  1.7k at Cerulean, 13k at Lavender, 70k at the Hall of Fame).
+* Starter alternatives under the final model: Charmander +4%, Bulbasaur +5-7% EHT vs Squirtle (refuted but
+  close); FireRed +3% (untuned fill list).
+
 ## Open
 See the end of this file for the final state (updated as the session runs).
