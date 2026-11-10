@@ -49,6 +49,12 @@ fn main() {
             if battle_at.is_some() {
                 break;
             }
+            if trial == 0 && leg < 6 {
+                println!("leg {leg} pos {:?}", obs.pos(&mut emu));
+                if let Some(d) = &png_dir {
+                    let _ = emu.write_png(&d.join(format!("leg{leg}.png")));
+                }
+            }
         }
         let Some(t0) = battle_at else {
             println!("trial {trial}: no encounter");
