@@ -336,6 +336,39 @@ mod tests {
     }
 
     #[test]
+    fn type_chart_matches_the_decomp() {
+        let d = Dex::load();
+        let onix = d.species[d.id("SPECIES_ONIX")].types;
+        // Water on Rock/Ground is 4x, Electric on Ground is immune, Normal on a Ghost is immune.
+        assert_eq!(d.eff(type_num("TYPE_WATER"), onix), 4.0);
+        assert_eq!(d.eff(type_num("TYPE_ELECTRIC"), onix), 0.0);
+        assert_eq!(
+            d.eff(
+                type_num("TYPE_NORMAL"),
+                (type_num("TYPE_GHOST"), type_num("TYPE_POISON"))
+            ),
+            0.0
+        );
+        assert_eq!(
+            d.eff(
+                type_num("TYPE_FIRE"),
+                (type_num("TYPE_FIRE"), type_num("TYPE_FIRE"))
+            ),
+            0.5
+        );
+    }
+
+    #[test]
+    fn prize_money_and_scripts_resolve() {
+        let d = Dex::load();
+        // 4 x last level 14 x leader value 25 (`battle_script_commands.c:5373`, `battle_main.c:453`).
+        assert_eq!(d.trainer_money("TRAINER_LEADER_BROCK"), 1400);
+        assert_eq!(d.script_party("Route3_EventScript_Colton").len(), 3);
+        assert_eq!(d.trainer_money("TRAINER_BUG_CATCHER_COLTON"), 120);
+        assert_eq!(d.species[d.id("SPECIES_CHANSEY")].safari_flee, 125);
+    }
+
+    #[test]
     fn caught_set_counts() {
         let mut c = Caught::default();
         assert!(c.insert(151));

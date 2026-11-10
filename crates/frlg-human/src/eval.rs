@@ -315,6 +315,22 @@ mod tests {
     }
 
     #[test]
+    fn every_model_option_builds_and_runs() {
+        let dex = DEX.get_or_init(Dex::load);
+        let text = PLAN.replace(
+            "\"name\":\"t\"",
+            "\"name\":\"t\",\"audited_forced\":true,\"safari_model\":true,\"money_model\":true,\"calib_enc\":true,\"calib_battle\":true,\"type_strength\":1.0,\"type_floor\":0.9,\"rod\":\"super\",\"repel_on\":[\"route3\"],\"ball\":\"great\",\"weaken\":true",
+        );
+        let plan = Plan::load(dex, &text).unwrap();
+        let ctx = plan.ctx();
+        let t = totals(&evaluate_blocks(&ctx, 3, 200, rung_frames(8)), 200);
+        assert_eq!(t.attempts, 200);
+        // Another seed gives another score; the same seed the same one.
+        let u = totals(&evaluate_blocks(&ctx, 3, 200, rung_frames(8)), 200);
+        assert_eq!(t.wall_frames, u.wall_frames);
+    }
+
+    #[test]
     fn plan_without_json_block_is_an_error() {
         let dex = DEX.get_or_init(Dex::load);
         assert!(Plan::load(dex, "no block here").is_err());
