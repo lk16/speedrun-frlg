@@ -33,10 +33,13 @@ max_accepts = opt('--max-accepts', 50)
 max_passes = opt('--passes', 3)
 only = opt('--only', '').split(',') if '--only' in args else None
 cap = opt('--cap', 400000)
+POINTER = opt('--pointer', 'CURRENT')
+FIXED_RUNG = opt('--rung', '')
+os.environ['FRLG_POINTER'] = POINTER
 
 
 def current():
-    return open(os.path.join(PLANS, 'CURRENT')).read().strip()
+    return open(os.path.join(PLANS, POINTER)).read().strip()
 
 
 def load(name):
@@ -201,7 +204,8 @@ def candidates(p):
 
 def try_it(parent, label, patch, name, seed):
     r = subprocess.run([sys.executable, os.path.join(HERE, 'try.py'), os.path.join(PLANS, parent + '.md'), label,
-                        json.dumps(patch), '--name', name, '--cap', str(cap), '--seed', str(seed)],
+                        json.dumps(patch), '--name', name, '--cap', str(cap), '--seed', str(seed)]
+                       + (['--rung', FIXED_RUNG] if FIXED_RUNG else []),
                        capture_output=True, text=True)
     lines = [l for l in r.stdout.strip().splitlines() if l.startswith(('ACCEPT', 'refuted'))]
     return (lines[0] if lines else 'error: ' + r.stdout[-200:] + r.stderr[-200:])

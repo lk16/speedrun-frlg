@@ -16,7 +16,8 @@ for line in open(os.path.join(ROOT, 'human-run', 'scores.jsonl')):
     r = json.loads(line)
     if r.get('plan') == old:
         rec = r
-cur = open(os.path.join(ROOT, 'human-run', 'plans', 'CURRENT')).read().strip()
+POINTER = os.environ.get('FRLG_POINTER', 'CURRENT')
+cur = open(os.path.join(ROOT, 'human-run', 'plans', POINTER)).read().strip()
 parent_md = os.path.join(ROOT, 'human-run', 'plans', cur + '.md')
 doc = f"""# Plan {name}
 
@@ -37,5 +38,5 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
 """
 out = os.path.join(ROOT, 'human-run', 'plans', name + '.md')
 open(out, 'w').write(doc)
-open(os.path.join(ROOT, 'human-run', 'plans', 'CURRENT'), 'w').write(name + '\n')
+open(os.path.join(ROOT, 'human-run', 'plans', POINTER), 'w').write(name + '\n')
 print('wrote', out)

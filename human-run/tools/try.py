@@ -28,6 +28,7 @@ def opt(name, default):
 cap = opt('--cap', 160000)
 seed = opt('--seed', 1)
 name = opt('--name', '')
+fixed = opt('--rung', '')
 parent, idea = args[0], args[1]
 patch = json.loads(open(args[2][1:]).read() if args[2].startswith('@') else args[2])
 
@@ -48,6 +49,34 @@ for k, v in patch.items():
 child['name'] = name or ('try-' + hashlib.sha1(json.dumps(patch, sort_keys=True).encode()).hexdigest()[:6])
 cpath = os.path.join(SCRATCH, child['name'] + '.md')
 open(cpath, 'w').write('```json\n' + json.dumps(child, indent=1) + '\n```\n')
+
+if fixed:
+    # Objective fixed at one rung: no ladder, compare the two plans there (finishes >= 50 on both sides).
+    rec = dict(plan=child['name'], parent=params.get('name'), idea=idea, diff=patch, seed=seed)
+    r = 10000
+    while True:
+        out = run('compare', cpath, parent, '--rung', fixed, '--R', str(r), '--seed', str(seed))
+        j = json.loads([l for l in out.splitlines() if l.startswith('JSON ')][0][5:])
+        lo, hi, b = j['ci_lo'], j['ci_hi'], j['b_eht']
+        if lo is not None and (lo > 0 or hi < 0 or (b and (hi - lo) < 0.01 * b)):
+            break
+        if r >= 2_000_000 or (lo is None and r >= 400_000):
+            break
+        r *= 2
+    better = j['ci_hi'] is not None and j['ci_hi'] < 0 and (j.get('a_fin') or 0) >= 50
+    inconclusive = j['ci_lo'] is not None and j['ci_lo'] <= 0 <= j['ci_hi']
+    verdict = ('ACCEPT' if better else ('refuted (not significant)' if inconclusive else 'refuted (worse)')) + \
+        f" at {fixed} (fixed rung): diff {j['diff']} h CI [{j['ci_lo']},{j['ci_hi']}] R={j['R']}"
+    rec.update(rung=fixed, eht_hours=j['a_eht'], R=j['R'], ci=[j['ci_lo'], j['ci_hi']], diff_vs_parent=j['diff'], parent_eht=j['b_eht'])
+    rec['accepted'] = verdict.startswith('ACCEPT')
+    rec['verdict'] = verdict
+    rec['commit'] = None
+    with open(os.path.join(ROOT, 'human-run', 'scores.jsonl'), 'a') as f:
+        f.write(json.dumps(rec) + '\n')
+    print(f"parent {fixed} {j['b_eht']} h | child {fixed} {j['a_eht']} h")
+    print(verdict)
+    print('variant file:', cpath)
+    sys.exit(0)
 
 pl, cl = ladder(parent), ladder(cpath)
 rank = lambda l: RUNGS.index(l['rung']) if l.get('rung') else 99
