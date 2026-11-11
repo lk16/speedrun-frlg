@@ -18,8 +18,10 @@ for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\n    \},', si, re.
     gi = lambda k: int(re.search(r'\.' + k + r'\s*=\s*(\d+)', body).group(1)) if re.search(r'\.' + k + r'\s*=\s*(\d+)', body) else 0
     base = [gi('baseHP'), gi('baseAttack'), gi('baseDefense'), gi('baseSpeed'), gi('baseSpAttack'), gi('baseSpDefense')]
     ev = [gi('evYield_HP'), gi('evYield_Attack'), gi('evYield_Defense'), gi('evYield_Speed'), gi('evYield_SpAttack'), gi('evYield_SpDefense')]
+    ab = re.search(r'\.abilities = \{(ABILITY_[A-Z_]+),\s*(ABILITY_[A-Z_]+)\}', body)
     species[name] = dict(base=base, ev=ev, safari_flee=int(sf.group(1)) if sf else 0, types=[tm.group(1), tm.group(2)] if tm else ['TYPE_NORMAL', 'TYPE_NORMAL'], catch=int(g('catchRate').group(1)), yield_=int(g('expYield').group(1)),
-                         growth=g('growthRate').group(1), evo=[])
+                         growth=g('growthRate').group(1), evo=[],
+                         abilities=[ab.group(1), ab.group(2)] if ab else ['ABILITY_NONE', 'ABILITY_NONE'])
 ev = open(os.path.join(root, 'pokemon', 'evolution.h')).read()
 for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\},\n', ev, re.S):
     name, body = m.groups()
@@ -59,7 +61,10 @@ for m in re.finditer(r'static const struct TrainerMon\w+ (sParty_\w+)\[\] = \{((
     full = []
     for mm in re.finditer(r'\{\s*\.iv = (\d+),\s*\.lvl = (\d+),\s*\.species = (SPECIES_[A-Z0-9_]+),(.*?)\n    \}', m.group(2), re.S):
         mv = re.search(r'\.moves = \{([^}]*)\}', mm.group(4))
-        full.append([int(mm.group(2)), mm.group(3), int(mm.group(1)), re.findall(r'MOVE_[A-Z0-9_]+', mv.group(1)) if mv else None])
+        held = re.search(r'\.heldItem = (ITEM_[A-Z0-9_]+)', mm.group(4))
+        full.append([int(mm.group(2)), mm.group(3), int(mm.group(1)),
+                     re.findall(r'MOVE_[A-Z0-9_]+', mv.group(1)) if mv else None,
+                     held.group(1) if held else None])
     parties_full[m.group(1)] = full
 tr = open(os.path.join(root, 'trainers.h')).read()
 bm0 = open(os.path.join(root, '..', 'battle_main.c')).read()
@@ -74,7 +79,19 @@ for m in re.finditer(r'\[(TRAINER_[A-Z0-9_]+)\] = \{(.*?)\n    \},', tr, re.S):
         # decompiled/src/battle_script_commands.c:5373: 4 * lastMonLevel * moneyMultiplier(1) * (double ? 2 : 1) * table value
         val = money_table.get(cls.group(1), 0) if cls else 0
         last = parties[pm.group(1)][-1][0] if parties[pm.group(1)] else 0
-        trainers[m.group(1)] = dict(party=parties[pm.group(1)], party_full=parties_full.get(pm.group(1), []), double=dbl, money=4 * last * (2 if dbl else 1) * val)
+        # aiFlags: AI_SCRIPT_CHECK_BAD_MOVE 1, CHECK_VIABILITY 2, TRY_TO_FAINT 4
+        # (decompiled/include/constants/battle_ai.h:37-39)
+        aif = re.search(r'\.aiFlags = ([A-Z0-9_ |]+)', m.group(2))
+        ai = 0
+        if aif:
+            bits = dict(AI_SCRIPT_CHECK_BAD_MOVE=1, AI_SCRIPT_CHECK_VIABILITY=2, AI_SCRIPT_TRY_TO_FAINT=4)
+            for tok in aif.group(1).split('|'):
+                ai |= bits.get(tok.strip(), 0)
+        itm = re.search(r'\.items = \{([^}]*)\}', m.group(2))
+        items = re.findall(r'ITEM_[A-Z0-9_]+', itm.group(1)) if itm else []
+        items = [i for i in items if i != 'ITEM_NONE']
+        trainers[m.group(1)] = dict(party=parties[pm.group(1)], party_full=parties_full.get(pm.group(1), []), double=dbl,
+                                    money=4 * last * (2 if dbl else 1) * val, ai=ai, items=items)
 maps_dir = os.path.join(root, '..', '..', 'data')
 label_trainer = {}
 def scan(path):
@@ -117,7 +134,8 @@ for m in re.finditer(r'\[(MOVE_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\n    \},', bmv, re.S)
         r = re.search(r'\.' + k + r'\s*=\s*([A-Za-z0-9_]+)', body)
         return r.group(1) if r else default
     moves[mn] = dict(power=int(f('power', '0')), type=f('type', 'TYPE_NORMAL'), acc=int(f('accuracy', '0')),
-                     effect=f('effect', 'EFFECT_HIT'), prio=int(f('priority', '0')))
+                     effect=f('effect', 'EFFECT_HIT'), prio=int(f('priority', '0')),
+                     pp=int(f('pp', '0')), chance=int(f('secondaryEffectChance', '0')))
 lu = open(os.path.join(root, 'pokemon', 'level_up_learnsets.h')).read()
 sets = {}
 for m in re.finditer(r'static const u16 (s\w+LevelUpLearnset)\[\] = \{(.*?)LEVEL_UP_END', lu, re.S):
@@ -127,5 +145,24 @@ for sp, sn in re.findall(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*(s\w+LevelUpLearnset)'
     if sp in species and sn in sets and sp != 'SPECIES_NONE':
         species[sp]['learnset'] = sets[sn]
 scripts = {k: v for k, v in label_trainer.items() if v in trainers}
-json.dump(dict(moves=moves, scripts=scripts, type_chart=chart, kanto_count=len(kanto), species=species, sites=sites, sites_lg=sites_lg, trainers=trainers, map_trainers=map_trainers), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
+# TM/HM and tutor learnsets (src/data/pokemon/tmhm_learnsets.h, tutor_learnsets.h).
+# A TMHM(TM28_DIG) token names the move after the underscore: MOVE_DIG.
+tm = open(os.path.join(root, 'pokemon', 'tmhm_learnsets.h')).read()
+for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*TMHM_LEARNSET\((.*?)\),\n', tm, re.S):
+    if m.group(1) in species:
+        species[m.group(1)]['tmhm'] = re.findall(r'TMHM\((TM\d+_[A-Z0-9_]+|HM\d+_[A-Z0-9_]+)\)', m.group(2))
+tu = open(os.path.join(root, 'pokemon', 'tutor_learnsets.h')).read()
+tutor_moves = dict(re.findall(r'\[(TUTOR_MOVE_[A-Z0-9_]+)\] = (MOVE_[A-Z0-9_]+)', tu))
+for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\] = ((?:TUTOR\([A-Z0-9_]+\)[\s|]*)+)', tu):
+    if m.group(1) in species:
+        species[m.group(1)]['tutor'] = [tutor_moves['TUTOR_' + t] for t in re.findall(r'TUTOR\((MOVE_[A-Z0-9_]+)\)', m.group(2)) if 'TUTOR_' + t in tutor_moves]
+# Item prices (src/data/items.json).
+items_raw = json.load(open(os.path.join(root, 'items.json')))
+items_list = items_raw['items'] if isinstance(items_raw, dict) else items_raw
+prices = {}
+for it in items_list:
+    iid = it.get('itemId') or it.get('id')
+    if iid and it.get('price') is not None:
+        prices[iid] = it['price']
+json.dump(dict(moves=moves, scripts=scripts, type_chart=chart, kanto_count=len(kanto), species=species, sites=sites, sites_lg=sites_lg, trainers=trainers, map_trainers=map_trainers, item_prices=prices), open(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'data', 'dex.json'), 'w'), separators=(',', ':'))
 print(len(kanto), len(species), len(sites), len(trainers))

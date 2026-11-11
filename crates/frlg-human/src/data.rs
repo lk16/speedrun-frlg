@@ -21,6 +21,10 @@ struct RawMove {
     acc: u32,
     effect: String,
     prio: i32,
+    #[serde(default)]
+    pp: u32,
+    #[serde(default)]
+    chance: u32,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +43,14 @@ struct RawSpecies {
     growth: String,
     evo: Vec<(String, String, String)>,
     dex: u32,
+    #[serde(default)]
+    abilities: Vec<String>,
+    /// `TM28_DIG`-style tokens (`tmhm_learnsets.h`).
+    #[serde(default)]
+    tmhm: Vec<String>,
+    /// Tutor move names (`tutor_learnsets.h`).
+    #[serde(default)]
+    tutor: Vec<String>,
 }
 
 #[derive(Deserialize, Clone)]
@@ -59,8 +71,15 @@ pub struct RawSite {
 struct RawTrainer {
     party: Vec<(u32, String)>,
     #[serde(default)]
-    party_full: Vec<(u32, String, u32, Option<Vec<String>>)>,
+    party_full: Vec<(u32, String, u32, Option<Vec<String>>, Option<String>)>,
     money: u32,
+    /// AI script bits: 1 CHECK_BAD_MOVE, 2 CHECK_VIABILITY, 4 TRY_TO_FAINT
+    /// (`decompiled/include/constants/battle_ai.h:37-39`).
+    #[serde(default)]
+    ai: u32,
+    /// Battle items (`trainers.h` `.items`), e.g. Full Restores for the Elite Four.
+    #[serde(default)]
+    items: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -74,6 +93,8 @@ struct Raw {
     trainers: HashMap<String, RawTrainer>,
     map_trainers: HashMap<String, Vec<String>>,
     scripts: HashMap<String, String>,
+    #[serde(default)]
+    item_prices: HashMap<String, u32>,
 }
 
 #[derive(Clone, Debug)]
@@ -95,6 +116,101 @@ pub struct Species {
     pub ev_yield: [u32; 6],
     /// Level-up learnset, `(level, move index)` (`level_up_learnsets.h`).
     pub learnset: Vec<(u32, usize)>,
+    /// First ability (`species_info.h` `.abilities[0]`; slot choice by PID is ignored —
+    /// only a handful of route species have a second ability).
+    pub ability: Ability,
+    /// TM/HM moves the species can learn, as move indices (`tmhm_learnsets.h`).
+    pub tmhm: Vec<usize>,
+    /// Tutor moves (`tutor_learnsets.h`).
+    pub tutor: Vec<usize>,
+}
+
+/// The abilities the battle model distinguishes (`species_info.h`); everything else is None.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Ability {
+    None,
+    /// Starter abilities: 1.5x power below 1/3 HP (`pokemon.c`, `CalculateBaseDamage`).
+    Torrent,
+    Blaze,
+    Overgrow,
+    /// Immune to Ground moves (`battle_script_commands.c`, `Cmd_typecalc`).
+    Levitate,
+    /// Immune to paralysis / poison / sleep (`battle_script_commands.c`, status setters).
+    Limber,
+    Immunity,
+    Insomnia,
+    VitalSpirit,
+    /// Crits impossible (`Cmd_critcalc`).
+    BattleArmor,
+    ShellArmor,
+    /// Fire/Ice special attack halved against it (`CalculateBaseDamage`).
+    ThickFat,
+    /// Absorbs Electric moves (`battle_util.c`, `AbilityBattleEffects` move-end absorb).
+    VoltAbsorb,
+    WaterAbsorb,
+    FlashFire,
+    /// Static: 30% paralysis on contact (`battle_util.c`).
+    Static,
+    PoisonPoint,
+    EffectSpore,
+    /// Intimidate: attacker's Attack -1 on switch-in (`battle_util.c`).
+    Intimidate,
+    /// Guts: x1.5 attack while statused (`CalculateBaseDamage`).
+    Guts,
+    /// Rock Head: no recoil (`Cmd_...recoil`).
+    RockHead,
+    /// Sturdy: OHKO moves fail (`AccuracyCalcHelper`).
+    Sturdy,
+    /// Soundproof: blocks sound moves (Growl, Supersonic, Screech, Sing...).
+    Soundproof,
+    /// Compound Eyes: accuracy x1.3 (`Cmd_accuracycheck`).
+    CompoundEyes,
+    /// Hustle: attack x1.5, physical accuracy x0.8.
+    Hustle,
+    /// Keen Eye: accuracy cannot be lowered. Hyper Cutter: attack cannot be lowered.
+    KeenEye,
+    HyperCutter,
+    /// Shield Dust: no secondary effects against it.
+    ShieldDust,
+    /// Inner Focus: cannot flinch.
+    InnerFocus,
+    /// Synchronize, Pressure, and the rest that the model ignores map to None.
+    Other,
+}
+
+pub fn ability_from(name: &str) -> Ability {
+    match name {
+        "ABILITY_TORRENT" => Ability::Torrent,
+        "ABILITY_BLAZE" => Ability::Blaze,
+        "ABILITY_OVERGROW" => Ability::Overgrow,
+        "ABILITY_LEVITATE" => Ability::Levitate,
+        "ABILITY_LIMBER" => Ability::Limber,
+        "ABILITY_IMMUNITY" => Ability::Immunity,
+        "ABILITY_INSOMNIA" => Ability::Insomnia,
+        "ABILITY_VITAL_SPIRIT" => Ability::VitalSpirit,
+        "ABILITY_BATTLE_ARMOR" => Ability::BattleArmor,
+        "ABILITY_SHELL_ARMOR" => Ability::ShellArmor,
+        "ABILITY_THICK_FAT" => Ability::ThickFat,
+        "ABILITY_VOLT_ABSORB" => Ability::VoltAbsorb,
+        "ABILITY_WATER_ABSORB" => Ability::WaterAbsorb,
+        "ABILITY_FLASH_FIRE" => Ability::FlashFire,
+        "ABILITY_STATIC" => Ability::Static,
+        "ABILITY_POISON_POINT" => Ability::PoisonPoint,
+        "ABILITY_EFFECT_SPORE" => Ability::EffectSpore,
+        "ABILITY_INTIMIDATE" => Ability::Intimidate,
+        "ABILITY_GUTS" => Ability::Guts,
+        "ABILITY_ROCK_HEAD" => Ability::RockHead,
+        "ABILITY_STURDY" => Ability::Sturdy,
+        "ABILITY_SOUNDPROOF" => Ability::Soundproof,
+        "ABILITY_COMPOUND_EYES" => Ability::CompoundEyes,
+        "ABILITY_HUSTLE" => Ability::Hustle,
+        "ABILITY_KEEN_EYE" => Ability::KeenEye,
+        "ABILITY_HYPER_CUTTER" => Ability::HyperCutter,
+        "ABILITY_SHIELD_DUST" => Ability::ShieldDust,
+        "ABILITY_INNER_FOCUS" => Ability::InnerFocus,
+        "ABILITY_NONE" => Ability::None,
+        _ => Ability::Other,
+    }
 }
 
 /// A move from `battle_moves.h`.
@@ -105,6 +221,11 @@ pub struct MoveData {
     pub mtype: u8,
     pub acc: u32,
     pub prio: i32,
+    pub pp: u32,
+    /// `secondaryEffectChance`.
+    pub chance: u32,
+    /// `EFFECT_*` name (`battle_moves.h`), interpreted by the battle engine.
+    pub effect: String,
     /// A plain damaging move: the effect is one of the `*HIT*` family (no recoil, charge, status only).
     pub plain_hit: bool,
 }
@@ -119,12 +240,16 @@ pub struct PartyMon {
     pub moves: Vec<usize>,
 }
 
-/// A trainer fight: the real party, prize money, and the detailed mons.
+/// A trainer fight: the real party, prize money, the detailed mons, the AI bits
+/// (1 CHECK_BAD_MOVE, 2 CHECK_VIABILITY, 4 TRY_TO_FAINT) and battle items.
 #[derive(Clone, Debug)]
 pub struct Fight {
     pub party: Vec<(u32, usize)>,
     pub money: u32,
     pub full: Vec<PartyMon>,
+    pub ai: u32,
+    /// Full Restores etc. (`trainers.h` `.items`): count of usable heals.
+    pub heals: u32,
 }
 
 /// `TYPE_*` numbers, `decompiled/include/constants/pokemon.h:96-114`.
@@ -173,6 +298,10 @@ pub struct Dex {
     trainers: HashMap<String, Vec<(u32, usize)>>,
     /// Prize money per trainer id (`battle_script_commands.c:5373`).
     money: HashMap<String, u32>,
+    /// AI bits and heal-item count per trainer id (`trainers.h`).
+    trainer_ai: HashMap<String, (u32, u32)>,
+    /// Mart prices (`items.json`).
+    pub item_prices: HashMap<String, u32>,
     map_trainers: HashMap<String, Vec<String>>,
     scripts: HashMap<String, String>,
     /// Damage multiplier of attacking type (row) on defending type (column),
@@ -224,6 +353,9 @@ impl Dex {
                     mtype: type_num(&m.mtype),
                     acc: m.acc,
                     prio: m.prio,
+                    pp: m.pp,
+                    chance: m.chance,
+                    effect: m.effect.clone(),
                     plain_hit: (m.effect.contains("HIT") && !m.effect.contains("MULTI"))
                         || matches!(
                             m.effect.as_str(),
@@ -239,6 +371,11 @@ impl Dex {
             .iter()
             .map(|n| {
                 let s = &raw.species[*n];
+                // `TM28_DIG` names its move after the first underscore.
+                let tm_move = |t: &String| {
+                    let m = format!("MOVE_{}", t.split_once('_').map_or("", |x| x.1));
+                    move_by_name.get(&m).copied()
+                };
                 Species {
                     name: (*n).clone(),
                     catch_rate: s.catch,
@@ -249,6 +386,13 @@ impl Dex {
                     safari_flee: s.safari_flee,
                     base: s.base,
                     ev_yield: s.ev,
+                    ability: ability_from(s.abilities.first().map_or("", |a| a)),
+                    tmhm: s.tmhm.iter().filter_map(tm_move).collect(),
+                    tutor: s
+                        .tutor
+                        .iter()
+                        .filter_map(|m| move_by_name.get(m).copied())
+                        .collect(),
                     learnset: s
                         .learnset
                         .iter()
@@ -286,6 +430,27 @@ impl Dex {
             .iter()
             .map(|(k, t)| (k.clone(), t.money))
             .collect();
+        let trainer_ai = raw
+            .trainers
+            .iter()
+            .map(|(k, t)| {
+                let heals = t
+                    .items
+                    .iter()
+                    .filter(|i| {
+                        matches!(
+                            i.as_str(),
+                            "ITEM_FULL_RESTORE"
+                                | "ITEM_HYPER_POTION"
+                                | "ITEM_SUPER_POTION"
+                                | "ITEM_POTION"
+                                | "ITEM_FULL_HEAL"
+                        )
+                    })
+                    .count() as u32;
+                (k.clone(), (t.ai, heals))
+            })
+            .collect();
         #[derive(Deserialize)]
         struct Fly {
             tiles: Option<u32>,
@@ -302,6 +467,8 @@ impl Dex {
             trainer_full: HashMap::new(),
             fly_tiles,
             money,
+            trainer_ai,
+            item_prices: raw.item_prices,
             chart,
             species,
             by_name,
@@ -316,7 +483,7 @@ impl Dex {
             let mons = t
                 .party_full
                 .iter()
-                .filter_map(|(lvl, sp, iv, mv)| {
+                .filter_map(|(lvl, sp, iv, mv, _held)| {
                     let species = *dex.by_name.get(sp)?;
                     let moves: Vec<usize> = match mv {
                         Some(list) => list
@@ -364,10 +531,13 @@ impl Dex {
 
     /// A trainer's fight with the detailed mons, by decomp trainer id.
     pub fn fight(&self, id: &str) -> Fight {
+        let (ai, heals) = self.trainer_ai.get(id).copied().unwrap_or((1, 0));
         Fight {
             party: self.trainer(id).to_vec(),
             money: self.trainer_money(id),
             full: self.trainer_full.get(id).cloned().unwrap_or_default(),
+            ai,
+            heals,
         }
     }
 
