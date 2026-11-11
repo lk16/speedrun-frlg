@@ -61,10 +61,37 @@ impl Plan {
                 .and_then(|e| e.1.parse().ok())
                 .expect("starter evolves by level")
         });
+        let keep_ids = self
+            .params
+            .keep_moves
+            .iter()
+            .map(|m| self.dex.move_id(m))
+            .collect();
+        let x_from = |s: &str| match s {
+            "attack" => crate::battle::XItem::Attack,
+            "defend" => crate::battle::XItem::Defend,
+            "speed" => crate::battle::XItem::Speed,
+            "special" => crate::battle::XItem::Special,
+            "dire" => crate::battle::XItem::DireHit,
+            other => panic!("unknown x item {other}"),
+        };
+        let tactics = self
+            .params
+            .fight_tactics
+            .iter()
+            .map(|(k, t)| {
+                (
+                    k.clone(),
+                    (t.x.iter().map(|s| x_from(s)).collect(), t.heal_below),
+                )
+            })
+            .collect();
         let mut ctx = Ctx {
             dex: self.dex,
             p: &self.params,
             segs: &self.segs,
+            keep_ids,
+            tactics,
             floor_after: vec![0; n],
             mean_after: vec![0.0; n],
             oak_idx: self

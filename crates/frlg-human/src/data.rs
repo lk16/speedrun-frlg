@@ -71,6 +71,7 @@ pub struct RawSite {
 struct RawTrainer {
     party: Vec<(u32, String)>,
     #[serde(default)]
+    #[allow(clippy::type_complexity)]
     party_full: Vec<(u32, String, u32, Option<Vec<String>>, Option<String>)>,
     money: u32,
     /// AI script bits: 1 CHECK_BAD_MOVE, 2 CHECK_VIABILITY, 4 TRY_TO_FAINT

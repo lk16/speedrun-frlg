@@ -134,7 +134,7 @@ mod tests {
     fn game_rng_matches_the_lcg() {
         let mut g = GameRng::from_u32(0);
         // First Random() after SeedRng(0): state = 24691, top 16 bits = 0.
-        assert_eq!(g.roll(), 24691 >> 16);
+        assert_eq!(g.roll(), (24691u32 >> 16) as u16);
         let mut a = GameRng::from_u32(12345);
         let mut b = GameRng::from_u32(12345);
         a.frames(1000);

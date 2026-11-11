@@ -255,7 +255,10 @@ fn main() {
             );
         }
         Some("battle") => {
-            // battle <TRAINER_ID> <carry level> [--n 2000] [--iv 20] [--surf] [--badges mask]
+            // battle <TRAINER_ID> <carry level> [--n 2000] [--iv 20] [--badges mask]
+            //   [--species SPECIES_X] [--moves MOVE_A,MOVE_B] [--add MOVE_C,...]
+            //   [--x defend,attack,...] [--heal-below 0.4] [--league]
+            use frlg_human::battle::{enemy_mon, fight, heal_amount, make_mon, Tactics, XItem};
             let id = &args[1];
             let level: u32 = args[2].parse().unwrap();
             let n: u64 = arg(&args, "--n", 2000);
@@ -263,11 +266,7 @@ fn main() {
             let badges: u32 = arg(&args, "--badges", 0);
             let dexr = dex();
             let fightd = dexr.fight(id);
-            let foes: Vec<_> = fightd
-                .full
-                .iter()
-                .map(|m| frlg_human::battle::enemy_mon(dexr, m))
-                .collect();
+            let foes: Vec<_> = fightd.full.iter().map(|m| enemy_mon(dexr, m)).collect();
             let line =
                 ["SPECIES_SQUIRTLE", "SPECIES_WARTORTLE", "SPECIES_BLASTOISE"].map(|s| dexr.id(s));
             let mut species = line[(level >= 16) as usize + (level >= 36) as usize];
@@ -275,67 +274,85 @@ fn main() {
             if !alt.is_empty() {
                 species = dexr.id(&alt);
             }
-            let mut moves: Vec<usize> = vec![];
-            for &(l, m) in &dexr.species[species].learnset {
-                if l <= level
-                    && dexr.moves[m].plain_hit
-                    && dexr.moves[m].power > 0
-                    && !moves.contains(&m)
-                {
-                    moves.push(m);
+            let movearg: String = arg(&args, "--moves", String::new());
+            let mut moves: Vec<usize> = if movearg.is_empty() {
+                let mut v = vec![];
+                for &(l, m) in &dexr.species[species].learnset {
+                    if l <= level && dexr.moves[m].power > 0 && !v.contains(&m) {
+                        v.push(m);
+                    }
                 }
-            }
-            if args.iter().any(|a| a == "--surf") {
-                moves.push(dexr.move_id("MOVE_SURF"));
+                let k = v.len();
+                v.split_off(k.saturating_sub(4))
+            } else {
+                movearg.split(',').map(|m| dexr.move_id(m)).collect()
+            };
+            let addarg: String = arg(&args, "--add", String::new());
+            for m in addarg.split(',').filter(|s| !s.is_empty()) {
+                let mi = dexr.move_id(m);
+                if moves.len() < 4 {
+                    moves.push(mi);
+                } else {
+                    moves[0] = mi;
+                }
             }
             if moves.is_empty() {
                 moves.push(dexr.move_id("MOVE_TACKLE"));
             }
+            let xarg: String = arg(&args, "--x", String::new());
+            let xs: Vec<XItem> = xarg
+                .split(',')
+                .filter(|s| !s.is_empty())
+                .map(|s| match s {
+                    "attack" => XItem::Attack,
+                    "defend" => XItem::Defend,
+                    "speed" => XItem::Speed,
+                    "special" => XItem::Special,
+                    "dire" => XItem::DireHit,
+                    o => panic!("unknown x item {o}"),
+                })
+                .collect();
+            let league = args.iter().any(|a| a == "--league");
             let names: Vec<_> = moves.iter().map(|&m| dexr.moves[m].name.clone()).collect();
             println!(
-                "carry {} L{level} moves {names:?}",
-                dexr.species[species].name
+                "carry {} L{level} moves {names:?} x {xs:?} (trainer ai {:x}, heals {})",
+                dexr.species[species].name, fightd.ai, fightd.heals
             );
-            let pl = frlg_human::battle::Player {
-                species,
-                level,
-                ivs: [iv; 6],
-                evs: [0; 6],
-                nature: 0,
-                badge: [
-                    if badges & 1 != 0 { 110 } else { 100 },
-                    if badges & 16 != 0 { 110 } else { 100 },
-                    if badges & 64 != 0 { 110 } else { 100 },
-                    if badges & 64 != 0 { 110 } else { 100 },
-                ],
-                moves: &moves,
-                ability_type: if alt.is_empty() {
-                    dexr.species[line[0]].types.0
-                } else {
-                    255
-                },
-            };
-            let (mut won, mut turns, mut hp) = (0.0, 0.0, 0.0);
+            let (mut won, mut turns, mut hp, mut ev) = (0.0, 0.0, 0.0, 0.0);
             for i in 0..n {
-                let mut rng = frlg_human::rng::Rng::new(seed, i, 99);
-                let o = frlg_human::battle::fight(
+                let mut me = make_mon(dexr, species, level, [iv; 6], [0; 6], 0, badges as u8);
+                me.moves = moves.clone();
+                let tac = Tactics {
+                    x_items: xs.clone(),
+                    heal_below: arg(&args, "--heal-below", 0.4),
+                    heal: heal_amount(level, league),
+                    full_restore: league,
+                };
+                let mut g = frlg_human::rng::GameRng::from_u32(
+                    (seed as u32).wrapping_mul(2654435761) ^ (i as u32).wrapping_mul(0x9E3779B9),
+                );
+                let o = fight(
                     dexr,
-                    &pl,
-                    1.0,
+                    &mut me,
+                    &tac,
                     &foes,
-                    args.iter().any(|a| a == "--league"),
-                    &mut rng,
+                    fightd.ai,
+                    fightd.heals,
+                    false,
+                    &mut g,
                 );
                 won += o.won as u32 as f64;
                 turns += o.turns as f64;
                 hp += o.hp_frac;
+                ev += o.events as f64;
             }
             let foe_lv: Vec<_> = foes.iter().map(|f| f.level).collect();
             println!(
-                "{id} foes L{foe_lv:?}: win {:.3}  turns {:.1}  hp left {:.2}",
+                "{id} foes L{foe_lv:?}: win {:.3}  turns {:.1}  hp left {:.2}  events {:.1}",
                 won / n as f64,
                 turns / n as f64,
-                hp / n as f64
+                hp / n as f64,
+                ev / n as f64
             );
         }
         Some("pace") => {

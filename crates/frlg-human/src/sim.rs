@@ -120,8 +120,9 @@ struct State {
     carry_status: Status1,
     /// X items in the bag: Attack, Defend, Speed, Special, Dire Hit.
     x_stock: [u32; 5],
-    /// Mewtwo once caught (battle_sim): its rolled IVs and nature.
+    /// Mewtwo once caught (battle_sim): its rolled IVs and nature, and its move slots.
     mewtwo: Option<([u32; 6], u8)>,
+    mewtwo_moves: Vec<usize>,
     /// Inside the Safari Zone on the current entry (steps and balls left).
     safari_open: bool,
     safari_steps: u32,
@@ -141,8 +142,6 @@ struct State {
     evs: [u32; 6],
     hp_frac: f64,
     badges: u8,
-    surf: bool,
-    eq: bool,
     league_items: bool,
 }
 
@@ -248,6 +247,8 @@ impl Ctx<'_> {
             | Kind::Stones
             | Kind::Mewtwo => 0.0,
             Kind::Special { .. } | Kind::Mart { .. } => 0.0,
+            Kind::Teach { teach } => teach.frames as f64 * self.p.text_factor,
+            Kind::XBuy { xbuy } => xbuy.frames as f64 * self.p.text_factor,
             Kind::TeleportOrWalk { frames, .. } => *frames as f64 * self.p.text_factor,
             Kind::Grind { .. } => 0.0,
         }
@@ -305,7 +306,7 @@ fn slot_utility(ctx: &Ctx, st: &State, mv: usize) -> f64 {
         return 1_000_000.0 - pos as f64;
     }
     let m = &ctx.dex.moves[mv];
-    if m.power == 0 || !m.plain_hit && m.power == 0 {
+    if m.power == 0 {
         return 0.0;
     }
     let types = ctx.dex.species[carry_species(ctx, st.carry)].types;
@@ -604,14 +605,28 @@ fn encounter(
             hp = ctx.k("weaken_hp", 0.3);
         }
         let ball = (!ctx.p.money_model).then(|| ball_mult(ctx.p));
-        if throw_balls(ctx, st, rng, sp.catch_rate, hp, ball, 8) {
+        if throw_balls(ctx, st, rng, sp.catch_rate, hp, Status1::None, ball, 8) {
             st.caught.insert(sp.dex);
         }
     } else if (ctx.p.fight_wild || st.carry < ctx.p.fight_until_level) && ctx.p.battle_sim {
-        let mut foe = crate::battle::make_mon(ctx.dex, slot.species, level, [15; 6], [0; 6], 0);
-        foe.moves = ctx.dex.default_moves(slot.species, level);
+        let foe = wild_mon(ctx, st, slot.species, level);
         // A lost wild fight is a whiteout like any other; the human does not give up the run over it.
-        sim_battle(ctx, st, rng, &[foe], false, 0, None, false);
+        sim_battle(
+            ctx,
+            st,
+            rng,
+            &BattleArgs {
+                name: "wild",
+                foes: &[foe],
+                trainer: false,
+                intro: 0,
+                ai: 0,
+                heals: 0,
+                yield_: None,
+                league: false,
+                wild: true,
+            },
+        );
     } else if ctx.p.fight_wild || st.carry < ctx.p.fight_until_level {
         let e = exp_gain(sp.exp_yield as u8, level as u8, false);
         let t = turns_per_mon(level as f64, effective_level(st, ctx.p), st.strength, 1.0);
@@ -645,6 +660,29 @@ fn flee(ctx: &Ctx, st: &mut State, rng: &mut Rng) {
 
 fn turns_per_mon(le: f64, lp: f64, strength: f64, adv: f64) -> f64 {
     ((1.0 + 3.0 * (le / lp - 0.7).max(0.0)) / (strength * adv)).max(1.0)
+}
+
+/// A wild mon with the game's generation: nature from the PID (`Random32() % 25`),
+/// IVs from two 16-bit rolls in 5-bit fields (`decompiled/src/pokemon.c`, `CreateBoxMon`:
+/// personality at `:1793`, IVs at `:1834-1853`), default level-up moves.
+fn wild_mon(ctx: &Ctx, st: &mut State, species: usize, level: u32) -> crate::battle::Mon {
+    let mut g = st.game;
+    let pid = (g.roll() as u32) | ((g.roll() as u32) << 16);
+    let iv1 = g.roll() as u32;
+    let iv2 = g.roll() as u32;
+    st.game = g;
+    let ivs = [
+        iv1 & 0x1F,
+        (iv1 >> 5) & 0x1F,
+        (iv1 >> 10) & 0x1F,
+        iv2 & 0x1F,
+        (iv2 >> 5) & 0x1F,
+        (iv2 >> 10) & 0x1F,
+    ];
+    let nature = (pid % 25) as u8;
+    let mut foe = crate::battle::make_mon(ctx.dex, species, level, ivs, [0; 6], nature, 0);
+    foe.moves = ctx.dex.default_moves(species, level);
+    foe
 }
 
 /// Opening the bag and using a Repel. guess.
@@ -871,100 +909,109 @@ fn carry_species(ctx: &Ctx, level: u32) -> usize {
     ctx.starter_line[stage]
 }
 
-/// Damaging moves the fighter can use: level-up moves known at `level` plus Surf once it is taught.
-fn carry_moves(ctx: &Ctx, st: &State, species: usize, level: u32) -> Vec<usize> {
-    let dex = ctx.dex;
-    let mut v: Vec<usize> = vec![];
-    for &(l, m) in &dex.species[species].learnset {
-        if l <= level && dex.moves[m].plain_hit && dex.moves[m].power > 0 && !v.contains(&m) {
-            v.push(m);
-        }
-    }
-    if st.surf {
-        v.push(dex.move_id("MOVE_SURF"));
-    }
-    if st.eq {
-        v.push(dex.move_id("MOVE_EARTHQUAKE"));
-    }
-    if v.is_empty() {
-        v.push(dex.move_id("MOVE_TACKLE"));
-    }
-    v
-}
-
-#[allow(clippy::too_many_arguments)]
-/// `battle_sim` fight against `foes`. Returns false when the human gives up (three whiteouts).
-/// `yield_` overrides the species' exp yield (the guessed trainer groups).
-fn sim_battle(
-    ctx: &Ctx,
-    st: &mut State,
-    rng: &mut Rng,
-    foes: &[crate::battle::Mon],
+/// One `battle_sim` fight, described.
+struct BattleArgs<'a> {
+    /// Segment name, for the per-fight tactics lookup.
+    name: &'a str,
+    foes: &'a [crate::battle::Mon],
     trainer: bool,
     intro: u32,
+    /// The trainer's AI bits and heal items (`trainers.h`).
+    ai: u32,
+    heals: u32,
+    /// Exp-yield override (the guessed trainer groups).
     yield_: Option<u32>,
     league: bool,
-) -> bool {
-    use crate::battle::{fight, heal_amount, make_mon, Player};
+    wild: bool,
+}
+
+/// `battle_sim` fight against `a.foes` with the exact engine. Returns false when the
+/// human gives up (three whiteouts, or one in the League where a loss means walking the
+/// rooms again).
+fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool {
+    use crate::battle::{fight, heal_amount, make_mon, Status1, Tactics};
     let dex = ctx.dex;
-    if trainer {
-        bump(st, ctx.trainer_intro(intro));
+    if a.trainer {
+        bump(st, ctx.trainer_intro(a.intro));
         bump(st, jitter(ctx, rng, 8) as f64);
     }
+    let (x_plan, heal_override) = ctx
+        .tactics
+        .get(a.name)
+        .map(|(x, h)| (x.clone(), *h))
+        .unwrap_or((vec![], -1.0));
+    let heal_below = if heal_override >= 0.0 {
+        heal_override
+    } else {
+        ctx.p.heal_below
+    };
     let mut tries = 0;
     loop {
         // Mewtwo takes over once it is caught; otherwise the starter line carries.
-        let mewtwo = ctx.p.mewtwo && st.power > 0.0;
-        let (species, level, ivs, evs, nature) = if mewtwo {
-            (dex.id("SPECIES_MEWTWO"), 70, [20; 6], [0; 6], 0)
+        let mewtwo_now = ctx.p.mewtwo && st.mewtwo.is_some() && !a.wild;
+        let mut me = if let (true, Some((ivs, nature))) = (mewtwo_now, st.mewtwo) {
+            let mut m = make_mon(
+                dex,
+                dex.id("SPECIES_MEWTWO"),
+                70,
+                ivs,
+                [0; 6],
+                nature,
+                st.badges,
+            );
+            m.moves = st.mewtwo_moves.clone();
+            m
         } else {
-            (
+            let mut m = make_mon(
+                dex,
                 carry_species(ctx, st.carry),
                 st.carry,
                 st.ivs,
                 st.evs,
                 st.nature,
-            )
-        };
-        let moves: Vec<usize> = if mewtwo {
-            [
-                "MOVE_PSYCHIC",
-                "MOVE_ICE_BEAM",
-                "MOVE_THUNDERBOLT",
-                "MOVE_FLAMETHROWER",
-            ]
-            .iter()
-            .map(|m| dex.move_id(m))
-            .collect()
-        } else {
-            carry_moves(ctx, st, species, level)
-        };
-        let starter_type = dex.species[ctx.starter_line[0]].types.0;
-        let pl = Player {
-            species,
-            level,
-            ivs,
-            evs,
-            nature,
-            badge: [
-                if st.badges & 1 != 0 { 110 } else { 100 },
-                if st.badges & (1 << 4) != 0 { 110 } else { 100 },
-                if st.badges & (1 << 6) != 0 { 110 } else { 100 },
-                if st.badges & (1 << 6) != 0 { 110 } else { 100 },
-            ],
-            moves: &moves,
-            ability_type: if mewtwo { 255 } else { starter_type },
+                st.badges,
+            );
+            m.moves = st.slots.clone();
+            m.status = st.carry_status;
+            m
         };
         // Heal with items before the fight when low (each use is a bag trip).
-        if st.hp_frac < 0.5 {
-            let max_hp = make_mon(dex, species, level, ivs, evs, nature).max_hp as f64;
-            let uses = (((0.85 - st.hp_frac) * max_hp)
-                / heal_amount(level, st.league_items) as f64)
+        if st.hp_frac < 0.5 && !mewtwo_now {
+            let uses = (((0.85 - st.hp_frac) * me.max_hp as f64)
+                / heal_amount(me.level, st.league_items) as f64)
                 .ceil();
             bump(st, uses * ctx.turn());
             st.hp_frac = 0.85;
         }
-        let out = fight(dex, &pl, st.hp_frac, foes, st.league_items, rng);
+        me.hp = ((me.max_hp as f64 * if mewtwo_now { 1.0 } else { st.hp_frac }).round() as i32)
+            .clamp(1, me.max_hp);
+        // X items limited by the bag.
+        let mut stock = st.x_stock;
+        let xs: Vec<XItem> = x_plan
+            .iter()
+            .filter(|&&x| {
+                let i = x_index(x);
+                if stock[i] > 0 {
+                    stock[i] -= 1;
+                    true
+                } else {
+                    false
+                }
+            })
+            .copied()
+            .collect();
+        let tac = Tactics {
+            x_items: xs.clone(),
+            heal_below,
+            heal: heal_amount(me.level, st.league_items),
+            full_restore: st.league_items,
+        };
+        let mut g = st.game;
+        let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
+        st.game = g;
+        for x in xs.iter().take(out.x_used as usize) {
+            st.x_stock[x_index(*x)] -= 1;
+        }
         bump(st, out.turns as f64 * ctx.turn());
         bump(st, out.kos.len() as f64 * ctx.mon_overhead());
         for _ in 0..out.events {
@@ -973,10 +1020,14 @@ fn sim_battle(
         bump(st, jitter(ctx, rng, out.turns * 2 + 3) as f64);
         if out.won {
             st.hp_frac = out.hp_frac;
+            if !mewtwo_now {
+                st.carry_status = out.end_status;
+                cure_status(ctx, st);
+            }
             for &(sp, lvl) in &out.kos {
-                let yld = yield_.unwrap_or(dex.species[sp].exp_yield);
-                if !mewtwo {
-                    let e = exp_gain(yld as u8, lvl as u8, trainer);
+                let yld = a.yield_.unwrap_or(dex.species[sp].exp_yield);
+                if !mewtwo_now {
+                    let e = exp_gain(yld as u8, lvl as u8, a.trainer);
                     let g = add_exp(ctx, st, e);
                     bump(st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
                     let ev = dex.species[sp].ev_yield;
@@ -985,21 +1036,67 @@ fn sim_battle(
                     }
                 }
             }
-            if trainer {
+            if a.trainer {
                 bump(st, ctx.k("trainer_outro", TRAINER_OUTRO as f64));
             }
+            return true;
+        }
+        // A wild battle the engine ended without a win and without fainting is a flee
+        // (a wild Abra's Teleport): carry on.
+        if a.wild && out.hp_frac > 0.0 {
+            st.hp_frac = out.hp_frac;
+            st.carry_status = out.end_status;
+            cure_status(ctx, st);
             return true;
         }
         st.whiteouts += 1;
         bump(st, ctx.k("whiteout", WHITEOUT as f64));
         st.hp_frac = 1.0;
+        st.carry_status = Status1::None;
         tries += 1;
+        if a.wild {
+            // The wild mon is gone; the run continues.
+            return true;
+        }
         // A whiteout in the League sends the player back to the first room: the human resets.
-        if tries >= 3 || league {
+        if tries >= 3 || a.league {
             st.abandoned = true;
             return false;
         }
     }
+}
+
+fn x_index(x: XItem) -> usize {
+    match x {
+        XItem::Attack => 0,
+        XItem::Defend => 1,
+        XItem::Speed => 2,
+        XItem::Special => 3,
+        XItem::DireHit => 4,
+    }
+}
+
+/// Cure a status that outlived a battle with the matching item: frames and (money model)
+/// the mart price (`items.json`: Antidote 100, Paralyze Heal 200, Awakening 250, Burn
+/// Heal 250, Ice Heal 250). Poison that stays would otherwise hurt in the overworld.
+fn cure_status(ctx: &Ctx, st: &mut State) {
+    use crate::battle::Status1;
+    if !ctx.p.cure_status || !st.carry_status.any() {
+        return;
+    }
+    let price = match st.carry_status {
+        Status1::Poison | Status1::Toxic(_) => 100,
+        Status1::Paralysis => 200,
+        _ => 250,
+    };
+    if ctx.p.money_model {
+        if st.money < price {
+            return; // live with it until the next Pokémon Center
+        }
+        st.money -= price;
+    }
+    bump(st, 400.0 * ctx.p.text_factor);
+    st.carry_status = Status1::None;
 }
 
 fn is_league(name: &str) -> bool {
@@ -1021,7 +1118,18 @@ fn group_battle(
             let foes: Vec<crate::battle::Mon> = (0..mons)
                 .map(|_| crate::battle::generic_mon(ctx.dex, level))
                 .collect();
-            if !sim_battle(ctx, st, rng, &foes, true, 600, Some(yld), false) {
+            let args = BattleArgs {
+                name: "group",
+                foes: &foes,
+                trainer: true,
+                intro: 600,
+                ai: 1,
+                heals: 0,
+                yield_: Some(yld),
+                league: false,
+                wild: false,
+            };
+            if !sim_battle(ctx, st, rng, &args) {
                 return false;
             }
             continue;
@@ -1203,14 +1311,27 @@ pub fn attempt(
         evs: [0; 6],
         hp_frac: 1.0,
         badges: 0,
-        surf: false,
-        eq: false,
         league_items: false,
         whiteouts: 0,
+        game: GameRng::from_u32(0),
+        slots: vec![],
+        learned_to: 5,
+        carry_status: Status1::None,
+        x_stock: [0; 5],
+        mewtwo: None,
+        mewtwo_moves: vec![],
     };
     st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
+    // The starter's level-5 moves (`level_up_learnsets.h`).
+    for &(l, m) in &ctx.dex.species[ctx.starter_line[0]].learnset {
+        if l <= 5 && !st.slots.contains(&m) {
+            st.slots.push(m);
+        }
+    }
     for (i, seg) in ctx.segs.iter().enumerate() {
         let mut rng = Rng::new(seed, idx, hash_str(&seg.name));
+        // The game's stream, re-keyed per segment (see `GameRng`).
+        st.game = GameRng::from_u32(rng.next_u64() as u32);
         let before = st.clock;
         let wo_before = st.whiteouts;
         match &seg.kind {
@@ -1265,22 +1386,26 @@ pub fn attempt(
                 adv,
                 money,
                 full,
+                ai,
+                heals,
             } => {
                 if ctx.p.battle_sim && !full.is_empty() {
                     let foes: Vec<_> = full
                         .iter()
                         .map(|m| crate::battle::enemy_mon(ctx.dex, m))
                         .collect();
-                    if !sim_battle(
-                        ctx,
-                        &mut st,
-                        &mut rng,
-                        &foes,
-                        true,
-                        *intro,
-                        None,
-                        is_league(&seg.name),
-                    ) {
+                    let args = BattleArgs {
+                        name: &seg.name,
+                        foes: &foes,
+                        trainer: true,
+                        intro: *intro,
+                        ai: *ai,
+                        heals: *heals,
+                        yield_: None,
+                        league: is_league(&seg.name),
+                        wild: false,
+                    };
+                    if !sim_battle(ctx, &mut st, &mut rng, &args) {
                         break;
                     }
                 } else {
@@ -1296,6 +1421,7 @@ pub fn attempt(
                 parties,
                 money,
                 fulls,
+                ais,
             } => {
                 let mut ok = true;
                 for (pi, p) in parties.iter().enumerate() {
@@ -1304,16 +1430,18 @@ pub fn attempt(
                             .iter()
                             .map(|m| crate::battle::enemy_mon(ctx.dex, m))
                             .collect();
-                        if !sim_battle(
-                            ctx,
-                            &mut st,
-                            &mut rng,
-                            &foes,
-                            true,
-                            600,
-                            None,
-                            is_league(&seg.name),
-                        ) {
+                        let args = BattleArgs {
+                            name: &seg.name,
+                            foes: &foes,
+                            trainer: true,
+                            intro: 600,
+                            ai: ais.get(pi).copied().unwrap_or(1),
+                            heals: 0,
+                            yield_: None,
+                            league: is_league(&seg.name),
+                            wild: false,
+                        };
+                        if !sim_battle(ctx, &mut st, &mut rng, &args) {
                             ok = false;
                             break;
                         }
@@ -1483,6 +1611,7 @@ pub fn attempt(
                             &mut rng,
                             sp.catch_rate,
                             special.hp_frac,
+                            Status1::None,
                             Some(ball),
                             special.max_throws,
                         ) {
@@ -1526,6 +1655,75 @@ pub fn attempt(
                 bump(&mut st, ctx.throw_cost() + ctx.catch_end());
                 st.caught.insert(150);
                 st.power = 70.0 * ctx.p.power_bonus;
+                // Roll its IVs and nature like any wild mon (`pokemon.c`, `CreateBoxMon`:
+                // personality then two IV words); its default level-70 moves are
+                // Swift/Recover/Safeguard/Psychic (`level_up_learnsets.h`), extended by
+                // `tms` entries with `mewtwo: true`.
+                let mut g = st.game;
+                let pid = (g.roll() as u32) | ((g.roll() as u32) << 16);
+                let iv1 = g.roll() as u32;
+                let iv2 = g.roll() as u32;
+                st.game = g;
+                let ivs = [
+                    iv1 & 0x1F,
+                    (iv1 >> 5) & 0x1F,
+                    (iv1 >> 10) & 0x1F,
+                    iv2 & 0x1F,
+                    (iv2 >> 5) & 0x1F,
+                    (iv2 >> 10) & 0x1F,
+                ];
+                st.mewtwo = Some((ivs, (pid % 25) as u8));
+                if st.mewtwo_moves.is_empty() {
+                    st.mewtwo_moves = ctx.dex.default_moves(ctx.dex.id("SPECIES_MEWTWO"), 70);
+                }
+            }
+            Kind::Teach { teach } => {
+                let mv = ctx.dex.move_id(&teach.mv);
+                if ctx.p.money_model && teach.cost > 0 {
+                    if st.money < teach.cost {
+                        continue;
+                    }
+                    st.money -= teach.cost;
+                }
+                bump(&mut st, teach.frames as f64 * ctx.p.text_factor);
+                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                if teach.mewtwo {
+                    if st.mewtwo.is_some() {
+                        if st.mewtwo_moves.len() < 4 {
+                            st.mewtwo_moves.push(mv);
+                        } else {
+                            st.mewtwo_moves[0] = mv;
+                        }
+                    }
+                } else {
+                    offer_move(ctx, &mut st, mv, true);
+                }
+            }
+            Kind::XBuy { xbuy } => {
+                bump(&mut st, xbuy.frames as f64 * ctx.p.text_factor);
+                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                // Prices (`items.json`): X Attack 500, X Defend 550, X Speed 350,
+                // X Special 350, Dire Hit 650.
+                for (i, (want, price)) in [
+                    (xbuy.attack, 500),
+                    (xbuy.defend, 550),
+                    (xbuy.speed, 350),
+                    (xbuy.special, 350),
+                    (xbuy.dire, 650),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let qty = if ctx.p.money_model {
+                        want.min(st.money / price)
+                    } else {
+                        want
+                    };
+                    if ctx.p.money_model {
+                        st.money -= qty * price;
+                    }
+                    st.x_stock[i] += qty;
+                }
             }
         }
         if st.abandoned {
@@ -1546,15 +1744,23 @@ pub fn attempt(
                 st.max_tier = 2;
                 st.badges |= 1 << 4;
             }
+            // Thunder Badge boosts the player's battle speed by 10%
+            // (`GetWhoStrikesFirst`, `battle_main.c:3444-3446`).
+            "surge-badge" => st.badges |= 1 << 2,
             "blaine-badge-and-sevii-scene" => st.badges |= 1 << 6,
-            "giovanni-badge" => st.eq = true,
+            // Giovanni hands over TM26 Earthquake
+            // (`ViridianCity_Gym/scripts.inc:28-30`); teaching it is a plan choice via
+            // `tms`, not automatic (a taught move displaces a slot).
             "indigo-heal" => st.league_items = true,
-            "safari-walk" => st.surf = true,
+            // HM03 Surf is taught to the carry after the Safari trip (the route needs a
+            // surfer anyway; `plan.md` HM gates).
+            "safari-walk" => offer_move(ctx, &mut st, ctx.dex.move_id("MOVE_SURF"), true),
             "lavender-heal" => st.max_tier = st.max_tier.max(1),
             _ => {}
         }
         if seg.name.contains("heal") {
             st.hp_frac = 1.0;
+            st.carry_status = Status1::None;
         }
         if seg.off_timer {
             let d = st.clock - before;
