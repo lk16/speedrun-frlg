@@ -68,12 +68,16 @@ pub enum Kind {
         money: u32,
         /// The mons with IVs and moves, for the battle simulation.
         full: Vec<crate::data::PartyMon>,
+        /// AI bits and heal items (`trainers.h` `.aiFlags`, `.items`).
+        ai: u32,
+        heals: u32,
     },
     /// Several real parties fought back to back (trainers of the given maps, hardest first).
     Parties {
         parties: Vec<Vec<(u32, usize)>>,
         money: u32,
         fulls: Vec<Vec<crate::data::PartyMon>>,
+        ais: Vec<u32>,
     },
     /// Trainers we only know in aggregate (a guess).
     Group {
@@ -102,6 +106,10 @@ pub enum Kind {
     Special { special: Special },
     /// A Poké Mart stop: buy balls with the money on hand.
     Mart { mart: crate::params::Mart },
+    /// Teach a TM or tutor move (battle_sim).
+    Teach { teach: crate::params::Teach },
+    /// Buy X items (battle_sim).
+    XBuy { xbuy: crate::params::XBuy },
 }
 
 #[derive(Clone, Debug)]
@@ -191,6 +199,8 @@ impl<'a> B<'a> {
                 adv,
                 money: f.money,
                 full: f.full,
+                ai: f.ai,
+                heals: f.heals,
             },
         );
     }
@@ -228,6 +238,7 @@ impl<'a> B<'a> {
         let n = fights.len() as u32;
         let money = fights.iter().map(|f| f.money).sum();
         let parties = fights.iter().map(|f| f.party.clone()).collect();
+        let ais = fights.iter().map(|f| f.ai).collect();
         let fulls = fights.into_iter().map(|f| f.full).collect();
         self.push(
             name,
@@ -237,6 +248,7 @@ impl<'a> B<'a> {
                 parties,
                 money,
                 fulls,
+                ais,
             },
         );
     }
@@ -251,6 +263,7 @@ impl<'a> B<'a> {
         let fights: Vec<_> = self.dex.map_parties(maps).into_iter().take(n).collect();
         let money = fights.iter().map(|f| f.money).sum();
         let parties = fights.iter().map(|f| f.party.clone()).collect();
+        let ais = fights.iter().map(|f| f.ai).collect();
         let fulls = fights.into_iter().map(|f| f.full).collect();
         self.push(
             name,
@@ -260,6 +273,7 @@ impl<'a> B<'a> {
                 parties,
                 money,
                 fulls,
+                ais,
             },
         );
     }
@@ -996,6 +1010,49 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
                 kind: Kind::Special {
                     special: sp.clone(),
                 },
+            },
+        );
+    }
+    for t in p.tms.iter().rev() {
+        dex.move_id(&t.mv);
+        let at = b
+            .segs
+            .iter()
+            .position(|s| s.name == t.after)
+            .unwrap_or_else(|| panic!("tm anchor {} matches no segment", t.after));
+        b.segs.insert(
+            at + 1,
+            Seg {
+                name: format!(
+                    "tm-{}@{}",
+                    t.mv.trim_start_matches("MOVE_").to_lowercase(),
+                    t.after
+                ),
+                src: Src::Guess,
+                inputs: 10,
+                split: false,
+                off_timer: false,
+                starter_check: false,
+                kind: Kind::Teach { teach: t.clone() },
+            },
+        );
+    }
+    for x in p.xbuys.iter().rev() {
+        let at = b
+            .segs
+            .iter()
+            .position(|s| s.name == x.after)
+            .unwrap_or_else(|| panic!("xbuy anchor {} matches no segment", x.after));
+        b.segs.insert(
+            at + 1,
+            Seg {
+                name: format!("xbuy@{}", x.after),
+                src: Src::Guess,
+                inputs: 12,
+                split: false,
+                off_timer: false,
+                starter_check: false,
+                kind: Kind::XBuy { xbuy: x.clone() },
             },
         );
     }

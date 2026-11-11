@@ -85,9 +85,64 @@ impl Rng {
     }
 }
 
+/// The game's own RNG stream: the LCG of `decompiled/src/random.c` (via `frlg-rng`,
+/// emulator-verified there), advanced once per frame by the VBlank handler
+/// (`decompiled/src/main.c:412`) and consumed by every game roll.
+///
+/// Within a segment the stream is serial and real: frame time advances it (`frames`),
+/// battle and encounter rolls consume it in order, so rolls have exactly the game's
+/// 16-bit arithmetic and in-stream correlation. Across segments it is re-keyed from the
+/// human stream so plans stay pairable on common random numbers — statistically
+/// indistinguishable from continuity because the real seed is a free-running 16-bit
+/// timer (`SeedRngAndSetTrainerId`, `decompiled/src/main.c:264`) and human input timing
+/// jitters the stream position anyway.
+#[derive(Clone, Copy)]
+pub struct GameRng(pub frlg_rng::Rng);
+
+impl GameRng {
+    /// Re-keyed from 32 bits of the human stream (any u32 is a reachable LCG state).
+    pub fn from_u32(v: u32) -> Self {
+        GameRng(frlg_rng::Rng(v))
+    }
+
+    /// `Random()`: one step, top 16 bits (`decompiled/src/random.c:10-14`).
+    pub fn roll(&mut self) -> u16 {
+        self.0.random()
+    }
+
+    /// `n` frames pass: the VBlank advance (`decompiled/src/main.c:412`), O(log n).
+    pub fn frames(&mut self, n: u32) {
+        self.0 = self.0.jump(n);
+    }
+
+    /// `Random() % 100 < p`: the secondary-effect and AI percent roll shape.
+    pub fn pct(&mut self, p: u32) -> bool {
+        (self.roll() as u32) % 100 < p
+    }
+
+    /// `Random() % n`.
+    pub fn modn(&mut self, n: u32) -> u32 {
+        (self.roll() as u32) % n
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn game_rng_matches_the_lcg() {
+        let mut g = GameRng::from_u32(0);
+        // First Random() after SeedRng(0): state = 24691, top 16 bits = 0.
+        assert_eq!(g.roll(), 24691 >> 16);
+        let mut a = GameRng::from_u32(12345);
+        let mut b = GameRng::from_u32(12345);
+        a.frames(1000);
+        for _ in 0..1000 {
+            b.roll();
+        }
+        assert_eq!(a.0 .0, b.0 .0);
+    }
 
     #[test]
     fn streams_are_reproducible_and_distinct() {

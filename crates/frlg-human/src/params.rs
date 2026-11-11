@@ -92,6 +92,69 @@ impl Default for Special {
     }
 }
 
+/// A TM, HM or tutor move taught to the carry (or Mewtwo) after the named segment.
+/// `frames` is the whole event before `text_factor` (walking to the tutor, menus);
+/// `cost` is money when the TM is bought (TM28 Dig is also a free pickup in Cerulean,
+/// `decompiled/data/maps/CeruleanCity/scripts.inc:179-187`; the Celadon mart sells it for
+/// 2000, `CeladonCity_DepartmentStore_2F/scripts.inc:57`, `items.json`).
+#[derive(Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct Teach {
+    pub after: String,
+    pub mv: String,
+    pub frames: u32,
+    pub cost: u32,
+    /// Teach Mewtwo instead of the carry (post-catch).
+    pub mewtwo: bool,
+}
+
+impl Default for Teach {
+    fn default() -> Self {
+        Teach {
+            after: String::new(),
+            mv: String::new(),
+            frames: 800,
+            cost: 0,
+            mewtwo: false,
+        }
+    }
+}
+
+/// Battle items bought after the named segment (Celadon Dept. 5F sells the X line,
+/// `decompiled/data/maps/CeladonCity_DepartmentStore_5F/scripts.inc:29-35`; prices
+/// `items.json`: X Attack 500, X Defend 550, X Speed 350, X Special 350, Dire Hit 650).
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct XBuy {
+    pub after: String,
+    pub attack: u32,
+    pub defend: u32,
+    pub speed: u32,
+    pub special: u32,
+    pub dire: u32,
+    pub frames: u32,
+}
+
+/// Per-fight battle tactics, keyed by segment name in `Params::fight_tactics`.
+#[derive(Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct FightTactic {
+    /// X items used on the opening turns, in order: `attack`, `defend`, `speed`,
+    /// `special`, `dire` (limited by the bag).
+    pub x: Vec<String>,
+    /// Heal when HP falls below this fraction (overrides the global `heal_below`).
+    pub heal_below: f64,
+}
+
+impl Default for FightTactic {
+    fn default() -> Self {
+        FightTactic {
+            x: vec![],
+            heal_below: -1.0,
+        }
+    }
+}
+
 /// A stop at a Poké Mart after the named segment, buying balls with the money on hand
 /// (money model only): up to `poke`, `great`, `ultra` balls in that order, if the mart on that leg
 /// of the route sells them (`LavenderTown_Mart` Great from Lavender, `FuchsiaCity_Mart` Ultra from
@@ -218,6 +281,18 @@ pub struct Params {
     pub hunts: Vec<Hunt>,
     pub specials: Vec<Special>,
     pub grinds: Vec<Grind>,
+    /// TM / tutor teaches (battle_sim).
+    pub tms: Vec<Teach>,
+    /// X-item purchases (battle_sim; money model pays for them).
+    pub xbuys: Vec<XBuy>,
+    /// Per-fight tactics by segment name (battle_sim).
+    pub fight_tactics: std::collections::HashMap<String, FightTactic>,
+    /// Global heal threshold in battle: use an item below this HP fraction.
+    pub heal_below: f64,
+    /// Moves the carry never forgets when a new one needs a slot.
+    pub keep_moves: Vec<String>,
+    /// Cure a status that outlives a battle with the matching item (frames + money).
+    pub cure_status: bool,
     /// Fallback hunts, tried in order when Oak's check finds fewer than 60 caught.
     pub fill: Vec<Hunt>,
     pub stones: Vec<String>,
@@ -302,6 +377,12 @@ impl Default for Params {
             hunts: vec![],
             specials: vec![],
             grinds: vec![],
+            tms: vec![],
+            xbuys: vec![],
+            fight_tactics: Default::default(),
+            heal_below: 0.4,
+            keep_moves: vec![],
+            cure_status: true,
             fill: vec![],
             stones: vec![],
             skip_groups: vec![],

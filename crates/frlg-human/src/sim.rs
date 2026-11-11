@@ -3,9 +3,10 @@
 //!
 //! Model constants marked `guess` are uncalibrated (see `human-run/plans/*.md`).
 
+use crate::battle::{Status1, XItem};
 use crate::data::{Area, Caught, Dex, Slot};
 use crate::params::{Hunt, Params};
-use crate::rng::{hash_str, Rng};
+use crate::rng::{hash_str, GameRng, Rng};
 use crate::route::{Era, Kind, Seg};
 use frlg_mon::stats::{calc_stats, exp_for_level, exp_gain, level_from_exp, Growth};
 
@@ -52,6 +53,10 @@ pub struct Ctx<'a> {
     pub stab_from: u32,
     /// Reset aggressiveness at each segment (the global value unless overridden).
     pub aggr: Vec<f64>,
+    /// Moves the carry never forgets (battle_sim), resolved from `Params::keep_moves`.
+    pub keep_ids: Vec<usize>,
+    /// Per-segment tactics (battle_sim), resolved from `Params::fight_tactics`.
+    pub tactics: std::collections::HashMap<String, (Vec<XItem>, f64)>,
     /// Index of Oak's check, and (from the no-reset pilot) the fill time as `base + slope * missing
     /// species`, the mean species still to be caught before Oak after segment i, and the mean remaining
     /// frames after segment i without the fill (for `dex_resets`).
@@ -106,6 +111,17 @@ struct State {
     caught: Caught,
     abandoned: bool,
     whiteouts: u32,
+    /// The game's RNG stream (re-keyed per segment, advanced per frame by `bump`).
+    game: GameRng,
+    /// The carry's four move slots and the level up to which level-up moves were offered.
+    slots: Vec<usize>,
+    learned_to: u32,
+    /// Status that outlived the last battle (cured by item or Pokémon Center).
+    carry_status: Status1,
+    /// X items in the bag: Attack, Defend, Speed, Special, Dire Hit.
+    x_stock: [u32; 5],
+    /// Mewtwo once caught (battle_sim): its rolled IVs and nature.
+    mewtwo: Option<([u32; 6], u8)>,
     /// Inside the Safari Zone on the current entry (steps and balls left).
     safari_open: bool,
     safari_steps: u32,
@@ -239,7 +255,10 @@ impl Ctx<'_> {
 }
 
 fn bump(st: &mut State, f: f64) {
-    st.clock += f.round() as u64;
+    let n = f.round() as u64;
+    st.clock += n;
+    // The VBlank advance (`decompiled/src/main.c:412`): time moves the game's stream.
+    st.game.frames(n.min(u32::MAX as u64) as u32);
 }
 
 fn jitter(ctx: &Ctx, rng: &mut Rng, inputs: u32) -> u32 {
@@ -279,6 +298,68 @@ fn effective_level(st: &State, p: &Params) -> f64 {
     (st.carry as f64 * p.team_bonus).max(st.power)
 }
 
+/// A move slot's worth when something has to go: damage against a neutral dummy with
+/// STAB for the current stage; keep-listed moves are effectively permanent.
+fn slot_utility(ctx: &Ctx, st: &State, mv: usize) -> f64 {
+    if let Some(pos) = ctx.keep_ids.iter().position(|&k| k == mv) {
+        return 1_000_000.0 - pos as f64;
+    }
+    let m = &ctx.dex.moves[mv];
+    if m.power == 0 || !m.plain_hit && m.power == 0 {
+        return 0.0;
+    }
+    let types = ctx.dex.species[carry_species(ctx, st.carry)].types;
+    let stab = if types.0 == m.mtype || types.1 == m.mtype {
+        1.5
+    } else {
+        1.0
+    };
+    let acc = if m.acc == 0 { 100 } else { m.acc } as f64 / 100.0;
+    m.power as f64 * stab * acc
+}
+
+/// Learn a move into the four slots: fill a free slot, else replace the lowest-utility
+/// slot if the newcomer is worth more (`forced` teaches always find a victim).
+fn offer_move(ctx: &Ctx, st: &mut State, mv: usize, forced: bool) {
+    if st.slots.contains(&mv) {
+        return;
+    }
+    if st.slots.len() < 4 {
+        st.slots.push(mv);
+        return;
+    }
+    let (worst_i, worst_u) = st
+        .slots
+        .iter()
+        .enumerate()
+        .map(|(i, &s)| (i, slot_utility(ctx, st, s)))
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+        .unwrap();
+    let new_u = slot_utility(ctx, st, mv);
+    if forced || new_u > worst_u {
+        st.slots[worst_i] = mv;
+    }
+}
+
+/// Offer every level-up move between the last processed level and the current one,
+/// using the learnset of the stage the carry had at each level.
+fn learn_moves(ctx: &Ctx, st: &mut State) {
+    while st.learned_to < st.carry {
+        st.learned_to += 1;
+        let l = st.learned_to;
+        let sp = carry_species(ctx, l);
+        let learn: Vec<usize> = ctx.dex.species[sp]
+            .learnset
+            .iter()
+            .filter(|&&(ll, _)| ll == l)
+            .map(|&(_, m)| m)
+            .collect();
+        for m in learn {
+            offer_move(ctx, st, m, false);
+        }
+    }
+}
+
 fn add_exp(ctx: &Ctx, st: &mut State, e: u32) -> u32 {
     st.exp = st.exp.saturating_add(e);
     let new = level_from_exp(Growth::MediumSlow, st.exp) as u32;
@@ -290,6 +371,9 @@ fn add_exp(ctx: &Ctx, st: &mut State, e: u32) -> u32 {
     }
     if st.carry >= ctx.evo_at[1] {
         st.caught.insert(ctx.dex.species[bla].dex);
+    }
+    if gained > 0 {
+        learn_moves(ctx, st);
     }
     gained
 }
@@ -320,15 +404,25 @@ fn ball_mult(p: &Params) -> u32 {
 }
 
 /// The four shake checks of `Cmd_handleballthrow`
-/// (`decompiled/src/battle_script_commands.c:9549-9640`).
-fn shakes_catch(rng: &mut Rng, odds: u32) -> bool {
+/// (`decompiled/src/battle_script_commands.c:9549-9640`), on the game's own stream.
+fn shakes_catch(g: &mut GameRng, odds: u32) -> bool {
     if odds > 254 {
         return true;
     }
     let o = odds.max(1);
     let s = isqrt(isqrt(16_711_680 / o)).max(1);
     let thr = 1_048_560 / s;
-    (0..4).all(|_| rng.below(65536) < thr)
+    (0..4).all(|_| (g.roll() as u32) < thr)
+}
+
+/// The status bonus of the same function: sleep/freeze double the odds, any other
+/// status is x1.5 (`battle_script_commands.c:9553-9556`).
+fn status_odds(odds: u32, status: Status1) -> u32 {
+    match status {
+        Status1::Sleep(_) | Status1::Freeze => odds * 2,
+        Status1::None => odds,
+        _ => odds * 15 / 10,
+    }
 }
 
 /// Safari Zone encounter: `safari_rocks` rocks first, then Safari Balls until caught, out of
@@ -364,7 +458,10 @@ fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Spec
             bump(st, ctx.throw_cost());
             let rate = (factor * 1275 / 100).min(255);
             let odds = (rate * 15 / 10) * 100 / 300;
-            if shakes_catch(rng, odds) {
+            let mut g = st.game;
+            let caught = shakes_catch(&mut g, odds);
+            st.game = g;
+            if caught {
                 bump(st, ctx.catch_end());
                 return true;
             }
@@ -436,13 +533,15 @@ fn take_ball(ctx: &Ctx, st: &mut State) -> Option<u32> {
 }
 
 /// Throws until caught or patience (8 throws) runs out. Formula:
-/// `decompiled/src/battle_script_commands.c:9549-9640`.
+/// `decompiled/src/battle_script_commands.c:9549-9640`, status bonus included.
+#[allow(clippy::too_many_arguments)]
 fn throw_balls(
     ctx: &Ctx,
     st: &mut State,
     rng: &mut Rng,
     catch_rate: u32,
     hp_frac: f64,
+    status: Status1,
     ball: Option<u32>,
     max_throws: u32,
 ) -> bool {
@@ -456,16 +555,14 @@ fn throw_balls(
                 None => return false,
             },
         };
-        let odds = (catch_rate * b / 10) * (max_hp * 3 - hp * 2) / (3 * max_hp);
+        let odds = status_odds(
+            (catch_rate * b / 10) * (max_hp * 3 - hp * 2) / (3 * max_hp),
+            status,
+        );
         bump(st, ctx.throw_cost());
-        let caught = if odds > 254 {
-            true
-        } else {
-            let o = odds.max(1);
-            let s = isqrt(isqrt(16_711_680 / o)).max(1);
-            let thr = 1_048_560 / s;
-            (0..4).all(|_| rng.below(65536) < thr)
-        };
+        let mut g = st.game;
+        let caught = shakes_catch(&mut g, odds);
+        st.game = g;
         if caught {
             bump(st, ctx.catch_end());
             return true;
