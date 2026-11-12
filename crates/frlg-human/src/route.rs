@@ -110,6 +110,8 @@ pub enum Kind {
     Teach { teach: crate::params::Teach },
     /// Buy X items (battle_sim).
     XBuy { xbuy: crate::params::XBuy },
+    /// Pick up an Elixir-class item (battle_sim).
+    Elixir { pickup: crate::params::ElixirPickup },
 }
 
 #[derive(Clone, Debug)]
@@ -1060,6 +1062,25 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
                 off_timer: false,
                 starter_check: false,
                 kind: Kind::Teach { teach: t.clone() },
+            },
+        );
+    }
+    for e in p.elixirs.iter().rev() {
+        let at = b
+            .segs
+            .iter()
+            .position(|s| s.name == e.after)
+            .unwrap_or_else(|| panic!("elixir anchor {} matches no segment", e.after));
+        b.segs.insert(
+            at + 1,
+            Seg {
+                name: format!("elixir-{}@{}", e.kind, e.after),
+                src: Src::Guess,
+                inputs: 4,
+                split: false,
+                off_timer: false,
+                starter_check: false,
+                kind: Kind::Elixir { pickup: e.clone() },
             },
         );
     }

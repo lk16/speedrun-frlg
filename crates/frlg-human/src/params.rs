@@ -120,6 +120,32 @@ impl Default for Teach {
     }
 }
 
+/// An Elixir-class pickup after the named segment (`frames` covers the detour), used
+/// between trainer fights when attacking PP runs low. On-route item balls, decomp-cited:
+/// Elixir in Pokémon Mansion B1F and Silph Co 5F, Max Elixir + Max Ether on Route 23,
+/// Max Elixir on Route 17 and in the Power Plant, Elixir + Ether on Route 25 (each map's
+/// `map.json`).
+#[derive(Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct ElixirPickup {
+    pub after: String,
+    /// "elixir" (10 PP per move), "max" (all PP), or "candy" (a Rare Candy, eaten just
+    /// before the League: on-route balls in Cerulean City, Route 6/9/12/17 and
+    /// Mansion 3F, each map's `map.json`).
+    pub kind: String,
+    pub frames: u32,
+}
+
+impl Default for ElixirPickup {
+    fn default() -> Self {
+        ElixirPickup {
+            after: String::new(),
+            kind: "elixir".into(),
+            frames: 400,
+        }
+    }
+}
+
 /// Battle items bought after the named segment (Celadon Dept. 5F sells the X line,
 /// `decompiled/data/maps/CeladonCity_DepartmentStore_5F/scripts.inc:29-35`; prices
 /// `items.json`: X Attack 500, X Defend 550, X Speed 350, X Special 350, Dire Hit 650).
@@ -132,6 +158,9 @@ pub struct XBuy {
     pub speed: u32,
     pub special: u32,
     pub dire: u32,
+    /// Revives (1500 each, `items.json`): bring sacrificed teammates back between
+    /// League fights.
+    pub revives: u32,
     pub frames: u32,
 }
 
@@ -288,6 +317,8 @@ pub struct Params {
     pub tms: Vec<Teach>,
     /// X-item purchases (battle_sim; money model pays for them).
     pub xbuys: Vec<XBuy>,
+    /// Elixir pickups (battle_sim).
+    pub elixirs: Vec<ElixirPickup>,
     /// Per-fight tactics by segment name (battle_sim).
     pub fight_tactics: std::collections::HashMap<String, FightTactic>,
     /// Global heal threshold in battle: use an item below this HP fraction.
@@ -400,6 +431,7 @@ impl Default for Params {
             grinds: vec![],
             tms: vec![],
             xbuys: vec![],
+            elixirs: vec![],
             fight_tactics: Default::default(),
             heal_below: 0.4,
             keep_moves: vec![],

@@ -1904,6 +1904,7 @@ pub fn fight(
                 }
             } else if tac.full_restore
                 && (matches!(me.status, Status1::Sleep(_) | Status1::Freeze)
+                    || (my_frac < 0.6 && (me.status == Status1::Paralysis || me.confusion > 1))
                     || (my_frac < tac.heal_below && me.max_hp > danger)
                     || in_danger)
             {

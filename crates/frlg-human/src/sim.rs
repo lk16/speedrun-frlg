@@ -128,6 +128,13 @@ struct State {
     mewtwo_moves: Vec<usize>,
     /// The first-evolution stat gate was already checked.
     evo_checked: bool,
+    /// Living expendable teammates (sacrifices burn them; a Centre revives them).
+    fodder: u32,
+    /// Elixirs and Max Elixirs in the bag.
+    elixirs: u32,
+    max_elixirs: u32,
+    revives: u32,
+    candies: u32,
     /// Inside the Safari Zone on the current entry (steps and balls left).
     safari_open: bool,
     safari_steps: u32,
@@ -254,6 +261,7 @@ impl Ctx<'_> {
             Kind::Special { .. } | Kind::Mart { .. } => 0.0,
             Kind::Teach { teach } => teach.frames as f64 * self.p.text_factor,
             Kind::XBuy { xbuy } => xbuy.frames as f64 * self.p.text_factor,
+            Kind::Elixir { pickup } => pickup.frames as f64 * self.p.text_factor,
             Kind::TeleportOrWalk { frames, .. } => *frames as f64 * self.p.text_factor,
             Kind::Grind { .. } => 0.0,
         }
@@ -947,6 +955,34 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         .get(a.name)
         .map(|(x, h, s)| (x.clone(), *h, *s))
         .unwrap_or((vec![], -1.0, 0));
+    // Sacrifices burn real party members; the budget spans a Centre-less chain, with
+    // Revives (bag trip each) bringing fodder back between fights.
+    while st.fodder < sacs && st.revives > 0 {
+        st.revives -= 1;
+        st.fodder += 1;
+        bump(st, 450.0 * ctx.p.text_factor);
+    }
+    let sacs = sacs.min(st.fodder);
+    // Low on attacking PP before a trainer fight: drink an Elixir (bag trip ~500f).
+    // Before a League fight any empty slot is worth topping up — the next Centre is
+    // several fights away.
+    let pp_low =
+        st.slot_pp.iter().sum::<i32>() < 12 || (a.league && st.slot_pp.iter().any(|&p| p == 0));
+    if a.trainer && pp_low {
+        if st.max_elixirs > 0 {
+            st.max_elixirs -= 1;
+            bump(st, 500.0 * ctx.p.text_factor);
+            for (k, &m) in st.slots.clone().iter().enumerate() {
+                st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
+            }
+        } else if st.elixirs > 0 {
+            st.elixirs -= 1;
+            bump(st, 500.0 * ctx.p.text_factor);
+            for (k, &m) in st.slots.clone().iter().enumerate() {
+                st.slot_pp[k] = (st.slot_pp[k] + 10).min(ctx.dex.moves[m].pp as i32);
+            }
+        }
+    }
     let heal_below = if heal_override >= 0.0 {
         heal_override
     } else {
@@ -1018,6 +1054,14 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
+        if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
+            eprintln!(
+                "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {}",
+                a.name, me.level, st.hp_frac, stock, sacs, me.pp,
+                me.moves.iter().map(|&m| dex.moves[m].name.trim_start_matches("MOVE_").to_string()).collect::<Vec<_>>(),
+                out.won, out.turns, out.x_used, out.sacs_used
+            );
+        }
         for x in xs.iter().take(out.x_used as usize) {
             st.x_stock[x_index(*x)] -= 1;
         }
@@ -1025,6 +1069,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         bump(st, out.kos.len() as f64 * ctx.mon_overhead());
         // A sacrifice costs its faint animation and the send-outs both ways. guess.
         bump(st, out.sacs_used as f64 * 900.0);
+        st.fodder = st.fodder.saturating_sub(out.sacs_used);
         for _ in 0..out.events {
             bump(st, react(ctx, rng) as f64);
         }
@@ -1360,6 +1405,11 @@ pub fn attempt(
         mewtwo: None,
         mewtwo_moves: vec![],
         evo_checked: false,
+        fodder: 0,
+        elixirs: 0,
+        max_elixirs: 0,
+        revives: 0,
+        candies: 0,
     };
     st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
     // The starter's level-5 moves (`level_up_learnsets.h`).
@@ -1740,21 +1790,40 @@ pub fn attempt(
                     offer_move(ctx, &mut st, mv, true);
                 }
             }
+            Kind::Elixir { pickup } => {
+                bump(&mut st, pickup.frames as f64 * ctx.p.text_factor);
+                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                match pickup.kind.as_str() {
+                    "max" => st.max_elixirs += 1,
+                    "candy" => st.candies += 1,
+                    _ => st.elixirs += 1,
+                }
+            }
             Kind::XBuy { xbuy } => {
                 bump(&mut st, xbuy.frames as f64 * ctx.p.text_factor);
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 // Prices (`items.json`): X Attack 500, X Defend 550, X Speed 350,
                 // X Special 350, Dire Hit 650.
-                for (i, (want, price)) in [
-                    (xbuy.attack, 500),
-                    (xbuy.defend, 550),
-                    (xbuy.speed, 350),
-                    (xbuy.special, 350),
-                    (xbuy.dire, 650),
-                ]
-                .into_iter()
-                .enumerate()
+                // Bought scarcest-first so a short purse fills the specials before
+                // the cheaper nice-to-haves (prices `items.json`).
                 {
+                    let qty = if ctx.p.money_model {
+                        xbuy.revives.min(st.money / 1500)
+                    } else {
+                        xbuy.revives
+                    };
+                    if ctx.p.money_model {
+                        st.money -= qty * 1500;
+                    }
+                    st.revives += qty;
+                }
+                for (i, want, price) in [
+                    (3usize, xbuy.special, 350),
+                    (2, xbuy.speed, 350),
+                    (0, xbuy.attack, 500),
+                    (1, xbuy.defend, 550),
+                    (4, xbuy.dire, 650),
+                ] {
                     let qty = if ctx.p.money_model {
                         want.min(st.money / price)
                     } else {
@@ -1792,7 +1861,20 @@ pub fn attempt(
             // Giovanni hands over TM26 Earthquake
             // (`ViridianCity_Gym/scripts.inc:28-30`); teaching it is a plan choice via
             // `tms`, not automatic (a taught move displaces a slot).
-            "indigo-heal" => st.league_items = true,
+            "indigo-heal" => {
+                st.league_items = true;
+                // Rare Candies kept for the League go down now: a level each, worth the
+                // most exp this late (~400 frames per use).
+                while st.candies > 0 && st.carry < 100 {
+                    st.candies -= 1;
+                    st.carry += 1;
+                    st.exp = st
+                        .exp
+                        .max(exp_for_level(Growth::MediumSlow, st.carry as u8));
+                    bump(&mut st, 400.0 * ctx.p.text_factor);
+                }
+                learn_moves(ctx, &mut st);
+            }
             // HM03 Surf is taught to the carry after the Safari trip (the route needs a
             // surfer anyway; `plan.md` HM gates).
             "safari-walk" => offer_move(ctx, &mut st, ctx.dex.move_id("MOVE_SURF"), true),
@@ -1801,6 +1883,9 @@ pub fn attempt(
         }
         // league-entry is the Indigo Plateau Centre before the rematch chain.
         if seg.name.contains("heal") || seg.name == "league-entry" {
+            // The party fillers (gift mons, caught fodder) stand revived; five slots
+            // beside the carry once the party has filled out (guess: by Misty).
+            st.fodder = if st.carry >= 20 { 5 } else { 2 };
             st.hp_frac = 1.0;
             st.carry_status = Status1::None;
             for (k, &m) in st.slots.clone().iter().enumerate() {
