@@ -319,6 +319,7 @@ fn main() {
                 dexr.species[species].name, fightd.ai, fightd.heals
             );
             let (mut won, mut turns, mut hp, mut ev) = (0.0, 0.0, 0.0, 0.0);
+            let mut kos = vec![0u32; foes.len() + 1];
             for i in 0..n {
                 let mut me = make_mon(dexr, species, level, [iv; 6], [0; 6], 0, badges as u8);
                 me.moves = moves.clone();
@@ -327,6 +328,7 @@ fn main() {
                     heal_below: arg(&args, "--heal-below", 0.4),
                     heal: heal_amount(level, league),
                     full_restore: league,
+                    sacs: arg(&args, "--sacs", 0u32),
                 };
                 let mut g = frlg_human::rng::GameRng::from_u32(
                     (seed as u32).wrapping_mul(2654435761) ^ (i as u32).wrapping_mul(0x9E3779B9),
@@ -345,8 +347,10 @@ fn main() {
                 turns += o.turns as f64;
                 hp += o.hp_frac;
                 ev += o.events as f64;
+                kos[o.kos.len().min(foes.len())] += 1;
             }
             let foe_lv: Vec<_> = foes.iter().map(|f| f.level).collect();
+            println!("kos histogram {kos:?}");
             println!(
                 "{id} foes L{foe_lv:?}: win {:.3}  turns {:.1}  hp left {:.2}  events {:.1}",
                 won / n as f64,

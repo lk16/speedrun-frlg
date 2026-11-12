@@ -283,6 +283,33 @@ impl<'a> B<'a> {
     }
 }
 
+fn erika_leg(b: &mut B<'_>, p: &Params, e: Era) {
+    b.walk("erika-walk", 146, e, None, Src::Tiles);
+    if p.audited_forced {
+        b.forced(
+            "celadon-gym-trainers",
+            &[],
+            &[(
+                2,
+                &[
+                    "CeladonCity_Gym_EventScript_Bridget",
+                    "CeladonCity_Gym_EventScript_Kay",
+                    "CeladonCity_Gym_EventScript_Lisa",
+                    "CeladonCity_Gym_EventScript_Lori",
+                    "CeladonCity_Gym_EventScript_Mary",
+                    "CeladonCity_Gym_EventScript_Tamia",
+                    "CeladonCity_Gym_EventScript_Tina",
+                ],
+            )],
+        );
+    } else {
+        b.group("celadon-gym-trainers", 2, 2, 25, 75);
+    }
+    b.trainer("erika", "TRAINER_LEADER_ERIKA", 600);
+    b.text("erika-badge", 600, Src::Guess);
+    b.split();
+}
+
 pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     // The rival's trainer ids are named after the *rival's* starter, which is the one that beats
     // the player's: `decompiled/data/maps/PalletTown_ProfessorOaksLab/scripts.inc:303-306`
@@ -415,6 +442,14 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     }
     b.walk("route4", 82, b.era, enc("MAP_ROUTE4", 0, 0, 30), Src::Guess);
     b.text("cerulean-heal", 500, Src::Guess);
+    if p.early_dig {
+        // The robbed house's Rocket is visible from the first Cerulean arrival
+        // (`data/maps/CeruleanCity/map.json:67` hides him behind
+        // FLAG_HIDE_CERULEAN_ROCKET, which nothing in the decomp ever sets), so TM28
+        // Dig can be fetched before the rival (`CeruleanCity/scripts.inc:164-187`).
+        b.trainer("dig-grunt", "TRAINER_TEAM_ROCKET_GRUNT_5", 600);
+        b.text("tm28-dig", 900, Src::Guess);
+    }
 
     // 3. Cerulean: rival, Nugget Bridge, Bill, Misty.
     b.trainer("rival-cerulean", &tn("TRAINER_RIVAL_CERULEAN"), 700);
@@ -530,8 +565,11 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         b.text("bike-redeem", 1200, Src::Guess);
         b.era = Era::Bike;
     }
-    b.group("dig-grunt", 1, 2, 17, 70);
-    b.text("tm28-dig", 900, Src::Guess);
+    if !p.early_dig {
+        // The Rocket who stole TM28 (`CeruleanCity/scripts.inc:172`).
+        b.trainer("dig-grunt", "TRAINER_TEAM_ROCKET_GRUNT_5", 600);
+        b.text("tm28-dig", 900, Src::Guess);
+    }
     let e = b.era;
     b.walk("route9", 60, e, enc("MAP_ROUTE9", 0, 0, 30), Src::Guess);
     b.walk(
@@ -611,30 +649,9 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     );
     b.trainer("hideout-giovanni", "TRAINER_BOSS_GIOVANNI", 700);
     b.text("scope-and-dig", 1800, Src::Guess);
-    b.walk("erika-walk", 146, e, None, Src::Tiles);
-    if p.audited_forced {
-        b.forced(
-            "celadon-gym-trainers",
-            &[],
-            &[(
-                2,
-                &[
-                    "CeladonCity_Gym_EventScript_Bridget",
-                    "CeladonCity_Gym_EventScript_Kay",
-                    "CeladonCity_Gym_EventScript_Lisa",
-                    "CeladonCity_Gym_EventScript_Lori",
-                    "CeladonCity_Gym_EventScript_Mary",
-                    "CeladonCity_Gym_EventScript_Tamia",
-                    "CeladonCity_Gym_EventScript_Tina",
-                ],
-            )],
-        );
-    } else {
-        b.group("celadon-gym-trainers", 2, 2, 25, 75);
+    if !p.erika_after_tower {
+        erika_leg(&mut b, p, e);
     }
-    b.trainer("erika", "TRAINER_LEADER_ERIKA", 600);
-    b.text("erika-badge", 600, Src::Guess);
-    b.split();
     b.walk("hm02-trip", 218, e, None, Src::Tiles);
     b.text("hm02-fly", 800, Src::Guess);
 
@@ -664,6 +681,12 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
 
     // 8. Cycling Road to Fuchsia, Safari, HM03 and HM04, Koga.
     b.text("fly-celadon", 700, Src::Guess);
+    if p.erika_after_tower {
+        // Erika postponed past the tower: the carry is two levels up and usually a
+        // Blastoise by now, and the fly lands in Celadon anyway (walk re-used; Guess).
+        let e = b.era;
+        erika_leg(&mut b, p, e);
+    }
     b.walk(
         "cycling-road",
         374,

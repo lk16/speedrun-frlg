@@ -632,6 +632,10 @@ pub struct Tactics {
     pub heal: i32,
     /// Full Restores available (League): heal = full and cures status.
     pub full_restore: bool,
+    /// Expendable teammates: against an enemy whose best move out-damages the fighter's
+    /// maximum HP, one is sent out to take the hit while the fighter uses its next X item
+    /// from the back (the universal speedrun sacrifice; each costs a faint + send-out).
+    pub sacs: u32,
 }
 
 impl Default for Tactics {
@@ -641,6 +645,7 @@ impl Default for Tactics {
             heal_below: 0.4,
             heal: 50,
             full_restore: false,
+            sacs: 0,
         }
     }
 }
@@ -671,6 +676,8 @@ pub struct Outcome {
     pub x_used: u32,
     pub heals_used: u32,
     pub full_restores_used: u32,
+    /// Sacrificial faints spent (each costs a faint animation and a send-out).
+    pub sacs_used: u32,
 }
 
 enum Action {
@@ -678,6 +685,8 @@ enum Action {
     XItem(XItem),
     Heal,
     FullRestore,
+    /// A teammate eats this turn's hit while the fighter uses its next X item.
+    Sac(XItem),
 }
 
 /// Expected damage for the player's (full-knowledge) choice: no crit, mean roll, scaled
@@ -1805,6 +1814,7 @@ pub fn fight(
     let mut en_side = Side::default();
     let ex = Exec { dex, wild };
     let mut setup_idx = 0usize;
+    let mut sacs_left = tac.sacs;
     for foe in foes {
         let mut e = foe.clone();
         let mut guard = 0;
@@ -1834,18 +1844,30 @@ pub fn fight(
                     )
                     && (calc_damage(dex, me, &e, mv, 0, false, &en_side, None) * 85) / 100 >= e.hp
             });
-            let in_danger = me.hp <= danger && !sure_kill;
+            // Healing is only worth a turn if it actually leaves the KO range.
+            let in_danger = me.hp <= danger && me.max_hp > danger && !sure_kill;
             let my_action = if forced {
                 Action::Move(me.charging.unwrap_or(me.moves[0]))
+            } else if danger >= me.max_hp
+                && sacs_left > 0
+                && setup_idx < tac.x_items.len()
+                && !sure_kill
+            {
+                sacs_left -= 1;
+                let x = tac.x_items[setup_idx];
+                setup_idx += 1;
+                Action::Sac(x)
             } else if tac.full_restore
                 && (matches!(me.status, Status1::Sleep(_) | Status1::Freeze)
-                    || my_frac < tac.heal_below
+                    || (my_frac < tac.heal_below && me.max_hp > danger)
                     || in_danger)
             {
                 Action::FullRestore
-            } else if my_frac < tac.heal_below || (in_danger && tac.heal >= danger) {
+            } else if (my_frac < tac.heal_below && tac.heal as f64 + me.hp as f64 > danger as f64)
+                || (in_danger && me.hp + tac.heal > danger)
+            {
                 Action::Heal
-            } else if setup_idx < tac.x_items.len() && me.hp * 2 > me.max_hp {
+            } else if setup_idx < tac.x_items.len() && me.hp * 2 > me.max_hp && !sure_kill {
                 let x = tac.x_items[setup_idx];
                 setup_idx += 1;
                 Action::XItem(x)
@@ -1967,6 +1989,25 @@ pub fn fight(
                         me.status = Status1::None;
                         me.confusion = 0;
                     }
+                    Action::Sac(x) => {
+                        out.sacs_used += 1;
+                        out.x_used += 1;
+                        match x {
+                            XItem::Attack => {
+                                apply_stat_change(me, 0, 1, false);
+                            }
+                            XItem::Defend => {
+                                apply_stat_change(me, 1, 1, false);
+                            }
+                            XItem::Speed => {
+                                apply_stat_change(me, 2, 1, false);
+                            }
+                            XItem::Special => {
+                                apply_stat_change(me, 3, 1, false);
+                            }
+                            XItem::DireHit => me.focus_energy = true,
+                        }
+                    }
                 }
             };
             let mut act_enemy = |me: &mut Mon,
@@ -1991,13 +2032,32 @@ pub fn fight(
                 }
             };
 
+            let sac_turn = matches!(my_action, Action::Sac(_));
+            if std::env::var_os("FRLG_BATTLE_TRACE").is_some() {
+                let an = match &my_action {
+                    Action::Move(mv) => dex.moves[*mv].name.clone(),
+                    Action::XItem(x) => format!("X{x:?}"),
+                    Action::Heal => "Heal".into(),
+                    Action::FullRestore => "FullRestore".into(),
+                    Action::Sac(x) => format!("Sac+{x:?}"),
+                };
+                eprintln!(
+                    "t{} me {}/{} st{:?} stg{:?} | foe {} {}/{} | act {} | en {:?} first {} danger {} kill {} sacs {}",
+                    out.turns, me.hp, me.max_hp, me.status, me.stages, foe.species, e.hp, e.max_hp,
+                    an, en_move.map(|m| dex.moves[m].name.clone()), me_first, danger, sure_kill, sacs_left
+                );
+            }
             let fled = if me_first {
                 act_player(me, &mut e, &mut my_side, &mut en_side, true, &mut out, rng);
-                if e.hp > 0 && me.hp > 0 {
+                if e.hp > 0 && me.hp > 0 && !sac_turn {
                     act_enemy(me, &mut e, &mut my_side, &mut en_side, false, &mut out, rng)
                 } else {
                     false
                 }
+            } else if sac_turn {
+                // The enemy's move falls on the sacrifice; the fighter acts freely.
+                act_player(me, &mut e, &mut my_side, &mut en_side, false, &mut out, rng);
+                false
             } else {
                 let f = act_enemy(me, &mut e, &mut my_side, &mut en_side, true, &mut out, rng);
                 if me.hp > 0 && e.hp > 0 && !f {

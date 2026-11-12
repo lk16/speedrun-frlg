@@ -82,7 +82,11 @@ impl Plan {
             .map(|(k, t)| {
                 (
                     k.clone(),
-                    (t.x.iter().map(|s| x_from(s)).collect(), t.heal_below),
+                    (
+                        t.x.iter().map(|s| x_from(s)).collect(),
+                        t.heal_below,
+                        t.sacs,
+                    ),
                 )
             })
             .collect();

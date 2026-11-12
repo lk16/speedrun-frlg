@@ -144,6 +144,8 @@ pub struct FightTactic {
     pub x: Vec<String>,
     /// Heal when HP falls below this fraction (overrides the global `heal_below`).
     pub heal_below: f64,
+    /// Expendable teammates sent out to eat a hit while the fighter sets up.
+    pub sacs: u32,
 }
 
 impl Default for FightTactic {
@@ -151,6 +153,7 @@ impl Default for FightTactic {
         FightTactic {
             x: vec![],
             heal_below: -1.0,
+            sacs: 0,
         }
     }
 }
@@ -293,6 +296,13 @@ pub struct Params {
     pub keep_moves: Vec<String>,
     /// Cure a status that outlives a battle with the matching item (frames + money).
     pub cure_status: bool,
+    /// Fetch TM28 Dig on the first Cerulean visit, before the rival (the Rocket is
+    /// there from the start: `data/maps/CeruleanCity/map.json:67`'s hide flag is never
+    /// set anywhere in the decomp).
+    pub early_dig: bool,
+    /// Fight Erika after the Pokémon Tower leg (fly-celadon lands beside the gym): the
+    /// carry is ~2 levels higher and usually evolved.
+    pub erika_after_tower: bool,
     /// Fallback hunts, tried in order when Oak's check finds fewer than 60 caught.
     pub fill: Vec<Hunt>,
     pub stones: Vec<String>,
@@ -383,6 +393,8 @@ impl Default for Params {
             heal_below: 0.4,
             keep_moves: vec![],
             cure_status: true,
+            early_dig: false,
+            erika_after_tower: false,
             fill: vec![],
             stones: vec![],
             skip_groups: vec![],

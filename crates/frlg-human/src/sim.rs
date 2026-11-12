@@ -55,8 +55,9 @@ pub struct Ctx<'a> {
     pub aggr: Vec<f64>,
     /// Moves the carry never forgets (battle_sim), resolved from `Params::keep_moves`.
     pub keep_ids: Vec<usize>,
-    /// Per-segment tactics (battle_sim), resolved from `Params::fight_tactics`.
-    pub tactics: std::collections::HashMap<String, (Vec<XItem>, f64)>,
+    /// Per-segment tactics (battle_sim), resolved from `Params::fight_tactics`:
+    /// (X items, heal threshold, sacrificial teammates).
+    pub tactics: std::collections::HashMap<String, (Vec<XItem>, f64, u32)>,
     /// Index of Oak's check, and (from the no-reset pilot) the fill time as `base + slope * missing
     /// species`, the mean species still to be caught before Oak after segment i, and the mean remaining
     /// frames after segment i without the fill (for `dex_resets`).
@@ -935,11 +936,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         bump(st, ctx.trainer_intro(a.intro));
         bump(st, jitter(ctx, rng, 8) as f64);
     }
-    let (x_plan, heal_override) = ctx
+    let (x_plan, heal_override, sacs) = ctx
         .tactics
         .get(a.name)
-        .map(|(x, h)| (x.clone(), *h))
-        .unwrap_or((vec![], -1.0));
+        .map(|(x, h, s)| (x.clone(), *h, *s))
+        .unwrap_or((vec![], -1.0, 0));
     let heal_below = if heal_override >= 0.0 {
         heal_override
     } else {
@@ -1005,6 +1006,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             heal_below,
             heal: heal_amount(me.level, st.league_items),
             full_restore: st.league_items,
+            sacs,
         };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
@@ -1014,6 +1016,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         bump(st, out.turns as f64 * ctx.turn());
         bump(st, out.kos.len() as f64 * ctx.mon_overhead());
+        // A sacrifice costs its faint animation and the send-outs both ways. guess.
+        bump(st, out.sacs_used as f64 * 900.0);
         for _ in 0..out.events {
             bump(st, react(ctx, rng) as f64);
         }

@@ -489,6 +489,7 @@ impl Dex {
                     let moves: Vec<usize> = match mv {
                         Some(list) => list
                             .iter()
+                            .filter(|m| m.as_str() != "MOVE_NONE")
                             .filter_map(|m| dex.move_by_name.get(m).copied())
                             .collect(),
                         None => dex.default_moves(species, *lvl),
