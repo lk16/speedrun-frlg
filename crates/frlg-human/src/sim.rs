@@ -1799,7 +1799,8 @@ pub fn attempt(
             "lavender-heal" => st.max_tier = st.max_tier.max(1),
             _ => {}
         }
-        if seg.name.contains("heal") {
+        // league-entry is the Indigo Plateau Centre before the rematch chain.
+        if seg.name.contains("heal") || seg.name == "league-entry" {
             st.hp_frac = 1.0;
             st.carry_status = Status1::None;
             for (k, &m) in st.slots.clone().iter().enumerate() {
