@@ -298,6 +298,33 @@ def candidates(p):
                   'fuchsia-gym-trainers', 'saffron-gym-trainers', 'mansion-trainers', 'mt-ember-trainers'):
             new = [x for x in cur_skip if x != g] if g in cur_skip else cur_skip + [g]
             out.append(('skipgroup', f"skip_groups {'-' if g in cur_skip else '+'}{g}", {'skip_groups': new}))
+        # Pickups: toggle each known on-route Elixir/Max Elixir/Rare Candy ball
+        # (each map's map.json; anchors are route segments the plan already walks).
+        pick_sites = [('cerulean-heal', 'candy', 350), ('route6-encounters', 'candy', 350),
+                      ('route9', 'candy', 350), ('super-rod', 'candy', 300),
+                      ('cycling-road', 'candy', 300), ('mansion', 'candy', 300),
+                      ('cycling-road', 'max', 500), ('route23', 'max', 400),
+                      ('silph-giovanni', 'elixir', 400), ('mansion', 'elixir', 300),
+                      ('bill', 'elixir', 500)]
+        cur_picks = p.get('elixirs', [])
+        have_p = {(e['after'], e['kind']) for e in cur_picks}
+        for after, kind, frames in pick_sites:
+            if (after, kind) in have_p:
+                continue
+            q = copy.deepcopy(cur_picks)
+            q.append({'after': after, 'kind': kind, 'frames': frames})
+            out.append(('pickup', f"pick up {kind}@{after}", {'elixirs': q}))
+        for i, e in enumerate(cur_picks):
+            q = copy.deepcopy(cur_picks)
+            del q[i]
+            out.append(('pickup', f"drop {e['kind']}@{e['after']}", {'elixirs': q}))
+        for i, xb in enumerate(p.get('xbuys', [])):
+            for d in (-3, 3):
+                v = xb.get('revives', 0) + d
+                if v >= 0:
+                    q = copy.deepcopy(p['xbuys'])
+                    q[i] = dict(q[i]); q[i]['revives'] = v
+                    out.append(('xbuy', f"xbuys[{i}] revives {xb.get('revives', 0)}->{v}", {'xbuys': q}))
         # Evolution stat gate (visible stats of the evolved form; SpA is index 4).
         em = p.get('evo_min_stats', [0] * 6)
         for k in (1, 4):
