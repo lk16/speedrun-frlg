@@ -197,6 +197,114 @@ def candidates(p):
             continue  # before the first mart that sells Repels
         new = [x for x in cur if x != sname] if sname in cur else cur + [sname]
         out.append(('repel', f"repel_on {'-' if sname in cur else '+'}{sname}", {'repel_on': new}))
+    # --- battle_sim knobs (exact engine, plans 297+).
+    if p.get('battle_sim'):
+        # Per-fight tactics: add/drop an X item, sacs +-1.
+        tactics = p.get('fight_tactics', {})
+        key_fights = ['surge', 'misty', 'erika', 'koga', 'sabrina', 'blaine', 'giovanni',
+                      'rival-cerulean', 'rival-ss-anne', 'rival-tower', 'rival-silph', 'rival-route22',
+                      'lorelei', 'bruno', 'agatha', 'lance', 'champion',
+                      'lorelei-2', 'bruno-2', 'agatha-2', 'lance-2', 'champion-2']
+        # X items exist only from Celadon on (`CeladonCity_DepartmentStore_5F/scripts.inc:29-35`).
+        no_x = {'surge', 'misty', 'rival-cerulean', 'rival-ss-anne'}
+        for f in key_fights:
+            t = tactics.get(f, {})
+            xs = list(t.get('x', []))
+            sacs = t.get('sacs', 0)
+            kinds = () if f in no_x else ('attack', 'defend', 'speed', 'special', 'dire')
+            for xi in kinds:
+                q = copy.deepcopy(tactics)
+                q.setdefault(f, {'x': [], 'sacs': 0})
+                q[f] = dict(q[f]); q[f]['x'] = xs + [xi]
+                out.append(('tactic', f"{f}: +x {xi}", {'fight_tactics': q}))
+            if xs:
+                q = copy.deepcopy(tactics)
+                q[f] = dict(q[f]); q[f]['x'] = xs[:-1]
+                out.append(('tactic', f"{f}: -x {xs[-1]}", {'fight_tactics': q}))
+            for d in (-1, 1):
+                if sacs + d >= 0:
+                    q = copy.deepcopy(tactics)
+                    q.setdefault(f, {'x': [], 'sacs': 0})
+                    q[f] = dict(q[f]); q[f]['sacs'] = sacs + d
+                    out.append(('tactic', f"{f}: sacs {sacs}->{sacs + d}", {'fight_tactics': q}))
+        # X purchases.
+        for i, xb in enumerate(p.get('xbuys', [])):
+            for k in ('attack', 'defend', 'speed', 'special', 'dire'):
+                for d in (-4, 4):
+                    v = xb.get(k, 0) + d
+                    if v >= 0:
+                        q = copy.deepcopy(p['xbuys'])
+                        q[i] = dict(q[i]); q[i][k] = v
+                        out.append(('xbuy', f"xbuys[{i}] {k} {xb.get(k, 0)}->{v}", {'xbuys': q}))
+        # TM / tutor teaches: drop what is there, add what is not. Sources, all decomp-cited:
+        # Route 4 tutors (map.json:96,110), TM28 Cerulean (scripts.inc:179-187), TM03 Misty
+        # (CeruleanCity_Gym/scripts.inc:23-25), TM26 Giovanni (ViridianCity_Gym/scripts.inc:28-30),
+        # TM14 Mansion B1F (map.json:71), TM31/TM28 Celadon 2F mart (scripts.inc:54-61,
+        # items.json prices), TM13 Ice Beam 4000 coins = 80000 money
+        # (GameCorner_PrizeRoom/scripts.inc:264-266, 20/coin).
+        tms = p.get('tms', [])
+        have_tm = {(t['after'], t['mv'], t.get('mewtwo', False)) for t in tms}
+        for i, t in enumerate(tms):
+            q = copy.deepcopy(tms)
+            del q[i]
+            out.append(('tm', f"drop tm {t['mv']}@{t['after']}", {'tms': q}))
+        tm_candidates = [
+            ('route4', 'MOVE_MEGA_PUNCH', 1500, 0, False),
+            ('route4', 'MOVE_MEGA_KICK', 1500, 0, False),
+            ('tm28-dig', 'MOVE_DIG', 800, 0, False),
+            ('misty-badge', 'MOVE_WATER_PULSE', 700, 0, False),
+            ('giovanni-badge', 'MOVE_EARTHQUAKE', 800, 0, False),
+            ('mansion', 'MOVE_BLIZZARD', 1100, 0, False),
+            ('celadon-tea', 'MOVE_BRICK_BREAK', 900, 3000, False),
+            ('fly-celadon-2', 'MOVE_ICE_BEAM', 2000, 80000, False),
+            ('mewtwo', 'MOVE_SURF', 600, 0, True),
+            ('mewtwo', 'MOVE_BLIZZARD', 600, 0, True),
+        ]
+        for after, mv, frames, cost, mt in tm_candidates:
+            if (after, mv, mt) in have_tm:
+                continue
+            q = copy.deepcopy(tms)
+            q.append({'after': after, 'mv': mv, 'frames': frames, 'cost': cost, 'mewtwo': mt})
+            out.append(('tm', f"teach {mv}@{after}{' (mewtwo)' if mt else ''}", {'tms': q}))
+        # Grinds: resize, drop, add at checkpoints.
+        for i, g in enumerate(p.get('grinds', [])):
+            for d in (-3, 3):
+                if g['battles'] + d > 0:
+                    q = copy.deepcopy(p['grinds'])
+                    q[i] = dict(q[i]); q[i]['battles'] = g['battles'] + d
+                    out.append(('grind', f"grinds[{i}]@{g['after']} battles {g['battles']}->{g['battles'] + d}", {'grinds': q}))
+            q = copy.deepcopy(p['grinds'])
+            del q[i]
+            out.append(('grind', f"drop grind@{g['after']}", {'grinds': q}))
+        have_g = {g['after'] for g in p.get('grinds', [])}
+        for after, level, yld in (('misty-badge', 16, 60), ('surge-badge', 20, 70),
+                                  ('lavender-heal', 24, 75), ('koga-badge', 30, 90)):
+            if after in have_g:
+                continue
+            q = copy.deepcopy(p.get('grinds', []))
+            q.append({'after': after, 'battles': 5, 'level': level, 'yield_': yld})
+            out.append(('grind', f"add grind@{after}", {'grinds': q}))
+        for d in (-4, 4):
+            v = p.get('grind_pre_e4', 0) + d
+            if v >= 0:
+                out.append(('grind', f"grind_pre_e4 {p.get('grind_pre_e4', 0)}->{v}", {'grind_pre_e4': v}))
+            v = p.get('grind_pre_rematch', 0) + d
+            if v >= 0:
+                out.append(('grind', f"grind_pre_rematch {p.get('grind_pre_rematch', 0)}->{v}", {'grind_pre_rematch': v}))
+        # Trainer groups: skip or fight each known optional group.
+        cur_skip = list(p.get('skip_groups', []))
+        for g in ('silph-grunts', 'cerulean-gym-trainer', 'surge-gym-trainers', 'celadon-gym-trainers',
+                  'viridian-gym-trainers', 'blaine-quiz', 'route3-trainers', 'mt-moon-trainers',
+                  'fuchsia-gym-trainers', 'saffron-gym-trainers', 'mansion-trainers', 'mt-ember-trainers'):
+            new = [x for x in cur_skip if x != g] if g in cur_skip else cur_skip + [g]
+            out.append(('skipgroup', f"skip_groups {'-' if g in cur_skip else '+'}{g}", {'skip_groups': new}))
+        # Route and policy toggles.
+        for k in ('early_dig', 'erika_after_tower'):
+            out.append(('toggle', f'{k} {p.get(k)}->{not p.get(k)}', {k: not p.get(k)}))
+        for d in (-0.1, 0.1):
+            v = round(p.get('heal_below', 0.4) + d, 2)
+            if 0.0 <= v <= 0.9:
+                out.append(('heal', f"heal_below {p.get('heal_below', 0.4)}->{v}", {'heal_below': v}))
     if only:
         out = [c for c in out if c[0] in only]
     return out

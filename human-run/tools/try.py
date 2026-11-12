@@ -60,7 +60,7 @@ if fixed:
         lo, hi, b = j['ci_lo'], j['ci_hi'], j['b_eht']
         if lo is not None and (lo > 0 or hi < 0 or (b and (hi - lo) < 0.01 * b)):
             break
-        if r >= 2_000_000 or (lo is None and r >= 400_000):
+        if r >= min(2_000_000, max(cap, 20_000)) or (lo is None and r >= 400_000):
             break
         r *= 2
     better = j['ci_hi'] is not None and j['ci_hi'] < 0 and (j.get('a_fin') or 0) >= 50
