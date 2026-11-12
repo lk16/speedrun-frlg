@@ -323,6 +323,7 @@ fn main() {
             for i in 0..n {
                 let mut me = make_mon(dexr, species, level, [iv; 6], [0; 6], 0, badges as u8);
                 me.moves = moves.clone();
+                me.set_pp(dexr);
                 let tac = Tactics {
                     x_items: xs.clone(),
                     heal_below: arg(&args, "--heal-below", 0.4),

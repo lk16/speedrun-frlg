@@ -114,8 +114,10 @@ struct State {
     whiteouts: u32,
     /// The game's RNG stream (re-keyed per segment, advanced per frame by `bump`).
     game: GameRng,
-    /// The carry's four move slots and the level up to which level-up moves were offered.
+    /// The carry's four move slots, their PP left, and the level up to which level-up
+    /// moves were offered.
     slots: Vec<usize>,
+    slot_pp: Vec<i32>,
     learned_to: u32,
     /// Status that outlived the last battle (cured by item or Pokémon Center).
     carry_status: Status1,
@@ -330,6 +332,7 @@ fn offer_move(ctx: &Ctx, st: &mut State, mv: usize, forced: bool) {
     }
     if st.slots.len() < 4 {
         st.slots.push(mv);
+        st.slot_pp.push(ctx.dex.moves[mv].pp as i32);
         return;
     }
     let (worst_i, worst_u) = st
@@ -342,6 +345,7 @@ fn offer_move(ctx: &Ctx, st: &mut State, mv: usize, forced: bool) {
     let new_u = slot_utility(ctx, st, mv);
     if forced || new_u > worst_u {
         st.slots[worst_i] = mv;
+        st.slot_pp[worst_i] = ctx.dex.moves[mv].pp as i32;
     }
 }
 
@@ -975,6 +979,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 st.badges,
             );
             m.moves = st.slots.clone();
+            m.pp = st.slot_pp.clone();
             m.status = st.carry_status;
             m
         };
@@ -1028,6 +1033,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             st.hp_frac = out.hp_frac;
             if !mewtwo_now {
                 st.carry_status = out.end_status;
+                st.slot_pp = me.pp.clone();
                 cure_status(ctx, st);
             }
             for &(sp, lvl) in &out.kos {
@@ -1059,6 +1065,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         bump(st, ctx.k("whiteout", WHITEOUT as f64));
         st.hp_frac = 1.0;
         st.carry_status = Status1::None;
+        // A whiteout lands at a Pokémon Center: PP comes back too.
+        for (k, &m) in st.slots.clone().iter().enumerate() {
+            st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
+        }
         tries += 1;
         if a.wild {
             // The wild mon is gone; the run continues.
@@ -1343,6 +1353,7 @@ pub fn attempt(
         whiteouts: 0,
         game: GameRng::from_u32(0),
         slots: vec![],
+        slot_pp: vec![],
         learned_to: 5,
         carry_status: Status1::None,
         x_stock: [0; 5],
@@ -1355,6 +1366,7 @@ pub fn attempt(
     for &(l, m) in &ctx.dex.species[ctx.starter_line[0]].learnset {
         if l <= 5 && !st.slots.contains(&m) {
             st.slots.push(m);
+            st.slot_pp.push(ctx.dex.moves[m].pp as i32);
         }
     }
     for (i, seg) in ctx.segs.iter().enumerate() {
@@ -1790,6 +1802,9 @@ pub fn attempt(
         if seg.name.contains("heal") {
             st.hp_frac = 1.0;
             st.carry_status = Status1::None;
+            for (k, &m) in st.slots.clone().iter().enumerate() {
+                st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
+            }
         }
         if seg.off_timer {
             let d = st.clock - before;
