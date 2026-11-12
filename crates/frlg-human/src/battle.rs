@@ -315,6 +315,9 @@ pub struct Mon {
     pub types: (u8, u8),
     pub ability: Ability,
     pub moves: Vec<usize>,
+    /// PP left per move slot (parallel to `moves`); empty = unlimited (callers that do
+    /// not track PP). `set_pp` fills it from the move data.
+    pub pp: Vec<i32>,
     pub status: Status1,
     pub confusion: u8,
     pub infatuated: bool,
@@ -387,6 +390,7 @@ pub fn make_mon(
         types: dex.species[species].types,
         ability: dex.species[species].ability,
         moves: vec![],
+        pp: vec![],
         status: Status1::None,
         confusion: 0,
         infatuated: false,
@@ -414,7 +418,33 @@ pub fn make_mon(
 pub fn enemy_mon(dex: &Dex, m: &PartyMon) -> Mon {
     let mut e = make_mon(dex, m.species, m.level, [m.iv; 6], [0; 6], 0, 0);
     e.moves = m.moves.clone();
+    e.set_pp(dex);
     e
+}
+
+impl Mon {
+    /// Full PP from the move data (`battle_moves.h` `.pp`).
+    pub fn set_pp(&mut self, dex: &Dex) {
+        self.pp = self.moves.iter().map(|&m| dex.moves[m].pp as i32).collect();
+    }
+
+    fn has_pp(&self, mv: usize) -> bool {
+        if self.pp.is_empty() {
+            return true;
+        }
+        match self.moves.iter().position(|&m| m == mv) {
+            Some(i) => self.pp.get(i).copied().unwrap_or(1) > 0,
+            None => true,
+        }
+    }
+
+    fn spend_pp(&mut self, mv: usize) {
+        if let Some(i) = self.moves.iter().position(|&m| m == mv) {
+            if let Some(p) = self.pp.get_mut(i) {
+                *p = (*p - 1).max(0);
+            }
+        }
+    }
 }
 
 /// A mon with no species data (the guessed trainer groups): all base stats 55, Normal type.
@@ -786,6 +816,10 @@ fn ai_choose(
     let target_faster = speed(target) > speed(user);
     for i in 0..n {
         let mv = user.moves[i];
+        if !user.has_pp(mv) {
+            score[i] = -30;
+            continue;
+        }
         if let Some((d, _)) = user.disabled {
             if d == mv {
                 score[i] = -20;
@@ -1259,6 +1293,11 @@ fn do_move(
 
     let m = dex.moves[mv].clone();
     let fx = effect_from(&m.effect);
+
+    // PP: one per use, charged when the move starts (`Cmd_ppreduce`).
+    if att.charging != Some(mv) {
+        att.spend_pp(mv);
+    }
 
     // --- two-turn moves.
     if att.charging == Some(mv) {
@@ -1835,6 +1874,9 @@ pub fn fight(
                 .max()
                 .unwrap_or(0);
             let sure_kill = me.moves.iter().any(|&mv| {
+                if !me.has_pp(mv) {
+                    return false;
+                }
                 let m = &dex.moves[mv];
                 let fx = effect_from(&m.effect);
                 m.power > 0
@@ -1879,6 +1921,9 @@ pub fn fight(
                 let mut best: Option<(usize, f64)> = None;
                 let mut killer: Option<(usize, f64)> = None;
                 for &mv in &me.moves {
+                    if !me.has_pp(mv) {
+                        continue;
+                    }
                     if let Some((d, _)) = me.disabled {
                         if d == mv {
                             continue;
@@ -1912,7 +1957,13 @@ pub fn fight(
                 }
                 match killer.or(best) {
                     Some((mv, _)) => Action::Move(mv),
-                    None => Action::Move(me.moves[0]),
+                    // Struggle stands in when nothing has PP (typeless 50, recoil 1/4:
+                    // the engine approximates it with the first slot at zero cost —
+                    // rare enough to log as an event instead of modelling).
+                    None => {
+                        out.events += 1;
+                        Action::Move(me.moves[0])
+                    }
                 }
             };
 
@@ -2017,6 +2068,9 @@ pub fn fight(
                                 // Attack from behind the sacrifice.
                                 let mut best: Option<(usize, f64)> = None;
                                 for &mv in &me.moves.clone() {
+                                    if !me.has_pp(mv) {
+                                        continue;
+                                    }
                                     let sc = player_score(dex, me, e, mv, en_side);
                                     if sc > 0.0 && (best.is_none() || sc > best.unwrap().1) {
                                         best = Some((mv, sc));
