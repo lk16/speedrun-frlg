@@ -887,9 +887,12 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         b.text("fly-cerulean", 700, Src::Guess);
         b.walk(
             "cerulean-cave",
-            450,
+            if p.rope_cerulean_cave { 275 } else { 450 },
             Era::Run,
-            Some(("MAP_CERULEAN_CAVE_1F", 150)),
+            Some((
+                "MAP_CERULEAN_CAVE_1F",
+                if p.rope_cerulean_cave { 95 } else { 150 },
+            )),
             Src::Guess,
         );
         b.push("mewtwo", Src::Guess, 10, Kind::Mewtwo);

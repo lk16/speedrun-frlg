@@ -124,6 +124,8 @@ struct State {
     /// Mewtwo once caught (battle_sim): its rolled IVs and nature, and its move slots.
     mewtwo: Option<([u32; 6], u8)>,
     mewtwo_moves: Vec<usize>,
+    /// The first-evolution stat gate was already checked.
+    evo_checked: bool,
     /// Inside the Safari Zone on the current entry (steps and balls left).
     safari_open: bool,
     safari_steps: u32,
@@ -1195,9 +1197,31 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
     } else {
         Era::Run
     };
+    // An Escape Rope replaces the walk back out of a dungeon site (rope 550,
+    // `items.json`; warps to the entrance, `EscapeRopeFieldEffect`).
+    let dungeon = [
+        "SEAFOAM",
+        "VICTORY_ROAD",
+        "POKEMON_TOWER",
+        "DIGLETTS",
+        "CAVE",
+        "TUNNEL",
+        "MT_MOON",
+    ]
+    .iter()
+    .any(|d| h.site.contains(d));
+    let ways = if ctx.p.rope_fills && dungeon {
+        if ctx.p.money_model && st.money >= 550 {
+            st.money -= 550;
+        }
+        bump(st, 350.0 * ctx.p.text_factor);
+        1.0
+    } else {
+        2.0
+    };
     bump(
         st,
-        walk_tiles as f64 * 2.0 * walk_era.frames_per_tile() * ctx.p.path_overhead,
+        walk_tiles as f64 * ways * walk_era.frames_per_tile() * ctx.p.path_overhead,
     );
     let per_step = if area == Area::Land {
         era.frames_per_tile() * ctx.p.path_overhead
@@ -1324,6 +1348,7 @@ pub fn attempt(
         x_stock: [0; 5],
         mewtwo: None,
         mewtwo_moves: vec![],
+        evo_checked: false,
     };
     st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
     // The starter's level-5 moves (`level_up_learnsets.h`).
@@ -1770,6 +1795,43 @@ pub fn attempt(
             let d = st.clock - before;
             st.off += d;
             st.clock = before;
+        }
+        // The evolution stat gate: the human opens the summary at the first evolution
+        // and resets unless the minima hold (finer IV information than level 5 gives).
+        if !st.evo_checked
+            && st.carry >= ctx.evo_at[0]
+            && ctx.p.evo_min_stats.iter().any(|&m| m > 0)
+        {
+            st.evo_checked = true;
+            bump(&mut st, 250.0 * ctx.p.text_factor);
+            let m = crate::battle::make_mon(
+                ctx.dex,
+                carry_species(ctx, st.carry),
+                st.carry,
+                st.ivs,
+                st.evs,
+                st.nature,
+                0,
+            );
+            let stats = [
+                m.max_hp, m.stat[0], m.stat[1], m.stat[2], m.stat[3], m.stat[4],
+            ];
+            let ok = stats
+                .iter()
+                .zip(ctx.p.evo_min_stats)
+                .all(|(&v, lo)| v as u32 >= lo);
+            if !ok {
+                if let Some(r) = rec.as_deref_mut() {
+                    r[i].resets += 1;
+                }
+                return Outcome {
+                    wall: st.clock + st.off,
+                    run: st.clock,
+                    finished: false,
+                    caught: st.caught.count(),
+                    whiteouts: st.whiteouts,
+                };
+            }
         }
         if seg.starter_check {
             let (mut ok, mut strength, mut ivs, mut nat) =

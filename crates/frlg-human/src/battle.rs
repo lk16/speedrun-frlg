@@ -685,8 +685,9 @@ enum Action {
     XItem(XItem),
     Heal,
     FullRestore,
-    /// A teammate eats this turn's hit while the fighter uses its next X item.
-    Sac(XItem),
+    /// A teammate eats this turn's hit while the fighter acts freely: uses its next X
+    /// item, or simply attacks when no setup is pending.
+    Sac(Option<XItem>),
 }
 
 /// Expected damage for the player's (full-knowledge) choice: no crit, mean roll, scaled
@@ -1848,15 +1849,17 @@ pub fn fight(
             let in_danger = me.hp <= danger && me.max_hp > danger && !sure_kill;
             let my_action = if forced {
                 Action::Move(me.charging.unwrap_or(me.moves[0]))
-            } else if danger >= me.max_hp
-                && sacs_left > 0
-                && setup_idx < tac.x_items.len()
-                && !sure_kill
-            {
+            } else if danger >= me.hp && sacs_left > 0 && (speed(&e) > speed(me) || !sure_kill) {
+                // A hit would (or could) faint the fighter: a teammate eats it. The free
+                // action goes to the next X item, else to the attack itself.
                 sacs_left -= 1;
-                let x = tac.x_items[setup_idx];
-                setup_idx += 1;
-                Action::Sac(x)
+                if setup_idx < tac.x_items.len() {
+                    let x = tac.x_items[setup_idx];
+                    setup_idx += 1;
+                    Action::Sac(Some(x))
+                } else {
+                    Action::Sac(None)
+                }
             } else if tac.full_restore
                 && (matches!(me.status, Status1::Sleep(_) | Status1::Freeze)
                     || (my_frac < tac.heal_below && me.max_hp > danger)
@@ -1991,21 +1994,40 @@ pub fn fight(
                     }
                     Action::Sac(x) => {
                         out.sacs_used += 1;
-                        out.x_used += 1;
                         match x {
-                            XItem::Attack => {
-                                apply_stat_change(me, 0, 1, false);
+                            Some(x) => {
+                                out.x_used += 1;
+                                match x {
+                                    XItem::Attack => {
+                                        apply_stat_change(me, 0, 1, false);
+                                    }
+                                    XItem::Defend => {
+                                        apply_stat_change(me, 1, 1, false);
+                                    }
+                                    XItem::Speed => {
+                                        apply_stat_change(me, 2, 1, false);
+                                    }
+                                    XItem::Special => {
+                                        apply_stat_change(me, 3, 1, false);
+                                    }
+                                    XItem::DireHit => me.focus_energy = true,
+                                }
                             }
-                            XItem::Defend => {
-                                apply_stat_change(me, 1, 1, false);
+                            None => {
+                                // Attack from behind the sacrifice.
+                                let mut best: Option<(usize, f64)> = None;
+                                for &mv in &me.moves.clone() {
+                                    let sc = player_score(dex, me, e, mv, en_side);
+                                    if sc > 0.0 && (best.is_none() || sc > best.unwrap().1) {
+                                        best = Some((mv, sc));
+                                    }
+                                }
+                                if let Some((mv, _)) = best {
+                                    do_move(
+                                        &ex, me, e, mv, my_side, en_side, true, first, out, rng,
+                                    );
+                                }
                             }
-                            XItem::Speed => {
-                                apply_stat_change(me, 2, 1, false);
-                            }
-                            XItem::Special => {
-                                apply_stat_change(me, 3, 1, false);
-                            }
-                            XItem::DireHit => me.focus_energy = true,
                         }
                     }
                 }
@@ -2039,7 +2061,7 @@ pub fn fight(
                     Action::XItem(x) => format!("X{x:?}"),
                     Action::Heal => "Heal".into(),
                     Action::FullRestore => "FullRestore".into(),
-                    Action::Sac(x) => format!("Sac+{x:?}"),
+                    Action::Sac(x) => format!("Sac {x:?}"),
                 };
                 eprintln!(
                     "t{} me {}/{} st{:?} stg{:?} | foe {} {}/{} | act {} | en {:?} first {} danger {} kill {} sacs {}",

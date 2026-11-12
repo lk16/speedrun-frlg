@@ -303,6 +303,17 @@ pub struct Params {
     /// Fight Erika after the Pokémon Tower leg (fly-celadon lands beside the gym): the
     /// carry is ~2 levels higher and usually evolved.
     pub erika_after_tower: bool,
+    /// Reset unless the carry's stats at its first evolution reach these minima
+    /// (HP, Atk, Def, Spe, SpA, SpD; 0 = no check). A later check resolves IVs far finer
+    /// than level 5 can: Wartortle at 16 has SpA 25-30 across IVs, so "SpA >= 30" is a
+    /// top-decile gate — the WR's reported rule.
+    pub evo_min_stats: [u32; 6],
+    /// Escape-Rope out of dungeon fill sites instead of walking back (rope 550,
+    /// `items.json`; one use per entry).
+    pub rope_fills: bool,
+    /// Escape-Rope out of Cerulean Cave after the Mewtwo catch (the walk segment
+    /// otherwise pays the way back).
+    pub rope_cerulean_cave: bool,
     /// Fallback hunts, tried in order when Oak's check finds fewer than 60 caught.
     pub fill: Vec<Hunt>,
     pub stones: Vec<String>,
@@ -395,6 +406,9 @@ impl Default for Params {
             cure_status: true,
             early_dig: false,
             erika_after_tower: false,
+            evo_min_stats: [0; 6],
+            rope_fills: false,
+            rope_cerulean_cave: false,
             fill: vec![],
             stones: vec![],
             skip_groups: vec![],
