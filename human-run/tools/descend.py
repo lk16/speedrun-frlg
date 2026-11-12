@@ -298,8 +298,21 @@ def candidates(p):
                   'fuchsia-gym-trainers', 'saffron-gym-trainers', 'mansion-trainers', 'mt-ember-trainers'):
             new = [x for x in cur_skip if x != g] if g in cur_skip else cur_skip + [g]
             out.append(('skipgroup', f"skip_groups {'-' if g in cur_skip else '+'}{g}", {'skip_groups': new}))
+        # Evolution stat gate (visible stats of the evolved form; SpA is index 4).
+        em = p.get('evo_min_stats', [0] * 6)
+        for k in (1, 4):
+            for d in (-1, 1):
+                cur = em[k]
+                base = {1: 27, 4: 28}[k]
+                v = (cur + d) if cur > 0 else (base if d > 0 else 0)
+                if v >= 0 and v != cur:
+                    q = list(em)
+                    q[k] = v
+                    out.append(('evogate', f"evo_min_stats[{k}] {cur}->{v}", {'evo_min_stats': q}))
+        if any(em):
+            out.append(('evogate', 'drop evo gate', {'evo_min_stats': [0] * 6}))
         # Route and policy toggles.
-        for k in ('early_dig', 'erika_after_tower'):
+        for k in ('early_dig', 'erika_after_tower', 'rope_fills', 'rope_cerulean_cave'):
             out.append(('toggle', f'{k} {p.get(k)}->{not p.get(k)}', {k: not p.get(k)}))
         for d in (-0.1, 0.1):
             v = round(p.get('heal_below', 0.4) + d, 2)
