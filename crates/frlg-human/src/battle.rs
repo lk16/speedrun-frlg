@@ -2199,6 +2199,7 @@ mod tests {
                 heal_below: 0.35,
                 heal: 50,
                 full_restore: false,
+                sacs: 0,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
