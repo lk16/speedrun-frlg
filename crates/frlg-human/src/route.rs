@@ -104,6 +104,8 @@ pub enum Kind {
     Mewtwo,
     /// A gift mon or a one-off wild battle.
     Special { special: Special },
+    /// An evolution banked as a dex entry (stone, candy or lead swap).
+    Evolve { evo: crate::params::Evolve },
     /// A Poké Mart stop: buy balls with the money on hand.
     Mart { mart: crate::params::Mart },
     /// Teach a TM or tutor move (battle_sim).
@@ -847,7 +849,16 @@ pub(crate) fn leg_sevii(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         "bond-bridge",
         125,
         Era::Run,
-        Some(("MAP_BOND_BRIDGE", g(34, 34, 34))),
+        // The old order's site name matches no table (its Bond Bridge walk has no encounters); the
+        // WR order uses the real map (`wild_encounters.json`, `MAP_THREE_ISLAND_BOND_BRIDGE`).
+        Some((
+            if p.route_style == "wr" {
+                "MAP_THREE_ISLAND_BOND_BRIDGE"
+            } else {
+                "MAP_BOND_BRIDGE"
+            },
+            g(34, 34, 34),
+        )),
         Src::Guess,
     );
     b.trainer("bond-bridge-nikki", "TRAINER_AROMA_LADY_NIKKI", 300);
@@ -1192,11 +1203,12 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     // Hunts go in right after the segment they are anchored to.
     for h in p.hunts.iter().rev() {
         assert!(dex.has_site(&h.site), "hunt site {} unknown", h.site);
-        let at = b
-            .segs
-            .iter()
-            .position(|s| s.name == h.after)
-            .unwrap_or_else(|| panic!("hunt anchor {} matches no segment", h.after));
+        let Some(at) = b.segs.iter().position(|s| s.name == h.after) else {
+            if p.skip_powerplant && h.after == "powerplant-out" {
+                continue;
+            }
+            panic!("hunt anchor {} matches no segment", h.after);
+        };
         let label = format!(
             "hunt-{}-{}@{}",
             h.site.trim_start_matches("MAP_").to_lowercase(),
@@ -1267,11 +1279,12 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         );
     }
     for sp in p.specials.iter().rev() {
-        let at = b
-            .segs
-            .iter()
-            .position(|s| s.name == sp.after)
-            .unwrap_or_else(|| panic!("special anchor {} matches no segment", sp.after));
+        let Some(at) = b.segs.iter().position(|s| s.name == sp.after) else {
+            if p.skip_powerplant && sp.after == "powerplant-out" {
+                continue;
+            }
+            panic!("special anchor {} matches no segment", sp.after);
+        };
         for n in &sp.species {
             dex.id(n);
         }
@@ -1292,6 +1305,31 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
                 kind: Kind::Special {
                     special: sp.clone(),
                 },
+            },
+        );
+    }
+    for ev in p.evolutions.iter().rev() {
+        dex.id(&ev.species);
+        let Some(at) = b.segs.iter().position(|s| s.name == ev.after) else {
+            if p.skip_powerplant && ev.after == "powerplant-out" {
+                continue;
+            }
+            panic!("evolution anchor {} matches no segment", ev.after);
+        };
+        b.segs.insert(
+            at + 1,
+            Seg {
+                name: format!(
+                    "evo-{}@{}",
+                    ev.species.trim_start_matches("SPECIES_").to_lowercase(),
+                    ev.after
+                ),
+                src: Src::Guess,
+                inputs: 6,
+                split: false,
+                off_timer: false,
+                starter_check: false,
+                kind: Kind::Evolve { evo: ev.clone() },
             },
         );
     }

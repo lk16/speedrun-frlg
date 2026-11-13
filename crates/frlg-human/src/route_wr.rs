@@ -52,9 +52,11 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     leg_koga(b, p, h);
 
     // Power Plant: fly to Lavender, surf to the plant (Route 10), catch, fly back out.
-    b.text("fly-lavender-2", 700, Src::Guess);
-    b.walk("powerplant-walk", 260, Era::Surf, None, Src::Guess);
-    b.text("powerplant-out", 400, Src::Guess);
+    if !p.skip_powerplant {
+        b.text("fly-lavender-2", 700, Src::Guess);
+        b.walk("powerplant-walk", 260, Era::Surf, None, Src::Guess);
+        b.text("powerplant-out", 400, Src::Guess);
+    }
     // Cinnabar: Mansion, Blaine.
     leg_mansion_blaine(b, p, h);
     b.text("blaine-badge", 600, Src::Guess);
@@ -63,9 +65,9 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.split(); // "Sevii"
                // The WR run evolves Pikachu and the rest with stones right after the Sevii trip (Raichu at
                // 2:00 in the video): the stones bought in Celadon's store plus Two Island's Moon Stone.
-    if !p.stones.is_empty() {
-        b.push("stones", Src::Guess, 0, Kind::Stones);
-    }
+               // The segment is the anchor of the trades and `evolutions` placed after it, so it exists even when the
+               // plan's `stones` list is empty (it then costs nothing).
+    b.push("stones", Src::Guess, 0, Kind::Stones);
 
     // Silph, Sabrina, then Erika (Celadon is a fly away), the Warden, Viridian.
     leg_silph(b, p, h);
