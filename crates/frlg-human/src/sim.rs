@@ -204,6 +204,10 @@ struct State {
     hp_frac: f64,
     badges: u8,
     league_items: bool,
+    /// Heal items left for the League round in progress (bought at its first fight).
+    heal_items: u32,
+    /// Mewtwo's HP fraction carried between R2 fights.
+    mewtwo_hp: f64,
     /// Record each trainer fight (see `Probe::fights`).
     log_fights: bool,
     /// Rare Candies eaten on the spot so far (`candy_early_n` caps it).
@@ -1126,12 +1130,43 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         bump(st, 450.0 * ctx.p.text_factor);
     }
     let sacs = sacs.min(st.fodder);
+    // League round start: the heal items come out of the purse (Indigo Plateau mart, 600
+    // frames of menus; guess).
+    if a.league && (a.name == "lorelei" || a.name == "lorelei-2") {
+        let want = ctx.p.league_heals.saturating_sub(st.heal_items);
+        let n = if ctx.p.money_model {
+            want.min(st.money / ctx.p.league_heal_price.max(1))
+        } else {
+            want
+        };
+        if ctx.p.money_model {
+            st.money -= n * ctx.p.league_heal_price;
+        }
+        st.heal_items += n;
+        st.mewtwo_hp = 1.0;
+        bump(st, 600.0 * ctx.p.text_factor);
+    }
     // Low on attacking PP before a trainer fight: drink an Elixir (bag trip ~500f).
     // Before a League fight any empty slot is worth topping up — the next Centre is
     // several fights away.
-    let pp_low = st.slot_pp.iter().sum::<i32>() < 12 || (a.league && st.slot_pp.contains(&0));
+    // A scarce slot (base PP <= 5: Blizzard, Fire Blast) below 3 PP counts as empty before a
+    // League fight: the human tops up with the Max Elixir he kept for exactly this
+    // ("Max Elixir between E4 fights", `STRATEGY.md` section 4).
+    let scarce_low = st
+        .slots
+        .iter()
+        .zip(&st.slot_pp)
+        .any(|(&m, &p)| ctx.dex.moves[m].pp <= 5 && ctx.dex.moves[m].power > 0 && p < 3);
+    let pp_low = st.slot_pp.iter().sum::<i32>() < 12
+        || (a.league && (st.slot_pp.contains(&0) || scarce_low));
     if a.trainer && pp_low {
-        if st.max_elixirs > 0 {
+        // Outside the League the last `league_max_reserve` Max Elixirs stay in the bag.
+        let reserve = if a.league {
+            0
+        } else {
+            ctx.p.league_max_reserve
+        };
+        if st.max_elixirs > reserve {
             st.max_elixirs -= 1;
             bump(st, 500.0 * ctx.p.text_factor);
             for (k, &m) in st.slots.clone().iter().enumerate() {
@@ -1185,8 +1220,13 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             m.moves = st.slots.clone();
             m.pp = st.slot_pp.clone();
             m.status = st.carry_status;
+            if a.league && std::env::var_os("FRLG_HACK_PP").is_some() {
+                m.pp = vec![50; m.moves.len()];
+            }
             // `carry_power`: the WR carry out-damages the engine's (see the param's doc).
-            let cp = if ctx.power_early_end.is_some_and(|e| st.seg_i <= e) {
+            let cp = if a.league && ctx.p.league_power > 0.0 {
+                ctx.p.league_power
+            } else if ctx.power_early_end.is_some_and(|e| st.seg_i <= e) {
                 ctx.p.carry_power_early
             } else {
                 ctx.p.carry_power
@@ -1218,8 +1258,22 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             bump(st, uses * ctx.turn());
             st.hp_frac = 0.85;
         }
-        me.hp = ((me.max_hp as f64 * if mewtwo_now { 1.0 } else { st.hp_frac }).round() as i32)
-            .clamp(1, me.max_hp);
+        // Between League fights: one item when the fighter is low (Mewtwo carries its damage
+        // from fight to fight like the carry does).
+        if a.league && st.heal_items > 0 {
+            let cur = if mewtwo_now { st.mewtwo_hp } else { st.hp_frac };
+            if cur < ctx.p.league_preheal {
+                st.heal_items -= 1;
+                bump(st, ctx.turn());
+                if mewtwo_now {
+                    st.mewtwo_hp = 1.0;
+                } else {
+                    st.hp_frac = 1.0;
+                }
+            }
+        }
+        let start_frac = if mewtwo_now { st.mewtwo_hp } else { st.hp_frac };
+        me.hp = ((me.max_hp as f64 * start_frac).round() as i32).clamp(1, me.max_hp);
         // X items limited by the bag.
         let mut stock = st.x_stock;
         let xs: Vec<XItem> = x_plan
@@ -1243,6 +1297,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             sacs,
             torrent: torrent && !mewtwo_now,
             torrent_stall: ctx.p.torrent_stall,
+            others_alive: st.fodder,
+            heal_stock: if a.league { st.heal_items } else { u32::MAX },
+            rollouts: if a.league { ctx.p.league_rollouts } else { 0 },
+            setup_min: ctx.p.setup_min_turns,
         };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
@@ -1253,10 +1311,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
             eprintln!(
-                "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {}",
+                "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {} kos {} heals {} frs {} stats {:?}/{}",
                 a.name, me.level, st.hp_frac, stock, sacs, me.pp,
                 me.moves.iter().map(|&m| dex.moves[m].name.trim_start_matches("MOVE_").to_string()).collect::<Vec<_>>(),
-                out.won, out.turns, out.x_used, out.sacs_used
+                out.won, out.turns, out.x_used, out.sacs_used, out.kos.len(), out.heals_used, out.full_restores_used, me.stat, me.max_hp
             );
         }
         for x in xs.iter().take(out.x_used as usize) {
@@ -1267,6 +1325,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         // A sacrifice costs its faint animation and the send-outs both ways. guess.
         bump(st, out.sacs_used as f64 * 900.0);
         st.fodder = st.fodder.saturating_sub(out.sacs_used);
+        if a.league {
+            st.heal_items = st
+                .heal_items
+                .saturating_sub(out.heals_used + out.full_restores_used);
+        }
         for _ in 0..out.events {
             bump(st, react(ctx, rng) as f64);
         }
@@ -1277,7 +1340,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             }
         }
         if out.won {
-            st.hp_frac = out.hp_frac;
+            if mewtwo_now {
+                st.mewtwo_hp = out.hp_frac;
+            } else {
+                st.hp_frac = out.hp_frac;
+            }
             if !mewtwo_now {
                 st.carry_status = out.end_status;
                 st.slot_pp = me.pp.clone();
@@ -1732,6 +1799,8 @@ pub fn attempt(
         hp_frac: 1.0,
         badges: 0,
         league_items: false,
+        heal_items: 0,
+        mewtwo_hp: 1.0,
         log_fights: probe.is_some(),
         candies_eaten: 0,
         fight_log: vec![],
@@ -2212,6 +2281,12 @@ pub fn attempt(
                 }
             }
             Kind::XBuy { xbuy } => {
+                if std::env::var_os("FRLG_SIM_TRACE").is_some() {
+                    eprintln!(
+                        "STATE xbuy {} money {} x_stock {:?}",
+                        seg.name, st.money, st.x_stock
+                    );
+                }
                 bump(&mut st, xbuy.frames as f64 * ctx.p.text_factor);
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 // Prices (`items.json`): X Attack 500, X Defend 550, X Speed 350,
@@ -2228,6 +2303,24 @@ pub fn attempt(
                         st.money -= qty * 1500;
                     }
                     st.revives += qty;
+                }
+                {
+                    // Hyper Potions for the League, after the Revives.
+                    let price = ctx
+                        .dex
+                        .item_prices
+                        .get("ITEM_HYPER_POTION")
+                        .copied()
+                        .unwrap_or(1200);
+                    let qty = if ctx.p.money_model {
+                        xbuy.heals.min(st.money / price)
+                    } else {
+                        xbuy.heals
+                    };
+                    if ctx.p.money_model {
+                        st.money -= qty * price;
+                    }
+                    st.heal_items += qty;
                 }
                 for (i, want, price) in [
                     (3usize, xbuy.special, 350),
@@ -2274,6 +2367,12 @@ pub fn attempt(
             // (`ViridianCity_Gym/scripts.inc:28-30`); teaching it is a plan choice via
             // `tms`, not automatic (a taught move displaces a slot).
             "indigo-heal" => {
+                if std::env::var_os("FRLG_SIM_TRACE").is_some() {
+                    eprintln!(
+                        "STATE indigo-heal money {} x_stock {:?} revives {} fodder {} candies {} carry {} elixirs {} max {}",
+                        st.money, st.x_stock, st.revives, st.fodder, st.candies, st.carry, st.elixirs, st.max_elixirs
+                    );
+                }
                 st.league_items = true;
                 // Rare Candies kept for the League go down now: a level each, worth the
                 // most exp this late (~400 frames per use).

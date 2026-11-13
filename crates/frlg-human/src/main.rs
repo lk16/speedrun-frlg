@@ -372,7 +372,29 @@ fn main() {
             let (mut won, mut turns, mut hp, mut ev) = (0.0, 0.0, 0.0, 0.0);
             let mut kos = vec![0u32; foes.len() + 1];
             for i in 0..n {
-                let mut me = make_mon(dexr, species, level, [iv; 6], [0; 6], 0, badges as u8);
+                let ivs = [
+                    arg(&args, "--hp-iv", iv),
+                    iv,
+                    iv,
+                    arg(&args, "--spa-iv", iv),
+                    iv,
+                    iv,
+                ];
+                let evall: u32 = arg(&args, "--ev", 0u32);
+                let mut me = make_mon(
+                    dexr,
+                    species,
+                    level,
+                    ivs,
+                    [evall; 6],
+                    arg(&args, "--nature", 0u8),
+                    badges as u8,
+                );
+                let power: f64 = arg(&args, "--power", 1.0);
+                if power != 1.0 {
+                    me.stat[0] = (me.stat[0] as f64 * power) as i32;
+                    me.stat[3] = (me.stat[3] as f64 * power) as i32;
+                }
                 me.moves = moves.clone();
                 me.set_pp(dexr);
                 let hpf: f64 = arg(&args, "--hp", 1.0);
@@ -385,6 +407,10 @@ fn main() {
                     sacs: arg(&args, "--sacs", 0u32),
                     torrent: args.iter().any(|a| a == "--torrent"),
                     torrent_stall: true,
+                    others_alive: arg(&args, "--others", 0u32),
+                    heal_stock: arg(&args, "--heals", u32::MAX),
+                    rollouts: arg(&args, "--rollouts", 0u32),
+                    setup_min: arg(&args, "--setup-min", 1u32),
                 };
                 let mut g = frlg_human::rng::GameRng::from_u32(
                     (seed as u32).wrapping_mul(2654435761) ^ (i as u32).wrapping_mul(0x9E3779B9),

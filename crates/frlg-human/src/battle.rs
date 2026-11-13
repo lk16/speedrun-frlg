@@ -81,6 +81,19 @@ const ACC_RATIO: [(u32, u32); 13] = [
 /// `sCriticalHitChance` (`decompiled/src/battle_script_commands.c:588`).
 const CRIT_CHANCE: [u32; 5] = [16, 8, 4, 3, 2];
 
+/// Weather numbers (`gBattleWeather`, `include/constants/battle.h` `B_WEATHER_*`).
+pub const W_RAIN: u8 = 1;
+pub const W_SUN: u8 = 2;
+pub const W_SAND: u8 = 3;
+pub const W_HAIL: u8 = 4;
+/// `turns` value of a permanent weather (Sand Stream: `B_WEATHER_SANDSTORM_PERMANENT`).
+const W_FOREVER: u8 = 255;
+
+/// Moves whose base PP is at most this are "scarce" slots the human rations.
+const SCARCE_PP: u32 = 5;
+/// A scarce move's value is scaled by this unless it kills.
+const SCARCE_FACTOR: f64 = 0.6;
+
 /// How the engine interprets a move's `EFFECT_*` (`battle_moves.h`). Everything that the
 /// route's trainers, wilds and the player can carry maps to one of these; unmodelled
 /// effects fall into `Nop` (status moves that then do nothing) or `PlainHit`.
@@ -150,6 +163,16 @@ pub enum Effect {
     Snore,
     Facade,
     Flail,
+    /// Rain Dance / Sunny Day / Sandstorm / Hail (weather number, `W_*`).
+    Weather(u8),
+    /// Overheat: the user's Special Attack falls by 2 after a hit (`EFFECT_OVERHEAT`).
+    Overheat,
+    /// Future Sight: damage lands two turns after the end of the turn it is used.
+    FutureSight,
+    /// Roar / Whirlwind: forces the target's switch in trainer battles.
+    Roar,
+    /// Foresight / Odor Sleuth: only its AI score matters here.
+    Foresight,
     Nop,
 }
 
@@ -271,7 +294,14 @@ pub fn effect_from(e: &str) -> Effect {
         "EFFECT_SNORE" => Snore,
         "EFFECT_FACADE" => Facade,
         "EFFECT_FLAIL" => Flail,
-        "EFFECT_OVERHEAT" => PlainHit,
+        "EFFECT_OVERHEAT" => Overheat,
+        "EFFECT_RAIN_DANCE" => Weather(W_RAIN),
+        "EFFECT_SUNNY_DAY" => Weather(W_SUN),
+        "EFFECT_SANDSTORM" => Weather(W_SAND),
+        "EFFECT_HAIL" => Weather(W_HAIL),
+        "EFFECT_FUTURE_SIGHT" => FutureSight,
+        "EFFECT_ROAR" => Roar,
+        "EFFECT_FORESIGHT" => Foresight,
         _ => Nop,
     }
 }
@@ -335,6 +365,12 @@ pub struct Mon {
     pub protected: bool,
     pub protect_count: u8,
     pub rampage: u8,
+    /// The move a Thrash/Outrage lock repeats (`gLockedMoves`, `battle_script_commands.c:2727`).
+    pub lock_move: Option<usize>,
+    /// The move this mon used last (`gLastMoves`; the AI's Counter / Defense Up scripts read it).
+    pub last_move: Option<usize>,
+    /// Holds a Sitrus Berry (`HOLD_EFFECT_RESTORE_HP`, 30 HP at <= 1/2, `battle_util.c:2562`).
+    pub sitrus: bool,
     /// Player badge boosts ×100: Atk, Def, Spe, SpA, SpD (enemy: all 100).
     pub badge: [i32; 5],
     /// Physical damage taken this turn (Counter).
@@ -349,6 +385,23 @@ struct Side {
     light_screen: u8,
     mist: u8,
     safeguard: u8,
+    /// Field weather, mirrored on both sides so `calc_damage` and the AI can read it from
+    /// either (`gBattleWeather`; the 5-turn counter is `gWishFutureKnock.weatherDuration`).
+    weather: u8,
+    weather_turns: u8,
+    /// A Future Sight aimed at this side's mon: turns left and the damage fixed at cast
+    /// (`Cmd_trysetfutureattack`, `battle_script_commands.c:8544`).
+    future: u8,
+    future_dmg: i32,
+}
+
+/// Start `w` on both sides for `turns` turns (the turn it is set counts: the counter is
+/// decremented at that turn's end, `battle_util.c:654-710`).
+fn set_weather(a: &mut Side, b: &mut Side, w: u8, turns: u8) {
+    for s in [a, b] {
+        s.weather = w;
+        s.weather_turns = turns;
+    }
 }
 
 pub fn make_mon(
@@ -406,6 +459,9 @@ pub fn make_mon(
         protected: false,
         protect_count: 0,
         rampage: 0,
+        lock_move: None,
+        last_move: None,
+        sitrus: false,
         badge: [bb(0), bb(4), bb(2), bb(6), bb(6)],
         counter_dmg: 0,
         yawned: false,
@@ -416,7 +472,8 @@ pub fn make_mon(
 /// nature (`decompiled/src/battle_main.c`, `CreateNPCTrainerParty`: a fixed personality
 /// per party — the model uses neutral, an approximation worth one stat point either way).
 pub fn enemy_mon(dex: &Dex, m: &PartyMon) -> Mon {
-    let mut e = make_mon(dex, m.species, m.level, [m.iv; 6], [0; 6], 0, 0);
+    let mut e = make_mon(dex, m.species, m.level, [m.iv; 6], [0; 6], m.nature, 0);
+    e.sitrus = m.sitrus;
     e.moves = m.moves.clone();
     e.set_pp(dex);
     e
@@ -570,6 +627,29 @@ fn calc_damage(
     if !phys && def_side.light_screen > 0 && !crit {
         dmg /= 2;
     }
+    // Weather acts on special-type moves only, after the screens and before the final +2
+    // (`CalculateBaseDamage`, `decompiled/src/pokemon.c:2605-2640`).
+    if !phys && def_side.weather != 0 {
+        let w = def_side.weather;
+        let t = m.mtype;
+        if w == W_RAIN {
+            if t == 10 {
+                dmg /= 2;
+            } else if t == 11 {
+                dmg = dmg * 15 / 10;
+            }
+        }
+        if matches!(w, W_RAIN | W_SAND | W_HAIL) && m.name == "MOVE_SOLAR_BEAM" {
+            dmg /= 2;
+        }
+        if w == W_SUN {
+            if t == 10 {
+                dmg = dmg * 15 / 10;
+            } else if t == 11 {
+                dmg /= 2;
+            }
+        }
+    }
     if phys && dmg == 0 {
         dmg = 1;
     }
@@ -596,6 +676,25 @@ fn calc_damage(
         dmg = 1;
     }
     dmg
+}
+
+/// `Some(heals)` when the defender's ability swallows a move of this type.
+fn absorbs(ab: Ability, mtype: u8) -> Option<bool> {
+    match (ab, mtype) {
+        (Ability::WaterAbsorb, 11) | (Ability::VoltAbsorb, 13) => Some(true),
+        (Ability::FlashFire, 10) => Some(false),
+        _ => None,
+    }
+}
+
+/// `CalculateBaseDamage` alone: no STAB, no type chart, no roll, no crit (what Future
+/// Sight stores at cast, `Cmd_trysetfutureattack`).
+fn base_damage(dex: &Dex, att: &Mon, def: &Mon, mv: usize, def_side: &Side) -> i32 {
+    let mut a = att.clone();
+    a.types = (9, 9);
+    let mut d = def.clone();
+    d.types = (9, 9);
+    calc_damage(dex, &a, &d, mv, 0, false, def_side, None)
 }
 
 /// Type effectiveness with Levitate (`Cmd_typecalc`).
@@ -676,6 +775,17 @@ pub struct Tactics {
     pub torrent: bool,
     /// With `torrent`: allow the stall turns (Withdraw is always allowed).
     pub torrent_stall: bool,
+    /// Living teammates besides the fighter (they take Roar/Whirlwind's drag-in).
+    pub others_alive: u32,
+    /// Heal items (Full Restore / potion uses) the fighter can still spend in this fight;
+    /// `u32::MAX` = unlimited (outside the League the model does not ration them).
+    pub heal_stock: u32,
+    /// Lookahead rollouts per candidate action when a fight is contested (0 = greedy human);
+    /// see [`fight`].
+    pub rollouts: u32,
+    /// An X item is used only against a foe the fighter's best attack needs this many hits to
+    /// drop (1 = always set up; see `turns_to_kill`).
+    pub setup_min: u32,
 }
 
 impl Default for Tactics {
@@ -688,6 +798,10 @@ impl Default for Tactics {
             sacs: 0,
             torrent: false,
             torrent_stall: true,
+            others_alive: 0,
+            heal_stock: u32::MAX,
+            rollouts: 0,
+            setup_min: 1,
         }
     }
 }
@@ -720,10 +834,20 @@ pub struct Outcome {
     pub full_restores_used: u32,
     /// Sacrificial faints spent (each costs a faint animation and a send-out).
     pub sacs_used: u32,
+    /// Healthy party mons besides the fighter (Roar/Whirlwind needs one to drag in;
+    /// `AI_CBM_Roar` counts them, `data/battle_ai_scripts.s`).
+    pub others_alive: u32,
+    /// A Roar/Whirlwind dragged the fighter out this turn.
+    pub forced_out: bool,
+    /// Times the fighter was dragged out.
+    pub dragged: u32,
 }
 
+#[derive(Clone, Copy)]
 enum Action {
     Move(usize),
+    /// Switch the fighter back in after a drag-out: no attack, the foe's move lands on it.
+    Switch,
     XItem(XItem),
     Heal,
     FullRestore,
@@ -737,6 +861,9 @@ enum Action {
 fn player_score(dex: &Dex, att: &Mon, def: &Mon, mv: usize, side: &Side) -> f64 {
     let m = &dex.moves[mv];
     let fx = effect_from(&m.effect);
+    if m.power > 0 && absorbs(def.ability, m.mtype).is_some() {
+        return 0.0;
+    }
     let base = match fx {
         Effect::SonicBoom => {
             20.0 * if effectiveness(dex, m.mtype, def) > 0.0 {
@@ -867,16 +994,15 @@ fn ai_damage(dex: &Dex, att: &Mon, def: &Mon, mv: usize, side: &Side, rng: &mut 
         return 0;
     }
     let fx = effect_from(&m.effect);
-    // `sDiscouragedPowerfulMoveEffects`: two-turn, recharge and self-KO moves are never
-    // "most powerful".
+    // `sDiscouragedPowerfulMoveEffects` (`battle_ai_script_commands.c:245`): two-turn,
+    // recharge, self-KO and Overheat are never "most powerful"; Dig/Fly are not on the list.
     if matches!(
         fx,
         Effect::Explosion
             | Effect::Charge
-            | Effect::SemiInvulnDig
-            | Effect::SemiInvulnFly
             | Effect::Recharge
             | Effect::DreamEater
+            | Effect::Overheat
     ) {
         return 0;
     }
@@ -885,6 +1011,502 @@ fn ai_damage(dex: &Dex, att: &Mon, def: &Mon, mv: usize, side: &Side, rng: &mut 
     let eff = effectiveness(dex, m.mtype, def);
     let d = (d as f64 * if eff > 0.0 { 1.0 } else { 0.0 }) as i32;
     (d * sim / 100).max(if eff > 0.0 { 1 } else { 0 })
+}
+
+/// Everything the viability scripts read about the two mons.
+struct CvCtx<'a> {
+    user: &'a Mon,
+    target: &'a Mon,
+    user_side: &'a Side,
+    user_hp: i32,
+    target_hp: i32,
+    /// `if_target_faster`: the target would move before the user.
+    target_faster: bool,
+    /// Effectiveness of the considered move on the target.
+    eff: f64,
+    /// The target's last used move (`get_last_used_move AI_TARGET`).
+    target_last: Option<usize>,
+}
+
+/// `AI_CheckViability` (`data/battle_ai_scripts.s:653-2300`): the score change for one move,
+/// ported script by script. `if_random_less_than n` is `Random() % 256 < n`; stat levels
+/// are the game's 0..12 with 6 neutral (our stages + 6). Effects without a script change
+/// nothing.
+fn ai_cv(dex: &Dex, c: &CvCtx, fx: Effect, mv: usize, rng: &mut GameRng) -> i32 {
+    let rl = |rng: &mut GameRng, n: u32| rng.modn(256) < n;
+    let (user, target) = (c.user, c.target);
+    let lvl = |m: &Mon, s: usize| m.stages[s] as i32 + 6;
+    let (uh, th) = (c.user_hp, c.target_hp);
+    let mut sc = 0i32;
+    // The "last move" scripts: power and type of the target's last used move.
+    let last = c
+        .target_last
+        .map(|m| (dex.moves[m].power, dex.moves[m].mtype));
+    match fx {
+        // AI_CV_AttackUp / SpAtkUp.
+        Effect::StatChange(s @ (0 | 3), d, true) if d > 0 => {
+            if lvl(user, s as usize) < 9 {
+                if uh == 100 && !rl(rng, 128) {
+                    sc += 2;
+                }
+            } else if !rl(rng, 100) {
+                sc -= 1;
+            }
+            // AU3: AttackUp discourages with rl(40), SpAtkUp with rl(70).
+            if uh <= 70 && (uh < 40 || !rl(rng, if s == 0 { 40 } else { 70 })) {
+                sc -= 2;
+            }
+        }
+        // AI_CV_DefenseUp / SpDefUp (Bulk Up, Calm Mind and Cosmic Power share them).
+        Effect::StatChange(s @ (1 | 4), d, true) if d > 0 => {
+            sc += cv_def_up(c, s as usize, last, rng)
+        }
+        Effect::TwoStat(0, 1, d) if d > 0 => sc += cv_def_up(c, 1, last, rng),
+        Effect::TwoStat(3, 4, d) | Effect::TwoStat(1, 4, d) if d > 0 => {
+            sc += cv_def_up(c, 4, last, rng)
+        }
+        // AI_CV_DragonDance.
+        Effect::TwoStat(0, 2, d) if d > 0 => {
+            if c.target_faster {
+                if !rl(rng, 128) {
+                    sc += 1;
+                }
+            } else if uh <= 50 && !rl(rng, 70) {
+                sc -= 1;
+            }
+        }
+        // AI_CV_SpeedUp.
+        Effect::StatChange(2, d, true) if d > 0 => {
+            if c.target_faster {
+                if !rl(rng, 70) {
+                    sc += 3;
+                }
+            } else {
+                sc -= 3;
+            }
+        }
+        // AI_CV_AccuracyUp.
+        Effect::StatChange(5, d, true) if d > 0 => {
+            if lvl(user, 5) >= 9 && !rl(rng, 50) {
+                sc -= 2;
+            }
+            if uh <= 70 {
+                sc -= 2;
+            }
+        }
+        // AI_CV_EvasionUp (Double Team, Minimize).
+        Effect::StatChange(6, d, true) if d > 0 => {
+            if uh >= 90 && !rl(rng, 100) {
+                sc += 3;
+            }
+            if lvl(user, 6) >= 9 && !rl(rng, 128) {
+                sc -= 1;
+            }
+            if matches!(target.status, Status1::Toxic(_)) {
+                let skip = if uh > 50 { false } else { rl(rng, 80) };
+                if !skip && !rl(rng, 50) {
+                    sc += 3;
+                }
+            }
+            if target.seeded && !rl(rng, 70) {
+                sc += 3;
+            }
+            if uh <= 70 && lvl(user, 6) != 6 && (uh < 40 || th < 40 || !rl(rng, 70)) {
+                sc -= 2;
+            }
+        }
+        // AI_CV_AttackDown.
+        Effect::StatChange(0, d, false) if d < 0 => {
+            if lvl(target, 0) != 6 {
+                sc -= 1;
+                if uh <= 90 {
+                    sc -= 1;
+                }
+                if lvl(target, 0) <= 3 && !rl(rng, 50) {
+                    sc -= 2;
+                }
+            }
+            if th <= 70 {
+                sc -= 2;
+            }
+            let phys = |t: u8| matches!(t, 0 | 1 | 4 | 5 | 6 | 8);
+            if !(phys(target.types.0) || phys(target.types.1)) && !rl(rng, 50) {
+                sc -= 2;
+            }
+        }
+        // AI_CV_SpAtkDown (the neutral test reads the target's *Attack*, as the script does).
+        Effect::StatChange(3, d, false) if d < 0 => {
+            if lvl(target, 0) != 6 {
+                sc -= 1;
+                if uh <= 90 {
+                    sc -= 1;
+                }
+                if lvl(target, 3) <= 3 && !rl(rng, 50) {
+                    sc -= 2;
+                }
+            }
+            if th <= 70 {
+                sc -= 2;
+            }
+            let special = |t: u8| t >= 10;
+            if !(special(target.types.0) || special(target.types.1)) && !rl(rng, 50) {
+                sc -= 2;
+            }
+        }
+        // AI_CV_DefenseDown / SpDefDown / EvasionDown share one shape.
+        Effect::StatChange(s @ (1 | 4 | 6), d, false) if d < 0 => {
+            let go2 = uh < 70 || lvl(target, s as usize) <= 3;
+            if go2 && !rl(rng, 50) {
+                sc -= 2;
+            }
+            if th <= 70 {
+                sc -= 2;
+            }
+        }
+        // AI_CV_SpeedDown (also Icy Wind / Rock Tomb / Mud Shot via `SpeedDownFromChance`).
+        Effect::StatChange(2, d, false) if d < 0 => sc += cv_speed_down(c, rng),
+        Effect::StatDownHit(2)
+            if matches!(
+                dex.moves[mv].name.as_str(),
+                "MOVE_ICY_WIND" | "MOVE_ROCK_TOMB" | "MOVE_MUD_SHOT"
+            ) =>
+        {
+            sc += cv_speed_down(c, rng)
+        }
+        // AI_CV_AccuracyDown.
+        Effect::StatChange(5, d, false) if d < 0 => {
+            if (uh < 70 || th <= 70) && !rl(rng, 100) {
+                sc -= 1;
+            }
+            if lvl(user, 5) <= 4 && !rl(rng, 80) {
+                sc -= 2;
+            }
+            if matches!(target.status, Status1::Toxic(_)) && !rl(rng, 70) {
+                sc += 2;
+            }
+            if target.seeded && !rl(rng, 70) {
+                sc += 2;
+            }
+            if uh <= 70 && lvl(target, 5) != 6 && (uh < 40 || th < 40 || !rl(rng, 70)) {
+                sc -= 2;
+            }
+        }
+        // AI_CV_Roar: -3 unless the target is boosted to +3 or more in a stat the AI cares
+        // about, then +2 half the time.
+        Effect::Roar => {
+            if [0usize, 1, 3, 4, 6].iter().any(|&k| target.stages[k] >= 3) {
+                if !rl(rng, 128) {
+                    sc += 2;
+                }
+            } else {
+                sc -= 3;
+            }
+        }
+        // AI_CV_Heal (Recover, Softboiled); Synthesis / Morning Sun / Moonlight first lose 2
+        // in hail, rain or sandstorm (AI_CV_HealWeather).
+        Effect::RestoreHp => {
+            if matches!(
+                dex.moves[mv].effect.as_str(),
+                "EFFECT_SYNTHESIS" | "EFFECT_MORNING_SUN" | "EFFECT_MOONLIGHT"
+            ) && matches!(c.user_side.weather, W_RAIN | W_SAND | W_HAIL)
+            {
+                sc -= 2;
+            }
+            if uh == 100 {
+                sc -= 3;
+            } else if !c.target_faster {
+                sc -= 8;
+            } else if uh >= 70 && !rl(rng, 30) {
+                sc -= 3;
+            } else if !rl(rng, 20) {
+                sc += 2;
+            }
+        }
+        // AI_CV_Rest.
+        Effect::Rest => {
+            if !c.target_faster {
+                if uh == 100 {
+                    sc -= 8;
+                } else if uh >= 40 && (uh > 50 || !rl(rng, 70)) {
+                    sc -= 3;
+                } else if !rl(rng, 10) {
+                    sc += 3;
+                }
+            } else if uh >= 60 && (uh > 70 || !rl(rng, 50)) {
+                sc -= 3;
+            } else if !rl(rng, 10) {
+                sc += 3;
+            }
+        }
+        // AI_CV_Paralyze.
+        Effect::Paralyze => {
+            if c.target_faster {
+                if !rl(rng, 20) {
+                    sc += 3;
+                }
+            } else if uh <= 70 {
+                sc -= 1;
+            }
+        }
+        // AI_CV_Confuse (Swagger shares it; Flatter adds a coin flip).
+        Effect::Confuse | Effect::Swagger => {
+            if th <= 70 {
+                if !rl(rng, 128) {
+                    sc -= 1;
+                }
+                if th <= 50 {
+                    sc -= 1;
+                    if th <= 30 {
+                        sc -= 1;
+                    }
+                }
+            }
+        }
+        // AI_CV_Toxic (Leech Seed shares it).
+        Effect::Toxic | Effect::LeechSeed => {
+            let has_attack = user.moves.iter().any(|&m2| dex.moves[m2].power > 1);
+            if has_attack {
+                if uh <= 50 && !rl(rng, 50) {
+                    sc -= 3;
+                }
+                if th <= 50 && !rl(rng, 50) {
+                    sc -= 3;
+                }
+            }
+            let protects = user
+                .moves
+                .iter()
+                .any(|&m2| matches!(effect_from(&dex.moves[m2].effect), Effect::Protect));
+            if protects && !rl(rng, 60) {
+                sc += 2;
+            }
+        }
+        // AI_CV_Poison.
+        Effect::Poison => {
+            if uh < 50 || th <= 50 {
+                sc -= 1;
+            }
+        }
+        // AI_CV_Trap.
+        Effect::Trap => {
+            if (matches!(target.status, Status1::Toxic(_)) || target.infatuated) && !rl(rng, 128) {
+                sc += 1;
+            }
+        }
+        // AI_CV_HighCrit.
+        Effect::HighCrit => {
+            if c.eff >= 1.0 {
+                let two = c.eff >= 2.0;
+                if (two || !rl(rng, 128)) && !rl(rng, 128) {
+                    sc += 1;
+                }
+            }
+        }
+        // AI_CV_Absorb: Giga Drain and friends are discouraged when resisted.
+        Effect::Absorb => {
+            if c.eff > 0.0 && c.eff < 1.0 && !rl(rng, 50) {
+                sc -= 3;
+            }
+        }
+        // AI_CV_SelfKO, trimmed (no evasion bookkeeping on the player).
+        Effect::Explosion => {
+            if uh >= 80 && !c.target_faster {
+                if rl(rng, 50) {
+                    // no change
+                } else {
+                    sc -= 3;
+                }
+            } else if uh <= 50 {
+                if !rl(rng, 128) {
+                    sc += 1;
+                }
+                if uh <= 30 && !rl(rng, 50) {
+                    sc += 1;
+                }
+            } else if uh > 50 && !rl(rng, 50) {
+                sc -= 1;
+            }
+        }
+        // AI_CV_Recharge.
+        Effect::Recharge => {
+            if c.eff < 1.0 || (!c.target_faster && uh > 40) || (c.target_faster && uh >= 60) {
+                sc -= 1;
+            }
+        }
+        // AI_CV_AlwaysHit.
+        Effect::AlwaysHit => {
+            if lvl(target, 6) > 10 || lvl(user, 5) < 2 {
+                sc += 1;
+                if !rl(rng, 100) {
+                    sc += 1;
+                }
+            } else if (lvl(target, 6) > 8 || lvl(user, 5) < 4) && !rl(rng, 100) {
+                sc += 1;
+            }
+        }
+        // AI_CV_Counter, trimmed to its type/HP terms.
+        Effect::Counter => {
+            if matches!(target.status, Status1::Sleep(_))
+                || target.confusion > 0
+                || target.infatuated
+            {
+                sc -= 1;
+            } else {
+                if uh <= 30 && !rl(rng, 10) {
+                    sc -= 1;
+                }
+                if uh <= 50 && !rl(rng, 100) {
+                    sc -= 1;
+                }
+                match last {
+                    Some((pw, ty)) if pw > 0 => {
+                        if !is_physical(ty) {
+                            sc -= 1;
+                        } else if !rl(rng, 100) {
+                            sc += 1;
+                        }
+                    }
+                    _ => {
+                        let phys = is_physical(target.types.0) || is_physical(target.types.1);
+                        if !phys && !rl(rng, 50) {
+                            sc -= 1;
+                        }
+                    }
+                }
+            }
+        }
+        // AI_CV_Protect, trimmed.
+        Effect::Protect => {
+            if user.protect_count >= 2 {
+                sc -= 2;
+            } else {
+                if matches!(target.status, Status1::Toxic(_)) || target.seeded {
+                    sc += 2;
+                }
+                if user.protect_count >= 1 {
+                    sc -= 1;
+                    if !rl(rng, 128) {
+                        sc -= 1;
+                    }
+                }
+            }
+        }
+        // AI_CV_Sleep: +1 only when the target knows Dream Eater or Nightmare (never the
+        // player's moves here).
+        Effect::Sleep => {}
+        Effect::Reflect => {
+            // AI_CV_Reflect: -2 below half HP; else only worth it against a physical-type
+            // target (80% -2 against anything else).
+            let phys = is_physical(target.types.0) || is_physical(target.types.1);
+            if uh < 50 || (!phys && !rl(rng, 50)) {
+                sc -= 2;
+            }
+        }
+        Effect::LightScreen => {
+            // AI_CV_LightScreen: the mirror image (special-type targets).
+            let special = target.types.0 >= 10 || target.types.1 >= 10;
+            if uh < 50 || (!special && !rl(rng, 50)) {
+                sc -= 2;
+            }
+        }
+        Effect::Charge => {
+            // AI_CV_ChargeUpMove: -2 when resisted (or the target Protects), -1 at 38% HP
+            // or less.
+            if c.eff < 1.0 {
+                sc -= 2;
+            } else if uh <= 38 {
+                sc -= 1;
+            }
+        }
+        Effect::Foresight => {
+            // AI_CV_Foresight: -2 for a non-Ghost user without raised evasion.
+            let ghost = user.types.0 == 7 || user.types.1 == 7;
+            if ghost || user.stages[6] > 2 {
+                if !rl(rng, 80) {
+                    sc += 2;
+                }
+            } else {
+                sc -= 2;
+            }
+        }
+        // AI_CV_RainDance / SunnyDay / Hail: -1 below 40% HP, else +1 when a different
+        // weather is up.
+        Effect::Weather(w) => {
+            if w != W_SAND {
+                if uh < 40 {
+                    sc -= 1;
+                } else if c.user_side.weather != 0 && c.user_side.weather != w {
+                    sc += 1;
+                }
+            }
+        }
+        // AI_CV_Overheat.
+        Effect::Overheat => {
+            if c.eff < 1.0 {
+                sc -= 1;
+            } else if c.target_faster {
+                if uh <= 80 {
+                    sc -= 1;
+                }
+            } else if uh <= 60 {
+                sc -= 1;
+            }
+        }
+        _ => {}
+    }
+    sc
+}
+
+/// `AI_CV_SpeedDown`: worth +2 (72%) when the target is faster, else -3.
+fn cv_speed_down(c: &CvCtx, rng: &mut GameRng) -> i32 {
+    if c.target_faster {
+        if rng.modn(256) >= 70 {
+            2
+        } else {
+            0
+        }
+    } else {
+        -3
+    }
+}
+
+/// `AI_CV_DefenseUp` / `AI_CV_SpDefUp` for the stat `s` (1 Def, 4 SpD).
+fn cv_def_up(c: &CvCtx, s: usize, last: Option<(u32, u8)>, rng: &mut GameRng) -> i32 {
+    let rl = |rng: &mut GameRng, n: u32| rng.modn(256) < n;
+    let uh = c.user_hp;
+    let mut sc = 0;
+    if c.user.stages[s] as i32 + 6 < 9 {
+        if uh == 100 && !rl(rng, 128) {
+            sc += 2;
+        }
+    } else if !rl(rng, 100) {
+        sc -= 1;
+    }
+    // DU3: at 70%+ HP, 200/256 of the time that is all.
+    if uh >= 70 && rl(rng, 200) {
+        return sc;
+    }
+    // DU4: below 40% never; then it depends on what the target last did.
+    if uh < 40 {
+        return sc - 2;
+    }
+    if let Some((pw, ty)) = last {
+        if pw > 0 {
+            let phys = is_physical(ty);
+            // Defense Up wants physical hitters, Sp. Def Up special ones.
+            if (s == 1 && !phys) || (s == 4 && phys) {
+                return sc - 2;
+            }
+            if rl(rng, 60) {
+                return sc;
+            }
+        }
+    }
+    // DU5.
+    if rl(rng, 60) {
+        return sc;
+    }
+    sc - 2
 }
 
 /// The ported AI (`data/battle_ai_scripts.s`): CHECK_BAD_MOVE vetoes, TRY_TO_FAINT,
@@ -900,6 +1522,7 @@ fn ai_choose(
     user_side: &Side,
     target_side: &Side,
     _turn: u32,
+    target_others: u32,
     rng: &mut GameRng,
 ) -> Option<usize> {
     if user.moves.is_empty() {
@@ -931,6 +1554,10 @@ fn ai_choose(
         // AI_CheckBadMove (always on: every trainer has the flag).
         if m.power > 1 && eff == 0.0 {
             score[i] -= 10;
+            continue;
+        }
+        if m.power > 1 && absorbs(target.ability, m.mtype).is_some() {
+            score[i] -= 12;
             continue;
         }
         match fx {
@@ -1030,260 +1657,41 @@ fn ai_choose(
             Effect::Disable if user.disabled.is_some() => {
                 score[i] -= 10;
             }
+            // AI_CBM_RainDance / SunnyDay / Hail / Sandstorm: -8 when it is already up.
+            Effect::Weather(w) => {
+                if user_side.weather == w {
+                    score[i] -= 8;
+                }
+            }
+            // AI_CBM_FutureSight: -10 when one is already pending on the target's side.
+            Effect::FutureSight => {
+                if target_side.future > 0 {
+                    score[i] -= 10;
+                }
+            }
+            // AI_CBM_Roar: -10 when the target has no other mon alive.
+            Effect::Roar if target_others == 0 => {
+                score[i] -= 10;
+            }
             _ => {}
         }
         if score[i] < 0 {
             continue;
         }
 
-        // AI_CheckViability, ported per effect (`data/battle_ai_scripts.s`).
+        // AI_CheckViability (`data/battle_ai_scripts.s`).
         if ai_flags & 2 != 0 {
-            match fx {
-                Effect::Paralyze => {
-                    // AI_CV_Paralyze.
-                    if target_faster {
-                        if !(rng.modn(256) < 20) {
-                            score[i] += 3;
-                        }
-                    } else if user_hp <= 70 {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::Confuse | Effect::Swagger => {
-                    // AI_CV_Confuse.
-                    if target_hp <= 70 {
-                        if rng.modn(256) >= 128 {
-                            score[i] -= 1;
-                        } else {
-                            if target_hp <= 50 {
-                                score[i] -= 1;
-                            }
-                            if target_hp <= 30 {
-                                score[i] -= 1;
-                            }
-                        }
-                    }
-                }
-                Effect::Toxic | Effect::LeechSeed => {
-                    // AI_CV_Toxic (leech seed shares it).
-                    let has_attack = user.moves.iter().any(|&m2| dex.moves[m2].power > 1);
-                    if has_attack {
-                        if user_hp <= 50 && rng.modn(256) >= 50 {
-                            score[i] -= 3;
-                        } else if target_hp <= 50 && rng.modn(256) >= 50 {
-                            score[i] -= 3;
-                        }
-                    }
-                }
-                Effect::StatChange(6, d, true) if d > 0 => {
-                    // AI_CV_EvasionUp (Double Team, Minimize), trimmed to the
-                    // statuses the model tracks.
-                    if user_hp >= 90 && rng.modn(256) >= 100 {
-                        score[i] += 3;
-                    }
-                    if user.stages[6] >= 3 && rng.modn(256) >= 128 {
-                        score[i] -= 1;
-                    }
-                    if matches!(target.status, Status1::Toxic(_))
-                        && user_hp > 50
-                        && rng.modn(256) >= 50
-                    {
-                        score[i] += 3;
-                    }
-                    if target.seeded && rng.modn(256) >= 70 {
-                        score[i] += 3;
-                    }
-                    if user_hp <= 70 && user.stages[6] != 6 {
-                        if user_hp <= 40 || target_hp <= 40 {
-                            score[i] -= 2;
-                        } else if rng.modn(256) >= 70 {
-                            score[i] -= 2;
-                        }
-                    }
-                }
-                Effect::StatChange(5, d, false) if d < 0 => {
-                    // AI_CV_AccuracyDown, trimmed the same way.
-                    if user_hp < 70 && rng.modn(256) >= 100 {
-                        score[i] -= 1;
-                    }
-                    if user.stages[5] <= -2 && rng.modn(256) >= 80 {
-                        score[i] -= 2;
-                    }
-                    if matches!(target.status, Status1::Toxic(_)) && rng.modn(256) >= 70 {
-                        score[i] += 2;
-                    }
-                    if target.seeded && rng.modn(256) >= 70 {
-                        score[i] += 2;
-                    }
-                    if user_hp <= 70 && target.stages[5] != 6 && (user_hp <= 40 || target_hp <= 40)
-                    {
-                        score[i] -= 2;
-                    }
-                }
-                Effect::StatChange(0, d, true) | Effect::StatChange(3, d, true) if d > 0 => {
-                    // AI_CV_AttackUp / AI_CV_SpAtkUp.
-                    if user.stages[if matches!(fx, Effect::StatChange(0, _, _)) {
-                        0
-                    } else {
-                        3
-                    }] >= 3
-                        && rng.modn(256) >= 100
-                    {
-                        score[i] -= 1;
-                    } else if user_hp == 100 && rng.modn(256) >= 128 {
-                        score[i] += 2;
-                    }
-                    if user_hp <= 70 {
-                        if user_hp <= 40 {
-                            score[i] -= 2;
-                        } else if rng.modn(256) >= 70 {
-                            score[i] -= 2;
-                        }
-                    }
-                }
-                Effect::StatChange(1, d, true)
-                | Effect::StatChange(4, d, true)
-                | Effect::TwoStat(_, _, d)
-                    if d > 0 =>
-                {
-                    // AI_CV_DefenseUp shape; Calm Mind and friends are unhandled in
-                    // FRLG's script and keep 100, so only the generic HP discourage.
-                    if user_hp <= 40 {
-                        score[i] -= 2;
-                    }
-                }
-                Effect::StatChange(s, d, false) if d < 0 && s < 5 => {
-                    // AI_CV_AttackDown family: discouraged off full HP and vs low targets.
-                    if target.stages[s as usize] > -6 {
-                        score[i] -= 1;
-                        if user_hp <= 90 {
-                            score[i] -= 1;
-                        }
-                        if target.stages[s as usize] < -3 && rng.modn(256) >= 50 {
-                            score[i] -= 2;
-                        }
-                        if target_hp <= 70 {
-                            score[i] -= 2;
-                        }
-                    }
-                }
-                Effect::RestoreHp => {
-                    // AI_CV_Heal.
-                    if user_hp == 100 {
-                        score[i] -= 3;
-                    } else if !target_faster {
-                        score[i] -= 8;
-                    } else if user_hp >= 70 && rng.modn(256) >= 30 {
-                        score[i] -= 3;
-                    } else if rng.modn(256) >= 20 {
-                        score[i] += 2;
-                    }
-                }
-                Effect::Rest => {
-                    // AI_CV_Rest.
-                    if !target_faster {
-                        if user_hp == 100 {
-                            score[i] -= 8;
-                        } else if user_hp >= 40 && (user_hp > 50 || rng.modn(256) >= 70) {
-                            score[i] -= 3;
-                        } else if rng.modn(256) >= 10 {
-                            score[i] += 3;
-                        }
-                    } else if user_hp >= 60 && (user_hp > 70 || rng.modn(256) >= 50) {
-                        score[i] -= 3;
-                    } else if rng.modn(256) >= 10 {
-                        score[i] += 3;
-                    }
-                }
-                Effect::HighCrit => {
-                    // AI_CV_HighCrit.
-                    if eff >= 2.0 && rng.modn(256) >= 128 {
-                        score[i] += 1;
-                    }
-                }
-                Effect::Explosion => {
-                    // AI_CV_SelfKO, trimmed (no evasion bookkeeping on the player).
-                    if user_hp >= 80 && !target_faster {
-                        if rng.modn(256) >= 50 {
-                            score[i] -= 3;
-                        }
-                    } else if user_hp <= 50 {
-                        if rng.modn(256) >= 128 {
-                            score[i] += 1;
-                        }
-                        if user_hp <= 30 && rng.modn(256) >= 50 {
-                            score[i] += 1;
-                        }
-                    } else if rng.modn(256) >= 50 {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::Recharge => {
-                    // AI_CV_Recharge.
-                    if eff < 1.0
-                        || (!target_faster && user_hp > 40)
-                        || (target_faster && user_hp >= 60)
-                    {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::Trap => {
-                    // AI_CV_Trap.
-                    if matches!(target.status, Status1::Toxic(_)) && rng.modn(256) >= 128 {
-                        score[i] += 1;
-                    }
-                }
-                Effect::AlwaysHit => {
-                    // AI_CV_AlwaysHit.
-                    if target.stages[6] >= 5 || user.stages[5] <= -4 {
-                        score[i] += 1;
-                    } else if (target.stages[6] >= 3 || user.stages[5] <= -2)
-                        && rng.modn(256) >= 100
-                    {
-                        score[i] += 1;
-                    }
-                }
-                Effect::Counter => {
-                    // AI_CV_Counter, trimmed: discouraged at low HP, encouraged against
-                    // physical attackers.
-                    if matches!(target.status, Status1::Sleep(_)) || target.confusion > 0 {
-                        score[i] -= 1;
-                    }
-                    if user_hp <= 30 && rng.modn(256) >= 10 {
-                        score[i] -= 1;
-                    }
-                    if user_hp <= 50 && rng.modn(256) >= 100 {
-                        score[i] -= 1;
-                    }
-                    let phys_target = is_physical(target.types.0) || is_physical(target.types.1);
-                    if phys_target {
-                        if rng.modn(256) >= 100 {
-                            score[i] += 1;
-                        }
-                    } else if rng.modn(256) >= 50 {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::Protect => {
-                    // AI_CV_Protect, trimmed.
-                    if user.protect_count >= 2 {
-                        score[i] -= 2;
-                    } else if matches!(target.status, Status1::Toxic(_)) || target.seeded {
-                        score[i] += 2;
-                    }
-                    if user.protect_count >= 1 {
-                        score[i] -= 1;
-                        if rng.modn(256) >= 128 {
-                            score[i] -= 1;
-                        }
-                    }
-                }
-                Effect::Sleep => {
-                    // AI_CV_Sleep: +1 only when the *target* knows Dream Eater or
-                    // Nightmare (the FRLG script checks AI_TARGET) — effectively never.
-                }
-                _ => {}
-            }
+            let cv = CvCtx {
+                user,
+                target,
+                user_side,
+                user_hp,
+                target_hp,
+                target_faster,
+                eff,
+                target_last: target.last_move,
+            };
+            score[i] += ai_cv(dex, &cv, fx, mv, rng);
         }
 
         // AI_TryToFaint.
@@ -1395,6 +1803,7 @@ fn do_move(
     if att.charging != Some(mv) {
         att.spend_pp(mv);
     }
+    att.last_move = Some(mv);
 
     // --- two-turn moves.
     if att.charging == Some(mv) {
@@ -1403,7 +1812,8 @@ fn do_move(
         att.airborne = false;
     } else {
         match fx {
-            Effect::Charge => {
+            // Solar Beam needs no charge turn in sun (`BattleScript_EffectSolarBeam`).
+            Effect::Charge if !(m.name == "MOVE_SOLAR_BEAM" && att_side.weather == W_SUN) => {
                 att.charging = Some(mv);
                 return false;
             }
@@ -1462,6 +1872,13 @@ fn do_move(
             att_side.safeguard = 5;
             return false;
         }
+        Effect::Weather(w) => {
+            // Fails when that weather is already up (`AI_CBM_*` mirrors it).
+            if att_side.weather != w {
+                set_weather(att_side, def_side, w, 5);
+            }
+            return false;
+        }
         Effect::Haze => {
             att.stages = [0; 7];
             def.stages = [0; 7];
@@ -1488,7 +1905,7 @@ fn do_move(
             apply_stat_change(att, 2, -1, false);
             return false;
         }
-        Effect::Nop => {
+        Effect::Nop | Effect::Foresight => {
             if m.name == "MOVE_TELEPORT" && ex.wild && !att_is_player {
                 return true; // the wild mon (an Abra) flees
             }
@@ -1526,10 +1943,20 @@ fn do_move(
         }
     }
 
+    // Future Sight: no accuracy roll, damage fixed now (`Cmd_trysetfutureattack`).
+    if matches!(fx, Effect::FutureSight) {
+        if def_side.future == 0 {
+            def_side.future = 3;
+            def_side.future_dmg = base_damage(dex, att, def, mv, def_side);
+        }
+        return false;
+    }
+
     // --- status-only targeted moves (their own accuracy, no damage pipeline).
     let status_only = matches!(
         fx,
-        Effect::Sleep
+        Effect::Roar
+            | Effect::Sleep
             | Effect::Paralyze
             | Effect::Poison
             | Effect::Toxic
@@ -1658,6 +2085,14 @@ fn do_move(
                     def.trap = ((rng.roll() & 3) + 3) as u8;
                 }
             }
+            // Trainer battle: the target is replaced by a random healthy party mon
+            // (`Cmd_forcerandomswitch`, `battle_script_commands.c:6905`); it fails when
+            // the target has no teammate left.
+            Effect::Roar => {
+                if !ex.wild && !att_is_player && out.others_alive > 0 {
+                    out.forced_out = true;
+                }
+            }
             Effect::StatChange(stat, delta, false) => {
                 if def.ability == Ability::ShieldDust && delta < 0 {
                     // Shield Dust blocks secondaries, not status moves; no-op here.
@@ -1671,6 +2106,17 @@ fn do_move(
 
     // --- damaging moves.
     if effectiveness(dex, m.mtype, def) == 0.0 {
+        if att_is_player {
+            out.events += 1;
+        }
+        return false;
+    }
+    // Water Absorb / Volt Absorb heal a quarter and take the move; Flash Fire takes it
+    // (`battle_util.c` `ABILITYEFFECT_MOVES_BLOCK`).
+    if let Some(heal) = absorbs(def.ability, m.mtype) {
+        if heal {
+            def.hp = (def.hp + def.max_hp / 4).min(def.max_hp);
+        }
         if att_is_player {
             out.events += 1;
         }
@@ -1842,9 +2288,20 @@ fn do_move(
         Effect::Recharge => {
             att.recharging = true;
         }
+        // Thrash / Outrage: locked for 2-3 turns in total, confused when it ends
+        // (`MOVE_EFFECT_THRASH`, `battle_script_commands.c:2719-2729`; the end-of-turn count
+        // and confusion are `ENDTURN_THRASH`, `battle_util.c:952-972`).
+        Effect::Rampage if att.rampage == 0 => {
+            att.rampage = ((rng.roll() & 1) + 2) as u8;
+            att.lock_move = Some(mv);
+        }
         Effect::BrickBreak => {
             def_side.reflect = 0;
             def_side.light_screen = 0;
+        }
+        // `MOVE_EFFECT_SP_ATK_TWO_DOWN | AFFECTS_USER | CERTAIN`.
+        Effect::Overheat => {
+            apply_stat_change(att, 3, -2, false);
         }
         _ => {}
     }
@@ -1887,9 +2344,54 @@ fn do_move(
 }
 
 /// End-of-turn residual damage and timers for one mon.
-fn end_of_turn(m: &mut Mon, other: &mut Mon, side: &mut Side, out: &mut Outcome, is_player: bool) {
+fn end_of_turn(
+    m: &mut Mon,
+    other: &mut Mon,
+    side: &mut Side,
+    out: &mut Outcome,
+    is_player: bool,
+    rng: &mut GameRng,
+) {
     if m.hp <= 0 {
         return;
+    }
+    // Weather chip: Hail 1/16 to non-Ice, Sandstorm 1/16 to non-Rock/Ground/Steel
+    // (`battle_util.c` `ENDTURN_SANDSTORM` / `ENDTURN_HAIL`, `BattleScript_DamagingWeatherContinues`).
+    let immune = |t: u8| m.types.0 == t || m.types.1 == t;
+    if (side.weather == W_HAIL && !immune(15))
+        || (side.weather == W_SAND && !(immune(5) || immune(4) || immune(8)))
+    {
+        m.hp -= (m.max_hp / 16).max(1);
+    }
+    // Future Sight lands when its counter runs out (`ENDTURN_FUTURE_SIGHT`).
+    if side.future > 0 {
+        side.future -= 1;
+        if side.future == 0 {
+            m.hp -= side.future_dmg.max(1);
+            side.future_dmg = 0;
+            if is_player {
+                out.events += 1;
+            }
+        }
+    }
+    if m.hp <= 0 {
+        return;
+    }
+    if m.sitrus && m.hp > 0 && m.hp <= m.max_hp / 2 {
+        m.sitrus = false;
+        m.hp = (m.hp + 30).min(m.max_hp);
+    }
+    if m.rampage > 0 {
+        m.rampage -= 1;
+        if m.rampage == 0 {
+            m.lock_move = None;
+            if m.confusion == 0 {
+                m.confusion = (rng.modn(4) + 2) as u8;
+                if is_player {
+                    out.events += 1;
+                }
+            }
+        }
     }
     match m.status {
         Status1::Burn | Status1::Poison => {
@@ -1932,9 +2434,53 @@ fn end_of_turn(m: &mut Mon, other: &mut Mon, side: &mut Side, out: &mut Outcome,
     side.safeguard = side.safeguard.saturating_sub(1);
 }
 
+/// `ShouldUseItem` for a Full Restore: below a quarter of max HP (integer division), and
+/// the n-th item (n >= 1) only once the trainer's valid mons are down to
+/// `items - n + 1` (`if (i && validMons > (itemsNo - i) + 1) continue;`,
+/// `battle_ai_switch_items.c:580`). `valid` counts the active mon and the unsent ones.
+fn ai_wants_item(total: u32, left: u32, valid: u32, e: &Mon) -> bool {
+    if left == 0 || e.hp <= 0 || e.hp >= e.max_hp / 4 {
+        return false;
+    }
+    let used = total - left;
+    used == 0 || valid <= total - used + 1
+}
+
+/// Mutable state of one fight that a rollout must be able to copy.
+#[derive(Clone)]
+struct Fs {
+    my_side: Side,
+    en_side: Side,
+    setup_idx: usize,
+    sacs_left: u32,
+    /// After a Roar/Whirlwind the fighter's next turn is spent switching back in.
+    must_switch: bool,
+    heals_left: u32,
+    last_heal: bool,
+    /// Full Restores the trainer still holds.
+    ai_heals: u32,
+    others_alive: u32,
+    /// Torrent stall turns used so far (max 2 per fight).
+    stalls: u32,
+}
+
+/// What the human saw when choosing: the foe's best-move damage and whether a sure kill exists.
+struct Read {
+    danger: i32,
+    sure_kill: bool,
+    stalled: bool,
+}
+
 /// Fights the trainer's party (or one wild mon) in order. `me` carries its state in and
 /// out (stages reset between enemy mons only for the enemy side; the player's X-item
 /// stages persist through the trainer's whole party, like the real game).
+///
+/// With `tac.rollouts > 0` the human is a *lookahead* player: when the fight is contested
+/// (the foe can reach the fighter within about two hits) it tries each sensible action —
+/// the greedy choice, the next-best attack, a heal, the next X item, a sacrifice — by
+/// playing the rest of the fight `tac.rollouts` times with fresh random numbers (no peeking
+/// at the real game's future) and the greedy policy, and takes the action that wins most
+/// often. A top runner knows these fights by heart; this is the model of that skill.
 #[allow(clippy::too_many_arguments)]
 pub fn fight(
     dex: &Dex,
@@ -1942,180 +2488,407 @@ pub fn fight(
     tac: &Tactics,
     foes: &[Mon],
     ai_flags: u32,
-    mut ai_heals: u32,
+    ai_heals: u32,
     wild: bool,
     rng: &mut GameRng,
 ) -> Outcome {
+    let mut fs = Fs {
+        my_side: Side::default(),
+        en_side: Side::default(),
+        setup_idx: 0,
+        sacs_left: tac.sacs,
+        must_switch: false,
+        heals_left: tac.heal_stock,
+        last_heal: false,
+        ai_heals,
+        others_alive: tac.others_alive,
+        stalls: 0,
+    };
+    run(
+        dex, me, tac, foes, ai_flags, ai_heals, wild, rng, &mut fs, None, None, 0,
+    )
+}
+
+/// The greedy human policy for one turn (the pure part: nothing is committed).
+#[allow(clippy::too_many_arguments)]
+fn greedy_action(
+    dex: &Dex,
+    me: &Mon,
+    e: &Mon,
+    tac: &Tactics,
+    fs: &Fs,
+    wild: bool,
+    next_foe: Option<&Mon>,
+    out: &mut Outcome,
+) -> (Action, Read) {
+    let my_frac = me.hp as f64 / me.max_hp as f64;
+    let forced = me.recharging || me.charging.is_some() || me.rampage > 0;
+    // The human knows the enemy's strongest move: heal when inside its max-roll
+    // KO range (no crit) and no sure kill is on the table this turn.
+    let danger = e
+        .moves
+        .iter()
+        .map(|&mv| calc_damage(dex, e, me, mv, 0, false, &fs.my_side, None))
+        .max()
+        .unwrap_or(0);
+    let sure_kill = me.moves.iter().any(|&mv| {
+        if !me.has_pp(mv) {
+            return false;
+        }
+        let m = &dex.moves[mv];
+        let fx = effect_from(&m.effect);
+        m.power > 0
+            && hit_pct(me, e, m) >= 95
+            && !matches!(
+                fx,
+                Effect::Charge | Effect::SemiInvulnDig | Effect::SemiInvulnFly
+            )
+            && absorbs(e.ability, m.mtype).is_none()
+            && (calc_damage(dex, me, e, mv, 0, false, &fs.en_side, None) * 85) / 100 >= e.hp
+    });
+    // A sure kill the fighter lands first (or survives the wait for) makes any heal pointless
+    // — unless what comes next (a +1-priority Extreme Speed, a sandstorm tick) would finish a
+    // fighter that low.
+    let next_danger = next_foe
+        .map(|nf| {
+            nf.moves
+                .iter()
+                .map(|&mv| calc_damage(dex, nf, me, mv, 0, false, &fs.my_side, None))
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+    let safe_kill = sure_kill
+        && (speed(me) > speed(e) || me.hp > danger)
+        && me.hp > next_danger + me.max_hp / 16;
+    // Healing is only worth a turn if it actually leaves the KO range.
+    let in_danger = me.hp <= danger && me.max_hp > danger && !safe_kill;
+    // The foe in front is harmless (or about to fall) but the next one would take the
+    // fighter in a single hit: spend the quiet turn on the heal ("two heals between E4
+    // fights" — and between mons when the lineup is known by heart).
+    let prep_heal = sure_kill
+        && next_danger > 0
+        && me.hp <= next_danger + me.max_hp / 16
+        && me.max_hp > next_danger
+        && (danger as f64) * 2.0 < me.hp as f64;
+    // ... and never twice in a row for HP alone: after a heal the human takes the
+    // free action instead of burning an item per turn against a foe that out-damages
+    // the heal (the engine's old Lance loop: 11 Full Restores against Outrage).
+    let heal_ok = !fs.last_heal;
+    let t_withdraw = (tac.torrent && !forced)
+        .then(|| torrent_action(dex, me, e, &fs.my_side, danger, sure_kill, false))
+        .flatten();
+    let t_stall = (tac.torrent && tac.torrent_stall && !forced && fs.stalls < 2)
+        .then(|| torrent_action(dex, me, e, &fs.my_side, danger, sure_kill, true))
+        .flatten();
+    let mut read = Read {
+        danger,
+        sure_kill,
+        stalled: false,
+    };
+    let next_x = tac.x_items.get(fs.setup_idx).copied();
+    let action = if fs.must_switch {
+        Action::Switch
+    } else if forced {
+        Action::Move(me.charging.or(me.lock_move).unwrap_or(me.moves[0]))
+    } else if danger >= me.hp && fs.sacs_left > 0 && (speed(e) > speed(me) || !sure_kill) {
+        // A hit would (or could) faint the fighter: a teammate eats it. The free
+        // action goes to the next X item, else to the attack itself.
+        Action::Sac(next_x)
+    } else if let Some(a) = t_withdraw {
+        a
+    } else if tac.full_restore
+        && fs.heals_left > 0
+        && (matches!(me.status, Status1::Sleep(_) | Status1::Freeze)
+            || (my_frac < 0.6 && (me.status == Status1::Paralysis || me.confusion > 1))
+            || ((my_frac < tac.heal_below && me.hp <= 2 * danger && me.max_hp > danger
+                || in_danger)
+                && heal_ok
+                && !safe_kill)
+            || (prep_heal && heal_ok))
+    {
+        Action::FullRestore
+    } else if fs.heals_left > 0
+        && ((my_frac < tac.heal_below
+            && me.hp <= 2 * danger
+            && tac.heal as f64 + me.hp as f64 > danger as f64)
+            || (in_danger && me.hp + tac.heal > danger)
+            || prep_heal && me.hp + tac.heal > next_danger)
+        && heal_ok
+        && !(safe_kill && !prep_heal)
+    {
+        // A human only burns a heal turn when the foe can actually reach them
+        // within ~2 hits (the WR run heals mid-fight only under real pressure).
+        Action::Heal
+    } else if let (Some(x), true) = (
+        next_x,
+        me.hp * 2 > me.max_hp && !sure_kill && turns_to_kill(dex, me, e, fs, wild) >= tac.setup_min,
+    ) {
+        // Setting up costs the foe a free hit; it only pays when the foe would otherwise
+        // take three or more attacks to drop (Pidgeot, Alakazam and Tyranitar fall to one
+        // or two, so a runner never spends a turn on an X item there).
+        Action::XItem(x)
+    } else if let Some(a) = t_stall {
+        read.stalled = true;
+        a
+    } else {
+        match best_attack(dex, me, e, fs, wild).0 {
+            Some(mv) => Action::Move(mv),
+            // Struggle stands in when nothing has PP (typeless 50, recoil 1/4:
+            // the engine approximates it with the first slot at zero cost —
+            // rare enough to log as an event instead of modelling).
+            None => {
+                out.events += 1;
+                Action::Move(me.moves[0])
+            }
+        }
+    };
+    (action, read)
+}
+
+/// Attacks the fighter's best move needs to drop the foe (mean roll, accuracy included).
+fn turns_to_kill(dex: &Dex, me: &Mon, e: &Mon, fs: &Fs, wild: bool) -> u32 {
+    let Some(mv) = best_attack(dex, me, e, fs, wild).0 else {
+        return 99;
+    };
+    let m = &dex.moves[mv];
+    let d = calc_damage(dex, me, e, mv, 0, false, &fs.en_side, None) as f64
+        * 0.925
+        * hit_pct(me, e, m) as f64
+        / 100.0;
+    if d < 1.0 {
+        return 99;
+    }
+    (e.hp as f64 / d).ceil() as u32
+}
+
+/// Hit chance of a move in percent after the attacker's accuracy and the target's evasion
+/// stages (`Cmd_accuracycheck`, `sAccuracyStageRatios`); 100 for never-miss moves.
+fn hit_pct(att: &Mon, def: &Mon, m: &crate::data::MoveData) -> u32 {
+    if m.acc == 0 || matches!(effect_from(&m.effect), Effect::AlwaysHit) {
+        return 100;
+    }
+    let buff = (att.stages[5] - def.stages[6]).clamp(-6, 6);
+    let (n, d) = ACC_RATIO[(buff + 6) as usize];
+    (m.acc * n / d).min(100)
+}
+
+/// Full-knowledge attack pick: kill if a min-roll kill exists, else best expected. Returns
+/// the choice and the runner-up (a different move worth trying).
+/// PP economy (engine-audit 2026-11-13): among kills, and among near-best non-kills
+/// (within 8%), prefer the slot with the most PP left — a human saves Surf/Blizzard PP on
+/// trash instead of draining the best slot.
+fn best_attack(
+    dex: &Dex,
+    me: &Mon,
+    e: &Mon,
+    fs: &Fs,
+    wild: bool,
+) -> (Option<usize>, Option<usize>) {
+    let mut cands: Vec<(usize, f64)> = vec![];
+    let mut best: Option<(usize, f64)> = None;
+    let mut killer: Option<(usize, f64, i32, u32)> = None;
+    for &mv in &me.moves {
+        if !me.has_pp(mv) {
+            continue;
+        }
+        if let Some((d, _)) = me.disabled {
+            if d == mv {
+                continue;
+            }
+        }
+        let mut s = player_score(dex, me, e, mv, &fs.en_side);
+        if s <= 0.0 {
+            continue;
+        }
+        let m = &dex.moves[mv];
+        // A slot with a tiny PP pool (Blizzard, Fire Blast: 5) is saved for the
+        // mon it decides — kills, or at least ~1.7x the next best — the way the
+        // WR run keeps Blizzard for Lance ("Max Elixir between E4 fights"; the
+        // exact-engine audit of 2026-11-14 found the pool drained by Agatha).
+        if m.pp <= SCARCE_PP && !wild {
+            s *= SCARCE_FACTOR;
+        }
+        let min_roll = (calc_damage(dex, me, e, mv, 0, false, &fs.en_side, None) * 85) / 100;
+        let acc_ok = hit_pct(me, e, m) >= 95;
+        if min_roll >= e.hp
+            && acc_ok
+            && !matches!(
+                effect_from(&m.effect),
+                Effect::Charge | Effect::SemiInvulnDig | Effect::SemiInvulnFly
+            )
+        {
+            let spd = dex.moves[mv].prio as f64;
+            let left = me.pp_left(mv);
+            let pow = dex.moves[mv].power;
+            let better = match killer {
+                None => true,
+                Some((_, kspd, kleft, kpow)) => {
+                    spd > kspd || (spd == kspd && (left > kleft || (left == kleft && pow < kpow)))
+                }
+            };
+            if better {
+                killer = Some((mv, spd, left, pow));
+            }
+        }
+        cands.push((mv, s));
+        if best.is_none() || s > best.unwrap().1 {
+            best = Some((mv, s));
+        }
+    }
+    let pick = best.map(|(_, bs)| {
+        cands
+            .iter()
+            .filter(|(_, s)| *s >= 0.92 * bs)
+            .max_by_key(|(mv, _)| me.pp_left(*mv))
+            .map(|&(mv, s)| (mv, s))
+            .unwrap()
+    });
+    let chosen = killer
+        .map(|(mv, s, _, _)| (mv, s))
+        .or(pick)
+        .map(|(mv, _)| mv);
+    // The runner-up: the highest-scoring other move.
+    let alt = cands
+        .iter()
+        .filter(|(mv, _)| Some(*mv) != chosen)
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+        .map(|&(mv, _)| mv);
+    (chosen, alt)
+}
+
+/// Apply the bookkeeping of a chosen action (items spent, teammates fainted).
+fn commit(fs: &mut Fs, action: Action, out: &mut Outcome) {
+    match action {
+        Action::Switch => fs.must_switch = false,
+        Action::XItem(_) => fs.setup_idx += 1,
+        Action::Heal | Action::FullRestore => fs.heals_left = fs.heals_left.saturating_sub(1),
+        Action::Sac(x) => {
+            fs.sacs_left -= 1;
+            fs.others_alive = fs.others_alive.saturating_sub(1);
+            out.others_alive = fs.others_alive;
+            if x.is_some() {
+                fs.setup_idx += 1;
+            }
+        }
+        Action::Move(_) => {}
+    }
+    fs.last_heal = matches!(action, Action::Heal | Action::FullRestore);
+}
+
+fn same_action(a: &Action, b: &Action) -> bool {
+    match (a, b) {
+        (Action::Move(x), Action::Move(y)) => x == y,
+        (Action::XItem(x), Action::XItem(y)) => x == y,
+        (Action::Sac(x), Action::Sac(y)) => x == y,
+        _ => std::mem::discriminant(a) == std::mem::discriminant(b),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run(
+    dex: &Dex,
+    me: &mut Mon,
+    tac: &Tactics,
+    foes: &[Mon],
+    ai_flags: u32,
+    ai_items_total: u32,
+    wild: bool,
+    rng: &mut GameRng,
+    fs: &mut Fs,
+    mut resume: Option<Mon>,
+    mut forced_first: Option<Action>,
+    depth: u8,
+) -> Outcome {
     let mut out = Outcome::default();
-    let mut my_side = Side::default();
-    let mut en_side = Side::default();
     let ex = Exec { dex, wild };
-    let mut setup_idx = 0usize;
-    let mut sacs_left = tac.sacs;
-    let mut stalls = 0u32;
-    for foe in foes {
-        let mut e = foe.clone();
+    out.others_alive = fs.others_alive;
+    for (foe_idx, foe) in foes.iter().enumerate() {
+        let resumed = foe_idx == 0 && resume.is_some();
+        let mut e = match resume.take() {
+            Some(m) if foe_idx == 0 => m,
+            _ => foe.clone(),
+        };
         let mut guard = 0;
+        // Entry abilities (`battle_util.c` `ABILITYEFFECT_ON_SWITCHIN`): Intimidate lowers
+        // the fighter's Attack, Sand Stream raises a permanent sandstorm.
+        if !resumed {
+            if e.ability == Ability::Intimidate && me.ability != Ability::HyperCutter {
+                apply_stat_change(me, 0, -1, false);
+            }
+            if e.ability == Ability::SandStream && fs.my_side.weather != W_SAND {
+                set_weather(&mut fs.my_side, &mut fs.en_side, W_SAND, W_FOREVER);
+            }
+        }
         while e.hp > 0 && me.hp > 0 && guard < 120 {
             guard += 1;
             out.turns += 1;
 
             // --- player action.
-            let my_frac = me.hp as f64 / me.max_hp as f64;
-            let forced = me.recharging || me.charging.is_some() || me.rampage > 0;
-            // The human knows the enemy's strongest move: heal when inside its max-roll
-            // KO range (no crit) and no sure kill is on the table this turn.
-            let danger = e
-                .moves
-                .iter()
-                .map(|&mv| calc_damage(dex, &e, me, mv, 0, false, &my_side, None))
-                .max()
-                .unwrap_or(0);
-            let sure_kill = me.moves.iter().any(|&mv| {
-                if !me.has_pp(mv) {
-                    return false;
-                }
-                let m = &dex.moves[mv];
-                let fx = effect_from(&m.effect);
-                m.power > 0
-                    && (m.acc == 0 || m.acc >= 95 || matches!(fx, Effect::AlwaysHit))
-                    && !matches!(
-                        fx,
-                        Effect::Charge | Effect::SemiInvulnDig | Effect::SemiInvulnFly
-                    )
-                    && (calc_damage(dex, me, &e, mv, 0, false, &en_side, None) * 85) / 100 >= e.hp
-            });
-            // Healing is only worth a turn if it actually leaves the KO range.
-            let in_danger = me.hp <= danger && me.max_hp > danger && !sure_kill;
-            let t_withdraw = (tac.torrent && !forced)
-                .then(|| torrent_action(dex, me, &e, &my_side, danger, sure_kill, false))
-                .flatten();
-            let t_stall = (tac.torrent && tac.torrent_stall && !forced && stalls < 2)
-                .then(|| torrent_action(dex, me, &e, &my_side, danger, sure_kill, true))
-                .flatten();
-            let my_action = if forced {
-                Action::Move(me.charging.unwrap_or(me.moves[0]))
-            } else if danger >= me.hp && sacs_left > 0 && (speed(&e) > speed(me) || !sure_kill) {
-                // A hit would (or could) faint the fighter: a teammate eats it. The free
-                // action goes to the next X item, else to the attack itself.
-                sacs_left -= 1;
-                if setup_idx < tac.x_items.len() {
-                    let x = tac.x_items[setup_idx];
-                    setup_idx += 1;
-                    Action::Sac(Some(x))
-                } else {
-                    Action::Sac(None)
-                }
-            } else if let Some(a) = t_withdraw {
-                a
-            } else if tac.full_restore
-                && (matches!(me.status, Status1::Sleep(_) | Status1::Freeze)
-                    || (my_frac < 0.6 && (me.status == Status1::Paralysis || me.confusion > 1))
-                    || (my_frac < tac.heal_below && me.hp <= 2 * danger && me.max_hp > danger)
-                    || in_danger)
+            let (mut my_action, read) =
+                greedy_action(dex, me, &e, tac, fs, wild, foes.get(foe_idx + 1), &mut out);
+            let danger = read.danger;
+            let sure_kill = read.sure_kill;
+            let mut stalled = read.stalled;
+            if let Some(a) = forced_first.take() {
+                my_action = a;
+                stalled = false;
+            } else if depth == 0
+                && tac.rollouts > 0
+                && !wild
+                && !fs.must_switch
+                && !(me.recharging || me.charging.is_some() || me.rampage > 0)
+                && (me.hp as f64 <= 1.6 * danger as f64 || me.hp * 2 < me.max_hp)
             {
-                Action::FullRestore
-            } else if (my_frac < tac.heal_below
-                && me.hp <= 2 * danger
-                && tac.heal as f64 + me.hp as f64 > danger as f64)
-                || (in_danger && me.hp + tac.heal > danger)
-            {
-                // A human only burns a heal turn when the foe can actually reach them
-                // within ~2 hits (the WR run heals mid-fight only under real pressure).
-                Action::Heal
-            } else if setup_idx < tac.x_items.len() && me.hp * 2 > me.max_hp && !sure_kill {
-                let x = tac.x_items[setup_idx];
-                setup_idx += 1;
-                Action::XItem(x)
-            } else if let Some(a) = t_stall {
-                stalls += 1;
-                a
-            } else {
-                // Full-knowledge pick: kill if a min-roll kill exists, else best expected.
-                // PP economy (engine-audit 2026-11-13): among kills, and among near-best
-                // non-kills (within 8%), prefer the slot with the most PP left — a human
-                // saves Surf/Blizzard PP on trash instead of draining the best slot.
-                let mut cands: Vec<(usize, f64)> = vec![];
-                let mut best: Option<(usize, f64)> = None;
-                let mut killer: Option<(usize, f64, i32, u32)> = None;
-                for &mv in &me.moves {
-                    if !me.has_pp(mv) {
-                        continue;
-                    }
-                    if let Some((d, _)) = me.disabled {
-                        if d == mv {
-                            continue;
-                        }
-                    }
-                    let s = player_score(dex, me, &e, mv, &en_side);
-                    if s <= 0.0 {
-                        continue;
-                    }
-                    let m = &dex.moves[mv];
-                    let min_roll =
-                        (calc_damage(dex, me, &e, mv, 0, false, &en_side, None) * 85) / 100;
-                    let acc_ok = m.acc == 0
-                        || m.acc >= 95
-                        || matches!(effect_from(&m.effect), Effect::AlwaysHit);
-                    if min_roll >= e.hp
-                        && acc_ok
-                        && !matches!(
-                            effect_from(&m.effect),
-                            Effect::Charge | Effect::SemiInvulnDig | Effect::SemiInvulnFly
-                        )
-                    {
-                        let spd = dex.moves[mv].prio as f64;
-                        let left = me.pp_left(mv);
-                        let pow = dex.moves[mv].power;
-                        let better = match killer {
-                            None => true,
-                            Some((_, kspd, kleft, kpow)) => {
-                                spd > kspd
-                                    || (spd == kspd
-                                        && (left > kleft || (left == kleft && pow < kpow)))
-                            }
-                        };
-                        if better {
-                            killer = Some((mv, spd, left, pow));
-                        }
-                    }
-                    cands.push((mv, s));
-                    if best.is_none() || s > best.unwrap().1 {
-                        best = Some((mv, s));
-                    }
-                }
-                let best = best.map(|(_, bs)| {
-                    cands
-                        .iter()
-                        .filter(|(_, s)| *s >= 0.92 * bs)
-                        .max_by_key(|(mv, _)| me.pp_left(*mv))
-                        .map(|&(mv, s)| (mv, s))
-                        .unwrap()
-                });
-                match killer.map(|(mv, s, _, _)| (mv, s)).or(best) {
-                    Some((mv, _)) => Action::Move(mv),
-                    // Struggle stands in when nothing has PP (typeless 50, recoil 1/4:
-                    // the engine approximates it with the first slot at zero cost —
-                    // rare enough to log as an event instead of modelling).
-                    None => {
-                        out.events += 1;
-                        Action::Move(me.moves[0])
-                    }
-                }
-            };
+                my_action = choose_by_rollouts(
+                    dex,
+                    me,
+                    &e,
+                    tac,
+                    fs,
+                    foes,
+                    foe_idx,
+                    ai_flags,
+                    ai_items_total,
+                    wild,
+                    rng,
+                    my_action,
+                );
+                stalled = false;
+            }
+            if stalled {
+                fs.stalls += 1;
+            }
+            commit(fs, my_action, &mut out);
 
             // --- enemy action.
-            let en_forced = e.recharging || e.charging.is_some();
+            let en_forced = e.recharging || e.charging.is_some() || e.rampage > 0;
+            let valid = (foes.len() - foe_idx) as u32;
             let en_move = if en_forced {
-                e.charging
-            } else if ai_heals > 0 && e.hp * 4 < e.max_hp {
-                // `ShouldUseItem`: Full Restore under 1/4 (`battle_ai_switch_items.c`).
+                // A recharge or locked turn still "uses" its move: `do_move` clears the
+                // recharge flag (the old code skipped it and the flag never cleared, so a
+                // Hyper Beam silenced the mon for the rest of its life).
+                Some(e.charging.or(e.lock_move).unwrap_or(e.moves[0]))
+            } else if ai_wants_item(ai_items_total, fs.ai_heals, valid, &e) {
+                // `ShouldUseItem`: Full Restore under 1/4 (`battle_ai_switch_items.c:562-598`).
                 None
             } else {
-                ai_choose(dex, &e, me, ai_flags, &en_side, &my_side, out.turns, rng)
-                    .map(|i| e.moves[i])
+                ai_choose(
+                    dex,
+                    &e,
+                    me,
+                    ai_flags,
+                    &fs.en_side,
+                    &fs.my_side,
+                    out.turns,
+                    out.others_alive,
+                    rng,
+                )
+                .map(|i| e.moves[i])
             };
-            let enemy_heals_now = !en_forced && en_move.is_none() && ai_heals > 0;
+            let enemy_heals_now = !en_forced
+                && en_move.is_none()
+                && ai_wants_item(ai_items_total, fs.ai_heals, valid, &e);
 
             // --- order (`GetWhoStrikesFirst`): priority, then speed, ties Random() & 1.
             let my_prio = match my_action {
@@ -2148,6 +2921,9 @@ pub fn fight(
                 match my_action {
                     Action::Move(mv) => {
                         do_move(&ex, me, e, mv, my_side, en_side, true, first, out, rng);
+                    }
+                    Action::Switch => {
+                        out.item_turns += 1;
                     }
                     Action::XItem(x) => {
                         out.item_turns += 1;
@@ -2223,6 +2999,7 @@ pub fn fight(
                     }
                 }
             };
+            let mut ai_heals_left = fs.ai_heals;
             let mut act_enemy = |me: &mut Mon,
                                  e: &mut Mon,
                                  my_side: &mut Side,
@@ -2232,7 +3009,7 @@ pub fn fight(
                                  rng: &mut GameRng|
              -> bool {
                 if enemy_heals_now {
-                    ai_heals -= 1;
+                    ai_heals_left -= 1;
                     e.hp = e.max_hp;
                     e.status = Status1::None;
                     e.confusion = 0;
@@ -2246,9 +3023,10 @@ pub fn fight(
             };
 
             let sac_turn = matches!(my_action, Action::Sac(_));
-            if std::env::var_os("FRLG_BATTLE_TRACE").is_some() {
+            if depth == 0 && std::env::var_os("FRLG_BATTLE_TRACE").is_some() {
                 let an = match &my_action {
                     Action::Move(mv) => dex.moves[*mv].name.clone(),
+                    Action::Switch => "Switch".into(),
                     Action::XItem(x) => format!("X{x:?}"),
                     Action::Heal => "Heal".into(),
                     Action::FullRestore => "FullRestore".into(),
@@ -2257,27 +3035,68 @@ pub fn fight(
                 eprintln!(
                     "t{} me {}/{} st{:?} stg{:?} | foe {} {}/{} | act {} | en {:?} first {} danger {} kill {} sacs {}",
                     out.turns, me.hp, me.max_hp, me.status, me.stages, dex.species[foe.species].name, e.hp, e.max_hp,
-                    an, en_move.map(|m| dex.moves[m].name.clone()), me_first, danger, sure_kill, sacs_left
+                    an, en_move.map(|m| dex.moves[m].name.clone()), me_first, danger, sure_kill, fs.sacs_left
                 );
             }
             let fled = if me_first {
-                act_player(me, &mut e, &mut my_side, &mut en_side, true, &mut out, rng);
+                act_player(
+                    me,
+                    &mut e,
+                    &mut fs.my_side,
+                    &mut fs.en_side,
+                    true,
+                    &mut out,
+                    rng,
+                );
                 if e.hp > 0 && me.hp > 0 && !sac_turn {
-                    act_enemy(me, &mut e, &mut my_side, &mut en_side, false, &mut out, rng)
+                    act_enemy(
+                        me,
+                        &mut e,
+                        &mut fs.my_side,
+                        &mut fs.en_side,
+                        false,
+                        &mut out,
+                        rng,
+                    )
                 } else {
                     false
                 }
             } else if sac_turn {
                 // The enemy's move falls on the sacrifice; the fighter acts freely.
-                act_player(me, &mut e, &mut my_side, &mut en_side, false, &mut out, rng);
+                act_player(
+                    me,
+                    &mut e,
+                    &mut fs.my_side,
+                    &mut fs.en_side,
+                    false,
+                    &mut out,
+                    rng,
+                );
                 false
             } else {
-                let f = act_enemy(me, &mut e, &mut my_side, &mut en_side, true, &mut out, rng);
+                let f = act_enemy(
+                    me,
+                    &mut e,
+                    &mut fs.my_side,
+                    &mut fs.en_side,
+                    true,
+                    &mut out,
+                    rng,
+                );
                 if me.hp > 0 && e.hp > 0 && !f {
-                    act_player(me, &mut e, &mut my_side, &mut en_side, false, &mut out, rng);
+                    act_player(
+                        me,
+                        &mut e,
+                        &mut fs.my_side,
+                        &mut fs.en_side,
+                        false,
+                        &mut out,
+                        rng,
+                    );
                 }
                 f
             };
+            fs.ai_heals = ai_heals_left;
             if fled {
                 // A wild Teleport: the battle just ends (no catch).
                 out.won = false;
@@ -2286,8 +3105,31 @@ pub fn fight(
                 return out;
             }
 
-            end_of_turn(me, &mut e, &mut my_side, &mut out, true);
-            end_of_turn(&mut e, me, &mut en_side, &mut out, false);
+            end_of_turn(me, &mut e, &mut fs.my_side, &mut out, true, rng);
+            end_of_turn(&mut e, me, &mut fs.en_side, &mut out, false, rng);
+            for sd in [&mut fs.my_side, &mut fs.en_side] {
+                if sd.weather_turns != 0 && sd.weather_turns != W_FOREVER {
+                    sd.weather_turns -= 1;
+                    if sd.weather_turns == 0 {
+                        sd.weather = 0;
+                    }
+                }
+            }
+            if out.forced_out {
+                // The drag-out clears the fighter's stat stages and volatile state
+                // (`SwitchInClearSetData`); it comes back next turn.
+                out.forced_out = false;
+                out.dragged += 1;
+                if me.hp > 0 {
+                    me.stages = [0; 7];
+                    me.focus_energy = false;
+                    me.confusion = 0;
+                    me.seeded = false;
+                    me.infatuated = false;
+                    fs.must_switch = true;
+                    out.events += 1;
+                }
+            }
         }
         if me.hp <= 0 || e.hp > 0 {
             out.won = false;
@@ -2305,6 +3147,93 @@ pub fn fight(
     out.hp_frac = me.hp.max(0) as f64 / me.max_hp as f64;
     out.end_status = me.status;
     out
+}
+
+/// The lookahead human: try the sensible actions and keep the one that wins most often in
+/// `tac.rollouts` simulated continuations (the greedy action wins ties).
+#[allow(clippy::too_many_arguments)]
+fn choose_by_rollouts(
+    dex: &Dex,
+    me: &Mon,
+    e: &Mon,
+    tac: &Tactics,
+    fs: &Fs,
+    foes: &[Mon],
+    foe_idx: usize,
+    ai_flags: u32,
+    ai_items_total: u32,
+    wild: bool,
+    rng: &mut GameRng,
+    greedy: Action,
+) -> Action {
+    let mut cands: Vec<Action> = vec![greedy];
+    let add = |a: Action, cands: &mut Vec<Action>| {
+        if !cands.iter().any(|c| same_action(c, &a)) {
+            cands.push(a);
+        }
+    };
+    if let (_, Some(alt)) = best_attack(dex, me, e, fs, wild) {
+        add(Action::Move(alt), &mut cands);
+    }
+    if fs.heals_left > 0 && me.hp < me.max_hp {
+        add(
+            if tac.full_restore {
+                Action::FullRestore
+            } else {
+                Action::Heal
+            },
+            &mut cands,
+        );
+    }
+    let next_x = tac.x_items.get(fs.setup_idx).copied();
+    if let Some(x) = next_x {
+        add(Action::XItem(x), &mut cands);
+    }
+    if fs.sacs_left > 0 && fs.others_alive > 0 {
+        add(Action::Sac(next_x), &mut cands);
+    }
+    if cands.len() < 2 {
+        return greedy;
+    }
+    let n = tac.rollouts;
+    let base = (rng.roll() as u32) << 16 | rng.roll() as u32;
+    let mut wins = vec![0u32; cands.len()];
+    for (ci, c) in cands.iter().enumerate() {
+        for k in 0..n {
+            let mut me2 = me.clone();
+            let mut fs2 = fs.clone();
+            // Common random numbers across candidates: the same seeds for each.
+            let mut r2 = GameRng::from_u32(base.wrapping_add(k.wrapping_mul(0x9E37_79B1)));
+            // The first turn of the rollout is the candidate itself.
+            let res = run(
+                dex,
+                &mut me2,
+                tac,
+                &foes[foe_idx..],
+                ai_flags,
+                ai_items_total,
+                wild,
+                &mut r2,
+                &mut fs2,
+                Some(e.clone()),
+                Some(*c),
+                1,
+            );
+            wins[ci] += res.won as u32;
+        }
+    }
+    let (bi, bw) = wins
+        .iter()
+        .enumerate()
+        .max_by_key(|(i, w)| (**w, usize::MAX - *i))
+        .map(|(i, w)| (i, *w))
+        .unwrap();
+    // Noise guard: leave the greedy action unless the alternative is clearly better.
+    if bw >= wins[0] + (n / 8).max(1) {
+        cands[bi]
+    } else {
+        greedy
+    }
 }
 
 /// Heal item used mid-fight: Potion (20) to level 14, Super Potion (50) to 29, Hyper
@@ -2471,14 +3400,19 @@ mod tests {
                 sacs: 0,
                 torrent: false,
                 torrent_stall: true,
+                others_alive: 0,
+                heal_stock: u32::MAX,
+                rollouts: 0,
+                setup_min: 1,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
             won += o.won as u32;
         }
         // The lone no-TM carry won ~5% of these in the old engine; Dig + two X Attacks
-        // has to make the fight roughly a coin flip or better at level 26 (higher level
-        // or a third X item pushes it well past that — the optimiser's call).
-        assert!(won > 180, "won {won}/400");
+        // has to make the fight a real chance at level 26 (higher level or a third X item
+        // pushes it well past that — the optimiser's call). Exact trainer natures
+        // (`CreateNPCTrainerParty`) took this from ~50% to ~39%.
+        assert!(won > 120, "won {won}/400");
     }
 }

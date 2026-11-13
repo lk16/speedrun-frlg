@@ -166,6 +166,9 @@ pub struct XBuy {
     /// Revives (1500 each, `items.json`): bring sacrificed teammates back between
     /// League fights.
     pub revives: u32,
+    /// Hyper Potions for the League (1200 each, `items.json`; Saffron Mart sells them,
+    /// `data/maps/SaffronCity_Mart/scripts.inc`); each is one heal use in a League fight.
+    pub heals: u32,
     pub frames: u32,
 }
 
@@ -377,6 +380,31 @@ pub struct Params {
     /// The same stand-in for the caught Mewtwo (R2 fights: the engine needs ~1.5x the WR video's
     /// actions with Mewtwo; no Torrent there, so this is the residual the Rash/IV/X lines do not explain).
     pub mewtwo_power: f64,
+    /// `carry_power` for League fights only (0 = same as `carry_power`). The League is where the
+    /// model's lone carry most visibly falls short of the WR run's (EVs, held type boosters, X lines
+    /// the engine does not play); fitted to the video's League action counts, see the journal.
+    pub league_power: f64,
+    /// Max Elixirs a non-League fight leaves in the bag for the League ("Max Elixir between E4
+    /// fights", `human-run/video-analysis/STRATEGY.md`; the exact engine's Blizzard (5 PP) is empty
+    /// by Lance otherwise).
+    pub league_max_reserve: u32,
+    /// Heal items the bag holds at the start of each League round: `xbuys[].heals` (Hyper Potions)
+    /// count first, the Indigo mart tops up to this many at `league_heal_price` while the money
+    /// lasts (the WR run: "two heals + a Max Elixir between E4 fights; Full Restores sparingly",
+    /// `STRATEGY.md`; the bag contents themselves are a guess).
+    pub league_heals: u32,
+    /// Price of a heal topped up at the Indigo Plateau mart at a round's start: Max Potion 2500
+    /// (`IndigoPlateau_PokemonCenter_1F_Items`, `items.json`; Full Restore is 3000).
+    pub league_heal_price: u32,
+    /// Between League fights the human spends one heal item when the fighter is below this
+    /// HP fraction (bag trip, `ctx.turn()` frames).
+    pub league_preheal: f64,
+    /// Lookahead rollouts per candidate action in contested League fights (0 = the greedy
+    /// human); see `battle::fight`.
+    pub league_rollouts: u32,
+    /// An X item is only used against a foe the fighter's best attack needs this many hits to drop
+    /// (1 = the old "always set up"); a runner does not spend a turn on an X item before a KO.
+    pub setup_min_turns: u32,
     /// Before a fight, heal with items when the carry is below this HP fraction (up to 0.85). The WR
     /// run walks into most fights at 1/3 HP or less to keep Torrent active
     /// (`human-run/video-analysis/data/calib/v2-mid-fights.md`: Koga 33/120, Giovanni 35/143, ...).
@@ -542,6 +570,13 @@ impl Default for Params {
             candy_early_n: 99,
             carry_power: 1.0,
             mewtwo_power: 1.0,
+            league_power: 0.0,
+            league_max_reserve: 2,
+            league_heals: 6,
+            league_heal_price: 2500,
+            league_preheal: 0.7,
+            league_rollouts: 0,
+            setup_min_turns: 1,
             keep_moves: vec![],
             cure_status: true,
             early_dig: false,
