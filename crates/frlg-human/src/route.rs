@@ -1380,11 +1380,12 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         );
     }
     for e in p.elixirs.iter().rev() {
-        let at = b
-            .segs
-            .iter()
-            .position(|s| s.name == e.after)
-            .unwrap_or_else(|| panic!("elixir anchor {} matches no segment", e.after));
+        let Some(at) = b.segs.iter().position(|s| s.name == e.after) else {
+            if p.skip_powerplant && e.after == "powerplant-out" {
+                continue;
+            }
+            panic!("elixir anchor {} matches no segment", e.after);
+        };
         b.segs.insert(
             at + 1,
             Seg {

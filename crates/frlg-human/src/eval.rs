@@ -38,6 +38,9 @@ impl Plan {
         let params = Params::from_plan_text(text)?;
         let segs = build(dex, &params);
         for h in params.hunts.iter() {
+            if params.skip_powerplant && h.after == "powerplant-out" {
+                continue;
+            }
             if !segs.iter().any(|s| s.name == h.after) {
                 return Err(format!("hunt anchor {} matches no segment", h.after));
             }
