@@ -14,7 +14,9 @@ set -euo pipefail
 VIDEO=${1:?usage: frlg-transcribe VIDEO [OUTBASE]}
 OUT=${2:-$(basename "${VIDEO%.*}")}
 DEPS=${FRLG_DEPS:?FRLG_DEPS is not set; is this the frlg sandbox?}
-CLI="$DEPS/whisper/bin/whisper-cli"
+# WHISPER_CLI: host-only override, e.g. a Vulkan build (~/.cache/speedrun-frlg/whisper-gpu),
+# ~8x faster than the CPU build on a GTX 1060; the sandbox has no GPU.
+CLI="${WHISPER_CLI:-$DEPS/whisper/bin/whisper-cli}"
 MODEL=$(ls "$DEPS/whisper/models/"ggml-*.bin 2>/dev/null | head -1 || true)
 
 [ -x "$CLI" ] || { echo "frlg-transcribe: $CLI is missing -- the deps tree predates the" >&2
@@ -31,6 +33,8 @@ trap 'rm -f "$WAV"' EXIT
 echo "extracting audio..." >&2
 ffmpeg -v error -y -i "$VIDEO" -vn -ac 1 -ar 16000 -c:a pcm_s16le "$WAV"
 echo "transcribing with $(basename "$MODEL") on $(nproc) threads..." >&2
-"$CLI" -m "$MODEL" -f "$WAV" -t "$(nproc)" -l en \
+# -mc 0: no text context between windows; without it stream audio sends whisper into
+# loops repeating one sentence for minutes (seen on the 2026-11-12 VOD, worse on GPU).
+"$CLI" -m "$MODEL" -f "$WAV" -t "$(nproc)" -l en -mc 0 \
   --output-txt --output-srt --output-file "$OUT" --no-prints
 echo "wrote $OUT.txt and $OUT.srt" >&2
