@@ -316,6 +316,17 @@ def candidates(p):
                     q = copy.deepcopy(hunts)
                     q[i]['stop_after'] = v
                     out.append(('hunt', f"hunts[{i}] {h['site'][4:]} stop_after {h['stop_after']}->{v}", {'hunts': q}))
+    # --- reset thresholds at the splits the dex economy moves (the E4 door gate is `indigo-heal`)
+    aggr = p.get('reset_aggr_at', {})
+    for sname in ('koga-badge', 'blaine-badge-and-sevii-scene', 'sabrina-badge', 'erika-badge', 'giovanni-badge',
+                  'indigo-heal', 'hall-of-fame-1', 'brock', 'misty-badge'):
+        cur_a = aggr.get(sname, p.get('reset_aggr', 0.0))
+        for d in (-0.15, 0.15):
+            v = round(min(1.0, max(0.0, cur_a + d)), 2)
+            if v != cur_a:
+                q = dict(aggr)
+                q[sname] = v
+                out.append(('aggr', f"aggr at {sname} {cur_a}->{v}", {'reset_aggr_at': q}))
     # --- where passing encounters may be caught
     off = p.get('pass_off', [])
     for sname in ('route1-encounters', 'route2-encounters', 'forest-encounters', 'route3', 'mt-moon-1f', 'mt-moon-b1f', 'mt-moon-b2f',
