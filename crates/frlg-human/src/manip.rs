@@ -48,6 +48,10 @@ pub struct ManipParams {
     /// probability of one press is `P(|N(mu, sigma)| < 0.5)`. Fitted, see the plan file.
     pub sigma: f64,
     pub mu: f64,
+    /// Dials the table can use to reach the target: 2 = naming idle N and ball idle j (doc 4.2,
+    /// needs an emulator-built table of the naming seeds), 1 = ball idle j alone (doc 4.2: T1 143
+    /// frames, T2 45 s, T3 3.8 min). The scan data cannot tell which Main97 has; see the plan file.
+    pub dials: u32,
     /// Overrides the derived per-press hit probability when >= 0.
     pub p_hit: f64,
     /// P(he keeps a starter that hit every press and meets the tier) -- misses by other causes
@@ -87,6 +91,7 @@ impl Default for ManipParams {
             min_spd: 0,
             sigma: 0.49,
             mu: 0.0,
+            dials: 2,
             p_hit: -1.0,
             p_accept: 1.0,
             s_boot_title: 45.0,
@@ -164,7 +169,11 @@ impl ManipParams {
 
     /// Mean on-timer idle frames (naming N + ball j) to reach the best pair of the tier (doc 4.2).
     pub fn mean_idle_frames(&self) -> f64 {
-        (std::f64::consts::PI / (2.0 * REACHABLE * self.rho())).sqrt()
+        if self.dials == 1 {
+            1.0 / (REACHABLE * self.rho())
+        } else {
+            (std::f64::consts::PI / (2.0 * REACHABLE * self.rho())).sqrt()
+        }
     }
 
     /// P(a title frame is quiet) for the configured tier; the doc's all-seeds scan (3.4).
@@ -250,9 +259,13 @@ pub fn draw(p: &ManipParams, rng: &mut Rng) -> AttemptDraw {
         d.quiet = title_hit;
     }
     if d.planned {
-        // Rayleigh: P(cost > x) = exp(-0.933 rho x^2 / 2).
+        // Two dials: Rayleigh, P(cost > x) = exp(-0.933 rho x^2 / 2). One dial: exponential.
         let u = rng.f64().max(1e-12);
-        d.idle_frames = (-2.0 * u.ln() / (REACHABLE * p.rho())).sqrt();
+        d.idle_frames = if p.dials == 1 {
+            -u.ln() / (REACHABLE * p.rho())
+        } else {
+            (-2.0 * u.ln() / (REACHABLE * p.rho())).sqrt()
+        };
     }
     d
 }
@@ -305,6 +318,8 @@ pub struct PhaseReport {
     pub attempts_q: [f64; 3],
     pub wall_q: [f64; 3],
     pub quiet_share: f64,
+    /// Mean on-timer idle seconds of the tier (model, not sampled).
+    pub idle_s: f64,
 }
 
 pub fn summarize(samples: &[PhaseSample], press_p: f64, seed: u64) -> PhaseReport {
@@ -378,6 +393,7 @@ pub fn summarize(samples: &[PhaseSample], press_p: f64, seed: u64) -> PhaseRepor
         attempts_q: quant(&mut atts),
         wall_q: quant(&mut walls),
         quiet_share,
+        idle_s: 0.0,
     }
 }
 
@@ -385,7 +401,7 @@ impl PhaseReport {
     pub fn text(&self) -> String {
         format!(
             "starter phase (manip), {} attempts: per-press hit {:.3}; P(good starter kept) {:.3} \
-             (planned {:.3}, lucky {:.4}); quiet seed on {:.0}% of kept\n\
+             (planned {:.3}, lucky {:.4}); quiet seed on {:.0}% of kept; tier idle {:.1} s on the timer\n\
              \x20 attempt wall to the stats screen: pass {:.0} s, miss {:.0} s (incl. reset)\n\
              \x20 to a good starter: attempts mean {:.2} (p10/50/90 {:.0}/{:.0}/{:.0}), \
              wall mean {:.0} s = {:.1} min (p10/50/90 {:.0}/{:.0}/{:.0} s)",
@@ -395,6 +411,7 @@ impl PhaseReport {
             self.p_planned,
             self.p_lucky,
             self.quiet_share * 100.0,
+            self.idle_s,
             self.mean_pass_s,
             self.mean_fail_s,
             self.mean_attempts,
@@ -428,6 +445,8 @@ mod tests {
         p.min_def = 20;
         assert!((p.rho() - 0.000396).abs() < 2e-6); // T2
         assert!((p.mean_idle_frames() - 65.0).abs() < 1.5);
+        p.dials = 1;
+        assert!((p.mean_idle_frames() - 2700.0).abs() < 100.0); // doc 4.2: 2710
     }
 
     #[test]

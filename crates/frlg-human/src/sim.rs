@@ -2133,7 +2133,9 @@ pub fn attempt(
             // On-timer: the route's own segments plus the extra human seconds and the idle frames
             // waiting for the table's frame.
             let extra = (mp.s_title_naming + mp.s_naming_ball + mp.s_ball_stats) * FPS;
-            bump(&mut st, extra + draw.idle_frames);
+            // Not `bump`: the game stream is re-keyed at the next segment, and an idle of
+            // hundreds of thousands of frames (one-dial tiers) would spin the LCG for nothing.
+            st.clock += (extra + draw.idle_frames).round() as u64;
             let (ok, strength, ivs, nat) =
                 manip_starter(ctx, &draw, &mut Rng::new(seed, idx, 0x5748));
             st.strength = strength;

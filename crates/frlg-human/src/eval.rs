@@ -371,7 +371,9 @@ pub fn phase_report(ctx: &Ctx, seed: u64, r: u64) -> crate::manip::PhaseReport {
             pr.phase
         })
         .collect();
-    crate::manip::summarize(&samples, ctx.p.manip.press_p(), seed)
+    let mut rep = crate::manip::summarize(&samples, ctx.p.manip.press_p(), seed);
+    rep.idle_s = ctx.p.manip.mean_idle_frames() / crate::manip::FPS;
+    rep
 }
 
 #[cfg(test)]
