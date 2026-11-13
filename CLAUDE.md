@@ -68,3 +68,10 @@ commit.
 
 `tools/` is host-only — those scripts need the network, mono, or docker, and none of the three
 exists in the sandbox.
+
+## Unattended runs: no deletions
+
+Nobody is there to approve prompts. `.claude/settings.json` denies `rm`, `rmdir`, `find -delete`
+and `git clean` outright, so they fail instead of waiting. Never delete: write each temp file under
+a unique name in the scratchpad (stale ones are harmless; `scratch/` is wiped per sandbox anyway),
+overwrite with `>` or the Write tool, and leave old generated files in place.
