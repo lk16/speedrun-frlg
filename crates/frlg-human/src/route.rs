@@ -374,7 +374,9 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.text("to-forest", 1161, Src::Ledger);
     detour(&mut b, "route2-detour", 4);
     b.wander("route2-encounters", "MAP_ROUTE2", g(5, 0, 60));
-    b.text("forest", 6708, Src::Ledger);
+    // 6708 in the ledger includes the forced Sammy fight (2706f), which "forest-trainers"
+    // charges separately (prebrock audit 2026-11-13): 6708 - 2706.
+    b.text("forest", 4002, Src::Ledger);
     detour(&mut b, "forest-detour", 20);
     b.wander("forest-encounters", "MAP_VIRIDIAN_FOREST", g(81, 48, 100));
     b.text("to-pewter", 1531, Src::Ledger);

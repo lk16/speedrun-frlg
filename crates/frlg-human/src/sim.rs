@@ -773,6 +773,18 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
     if era == Era::Bike {
         p *= 0.8;
     }
+    // Encounter cooldown (`decompiled/src/wild_encounter.c:673-699,707-755`): after a map
+    // entry and after every battle, the first `8 - rate/10` encounter-eligible steps only
+    // reach the dice through a 5% gate. Without this the model averaged ~17 encounters
+    // before Brock where the WR video shows 2-4 (prebrock audit, 2026-11-13).
+    let cd_steps = if rate >= 80 {
+        0
+    } else if rate < 10 {
+        8
+    } else {
+        8 - (rate as u64) / 10
+    };
+    let mut cooldown = cd_steps;
     let mut left = steps as u64;
     let mut used = 0u32;
     loop {
@@ -784,13 +796,22 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
         {
             break;
         }
-        let gap = rng.geometric(p);
+        // Steps inside the cooldown window roll at 5% of the rate; afterwards at full rate.
+        let gap = {
+            let g1 = rng.geometric(p * 0.05);
+            if g1 < cooldown {
+                g1
+            } else {
+                cooldown + rng.geometric(p)
+            }
+        };
         if gap >= left {
             used += left as u32;
             break;
         }
         left -= gap + 1;
         used += gap as u32 + 1;
+        cooldown = cd_steps;
         let slot = &slots[pick_slot(rng, &weights)];
         let level = rng.range(slot.min, slot.max);
         if repel && level < st.carry {

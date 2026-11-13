@@ -429,12 +429,16 @@ impl Mon {
     }
 
     fn has_pp(&self, mv: usize) -> bool {
+        self.pp_left(mv) > 0
+    }
+
+    fn pp_left(&self, mv: usize) -> i32 {
         if self.pp.is_empty() {
-            return true;
+            return 1;
         }
         match self.moves.iter().position(|&m| m == mv) {
-            Some(i) => self.pp.get(i).copied().unwrap_or(1) > 0,
-            None => true,
+            Some(i) => self.pp.get(i).copied().unwrap_or(1),
+            None => 1,
         }
     }
 
@@ -1905,13 +1909,17 @@ pub fn fight(
             } else if tac.full_restore
                 && (matches!(me.status, Status1::Sleep(_) | Status1::Freeze)
                     || (my_frac < 0.6 && (me.status == Status1::Paralysis || me.confusion > 1))
-                    || (my_frac < tac.heal_below && me.max_hp > danger)
+                    || (my_frac < tac.heal_below && me.hp <= 2 * danger && me.max_hp > danger)
                     || in_danger)
             {
                 Action::FullRestore
-            } else if (my_frac < tac.heal_below && tac.heal as f64 + me.hp as f64 > danger as f64)
+            } else if (my_frac < tac.heal_below
+                && me.hp <= 2 * danger
+                && tac.heal as f64 + me.hp as f64 > danger as f64)
                 || (in_danger && me.hp + tac.heal > danger)
             {
+                // A human only burns a heal turn when the foe can actually reach them
+                // within ~2 hits (the WR run heals mid-fight only under real pressure).
                 Action::Heal
             } else if setup_idx < tac.x_items.len() && me.hp * 2 > me.max_hp && !sure_kill {
                 let x = tac.x_items[setup_idx];
@@ -1919,8 +1927,12 @@ pub fn fight(
                 Action::XItem(x)
             } else {
                 // Full-knowledge pick: kill if a min-roll kill exists, else best expected.
+                // PP economy (engine-audit 2026-11-13): among kills, and among near-best
+                // non-kills (within 8%), prefer the slot with the most PP left — a human
+                // saves Surf/Blizzard PP on trash instead of draining the best slot.
+                let mut cands: Vec<(usize, f64)> = vec![];
                 let mut best: Option<(usize, f64)> = None;
-                let mut killer: Option<(usize, f64)> = None;
+                let mut killer: Option<(usize, f64, i32, u32)> = None;
                 for &mv in &me.moves {
                     if !me.has_pp(mv) {
                         continue;
@@ -1948,15 +1960,34 @@ pub fn fight(
                         )
                     {
                         let spd = dex.moves[mv].prio as f64;
-                        if killer.is_none() || spd > killer.unwrap().1 {
-                            killer = Some((mv, spd));
+                        let left = me.pp_left(mv);
+                        let pow = dex.moves[mv].power;
+                        let better = match killer {
+                            None => true,
+                            Some((_, kspd, kleft, kpow)) => {
+                                spd > kspd
+                                    || (spd == kspd
+                                        && (left > kleft || (left == kleft && pow < kpow)))
+                            }
+                        };
+                        if better {
+                            killer = Some((mv, spd, left, pow));
                         }
                     }
+                    cands.push((mv, s));
                     if best.is_none() || s > best.unwrap().1 {
                         best = Some((mv, s));
                     }
                 }
-                match killer.or(best) {
+                let best = best.map(|(_, bs)| {
+                    cands
+                        .iter()
+                        .filter(|(_, s)| *s >= 0.92 * bs)
+                        .max_by_key(|(mv, _)| me.pp_left(*mv))
+                        .map(|&(mv, s)| (mv, s))
+                        .unwrap()
+                });
+                match killer.map(|(mv, s, _, _)| (mv, s)).or(best) {
                     Some((mv, _)) => Action::Move(mv),
                     // Struggle stands in when nothing has PP (typeless 50, recoil 1/4:
                     // the engine approximates it with the first slot at zero cost —
