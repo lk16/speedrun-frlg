@@ -57,7 +57,7 @@ SCCACHE_VER="${SCCACHE_VER:-0.17.0}"      # musl release tarball, so it runs on 
 # store; the `template` in .box/config.json is what names it at create time.
 IMAGE_BASE="${FRLG_IMAGE_BASE:-docker.io/docker/sandbox-templates:claude-code-docker}"
 IMAGE_TAG="${FRLG_IMAGE:-frlg-sandbox:1}" # must match .box/config.json's `template`
-IMAGE_PKGS=(build-essential binutils-arm-none-eabi libpng-dev zlib1g-dev pkg-config cmake perl)
+IMAGE_PKGS=(build-essential binutils-arm-none-eabi libpng-dev zlib1g-dev pkg-config cmake perl ffmpeg)
 
 # .deb packages extracted into a sysroot. This is host-side only now: build.sh in the
 # agbcc step needs arm-none-eabi-as and -ar, which a host has no reason to have
@@ -175,7 +175,7 @@ EOF
   local user; user=$(docker image inspect -f '{{.Config.User}}' "$IMAGE_TAG")
   [ "$user" = agent ] || die "$IMAGE_TAG runs as '$user', not agent -- the USER line did not take"
   docker run --rm --entrypoint sh "$IMAGE_TAG" -c '
-    for c in cc g++ ld as arm-none-eabi-as arm-none-eabi-ld make perl cmake pkg-config; do
+    for c in cc g++ ld as arm-none-eabi-as arm-none-eabi-ld make perl cmake pkg-config ffmpeg; do
       command -v "$c" >/dev/null || { echo "missing: $c"; exit 1; }
     done' || die "$IMAGE_TAG is missing a tool (above); check the apt output from the build"
   manifest image "$IMAGE_TAG <- $(docker image inspect -f '{{index .RepoDigests 0}}' "$IMAGE_BASE" 2>/dev/null || echo "$IMAGE_BASE")"
