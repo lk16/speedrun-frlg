@@ -1831,7 +1831,10 @@ pub fn attempt(
         st.off += (draw.pre_s * FPS).round() as u64;
         if draw.quiet {
             st.quiet_hits_left = ctx.p.manip.quiet_max_hits;
-            st.quiet_window = ctx.p.manip.quiet_window as f64;
+            // The density table (`ManipParams::quiet_p`, doc 3.4) is for hits within 60 rate
+            // tests; a wider window with the same density would be a free lunch (plan 384 descent:
+            // window 150 "won" 1.7 h that way), so the window is capped at the table's.
+            st.quiet_window = ctx.p.manip.quiet_window.min(60) as f64;
         }
     }
     st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
