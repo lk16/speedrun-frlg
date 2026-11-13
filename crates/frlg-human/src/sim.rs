@@ -87,6 +87,8 @@ pub struct Ctx<'a> {
     pub torrent_end: Option<usize>,
     pub power_early_end: Option<usize>,
     pub no_salvage_end: Option<usize>,
+    /// Salvage check aggressiveness per segment (negative = none), `Params::salvage_at`.
+    pub salvage: Vec<f64>,
     /// Index of Oak's check, and (from the no-reset pilot) the fill time as `base + slope * missing
     /// species`, the mean species still to be caught before Oak after segment i, and the mean remaining
     /// frames after segment i without the fill (for `dex_resets`).
@@ -144,6 +146,9 @@ pub struct Outcome {
 }
 
 struct State {
+    /// The active target in frames (None = no resets) and the clock when the League began.
+    target: Option<u64>,
+    league_t0: u64,
     clock: u64,
     off: u64,
     exp: u32,
@@ -1378,12 +1383,33 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             return true;
         }
         st.whiteouts += 1;
+        let rule = ctx.salvage.get(st.seg_i).copied().unwrap_or(-1.0);
         // The runner does not salvage an early death: he resets.
-        if ctx.no_salvage_end.is_some_and(|e| st.seg_i <= e) {
+        if rule < 0.0 && ctx.no_salvage_end.is_some_and(|e| st.seg_i <= e) {
             st.abandoned = true;
             return false;
         }
+        if a.league {
+            if ctx.p.league_redo <= 0.0 || st.target.is_none() {
+                st.abandoned = true;
+                return false;
+            }
+            // Back to the first room: the rooms are walked and fought again.
+            let spent = (st.clock - st.league_t0) as f64;
+            bump(st, spent * ctx.p.league_redo);
+        }
         bump(st, ctx.k("whiteout", WHITEOUT as f64));
+        if rule >= 0.0 {
+            if let Some(t) = st.target {
+                let i = st.seg_i;
+                let fl = ctx.floor_after[i] as f64;
+                let rem = fl + rule * (ctx.mean_after[i] - fl).max(0.0);
+                if st.clock as f64 + rem > t as f64 {
+                    st.abandoned = true;
+                    return false;
+                }
+            }
+        }
         st.hp_frac = 1.0;
         st.carry_status = Status1::None;
         // A whiteout lands at a Pokémon Center: PP comes back too.
@@ -1395,8 +1421,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             // The wild mon is gone; the run continues.
             return true;
         }
-        // A whiteout in the League sends the player back to the first room: the human resets.
-        if tries >= 3 || a.league {
+        // Three whiteouts on one fight: the human resets.
+        if tries >= 3 {
             st.abandoned = true;
             return false;
         }
@@ -1772,6 +1798,8 @@ pub fn attempt(
     mut probe: Option<&mut Probe>,
 ) -> Outcome {
     let mut st = State {
+        target,
+        league_t0: 0,
         clock: 0,
         off: 0,
         exp: exp_for_level(Growth::MediumSlow, 5),
@@ -1852,6 +1880,9 @@ pub fn attempt(
         let before = st.clock;
         let wo_before = st.whiteouts;
         st.seg_i = i;
+        if seg.name == "indigo-heal" || seg.name == "league-entry" {
+            st.league_t0 = st.clock;
+        }
         // The Torrent phase walks past the Pokémon Centers it would have stopped at.
         let skip_heal =
             seg.name.starts_with("center-heal@") && ctx.torrent_end.is_some_and(|e| i <= e);

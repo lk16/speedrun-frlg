@@ -136,6 +136,17 @@ impl Plan {
             power_early_end: seg_index(&self.segs, &self.params.power_early_until),
             torrent_end: seg_index(&self.segs, &self.params.torrent_until),
             no_salvage_end: seg_index(&self.segs, &self.params.no_salvage_until),
+            salvage: self
+                .segs
+                .iter()
+                .map(|s| {
+                    *self
+                        .params
+                        .salvage_at
+                        .get(&s.name)
+                        .unwrap_or(&self.params.salvage_default)
+                })
+                .collect(),
             starter_line: line,
             evo_at,
             stab_from: if self.params.starter == "bulbasaur" {

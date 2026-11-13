@@ -489,6 +489,16 @@ pub struct Params {
     /// A whiteout in a fight up to and including this segment ends the attempt (the runner does not
     /// salvage early deaths: `STRATEGY.md` 7). Empty = the old retry-from-the-Center model.
     pub no_salvage_until: String,
+    /// Per-segment salvage rule: after a whiteout in a fight of this segment (and its cost) the
+    /// human resets when `clock + floor + a * (mean - floor)` still exceeds T, with `a` the value
+    /// here (the `reset_aggr` formula); otherwise he plays on. Overrides `no_salvage_until` for
+    /// that segment. `salvage_default` (>= 0) applies the same check to every other segment.
+    pub salvage_at: std::collections::HashMap<String, f64>,
+    pub salvage_default: f64,
+    /// A whiteout in the League sends the human back to the first room: > 0 = he walks the rooms
+    /// again (`league_redo` times the League clock spent so far, plus the whiteout cost) instead of
+    /// resetting. 0 = reset (the old model).
+    pub league_redo: f64,
     /// Poison outside battle costs 1 HP per this many frames of walking/text (decomp: 1 HP per 5
     /// steps, `field_control_avatar.c:710-733`; a step is 8-16 frames; guess for the blend). 0 = no
     /// field poison. The human drinks an Antidote when the HP reaches `poison_floor`.
@@ -608,6 +618,9 @@ impl Default for Params {
             manip: Default::default(),
             torrent_until: String::new(),
             no_salvage_until: String::new(),
+            salvage_at: Default::default(),
+            salvage_default: -1.0,
+            league_redo: 0.0,
             poison_frames_per_hp: 0.0,
             poison_floor: 3,
             torrent_hits: 2.0,
