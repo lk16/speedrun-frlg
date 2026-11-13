@@ -282,3 +282,17 @@ mandatory, which is why the model keeps hit probabilities of the *presses*, not 
     python3 human-run/tools/analyze_sweep.py out.tsv
     python3 human-run/tools/wild_seed_scan.py
     cc -O2 human-run/tools/starter_scan.c -o starter_scan && ./starter_scan   # ~2 min
+
+## 6. Where the simulator uses this (human-run branch)
+
+`crates/frlg-human/src/manip.rs`, plan knob `"starter_model": "manip"` (default `"random"` keeps the old
+level-5-total gate). Parameters under `"manip"`: allowed `natures`, IV minima (`min_spa`, `min_spe`,
+`min_hp`, `min_def`, `min_atk`, `min_spd`), `dials` (1 = ball idle `j` only, 2 = naming idle `N` + `j`, section
+4.2), per-press `sigma`/`mu` frames or a direct `p_hit`, `p_accept`, off-timer seconds (`s_boot_title`,
+`s_reset`) and on-timer extras, and the quiet wild seed (`quiet_max_hits`, `quiet_window`, `quiet_wait_cap`).
+The density of the tier is `rho = P(nature) * prod (32 - min_iv)/32` (reproduces the table in 3.2); the
+on-timer idle is Rayleigh (2 dials) or exponential (1 dial) with the means of 4.2. A press that misses gives
+an independent random starter (kept only if it happens to meet the tier) and, for the title press, no quiet
+seed; he finds out at the stats screen and pays `s_reset`. `frlg-human starter-phase <plan>` (and `report`)
+prints attempts and wall seconds to a good starter. Fitted values and the EHT effect:
+`human-run/plans/374-manip-starter.md`.
