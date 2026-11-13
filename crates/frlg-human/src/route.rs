@@ -1295,6 +1295,17 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
             },
         );
     }
+    for x in p.extra_fights.iter().rev() {
+        let at = b
+            .segs
+            .iter()
+            .position(|s| s.name == x.after)
+            .unwrap_or_else(|| panic!("extra fight anchor {} matches no segment", x.after));
+        let scripts: Vec<&str> = x.scripts.iter().map(|s| s.as_str()).collect();
+        b.forced(&x.name, &scripts, &[]);
+        let seg = b.segs.pop().expect("forced pushes a segment");
+        b.segs.insert(at + 1, seg);
+    }
     for t in p.tms.iter().rev() {
         dex.move_id(&t.mv);
         let at = b

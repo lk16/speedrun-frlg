@@ -670,6 +670,12 @@ pub struct Tactics {
     /// maximum HP, one is sent out to take the hit while the fighter uses its next X item
     /// from the back (the universal speedrun sacrifice; each costs a faint + send-out).
     pub sacs: u32,
+    /// Torrent tactic (the WR runner keeps the starter at <= 1/3 HP): Withdraw when the foe's max
+    /// roll would KO and one Defense stage saves the carry, and a stall turn (Tackle) while above
+    /// 1/3 HP when one hit is survivable and lands the carry in the boost.
+    pub torrent: bool,
+    /// With `torrent`: allow the stall turns (Withdraw is always allowed).
+    pub torrent_stall: bool,
 }
 
 impl Default for Tactics {
@@ -680,6 +686,8 @@ impl Default for Tactics {
             heal: 50,
             full_restore: false,
             sacs: 0,
+            torrent: false,
+            torrent_stall: true,
         }
     }
 }
@@ -764,6 +772,91 @@ fn player_score(dex: &Dex, att: &Mon, def: &Mon, mv: usize, side: &Side) -> f64 
         ((m.acc * n / d) as f64 / 100.0).min(1.0)
     };
     base * acc
+}
+
+/// Torrent tactic. `stall = false`: Withdraw when the foe's max-roll hit would KO, the carry moves
+/// first and one Defense stage leaves it alive (Rock Tomb 8-10 -> 5-7 in the WR's Brock fight,
+/// `STRATEGY.md` 4). `stall = true`: while above 1/3 HP, no kill on the table and one max-roll hit
+/// survivable, spend the turn on the best non-Water attack (Tackle) so the foe's hit puts the carry
+/// inside the Torrent boost for the Water move after it.
+fn torrent_action(
+    dex: &Dex,
+    me: &Mon,
+    e: &Mon,
+    my_side: &Side,
+    danger: i32,
+    sure_kill: bool,
+    stall: bool,
+) -> Option<Action> {
+    if me.ability != Ability::Torrent || sure_kill {
+        return None;
+    }
+    let usable = |mv: usize| {
+        me.has_pp(mv) && me.disabled.is_none_or(|(d, _)| d != mv) && dex.moves[mv].mtype != 11
+    };
+    if !stall {
+        if danger < me.hp || me.stages[1] >= 6 || speed(me) <= speed(e) {
+            return None;
+        }
+        let mut m2 = me.clone();
+        m2.stages[1] += 1;
+        let d2 = e
+            .moves
+            .iter()
+            .map(|&x| calc_damage(dex, e, &m2, x, 0, false, my_side, None))
+            .max()
+            .unwrap_or(0);
+        if d2 >= me.hp {
+            return None;
+        }
+        return me
+            .moves
+            .iter()
+            .copied()
+            .find(|&mv| {
+                me.has_pp(mv)
+                    && me.disabled.is_none_or(|(d, _)| d != mv)
+                    && effect_from(&dex.moves[mv].effect) == Effect::StatChange(1, 1, true)
+            })
+            .map(Action::Move);
+    }
+    let on = me.hp * 3 <= me.max_hp;
+    let after_min = me.hp - danger * 85 / 100;
+    if on || danger == 0 || danger >= me.hp || after_min * 3 > me.max_hp {
+        return None;
+    }
+    let mut best: Option<(usize, f64)> = None;
+    for &mv in &me.moves {
+        if !usable(mv) {
+            continue;
+        }
+        let s = player_score(dex, me, e, mv, &Side::default());
+        if s > 0.0 && best.is_none_or(|(_, bs)| s > bs) {
+            best = Some((mv, s));
+        }
+    }
+    best.map(|(mv, _)| Action::Move(mv))
+}
+
+/// The best hit any of `foes` can land on `me` (max roll, no crit), counting one Withdraw-type
+/// Defense stage when the carry knows such a move (Rock Tomb 8-10 -> 5-7 on the WR's Brock fight).
+pub fn entry_floor(dex: &Dex, me: &Mon, foes: &[Mon]) -> i32 {
+    let mut m = me.clone();
+    if me.moves.iter().any(|&mv| {
+        effect_from(&dex.moves[mv].effect) == Effect::StatChange(1, 1, true)
+            && dex.moves[mv].mtype != 11
+    }) {
+        m.stages[1] = (m.stages[1] + 1).min(6);
+    }
+    let side = Side::default();
+    foes.iter()
+        .flat_map(|f| {
+            f.moves
+                .iter()
+                .map(|&x| calc_damage(dex, f, &m, x, 0, false, &side, None))
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 /// The AI's damage estimate for one move: real calc, no crit, its own rolled variance
@@ -1859,6 +1952,7 @@ pub fn fight(
     let ex = Exec { dex, wild };
     let mut setup_idx = 0usize;
     let mut sacs_left = tac.sacs;
+    let mut stalls = 0u32;
     for foe in foes {
         let mut e = foe.clone();
         let mut guard = 0;
@@ -1893,6 +1987,12 @@ pub fn fight(
             });
             // Healing is only worth a turn if it actually leaves the KO range.
             let in_danger = me.hp <= danger && me.max_hp > danger && !sure_kill;
+            let t_withdraw = (tac.torrent && !forced)
+                .then(|| torrent_action(dex, me, &e, &my_side, danger, sure_kill, false))
+                .flatten();
+            let t_stall = (tac.torrent && tac.torrent_stall && !forced && stalls < 2)
+                .then(|| torrent_action(dex, me, &e, &my_side, danger, sure_kill, true))
+                .flatten();
             let my_action = if forced {
                 Action::Move(me.charging.unwrap_or(me.moves[0]))
             } else if danger >= me.hp && sacs_left > 0 && (speed(&e) > speed(me) || !sure_kill) {
@@ -1906,6 +2006,8 @@ pub fn fight(
                 } else {
                     Action::Sac(None)
                 }
+            } else if let Some(a) = t_withdraw {
+                a
             } else if tac.full_restore
                 && (matches!(me.status, Status1::Sleep(_) | Status1::Freeze)
                     || (my_frac < 0.6 && (me.status == Status1::Paralysis || me.confusion > 1))
@@ -1925,6 +2027,9 @@ pub fn fight(
                 let x = tac.x_items[setup_idx];
                 setup_idx += 1;
                 Action::XItem(x)
+            } else if let Some(a) = t_stall {
+                stalls += 1;
+                a
             } else {
                 // Full-knowledge pick: kill if a min-roll kill exists, else best expected.
                 // PP economy (engine-audit 2026-11-13): among kills, and among near-best
@@ -2308,6 +2413,8 @@ mod tests {
                 heal: 50,
                 full_restore: false,
                 sacs: 0,
+                torrent: false,
+                torrent_stall: true,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);

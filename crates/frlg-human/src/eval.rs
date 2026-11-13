@@ -11,6 +11,18 @@ use rayon::prelude::*;
 pub const WR_SECONDS: f64 = 12325.0;
 pub const LADDER_MINUTES: [u32; 9] = [0, 1, 2, 5, 10, 20, 40, 80, 160];
 
+/// Index of the segment with this name (`None` for an empty name; a name matching nothing is a plan error).
+fn seg_index(segs: &[Seg], name: &str) -> Option<usize> {
+    if name.is_empty() {
+        return None;
+    }
+    Some(
+        segs.iter()
+            .position(|s| s.name == name)
+            .unwrap_or_else(|| panic!("segment {name} matches nothing")),
+    )
+}
+
 pub fn rung_name(i: usize) -> String {
     if LADDER_MINUTES[i] == 0 {
         "WR".into()
@@ -82,11 +94,13 @@ impl Plan {
             .map(|(k, t)| {
                 (
                     k.clone(),
-                    (
-                        t.x.iter().map(|s| x_from(s)).collect(),
-                        t.heal_below,
-                        t.sacs,
-                    ),
+                    crate::sim::TacCfg {
+                        x: t.x.iter().map(|s| x_from(s)).collect(),
+                        heal_below: t.heal_below,
+                        sacs: t.sacs,
+                        torrent: t.torrent,
+                        entry: t.entry,
+                    },
                 )
             })
             .collect();
@@ -118,6 +132,9 @@ impl Plan {
                         .unwrap_or(&self.params.reset_aggr)
                 })
                 .collect(),
+            power_early_end: seg_index(&self.segs, &self.params.power_early_until),
+            torrent_end: seg_index(&self.segs, &self.params.torrent_until),
+            no_salvage_end: seg_index(&self.segs, &self.params.no_salvage_until),
             starter_line: line,
             evo_at,
             stab_from: if self.params.starter == "bulbasaur" {

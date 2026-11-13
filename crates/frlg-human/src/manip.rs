@@ -77,6 +77,11 @@ pub struct ManipParams {
     /// P(a title frame has a quiet seed) for `quiet_max_hits`, from the all-seeds scan (doc 3.4).
     /// Empty = look up the doc table.
     pub quiet_density: f64,
+    /// The quiet table also picks the species: encounters the human wants (a new species he would
+    /// throw a ball at: the forest bug, the Route 1 kills for exp are `quiet_max_hits`) still happen
+    /// inside the quiet window; only the unwanted ones are suppressed (`STRATEGY.md` 2: "a perfect
+    /// two encounter forest").
+    pub quiet_keeps_wanted: bool,
 }
 
 impl Default for ManipParams {
@@ -103,6 +108,7 @@ impl Default for ManipParams {
             quiet_window: 60,
             quiet_wait_cap: 648,
             quiet_density: -1.0,
+            quiet_keeps_wanted: false,
         }
     }
 }

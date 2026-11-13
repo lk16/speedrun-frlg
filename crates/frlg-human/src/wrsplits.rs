@@ -83,7 +83,13 @@ pub fn split_indices(plan: &Plan) -> Vec<Option<usize>> {
         .collect()
 }
 
-type Row = (Vec<u64>, Vec<u32>, Vec<u32>, bool, Vec<(String, u32, bool)>);
+type Row = (
+    Vec<u64>,
+    Vec<u32>,
+    Vec<u32>,
+    bool,
+    Vec<(String, u32, bool, f64)>,
+);
 
 /// Real fight lengths read off the WR video (`human-run/video-analysis/data/calib/v1..v4`):
 /// (segment name, player actions ("turns"), duration in seconds from intro to the defeated box).
@@ -106,6 +112,13 @@ pub const WR_FIGHTS: &[(&str, f64, f64)] = &[
     ("lance-2", 7.5, 110.0),
     ("champion-2", 11.5, 196.0),
 ];
+
+fn is_league(n: &str) -> bool {
+    matches!(
+        n.trim_end_matches("-2"),
+        "lorelei" | "bruno" | "agatha" | "lance" | "champion"
+    )
+}
 
 pub fn print_table(plan: &Plan, ctx: &Ctx, seed: u64, r: u64, all: bool) {
     let n = plan.segs.len();
@@ -243,8 +256,9 @@ pub fn print_table(plan: &Plan, ctx: &Ctx, seed: u64, r: u64, all: bool) {
         );
     }
     println!("\nfight length: model player actions (win rate) vs the WR video's:");
+    let mut fit = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
     for (name, wt, ws) in WR_FIGHTS {
-        let v: Vec<&(String, u32, bool)> = rows
+        let v: Vec<&(String, u32, bool, f64)> = rows
             .iter()
             .flat_map(|r| r.4.iter())
             .filter(|f| f.0 == *name)
@@ -269,16 +283,61 @@ pub fn print_table(plan: &Plan, ctx: &Ctx, seed: u64, r: u64, all: bool) {
                 (!d.is_empty()).then(|| d.iter().sum::<f64>() / d.len() as f64)
             })
             .unwrap_or(0.0);
+        let core = {
+            let c: Vec<f64> = v.iter().filter(|f| f.2).map(|f| f.3 / FPS).collect();
+            c.iter().sum::<f64>() / c.len().max(1) as f64
+        };
+        if turns > 0.0 {
+            fit.0 += (turns / wt).ln().abs();
+            fit.1 += (core / ws).ln().abs();
+            fit.2 += 1.0;
+            if !is_league(name) {
+                fit.3 += (turns / wt).ln().abs();
+            }
+        }
         println!(
-            "  {:<16} model {:>5.1} actions {:>4.0} s (won {:>4.0}%, n={:>5.0}) | WR {:>4.1} actions {:>4.0} s",
+            "  {:<16} model {:>5.1} actions core {:>4.0} s (+outro/level-ups {:>4.0} s) (won {:>4.0}%, n={:>5.0}) | WR {:>4.1} actions {:>4.0} s",
             name,
             turns,
+            core,
             secs,
             won * 100.0,
             n,
             wt,
             ws
         );
+    }
+    if fit.2 > 0.0 {
+        println!(
+            "fit: mean |log(model/WR)| over {} fights: actions {:.3}, core seconds {:.3}; actions without the League fights {:.3}",
+            fit.2, fit.0 / fit.2, fit.1 / fit.2, fit.3 / 7.0
+        );
+    }
+    // Survival: of the attempts that passed the starter gate, how many reach each early split.
+    let pass_i = plan
+        .segs
+        .iter()
+        .position(|sg| sg.name == "rival-lab")
+        .unwrap_or(0);
+    let passed = rows
+        .iter()
+        .filter(|(sc, ..)| sc[pass_i] != u64::MAX)
+        .count() as f64;
+    if passed > 0.0 {
+        let mut prev = 1.0;
+        print!("reach (of starter passers):");
+        for (k, ix) in split_indices(plan).into_iter().enumerate().take(14) {
+            let Some(i) = ix else { continue };
+            let r = rows.iter().filter(|(sc, ..)| sc[i] != u64::MAX).count() as f64 / passed;
+            print!(
+                " {} {:.1}% (step {:.1}%)",
+                WR_SPLITS[k].0,
+                r * 100.0,
+                r / prev * 100.0
+            );
+            prev = r.max(1e-9);
+        }
+        println!();
     }
     let mut runs: Vec<f64> = rows
         .iter()

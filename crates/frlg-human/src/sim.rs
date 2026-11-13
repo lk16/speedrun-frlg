@@ -37,6 +37,28 @@ const P_EVENT: f64 = 0.10;
 
 pub const FPS: f64 = 59.7275;
 
+/// A fight's tactics, resolved from `Params::fight_tactics`.
+#[derive(Clone, Debug)]
+pub struct TacCfg {
+    pub x: Vec<XItem>,
+    pub heal_below: f64,
+    pub sacs: u32,
+    pub torrent: bool,
+    pub entry: bool,
+}
+
+impl Default for TacCfg {
+    fn default() -> Self {
+        TacCfg {
+            x: vec![],
+            heal_below: -1.0,
+            sacs: 0,
+            torrent: false,
+            entry: false,
+        }
+    }
+}
+
 pub struct Ctx<'a> {
     pub dex: &'a Dex,
     pub p: &'a Params,
@@ -57,7 +79,12 @@ pub struct Ctx<'a> {
     pub keep_ids: Vec<usize>,
     /// Per-segment tactics (battle_sim), resolved from `Params::fight_tactics`:
     /// (X items, heal threshold, sacrificial teammates).
-    pub tactics: std::collections::HashMap<String, (Vec<XItem>, f64, u32)>,
+    pub tactics: std::collections::HashMap<String, TacCfg>,
+    /// Last segment of the Torrent phase / of the no-salvage phase (`Params::torrent_until`,
+    /// `Params::no_salvage_until`).
+    pub torrent_end: Option<usize>,
+    pub power_early_end: Option<usize>,
+    pub no_salvage_end: Option<usize>,
     /// Index of Oak's check, and (from the no-reset pilot) the fill time as `base + slope * missing
     /// species`, the mean species still to be caught before Oak after segment i, and the mean remaining
     /// frames after segment i without the fill (for `dex_resets`).
@@ -96,9 +123,10 @@ pub struct Probe {
     pub phase: Option<crate::manip::PhaseSample>,
     /// The carry's level after each segment (filled when a probe is passed).
     pub level_at: Vec<u32>,
-    /// Trainer fights of the attempt: (segment name, player actions, whether it was won). Only
-    /// recorded when a probe is passed.
-    pub fights: Vec<(String, u32, bool)>,
+    /// Trainer fights of the attempt: (segment name, player actions, whether it was won, frames from
+    /// the intro to the last faint without outro and level-up text). Only recorded when a probe is
+    /// passed.
+    pub fights: Vec<(String, u32, bool, f64)>,
     /// National numbers still missing when the fill gave up (an abandoned attempt).
     pub missing: Vec<u32>,
     /// National numbers missing when the fill (or Oak's check) starts.
@@ -178,7 +206,10 @@ struct State {
     log_fights: bool,
     /// Rare Candies eaten on the spot so far (`candy_early_n` caps it).
     candies_eaten: u32,
-    fight_log: Vec<(String, u32, bool)>,
+    fight_log: Vec<(String, u32, bool, f64)>,
+    /// Index of the segment being played, and the poison HP not yet charged (frames).
+    seg_i: usize,
+    poison_acc: f64,
 }
 
 impl Ctx<'_> {
@@ -893,9 +924,21 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
         if repel && level < st.carry {
             continue;
         }
+        let want_catch = stop_when_done
+            || (ctx.p.catch_on_pass
+                && ctx.dex.species[slot.species].catch_rate >= ctx.p.pass_min_catch);
         if quiet_hit == Some(true) {
-            // A quiet table seed: this roll is a miss (`manip.rs`, doc 3.4).
-            continue;
+            // A quiet table seed: this roll is a miss (`manip.rs`, doc 3.4). With `quiet_keeps_wanted`
+            // the table also picks the species, so an encounter the human wants (a new species he
+            // would throw a ball at) still happens; only the unwanted ones are suppressed.
+            let sp = &ctx.dex.species[slot.species];
+            let wanted = want_catch
+                && sp.dex != 0
+                && !st.caught.has(sp.dex)
+                && !skip.contains(&slot.species);
+            if !(ctx.p.manip.quiet_keeps_wanted && wanted) {
+                continue;
+            }
         }
         encounter(
             ctx,
@@ -1064,15 +1107,15 @@ struct BattleArgs<'a> {
 fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool {
     use crate::battle::{fight, heal_amount, make_mon, Status1, Tactics};
     let dex = ctx.dex;
+    let t0 = st.clock;
     if a.trainer {
         bump(st, ctx.trainer_intro(a.intro));
         bump(st, jitter(ctx, rng, 8) as f64);
     }
-    let (x_plan, heal_override, sacs) = ctx
-        .tactics
-        .get(a.name)
-        .map(|(x, h, s)| (x.clone(), *h, *s))
-        .unwrap_or((vec![], -1.0, 0));
+    let cfg = ctx.tactics.get(a.name).cloned().unwrap_or_default();
+    let (x_plan, heal_override, sacs) = (cfg.x.clone(), cfg.heal_below, cfg.sacs);
+    let in_torrent = ctx.torrent_end.is_some_and(|e| st.seg_i <= e);
+    let torrent = cfg.torrent || in_torrent;
     // Sacrifices burn real party members; the budget spans a Centre-less chain, with
     // Revives (bag trip each) bringing fodder back between fights.
     while st.fodder < sacs && st.revives > 0 {
@@ -1102,6 +1145,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     }
     let heal_below = if heal_override >= 0.0 {
         heal_override
+    } else if in_torrent {
+        0.0
     } else {
         ctx.p.heal_below
     };
@@ -1139,14 +1184,31 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             m.pp = st.slot_pp.clone();
             m.status = st.carry_status;
             // `carry_power`: the WR carry out-damages the engine's (see the param's doc).
-            if ctx.p.carry_power != 1.0 {
-                m.stat[0] = (m.stat[0] as f64 * ctx.p.carry_power) as i32;
-                m.stat[3] = (m.stat[3] as f64 * ctx.p.carry_power) as i32;
+            let cp = if ctx.power_early_end.is_some_and(|e| st.seg_i <= e) {
+                ctx.p.carry_power_early
+            } else {
+                ctx.p.carry_power
+            };
+            if cp != 1.0 {
+                m.stat[0] = (m.stat[0] as f64 * cp) as i32;
+                m.stat[3] = (m.stat[3] as f64 * cp) as i32;
             }
             m
         };
         // Heal with items before the fight when low (each use is a bag trip).
-        if st.hp_frac < ctx.p.preheal_below && !mewtwo_now {
+        if (cfg.entry || in_torrent) && !mewtwo_now {
+            // The Torrent window: at least the foes' best hit (after one Withdraw) plus one HP, at
+            // most 1/3 of the max. Below the window a potion heal; above it nothing can be done.
+            let hits = if cfg.entry { 1.0 } else { ctx.p.torrent_hits };
+            let lo = (crate::battle::entry_floor(dex, &me, a.foes) as f64 * hits).ceil() as i32 + 1;
+            let cur = (me.max_hp as f64 * st.hp_frac).round() as i32;
+            if cur < lo {
+                let per = heal_amount(me.level, st.league_items);
+                let uses = (lo - cur + per - 1) / per;
+                bump(st, uses as f64 * ctx.turn());
+                st.hp_frac = ((cur + uses * per) as f64 / me.max_hp as f64).min(1.0);
+            }
+        } else if st.hp_frac < ctx.p.preheal_below && !mewtwo_now && !torrent {
             let uses = (((0.85 - st.hp_frac) * me.max_hp as f64)
                 / heal_amount(me.level, st.league_items) as f64)
                 .ceil();
@@ -1176,12 +1238,15 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             heal: heal_amount(me.level, st.league_items),
             full_restore: st.league_items,
             sacs,
+            torrent: torrent && !mewtwo_now,
+            torrent_stall: ctx.p.torrent_stall,
         };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
         if a.trainer && st.log_fights {
-            st.fight_log.push((a.name.to_string(), out.turns, out.won));
+            st.fight_log
+                .push((a.name.to_string(), out.turns, out.won, 0.0));
         }
         if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
             eprintln!(
@@ -1203,12 +1268,19 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             bump(st, react(ctx, rng) as f64);
         }
         bump(st, jitter(ctx, rng, out.turns * 2 + 3) as f64);
+        if let Some(l) = st.fight_log.last_mut() {
+            if l.0 == a.name && l.3 == 0.0 {
+                l.3 = (st.clock - t0) as f64;
+            }
+        }
         if out.won {
             st.hp_frac = out.hp_frac;
             if !mewtwo_now {
                 st.carry_status = out.end_status;
                 st.slot_pp = me.pp.clone();
-                cure_status(ctx, st);
+                if !in_torrent {
+                    cure_status(ctx, st);
+                }
             }
             for &(sp, lvl) in &out.kos {
                 let yld = a.yield_.unwrap_or(dex.species[sp].exp_yield);
@@ -1236,6 +1308,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             return true;
         }
         st.whiteouts += 1;
+        // The runner does not salvage an early death: he resets.
+        if ctx.no_salvage_end.is_some_and(|e| st.seg_i <= e) {
+            st.abandoned = true;
+            return false;
+        }
         bump(st, ctx.k("whiteout", WHITEOUT as f64));
         st.hp_frac = 1.0;
         st.carry_status = Status1::None;
@@ -1253,6 +1330,40 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             st.abandoned = true;
             return false;
         }
+    }
+}
+
+/// Field poison (`field_control_avatar.c:710-733`, `field_poison.c:92-119`: 1 HP per 5 steps, a
+/// poisoned mon at 0 faints). The human drinks an Antidote (frames, 100 money) when the HP reaches
+/// `poison_floor`; the cure is also a bag trip (400 frames, as `cure_status`).
+fn field_poison(ctx: &Ctx, st: &mut State, frames: f64) {
+    use crate::battle::{make_mon, Status1};
+    st.poison_acc += frames;
+    let lose = (st.poison_acc / ctx.p.poison_frames_per_hp).floor();
+    if lose < 1.0 {
+        return;
+    }
+    st.poison_acc -= lose * ctx.p.poison_frames_per_hp;
+    let me = make_mon(
+        ctx.dex,
+        carry_species(ctx, st.carry),
+        st.carry,
+        st.ivs,
+        st.evs,
+        st.nature,
+        st.badges,
+    );
+    let hp = (me.max_hp as f64 * st.hp_frac).round() as i32 - lose as i32;
+    if hp <= ctx.p.poison_floor {
+        st.hp_frac = ctx.p.poison_floor.max(1) as f64 / me.max_hp as f64;
+        bump(st, 400.0 * ctx.p.text_factor);
+        if ctx.p.money_model && st.money >= 100 {
+            st.money -= 100;
+        }
+        st.carry_status = Status1::None;
+        st.poison_acc = 0.0;
+    } else {
+        st.hp_frac = hp as f64 / me.max_hp as f64;
     }
 }
 
@@ -1621,6 +1732,8 @@ pub fn attempt(
         log_fights: probe.is_some(),
         candies_eaten: 0,
         fight_log: vec![],
+        seg_i: 0,
+        poison_acc: 0.0,
         whiteouts: 0,
         game: GameRng::from_u32(0),
         slots: vec![],
@@ -1663,9 +1776,15 @@ pub fn attempt(
         st.game = GameRng::from_u32(rng.next_u64() as u32);
         let before = st.clock;
         let wo_before = st.whiteouts;
+        st.seg_i = i;
+        // The Torrent phase walks past the Pokémon Centers it would have stopped at.
+        let skip_heal =
+            seg.name.starts_with("center-heal@") && ctx.torrent_end.is_some_and(|e| i <= e);
         match &seg.kind {
             Kind::Text { frames } => {
-                bump(&mut st, *frames as f64 * ctx.p.text_factor);
+                if !skip_heal {
+                    bump(&mut st, *frames as f64 * ctx.p.text_factor);
+                }
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 bump(&mut st, mistakes(ctx, &mut rng, seg.inputs as f64 / 100.0));
             }
@@ -2176,8 +2295,19 @@ pub fn attempt(
             "lavender-heal" => st.max_tier = st.max_tier.max(1),
             _ => {}
         }
+        // Poison outside battle: 1 HP per 5 steps while walking or reading text.
+        if ctx.p.poison_frames_per_hp > 0.0
+            && matches!(
+                seg.kind,
+                Kind::Text { .. } | Kind::Walk { .. } | Kind::Wander { .. }
+            )
+            && matches!(st.carry_status, Status1::Poison | Status1::Toxic(_))
+        {
+            let d = (st.clock - before) as f64;
+            field_poison(ctx, &mut st, d);
+        }
         // league-entry is the Indigo Plateau Centre before the rematch chain.
-        if seg.name.contains("heal") || seg.name == "league-entry" {
+        if !skip_heal && (seg.name.contains("heal") || seg.name == "league-entry") {
             // The party fillers (gift mons, caught fodder) stand revived; five slots
             // beside the carry once the party has filled out (guess: by Misty).
             st.fodder = if st.carry >= 20 { 5 } else { 2 };

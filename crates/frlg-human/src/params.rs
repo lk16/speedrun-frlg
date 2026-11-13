@@ -169,6 +169,17 @@ pub struct XBuy {
     pub frames: u32,
 }
 
+/// Optional trainers the route fights beyond the cone-forced ones (the WR run buys experience: Josh
+/// in Mt. Moon, the Route 3 bug catchers; `STRATEGY.md` 4): a fight segment inserted after `after`.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct ExtraFight {
+    pub name: String,
+    pub after: String,
+    /// Event-script labels of the trainers (`decompiled/data/maps/*/scripts.inc`).
+    pub scripts: Vec<String>,
+}
+
 /// Per-fight battle tactics, keyed by segment name in `Params::fight_tactics`.
 #[derive(Deserialize, Clone, Debug)]
 #[serde(default)]
@@ -180,6 +191,12 @@ pub struct FightTactic {
     pub heal_below: f64,
     /// Expendable teammates sent out to eat a hit while the fighter sets up.
     pub sacs: u32,
+    /// Torrent tactic in this fight: Withdraw when its Defense stage saves a would-be KO, stall
+    /// turns while above 1/3 HP (`battle.rs` `torrent_action`).
+    pub torrent: bool,
+    /// Before this fight, a potion heal only up to the Torrent window: heal when the HP is below the
+    /// foes' best hit (with Withdraw) plus one, otherwise leave the HP alone (never heal up to full).
+    pub entry: bool,
 }
 
 impl Default for FightTactic {
@@ -188,6 +205,8 @@ impl Default for FightTactic {
             x: vec![],
             heal_below: -1.0,
             sacs: 0,
+            torrent: false,
+            entry: false,
         }
     }
 }
@@ -428,6 +447,31 @@ pub struct Params {
     /// presses with a table, `manip.rs`; parameters in `manip`).
     pub starter_model: String,
     pub manip: crate::manip::ManipParams,
+    /// Torrent phase, up to and including this segment (empty = off): Pokémon Center stops
+    /// (`extra_heals`) are skipped, no pre-fight potions, poison is not cured, the fights use the
+    /// Torrent tactic and heal only under a lethal threat (the WR runner skips the PC potion, the
+    /// Center and the Mom heal and keeps the starter at <= 1/3 HP through ~Lv17,
+    /// `STRATEGY.md` 4).
+    pub torrent_until: String,
+    /// A whiteout in a fight up to and including this segment ends the attempt (the runner does not
+    /// salvage early deaths: `STRATEGY.md` 7). Empty = the old retry-from-the-Center model.
+    pub no_salvage_until: String,
+    /// Poison outside battle costs 1 HP per this many frames of walking/text (decomp: 1 HP per 5
+    /// steps, `field_control_avatar.c:710-733`; a step is 8-16 frames; guess for the blend). 0 = no
+    /// field poison. The human drinks an Antidote when the HP reaches `poison_floor`.
+    pub poison_frames_per_hp: f64,
+    pub poison_floor: i32,
+    /// In the Torrent phase, fights without `entry` start only with HP for this many max-roll hits of
+    /// the foes' best move (a potion otherwise); fights with `entry` (the YOLO fights) with one.
+    pub torrent_hits: f64,
+    /// Stall turns in the Torrent tactic (Withdraw is always allowed).
+    pub torrent_stall: bool,
+    /// `carry_power` up to and including the segment `power_early_until`: the early fights (Brock,
+    /// Misty, ...) use the engine's own Torrent and the real manip IVs, so the fitted stand-in is not
+    /// needed there (empty = `carry_power` throughout).
+    pub carry_power_early: f64,
+    pub power_early_until: String,
+    pub extra_fights: Vec<ExtraFight>,
 }
 
 impl Default for Params {
@@ -520,6 +564,15 @@ impl Default for Params {
             audited_forced: false,
             starter_model: "random".into(),
             manip: Default::default(),
+            torrent_until: String::new(),
+            no_salvage_until: String::new(),
+            poison_frames_per_hp: 0.0,
+            poison_floor: 3,
+            torrent_hits: 2.0,
+            torrent_stall: true,
+            carry_power_early: 1.0,
+            power_early_until: String::new(),
+            extra_fights: vec![],
         }
     }
 }
