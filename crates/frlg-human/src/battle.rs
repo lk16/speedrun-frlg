@@ -364,6 +364,8 @@ pub struct Mon {
     pub rampage: u8,
     /// The move a Thrash/Outrage lock repeats (`gLockedMoves`, `battle_script_commands.c:2727`).
     pub lock_move: Option<usize>,
+    /// Holds a Sitrus Berry (`HOLD_EFFECT_RESTORE_HP`, 30 HP at <= 1/2, `battle_util.c:2562`).
+    pub sitrus: bool,
     /// Player badge boosts ×100: Atk, Def, Spe, SpA, SpD (enemy: all 100).
     pub badge: [i32; 5],
     /// Physical damage taken this turn (Counter).
@@ -453,6 +455,7 @@ pub fn make_mon(
         protect_count: 0,
         rampage: 0,
         lock_move: None,
+        sitrus: false,
         badge: [bb(0), bb(4), bb(2), bb(6), bb(6)],
         counter_dmg: 0,
         yawned: false,
@@ -463,7 +466,8 @@ pub fn make_mon(
 /// nature (`decompiled/src/battle_main.c`, `CreateNPCTrainerParty`: a fixed personality
 /// per party — the model uses neutral, an approximation worth one stat point either way).
 pub fn enemy_mon(dex: &Dex, m: &PartyMon) -> Mon {
-    let mut e = make_mon(dex, m.species, m.level, [m.iv; 6], [0; 6], 0, 0);
+    let mut e = make_mon(dex, m.species, m.level, [m.iv; 6], [0; 6], m.nature, 0);
+    e.sitrus = m.sitrus;
     e.moves = m.moves.clone();
     e.set_pp(dex);
     e
@@ -2034,6 +2038,10 @@ fn end_of_turn(
     if m.hp <= 0 {
         return;
     }
+    if m.sitrus && m.hp > 0 && m.hp <= m.max_hp / 2 {
+        m.sitrus = false;
+        m.hp = (m.hp + 30).min(m.max_hp);
+    }
     if m.rampage > 0 {
         m.rampage -= 1;
         if m.rampage == 0 {
@@ -2087,6 +2095,18 @@ fn end_of_turn(
     side.safeguard = side.safeguard.saturating_sub(1);
 }
 
+/// `ShouldUseItem` for a Full Restore: below a quarter of max HP (integer division), and
+/// the n-th item (n >= 1) only once the trainer's valid mons are down to
+/// `items - n + 1` (`if (i && validMons > (itemsNo - i) + 1) continue;`,
+/// `battle_ai_switch_items.c:580`). `valid` counts the active mon and the unsent ones.
+fn ai_wants_item(total: u32, left: u32, valid: u32, e: &Mon) -> bool {
+    if left == 0 || e.hp <= 0 || e.hp >= e.max_hp / 4 {
+        return false;
+    }
+    let used = total - left;
+    used == 0 || valid <= total - used + 1
+}
+
 /// Fights the trainer's party (or one wild mon) in order. `me` carries its state in and
 /// out (stages reset between enemy mons only for the enemy side; the player's X-item
 /// stages persist through the trainer's whole party, like the real game).
@@ -2110,7 +2130,8 @@ pub fn fight(
     out.others_alive = tac.others_alive;
     // After a Roar/Whirlwind the fighter's next turn is spent switching back in.
     let mut must_switch = false;
-    for foe in foes {
+    let ai_items_total = ai_heals;
+    for (foe_idx, foe) in foes.iter().enumerate() {
         let mut e = foe.clone();
         let mut guard = 0;
         // Entry abilities (`battle_util.c` `ABILITYEFFECT_ON_SWITCHIN`): Intimidate lowers
@@ -2276,8 +2297,13 @@ pub fn fight(
                 // recharge flag (the old code skipped it and the flag never cleared, so a
                 // Hyper Beam silenced the mon for the rest of its life).
                 Some(e.charging.or(e.lock_move).unwrap_or(e.moves[0]))
-            } else if ai_heals > 0 && e.hp * 4 < e.max_hp {
-                // `ShouldUseItem`: Full Restore under 1/4 (`battle_ai_switch_items.c`).
+            } else if ai_wants_item(
+                ai_items_total,
+                ai_heals,
+                (foes.len() - foe_idx) as u32,
+                &e,
+            ) {
+                // `ShouldUseItem`: Full Restore under 1/4 (`battle_ai_switch_items.c:562-598`).
                 None
             } else {
                 ai_choose(
@@ -2293,7 +2319,14 @@ pub fn fight(
                 )
                 .map(|i| e.moves[i])
             };
-            let enemy_heals_now = !en_forced && en_move.is_none() && ai_heals > 0;
+            let enemy_heals_now = !en_forced
+                && en_move.is_none()
+                && ai_wants_item(
+                    ai_items_total,
+                    ai_heals,
+                    (foes.len() - foe_idx) as u32,
+                    &e,
+                );
 
             // --- order (`GetWhoStrikesFirst`): priority, then speed, ties Random() & 1.
             let my_prio = match my_action {

@@ -81,6 +81,9 @@ struct RawTrainer {
     /// Battle items (`trainers.h` `.items`), e.g. Full Restores for the Elite Four.
     #[serde(default)]
     items: Vec<String>,
+    /// Nature of each party mon (`personality % 25`, `human-run/tools/add_natures.py`).
+    #[serde(default)]
+    natures: Vec<u8>,
 }
 
 #[derive(Deserialize)]
@@ -242,6 +245,11 @@ pub struct PartyMon {
     /// 0..=31 (`iv * 31 / 255`).
     pub iv: u32,
     pub moves: Vec<usize>,
+    /// 0..=24, from the fixed trainer personality (`CreateNPCTrainerParty`,
+    /// `decompiled/src/battle_main.c:1539`); 0 (Hardy, neutral) when the data has none.
+    pub nature: u8,
+    /// Holds a Sitrus Berry (restores 30 HP at half HP or less).
+    pub sitrus: bool,
 }
 
 /// A trainer fight: the real party, prize money, the detailed mons, the AI bits
@@ -487,7 +495,8 @@ impl Dex {
             let mons = t
                 .party_full
                 .iter()
-                .filter_map(|(lvl, sp, iv, mv, _held)| {
+                .enumerate()
+                .filter_map(|(slot, (lvl, sp, iv, mv, held))| {
                     let species = *dex.by_name.get(sp)?;
                     let moves: Vec<usize> = match mv {
                         Some(list) => list
@@ -502,6 +511,8 @@ impl Dex {
                         species,
                         iv: iv * 31 / 255,
                         moves,
+                        nature: t.natures.get(slot).copied().unwrap_or(0),
+                        sitrus: held.as_deref() == Some("ITEM_SITRUS_BERRY"),
                     })
                 })
                 .collect();
