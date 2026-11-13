@@ -407,6 +407,55 @@ mod tests {
     }
 
     #[test]
+    fn wr_route_style_orders_the_run_like_the_wr_splits() {
+        let dex = DEX.get_or_init(Dex::load);
+        let text = PLAN.replace(
+            "\"name\":\"t\"",
+            "\"name\":\"t\",\"route_style\":\"wr\",\"audited_forced\":true,\"calib_wr\":true,\"stones\":[\"MOON\"]",
+        );
+        let plan = Plan::load(dex, &text).unwrap();
+        let pos = |n: &str| {
+            plan.segs
+                .iter()
+                .position(|s| s.name == n)
+                .unwrap_or_else(|| panic!("segment {n} missing"))
+        };
+        // The WR split order: Brock, Misty, Bill, Bike, Rock Tunnel, Giovanni 1, Snorlax (Surge folded
+        // in), Koga, Blaine, Sevii, Sabrina, Erika, Giovanni 3, then all 60 before the League.
+        let order = [
+            "brock",
+            "misty-badge",
+            "bill-cottage",
+            "bike-redeem",
+            "rock-tunnel",
+            "scope-and-dig",
+            "surge-badge",
+            "snorlax",
+            "koga-badge",
+            "blaine-badge",
+            "blaine-badge-and-sevii-scene",
+            "sabrina-badge",
+            "erika-badge",
+            "giovanni-badge",
+            "dex-fill",
+            "indigo-heal",
+            "hall-of-fame-1",
+            "icefall-cave",
+            "hall-of-fame-2",
+        ];
+        let at: Vec<usize> = order.iter().map(|n| pos(n)).collect();
+        assert!(at.windows(2).all(|w| w[0] < w[1]), "{at:?}");
+        // No post-Hall-of-Fame dex check in this order.
+        assert!(!plan.segs.iter().any(|s| s.name == "oak-dex-check"));
+        // The pre-League fill runs the plan's `fill` list, so the attempt completes or is abandoned
+        // before the League; and a seeded evaluation is reproducible.
+        let ctx = plan.ctx();
+        let a = totals(&evaluate_blocks(&ctx, 5, 300, rung_frames(8)), 300);
+        let b = totals(&evaluate_blocks(&ctx, 5, 300, rung_frames(8)), 300);
+        assert_eq!(a.wall_frames, b.wall_frames);
+    }
+
+    #[test]
     fn plan_without_json_block_is_an_error() {
         let dex = DEX.get_or_init(Dex::load);
         assert!(Plan::load(dex, "no block here").is_err());
