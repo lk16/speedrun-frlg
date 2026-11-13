@@ -283,6 +283,22 @@ impl Target {
     }
 }
 
+thread_local! {
+    /// Measurement dial, default 0 and absent from every route: frames idled
+    /// on the player naming screen between START (cursor to OK) and the final
+    /// A. The naming screen restarts TM1 on entry and `MainState_Exit` reseeds
+    /// `gRngValue` from it (`decompiled/src/naming_screen.c:427-428,722`), so
+    /// this shifts the seed by 18752 timer ticks per frame
+    /// (`docs/tricks/starter-manip.md`). Thread-local so a parallel sweep can
+    /// give every worker its own value; used only by `examples/starter-sweep.rs`.
+    static NAMING_DELAY: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Set this thread's naming-screen idle (see `NAMING_DELAY`).
+pub fn set_naming_delay(frames: usize) {
+    NAMING_DELAY.with(|c| c.set(frames));
+}
+
 /// The task that owns both preset-name menus
 /// (`decompiled/src/oak_speech.c:1413`). Its name says "rival" but it handles
 /// the player's menu too -- `hasPlayerBeenNamed` is what distinguishes them.
@@ -385,6 +401,7 @@ fn names(version: Version, tuning: Tuning) -> Segment {
             })?;
             rec.tap(keys::A)?; // one letter, wherever the cursor starts
             rec.tap(keys::START)?; // cursor to OK
+            rec.idle(NAMING_DELAY.with(|c| c.get()))?; // measurement dial, 0 in every route
             rec.tap(keys::A)?; // OK: save the name, leave
 
             // Through the confirm box and the rival intro, to the rival's
