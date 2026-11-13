@@ -174,6 +174,10 @@ struct State {
     hp_frac: f64,
     badges: u8,
     league_items: bool,
+    /// Heal items left for the League round in progress (bought at its first fight).
+    heal_items: u32,
+    /// Mewtwo's HP fraction carried between R2 fights.
+    mewtwo_hp: f64,
     /// Record each trainer fight (see `Probe::fights`).
     log_fights: bool,
     /// Rare Candies eaten on the spot so far (`candy_early_n` caps it).
@@ -1081,6 +1085,22 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         bump(st, 450.0 * ctx.p.text_factor);
     }
     let sacs = sacs.min(st.fodder);
+    // League round start: the heal items come out of the purse (Indigo Plateau mart, 600
+    // frames of menus; guess).
+    if a.league && (a.name == "lorelei" || a.name == "lorelei-2") {
+        let want = ctx.p.league_heals.saturating_sub(st.heal_items);
+        let n = if ctx.p.money_model {
+            want.min(st.money / ctx.p.league_heal_price.max(1))
+        } else {
+            want
+        };
+        if ctx.p.money_model {
+            st.money -= n * ctx.p.league_heal_price;
+        }
+        st.heal_items += n;
+        st.mewtwo_hp = 1.0;
+        bump(st, 600.0 * ctx.p.text_factor);
+    }
     // Low on attacking PP before a trainer fight: drink an Elixir (bag trip ~500f).
     // Before a League fight any empty slot is worth topping up — the next Centre is
     // several fights away.
@@ -1171,8 +1191,22 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             bump(st, uses * ctx.turn());
             st.hp_frac = 0.85;
         }
-        me.hp = ((me.max_hp as f64 * if mewtwo_now { 1.0 } else { st.hp_frac }).round() as i32)
-            .clamp(1, me.max_hp);
+        // Between League fights: one item when the fighter is low (Mewtwo carries its damage
+        // from fight to fight like the carry does).
+        if a.league && st.heal_items > 0 {
+            let cur = if mewtwo_now { st.mewtwo_hp } else { st.hp_frac };
+            if cur < ctx.p.league_preheal {
+                st.heal_items -= 1;
+                bump(st, ctx.turn());
+                if mewtwo_now {
+                    st.mewtwo_hp = 1.0;
+                } else {
+                    st.hp_frac = 1.0;
+                }
+            }
+        }
+        let start_frac = if mewtwo_now { st.mewtwo_hp } else { st.hp_frac };
+        me.hp = ((me.max_hp as f64 * start_frac).round() as i32).clamp(1, me.max_hp);
         // X items limited by the bag.
         let mut stock = st.x_stock;
         let xs: Vec<XItem> = x_plan
@@ -1195,6 +1229,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             full_restore: st.league_items,
             sacs,
             others_alive: st.fodder,
+            heal_stock: if a.league { st.heal_items } else { u32::MAX },
+            rollouts: if a.league { ctx.p.league_rollouts } else { 0 },
         };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
@@ -1218,12 +1254,21 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         // A sacrifice costs its faint animation and the send-outs both ways. guess.
         bump(st, out.sacs_used as f64 * 900.0);
         st.fodder = st.fodder.saturating_sub(out.sacs_used);
+        if a.league {
+            st.heal_items = st
+                .heal_items
+                .saturating_sub(out.heals_used + out.full_restores_used);
+        }
         for _ in 0..out.events {
             bump(st, react(ctx, rng) as f64);
         }
         bump(st, jitter(ctx, rng, out.turns * 2 + 3) as f64);
         if out.won {
-            st.hp_frac = out.hp_frac;
+            if mewtwo_now {
+                st.mewtwo_hp = out.hp_frac;
+            } else {
+                st.hp_frac = out.hp_frac;
+            }
             if !mewtwo_now {
                 st.carry_status = out.end_status;
                 st.slot_pp = me.pp.clone();
@@ -1637,6 +1682,8 @@ pub fn attempt(
         hp_frac: 1.0,
         badges: 0,
         league_items: false,
+        heal_items: 0,
+        mewtwo_hp: 1.0,
         log_fights: probe.is_some(),
         candies_eaten: 0,
         fight_log: vec![],
@@ -2131,6 +2178,19 @@ pub fn attempt(
                         st.money -= qty * 1500;
                     }
                     st.revives += qty;
+                }
+                {
+                    // Hyper Potions for the League, after the Revives.
+                    let price = ctx.dex.item_prices.get("ITEM_HYPER_POTION").copied().unwrap_or(1200);
+                    let qty = if ctx.p.money_model {
+                        xbuy.heals.min(st.money / price)
+                    } else {
+                        xbuy.heals
+                    };
+                    if ctx.p.money_model {
+                        st.money -= qty * price;
+                    }
+                    st.heal_items += qty;
                 }
                 for (i, want, price) in [
                     (3usize, xbuy.special, 350),

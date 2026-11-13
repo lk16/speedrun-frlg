@@ -166,6 +166,9 @@ pub struct XBuy {
     /// Revives (1500 each, `items.json`): bring sacrificed teammates back between
     /// League fights.
     pub revives: u32,
+    /// Hyper Potions for the League (1200 each, `items.json`; Saffron Mart sells them,
+    /// `data/maps/SaffronCity_Mart/scripts.inc`); each is one heal use in a League fight.
+    pub heals: u32,
     pub frames: u32,
 }
 
@@ -357,6 +360,20 @@ pub struct Params {
     /// fights", `human-run/video-analysis/STRATEGY.md`; the exact engine's Blizzard (5 PP) is empty
     /// by Lance otherwise).
     pub league_max_reserve: u32,
+    /// Heal items the bag holds at the start of each League round: `xbuys[].heals` (Hyper Potions)
+    /// count first, the Indigo mart tops up to this many at `league_heal_price` while the money
+    /// lasts (the WR run: "two heals + a Max Elixir between E4 fights; Full Restores sparingly",
+    /// `STRATEGY.md`; the bag contents themselves are a guess).
+    pub league_heals: u32,
+    /// Price of a heal topped up at the Indigo Plateau mart at a round's start: Max Potion 2500
+    /// (`IndigoPlateau_PokemonCenter_1F_Items`, `items.json`; Full Restore is 3000).
+    pub league_heal_price: u32,
+    /// Between League fights the human spends one heal item when the fighter is below this
+    /// HP fraction (bag trip, `ctx.turn()` frames).
+    pub league_preheal: f64,
+    /// Lookahead rollouts per candidate action in contested League fights (0 = the greedy
+    /// human); see `battle::fight`.
+    pub league_rollouts: u32,
     /// Before a fight, heal with items when the carry is below this HP fraction (up to 0.85). The WR
     /// run walks into most fights at 1/3 HP or less to keep Torrent active
     /// (`human-run/video-analysis/data/calib/v2-mid-fights.md`: Koga 33/120, Giovanni 35/143, ...).
@@ -496,6 +513,10 @@ impl Default for Params {
             carry_power: 1.0,
             mewtwo_power: 1.0,
             league_max_reserve: 2,
+            league_heals: 6,
+            league_heal_price: 2500,
+            league_preheal: 0.5,
+            league_rollouts: 0,
             keep_moves: vec![],
             cure_status: true,
             early_dig: false,
