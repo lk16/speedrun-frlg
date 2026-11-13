@@ -918,6 +918,13 @@ fn battle(
     }
 }
 
+/// A TM/HM or tutor move the species can be taught (`tmhm_learnsets.h`,
+/// `tutor_learnsets.h`).
+fn can_learn(ctx: &Ctx, species: usize, mv: usize) -> bool {
+    let sp = &ctx.dex.species[species];
+    sp.tmhm.contains(&mv) || sp.tutor.contains(&mv)
+}
+
 /// The carry's species at `level` (`starter_line`, evolving at `evo_at`).
 fn carry_species(ctx: &Ctx, level: u32) -> usize {
     let stage = (level >= ctx.evo_at[0]) as usize + (level >= ctx.evo_at[1]) as usize;
@@ -966,8 +973,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     // Low on attacking PP before a trainer fight: drink an Elixir (bag trip ~500f).
     // Before a League fight any empty slot is worth topping up — the next Centre is
     // several fights away.
-    let pp_low =
-        st.slot_pp.iter().sum::<i32>() < 12 || (a.league && st.slot_pp.iter().any(|&p| p == 0));
+    let pp_low = st.slot_pp.iter().sum::<i32>() < 12 || (a.league && st.slot_pp.contains(&0));
     if a.trainer && pp_low {
         if st.max_elixirs > 0 {
             st.max_elixirs -= 1;
@@ -1770,24 +1776,45 @@ pub fn attempt(
             }
             Kind::Teach { teach } => {
                 let mv = ctx.dex.move_id(&teach.mv);
-                if ctx.p.money_model && teach.cost > 0 {
-                    if st.money < teach.cost {
-                        continue;
+                let mewtwo_sp = ctx.dex.id("SPECIES_MEWTWO");
+                let learner = if teach.mewtwo {
+                    mewtwo_sp
+                } else {
+                    carry_species(ctx, st.carry)
+                };
+                let affordable = !ctx.p.money_model || st.money >= teach.cost;
+                let possible =
+                    can_learn(ctx, learner, mv) && (!teach.mewtwo || st.mewtwo.is_some());
+                if affordable && possible {
+                    if ctx.p.money_model {
+                        st.money -= teach.cost;
                     }
-                    st.money -= teach.cost;
-                }
-                bump(&mut st, teach.frames as f64 * ctx.p.text_factor);
-                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
-                if teach.mewtwo {
-                    if st.mewtwo.is_some() {
+                    bump(&mut st, teach.frames as f64 * ctx.p.text_factor);
+                    bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                    if teach.mewtwo {
                         if st.mewtwo_moves.len() < 4 {
                             st.mewtwo_moves.push(mv);
                         } else {
-                            st.mewtwo_moves[0] = mv;
+                            // Psychic and Recover stay; the weakest other slot goes
+                            // (Safeguard, then Swift, then an earlier teach).
+                            let keep = [
+                                ctx.dex.move_id("MOVE_PSYCHIC"),
+                                ctx.dex.move_id("MOVE_RECOVER"),
+                            ];
+                            if let Some(i) = st
+                                .mewtwo_moves
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, m)| !keep.contains(m))
+                                .min_by_key(|(_, &m)| ctx.dex.moves[m].power)
+                                .map(|(i, _)| i)
+                            {
+                                st.mewtwo_moves[i] = mv;
+                            }
                         }
+                    } else {
+                        offer_move(ctx, &mut st, mv, true);
                     }
-                } else {
-                    offer_move(ctx, &mut st, mv, true);
                 }
             }
             Kind::Elixir { pickup } => {
@@ -1877,7 +1904,12 @@ pub fn attempt(
             }
             // HM03 Surf is taught to the carry after the Safari trip (the route needs a
             // surfer anyway; `plan.md` HM gates).
-            "safari-walk" => offer_move(ctx, &mut st, ctx.dex.move_id("MOVE_SURF"), true),
+            "safari-walk" => {
+                let surf = ctx.dex.move_id("MOVE_SURF");
+                if can_learn(ctx, carry_species(ctx, st.carry), surf) {
+                    offer_move(ctx, &mut st, surf, true);
+                }
+            }
             "lavender-heal" => st.max_tier = st.max_tier.max(1),
             _ => {}
         }

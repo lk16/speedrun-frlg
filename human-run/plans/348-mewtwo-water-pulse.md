@@ -1,0 +1,635 @@
+# Plan 348-mewtwo-water-pulse
+
+Parent: `347-lg-with-fr-tactics`. **Correction**: 347 (and every plan since 303) taught HM03
+Surf to Mewtwo, which Mewtwo cannot learn — `tmhm_learnsets.h` gives it HM04/05/06 only. The
+engine now refuses illegal teaches (`can_learn`: `tmhm_learnsets.h`, `tutor_learnsets.h`), and
+347 collapses to 9 finishes in 160 000 without its Tyranitar answer.
+
+Mewtwo's legal options against the Psychic-immune rematch Tyranitar, scored in the full run
+(R = 80 000, EHT at WR+160m): **TM03 Water Pulse** (Misty's gift,
+`CeruleanCity_Gym/scripts.inc:23-25`; the carry never uses it) 20.06 h; TM31 Brick Break
+(Celadon 2F, 3000) 22.70 h; none 9 562 h. TM13 Ice Beam / TM24 Thunderbolt (4000 coins each,
+`GameCorner_PrizeRoom/scripts.inc:264-282`) win the isolated fight (Ice Beam + Thunderbolt
+70% vs Water Pulse 42%) but the run has ~17 000 money at the Mewtwo catch, so they never get
+bought. Gen 3 TMs are single-use, so one TM cannot serve both the carry and Mewtwo.
+
+Score (model, seed 1): rung WR+160m, **EHT 20.06 h** (2373 / 80 000).
+
+```json
+{
+ "name": "348-mewtwo-water-pulse",
+ "starter_min_total": 74,
+ "hunts": [
+  {
+   "after": "bill",
+   "site": "MAP_ROUTE25",
+   "area": "land",
+   "steps": 240,
+   "detour_tiles": 2,
+   "skip": [
+    "SPECIES_ODDISH",
+    "SPECIES_PIDGEY",
+    "SPECIES_CATERPIE",
+    "SPECIES_WEEDLE",
+    "SPECIES_KAKUNA",
+    "SPECIES_METAPOD"
+   ]
+  },
+  {
+   "after": "route3",
+   "site": "MAP_ROUTE3",
+   "area": "land",
+   "steps": 15,
+   "detour_tiles": 2,
+   "skip": []
+  },
+  {
+   "after": "route5-6",
+   "site": "MAP_ROUTE5",
+   "area": "land",
+   "steps": 120,
+   "detour_tiles": 2,
+   "skip": []
+  }
+ ],
+ "specials": [
+  {
+   "after": "celadon-tea",
+   "kind": "gift",
+   "species": [
+    "SPECIES_EEVEE"
+   ],
+   "frames": 1500,
+   "level": 30
+  },
+  {
+   "after": "silph-giovanni",
+   "kind": "gift",
+   "species": [
+    "SPECIES_LAPRAS"
+   ],
+   "frames": 700,
+   "level": 30
+  },
+  {
+   "after": "snorlax",
+   "kind": "static",
+   "species": [
+    "SPECIES_SNORLAX"
+   ],
+   "frames": 400,
+   "level": 30
+  },
+  {
+   "after": "blaine-walk",
+   "kind": "gift",
+   "species": [
+    "SPECIES_KABUTO"
+   ],
+   "frames": 1800,
+   "level": 30
+  },
+  {
+   "after": "to-pewter",
+   "kind": "gift",
+   "species": [
+    "SPECIES_AERODACTYL"
+   ],
+   "frames": 2800,
+   "level": 5
+  },
+  {
+   "after": "ss-anne",
+   "kind": "trade",
+   "species": [
+    "SPECIES_FARFETCHD"
+   ],
+   "requires": [
+    "SPECIES_SPEAROW"
+   ],
+   "frames": 2200
+  },
+  {
+   "after": "blaine-walk",
+   "kind": "trade",
+   "species": [
+    "SPECIES_TANGELA"
+   ],
+   "requires": [
+    "SPECIES_VENONAT"
+   ],
+   "frames": 2400
+  },
+  {
+   "after": "blaine-walk",
+   "kind": "trade",
+   "species": [
+    "SPECIES_ELECTRODE"
+   ],
+   "requires": [
+    "SPECIES_RAICHU"
+   ],
+   "frames": 2400
+  },
+  {
+   "after": "fly-viridian",
+   "kind": "trade",
+   "species": [
+    "SPECIES_MR_MIME"
+   ],
+   "requires": [
+    "SPECIES_ABRA"
+   ],
+   "frames": 2600
+  },
+  {
+   "after": "hall-of-fame-1",
+   "kind": "buy",
+   "species": [
+    "SPECIES_ABRA"
+   ],
+   "cost": 2400,
+   "frames": 2400
+  },
+  {
+   "after": "hall-of-fame-1",
+   "kind": "buy",
+   "species": [
+    "SPECIES_CLEFAIRY"
+   ],
+   "cost": 15000,
+   "frames": 2400
+  }
+ ],
+ "fill": [
+  {
+   "after": "",
+   "site": "MAP_SEAFOAM_ISLANDS_B3F",
+   "area": "land",
+   "steps": 80,
+   "detour_tiles": 50
+  },
+  {
+   "after": "",
+   "site": "MAP_VERMILION_CITY",
+   "area": "fish",
+   "steps": 38,
+   "detour_tiles": 25
+  },
+  {
+   "after": "",
+   "site": "MAP_POWER_PLANT",
+   "area": "land",
+   "steps": 161,
+   "detour_tiles": 20
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE6",
+   "area": "fish",
+   "steps": 38,
+   "detour_tiles": 60
+  },
+  {
+   "after": "",
+   "site": "MAP_FUCHSIA_CITY",
+   "area": "fish",
+   "steps": 36,
+   "detour_tiles": 50
+  },
+  {
+   "after": "",
+   "site": "MAP_SEAFOAM_ISLANDS_B2F",
+   "area": "land",
+   "steps": 42,
+   "detour_tiles": 25
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE13",
+   "area": "land",
+   "steps": 51,
+   "detour_tiles": 30
+  },
+  {
+   "after": "",
+   "site": "MAP_SEAFOAM_ISLANDS_B4F",
+   "area": "land",
+   "steps": 92,
+   "detour_tiles": 30
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE11",
+   "area": "land",
+   "steps": 116,
+   "detour_tiles": 30
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE21_NORTH",
+   "area": "land",
+   "steps": 122,
+   "detour_tiles": 25
+  },
+  {
+   "after": "",
+   "site": "MAP_DIGLETTS_CAVE_B1F",
+   "area": "land",
+   "steps": 62,
+   "detour_tiles": 30
+  },
+  {
+   "after": "",
+   "site": "MAP_VICTORY_ROAD_2F",
+   "area": "land",
+   "steps": 154,
+   "detour_tiles": 25
+  },
+  {
+   "after": "",
+   "site": "MAP_ROUTE23",
+   "area": "land",
+   "steps": 76,
+   "detour_tiles": 40
+  },
+  {
+   "after": "",
+   "site": "MAP_SAFARI_ZONE_WEST",
+   "area": "land",
+   "steps": 95,
+   "detour_tiles": 10
+  },
+  {
+   "after": "",
+   "site": "MAP_POKEMON_TOWER_7F",
+   "area": "land",
+   "steps": 152,
+   "detour_tiles": 25
+  },
+  {
+   "after": "",
+   "site": "MAP_SAFARI_ZONE_CENTER",
+   "area": "land",
+   "steps": 77,
+   "detour_tiles": 30
+  }
+ ],
+ "grind_pre_e4": 4,
+ "grind_level": 42,
+ "grind_yield": 90,
+ "stones": [],
+ "reset_aggr": 0.84,
+ "weaken": true,
+ "ball": "great",
+ "fight_until_level": 15,
+ "skip_groups": [
+  "cerulean-gym-trainer",
+  "celadon-gym-trainers",
+  "viridian-gym-trainers",
+  "blaine-quiz",
+  "route3-trainers",
+  "mt-moon-trainers",
+  "fuchsia-gym-trainers",
+  "mt-ember-trainers"
+ ],
+ "mistake_rate": 1.0,
+ "version": "LG",
+ "battle_scale": 1.75,
+ "mewtwo": true,
+ "group_n": {
+  "hideout-grunts": 3,
+  "victory-road-trainers": 4
+ },
+ "teleport_abra": true,
+ "reset_aggr_at": {
+  "misty-badge": 0.7,
+  "surge-badge": 0.7,
+  "erika-badge": 0.7,
+  "koga-badge": 0.9,
+  "sabrina-badge": 0.7,
+  "blaine-badge-and-sevii-scene": 0.9,
+  "giovanni-badge": 0.7,
+  "oak-national-dex": 0.9,
+  "brock": 0.8,
+  "hall-of-fame-1": 0.6,
+  "indigo-heal": 0.5
+ },
+ "starter_min_stats": [
+  19,
+  0,
+  0,
+  0,
+  11,
+  0
+ ],
+ "type_strength": 1.0,
+ "type_floor": 0.9,
+ "audited_forced": true,
+ "pass_min_catch": 45,
+ "safari_model": true,
+ "money_model": true,
+ "ball_batch": 40,
+ "calib_enc": true,
+ "rod": "super",
+ "repel_on": [
+  "mt-moon-1f",
+  "cerulean-cave",
+  "route3",
+  "nugget-bridge",
+  "cycling-road",
+  "route6-encounters",
+  "rock-tunnel",
+  "route9",
+  "route22",
+  "tower-encounters"
+ ],
+ "calib_battle": true,
+ "enc_path": true,
+ "detour_map": true,
+ "detour_bike": true,
+ "battle_sim": true,
+ "tms": [
+  {
+   "after": "route4",
+   "mv": "MOVE_MEGA_PUNCH",
+   "frames": 1500
+  },
+  {
+   "after": "tm28-dig",
+   "mv": "MOVE_DIG",
+   "frames": 800
+  },
+  {
+   "after": "mansion",
+   "mv": "MOVE_BLIZZARD",
+   "frames": 1100
+  },
+  {
+   "after": "giovanni-badge",
+   "mv": "MOVE_EARTHQUAKE",
+   "frames": 800,
+   "cost": 0
+  },
+  {
+   "after": "mewtwo",
+   "mv": "MOVE_WATER_PULSE",
+   "frames": 600,
+   "cost": 0,
+   "mewtwo": true
+  }
+ ],
+ "keep_moves": [
+  "MOVE_DIG",
+  "MOVE_SURF",
+  "MOVE_BLIZZARD",
+  "MOVE_EARTHQUAKE"
+ ],
+ "xbuys": [
+  {
+   "after": "celadon-tea",
+   "attack": 4,
+   "speed": 2,
+   "frames": 1200
+  },
+  {
+   "after": "fly-celadon-2",
+   "special": 34,
+   "speed": 10,
+   "attack": 8,
+   "revives": 8,
+   "frames": 1800
+  }
+ ],
+ "fight_tactics": {
+  "surge": {
+   "x": [],
+   "sacs": 2
+  },
+  "erika": {
+   "x": [
+    "attack",
+    "attack",
+    "attack"
+   ]
+  },
+  "koga": {
+   "x": [
+    "special",
+    "special"
+   ],
+   "sacs": 1
+  },
+  "sabrina": {
+   "x": [
+    "special",
+    "special",
+    "speed"
+   ],
+   "sacs": 1
+  },
+  "lorelei": {
+   "x": [
+    "attack",
+    "attack",
+    "attack",
+    "attack",
+    "speed"
+   ],
+   "sacs": 2
+  },
+  "bruno": {
+   "x": [
+    "special",
+    "special",
+    "special",
+    "speed"
+   ],
+   "sacs": 2
+  },
+  "agatha": {
+   "x": [
+    "special",
+    "special",
+    "special",
+    "speed"
+   ],
+   "sacs": 2
+  },
+  "lance": {
+   "x": [
+    "special",
+    "special",
+    "special",
+    "special",
+    "speed"
+   ],
+   "sacs": 2
+  },
+  "champion": {
+   "x": [
+    "special",
+    "special",
+    "special",
+    "special",
+    "speed",
+    "special"
+   ],
+   "sacs": 4
+  },
+  "rival-ss-anne": {
+   "x": [],
+   "sacs": 1
+  },
+  "rival-silph": {
+   "x": [
+    "special",
+    "special",
+    "speed"
+   ],
+   "sacs": 2
+  },
+  "rival-route22": {
+   "x": [
+    "special",
+    "special",
+    "speed"
+   ],
+   "sacs": 2
+  },
+  "giovanni": {
+   "x": [
+    "special",
+    "speed"
+   ]
+  },
+  "lorelei-2": {
+   "x": [
+    "special",
+    "special"
+   ],
+   "sacs": 1
+  },
+  "bruno-2": {
+   "x": [
+    "special",
+    "special"
+   ],
+   "sacs": 1
+  },
+  "agatha-2": {
+   "x": [
+    "special",
+    "special"
+   ],
+   "sacs": 1
+  },
+  "lance-2": {
+   "x": [
+    "special",
+    "special"
+   ],
+   "sacs": 1
+  },
+  "champion-2": {
+   "x": [
+    "special",
+    "special",
+    "speed",
+    "special"
+   ],
+   "sacs": 4
+  },
+  "rival-cerulean": {
+   "x": [],
+   "sacs": 2
+  }
+ },
+ "early_dig": true,
+ "erika_after_tower": true,
+ "grinds": [
+  {
+   "after": "cerulean-heal",
+   "battles": 2,
+   "level": 12,
+   "yield_": 58
+  },
+  {
+   "after": "captain-hm01",
+   "battles": 8,
+   "level": 20,
+   "yield_": 70
+  },
+  {
+   "after": "koga-badge",
+   "battles": 5,
+   "level": 30,
+   "yield_": 90
+  },
+  {
+   "after": "misty-badge",
+   "battles": 5,
+   "level": 16,
+   "yield_": 60
+  }
+ ],
+ "elixirs": [
+  {
+   "after": "cycling-road",
+   "kind": "max",
+   "frames": 500
+  },
+  {
+   "after": "silph-giovanni",
+   "kind": "elixir",
+   "frames": 400
+  },
+  {
+   "after": "mansion",
+   "kind": "elixir",
+   "frames": 300
+  },
+  {
+   "after": "route23",
+   "kind": "max",
+   "frames": 400
+  },
+  {
+   "after": "cerulean-heal",
+   "kind": "candy",
+   "frames": 350
+  },
+  {
+   "after": "route6-encounters",
+   "kind": "candy",
+   "frames": 350
+  },
+  {
+   "after": "route9",
+   "kind": "candy",
+   "frames": 350
+  },
+  {
+   "after": "super-rod",
+   "kind": "candy",
+   "frames": 300
+  },
+  {
+   "after": "cycling-road",
+   "kind": "candy",
+   "frames": 300
+  },
+  {
+   "after": "mansion",
+   "kind": "candy",
+   "frames": 300
+  },
+  {
+   "after": "bill",
+   "kind": "elixir",
+   "frames": 500
+  }
+ ],
+ "rope_cerulean_cave": true
+}
+```
