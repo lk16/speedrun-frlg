@@ -1177,9 +1177,14 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 m.pp = vec![50; m.moves.len()];
             }
             // `carry_power`: the WR carry out-damages the engine's (see the param's doc).
-            if ctx.p.carry_power != 1.0 {
-                m.stat[0] = (m.stat[0] as f64 * ctx.p.carry_power) as i32;
-                m.stat[3] = (m.stat[3] as f64 * ctx.p.carry_power) as i32;
+            let power = if a.league && ctx.p.league_power > 0.0 {
+                ctx.p.league_power
+            } else {
+                ctx.p.carry_power
+            };
+            if power != 1.0 {
+                m.stat[0] = (m.stat[0] as f64 * power) as i32;
+                m.stat[3] = (m.stat[3] as f64 * power) as i32;
             }
             m
         };
@@ -1231,6 +1236,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             others_alive: st.fodder,
             heal_stock: if a.league { st.heal_items } else { u32::MAX },
             rollouts: if a.league { ctx.p.league_rollouts } else { 0 },
+            setup_min: ctx.p.setup_min_turns,
         };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
@@ -2181,7 +2187,12 @@ pub fn attempt(
                 }
                 {
                     // Hyper Potions for the League, after the Revives.
-                    let price = ctx.dex.item_prices.get("ITEM_HYPER_POTION").copied().unwrap_or(1200);
+                    let price = ctx
+                        .dex
+                        .item_prices
+                        .get("ITEM_HYPER_POTION")
+                        .copied()
+                        .unwrap_or(1200);
                     let qty = if ctx.p.money_model {
                         xbuy.heals.min(st.money / price)
                     } else {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Coordinate descent over the plan's knobs, following human-run/PROMPT.md's comparison rules.
 
-usage: descend.py [--max-accepts N] [--passes N] [--only KIND,...]
+usage: descend.py [--max-accepts N] [--passes N] [--only KIND,...] [--fights NAME,...] [--rung R] [--pointer P]
 
 Starts from plans/CURRENT. For every candidate patch (one knob changed) runs try.py against the
 current plan (seed 1); on ACCEPT it re-runs on seed 2 to filter chance wins (many candidates are
@@ -34,6 +34,7 @@ max_passes = opt('--passes', 3)
 only = opt('--only', '').split(',') if '--only' in args else None
 cap = opt('--cap', 400000)
 POINTER = opt('--pointer', 'CURRENT')
+ONLY_FIGHTS = opt('--fights', '').split(',') if '--fights' in args else None
 FIXED_RUNG = opt('--rung', '')
 os.environ['FRLG_POINTER'] = POINTER
 
@@ -205,6 +206,8 @@ def candidates(p):
                       'rival-cerulean', 'rival-ss-anne', 'rival-tower', 'rival-silph', 'rival-route22',
                       'lorelei', 'bruno', 'agatha', 'lance', 'champion',
                       'lorelei-2', 'bruno-2', 'agatha-2', 'lance-2', 'champion-2']
+        if ONLY_FIGHTS:
+            key_fights = [f for f in key_fights if f in ONLY_FIGHTS]
         # X items exist only from Celadon on (`CeladonCity_DepartmentStore_5F/scripts.inc:29-35`).
         no_x = {'surge', 'misty', 'rival-cerulean', 'rival-ss-anne'}
         for f in key_fights:
@@ -229,13 +232,22 @@ def candidates(p):
                     out.append(('tactic', f"{f}: sacs {sacs}->{sacs + d}", {'fight_tactics': q}))
         # X purchases.
         for i, xb in enumerate(p.get('xbuys', [])):
-            for k in ('attack', 'defend', 'speed', 'special', 'dire'):
-                for d in (-4, 4):
+            for k in ('attack', 'defend', 'speed', 'special', 'dire', 'heals'):
+                for d in ((-2, 2) if k == 'heals' else (-4, 4)):
                     v = xb.get(k, 0) + d
                     if v >= 0:
                         q = copy.deepcopy(p['xbuys'])
                         q[i] = dict(q[i]); q[i][k] = v
                         out.append(('xbuy', f"xbuys[{i}] {k} {xb.get(k, 0)}->{v}", {'xbuys': q}))
+        # League bag knobs the plan controls: how many heal items a round starts with and how
+        # readily the human tops up between fights.
+        for d in (-2, 2):
+            v = p.get('league_heals', 6) + d
+            if v >= 0:
+                out.append(('xbuy', f"league_heals {p.get('league_heals', 6)}->{v}", {'league_heals': v}))
+        for v in (0.5, 0.7, 0.85):
+            if abs(p.get('league_preheal', 0.7) - v) > 1e-9:
+                out.append(('heal', f"league_preheal {p.get('league_preheal', 0.7)}->{v}", {'league_preheal': v}))
         # TM / tutor teaches: drop what is there, add what is not. Sources, all decomp-cited:
         # Route 4 tutors (map.json:96,110), TM28 Cerulean (scripts.inc:179-187), TM03 Misty
         # (CeruleanCity_Gym/scripts.inc:23-25), TM26 Giovanni (ViridianCity_Gym/scripts.inc:28-30),

@@ -356,6 +356,10 @@ pub struct Params {
     /// The same stand-in for the caught Mewtwo (R2 fights: the engine needs ~1.5x the WR video's
     /// actions with Mewtwo; no Torrent there, so this is the residual the Rash/IV/X lines do not explain).
     pub mewtwo_power: f64,
+    /// `carry_power` for League fights only (0 = same as `carry_power`). The League is where the
+    /// model's lone carry most visibly falls short of the WR run's (EVs, held type boosters, X lines
+    /// the engine does not play); fitted to the video's League action counts, see the journal.
+    pub league_power: f64,
     /// Max Elixirs a non-League fight leaves in the bag for the League ("Max Elixir between E4
     /// fights", `human-run/video-analysis/STRATEGY.md`; the exact engine's Blizzard (5 PP) is empty
     /// by Lance otherwise).
@@ -374,6 +378,9 @@ pub struct Params {
     /// Lookahead rollouts per candidate action in contested League fights (0 = the greedy
     /// human); see `battle::fight`.
     pub league_rollouts: u32,
+    /// An X item is only used against a foe the fighter's best attack needs this many hits to drop
+    /// (1 = the old "always set up"); a runner does not spend a turn on an X item before a KO.
+    pub setup_min_turns: u32,
     /// Before a fight, heal with items when the carry is below this HP fraction (up to 0.85). The WR
     /// run walks into most fights at 1/3 HP or less to keep Torrent active
     /// (`human-run/video-analysis/data/calib/v2-mid-fights.md`: Koga 33/120, Giovanni 35/143, ...).
@@ -512,11 +519,13 @@ impl Default for Params {
             candy_early_n: 99,
             carry_power: 1.0,
             mewtwo_power: 1.0,
+            league_power: 0.0,
             league_max_reserve: 2,
             league_heals: 6,
             league_heal_price: 2500,
-            league_preheal: 0.5,
+            league_preheal: 0.7,
             league_rollouts: 0,
+            setup_min_turns: 1,
             keep_moves: vec![],
             cure_status: true,
             early_dig: false,

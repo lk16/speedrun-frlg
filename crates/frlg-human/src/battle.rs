@@ -367,6 +367,8 @@ pub struct Mon {
     pub rampage: u8,
     /// The move a Thrash/Outrage lock repeats (`gLockedMoves`, `battle_script_commands.c:2727`).
     pub lock_move: Option<usize>,
+    /// The move this mon used last (`gLastMoves`; the AI's Counter / Defense Up scripts read it).
+    pub last_move: Option<usize>,
     /// Holds a Sitrus Berry (`HOLD_EFFECT_RESTORE_HP`, 30 HP at <= 1/2, `battle_util.c:2562`).
     pub sitrus: bool,
     /// Player badge boosts ×100: Atk, Def, Spe, SpA, SpD (enemy: all 100).
@@ -458,6 +460,7 @@ pub fn make_mon(
         protect_count: 0,
         rampage: 0,
         lock_move: None,
+        last_move: None,
         sitrus: false,
         badge: [bb(0), bb(4), bb(2), bb(6), bb(6)],
         counter_dmg: 0,
@@ -774,6 +777,9 @@ pub struct Tactics {
     /// Lookahead rollouts per candidate action when a fight is contested (0 = greedy human);
     /// see [`fight`].
     pub rollouts: u32,
+    /// An X item is used only against a foe the fighter's best attack needs this many hits to
+    /// drop (1 = always set up; see `turns_to_kill`).
+    pub setup_min: u32,
 }
 
 impl Default for Tactics {
@@ -787,6 +793,7 @@ impl Default for Tactics {
             others_alive: 0,
             heal_stock: u32::MAX,
             rollouts: 0,
+            setup_min: 1,
         }
     }
 }
@@ -911,6 +918,512 @@ fn ai_damage(dex: &Dex, att: &Mon, def: &Mon, mv: usize, side: &Side, rng: &mut 
     let eff = effectiveness(dex, m.mtype, def);
     let d = (d as f64 * if eff > 0.0 { 1.0 } else { 0.0 }) as i32;
     (d * sim / 100).max(if eff > 0.0 { 1 } else { 0 })
+}
+
+/// Everything the viability scripts read about the two mons.
+struct CvCtx<'a> {
+    user: &'a Mon,
+    target: &'a Mon,
+    user_side: &'a Side,
+    user_hp: i32,
+    target_hp: i32,
+    /// `if_target_faster`: the target would move before the user.
+    target_faster: bool,
+    /// Effectiveness of the considered move on the target.
+    eff: f64,
+    /// The target's last used move (`get_last_used_move AI_TARGET`).
+    target_last: Option<usize>,
+}
+
+/// `AI_CheckViability` (`data/battle_ai_scripts.s:653-2300`): the score change for one move,
+/// ported script by script. `if_random_less_than n` is `Random() % 256 < n`; stat levels
+/// are the game's 0..12 with 6 neutral (our stages + 6). Effects without a script change
+/// nothing.
+fn ai_cv(dex: &Dex, c: &CvCtx, fx: Effect, mv: usize, rng: &mut GameRng) -> i32 {
+    let rl = |rng: &mut GameRng, n: u32| rng.modn(256) < n;
+    let (user, target) = (c.user, c.target);
+    let lvl = |m: &Mon, s: usize| m.stages[s] as i32 + 6;
+    let (uh, th) = (c.user_hp, c.target_hp);
+    let mut sc = 0i32;
+    // The "last move" scripts: power and type of the target's last used move.
+    let last = c
+        .target_last
+        .map(|m| (dex.moves[m].power, dex.moves[m].mtype));
+    match fx {
+        // AI_CV_AttackUp / SpAtkUp.
+        Effect::StatChange(s @ (0 | 3), d, true) if d > 0 => {
+            if lvl(user, s as usize) < 9 {
+                if uh == 100 && !rl(rng, 128) {
+                    sc += 2;
+                }
+            } else if !rl(rng, 100) {
+                sc -= 1;
+            }
+            // AU3: AttackUp discourages with rl(40), SpAtkUp with rl(70).
+            if uh <= 70 {
+                if uh < 40 {
+                    sc -= 2;
+                } else if !rl(rng, if s == 0 { 40 } else { 70 }) {
+                    sc -= 2;
+                }
+            }
+        }
+        // AI_CV_DefenseUp / SpDefUp (Bulk Up, Calm Mind and Cosmic Power share them).
+        Effect::StatChange(s @ (1 | 4), d, true) if d > 0 => {
+            sc += cv_def_up(c, s as usize, last, rng)
+        }
+        Effect::TwoStat(0, 1, d) if d > 0 => sc += cv_def_up(c, 1, last, rng),
+        Effect::TwoStat(3, 4, d) | Effect::TwoStat(1, 4, d) if d > 0 => {
+            sc += cv_def_up(c, 4, last, rng)
+        }
+        // AI_CV_DragonDance.
+        Effect::TwoStat(0, 2, d) if d > 0 => {
+            if c.target_faster {
+                if !rl(rng, 128) {
+                    sc += 1;
+                }
+            } else if uh <= 50 && !rl(rng, 70) {
+                sc -= 1;
+            }
+        }
+        // AI_CV_SpeedUp.
+        Effect::StatChange(2, d, true) if d > 0 => {
+            if c.target_faster {
+                if !rl(rng, 70) {
+                    sc += 3;
+                }
+            } else {
+                sc -= 3;
+            }
+        }
+        // AI_CV_AccuracyUp.
+        Effect::StatChange(5, d, true) if d > 0 => {
+            if lvl(user, 5) >= 9 && !rl(rng, 50) {
+                sc -= 2;
+            }
+            if uh <= 70 {
+                sc -= 2;
+            }
+        }
+        // AI_CV_EvasionUp (Double Team, Minimize).
+        Effect::StatChange(6, d, true) if d > 0 => {
+            if uh >= 90 && !rl(rng, 100) {
+                sc += 3;
+            }
+            if lvl(user, 6) >= 9 && !rl(rng, 128) {
+                sc -= 1;
+            }
+            if matches!(target.status, Status1::Toxic(_)) {
+                let skip = if uh > 50 { false } else { rl(rng, 80) };
+                if !skip && !rl(rng, 50) {
+                    sc += 3;
+                }
+            }
+            if target.seeded && !rl(rng, 70) {
+                sc += 3;
+            }
+            if uh <= 70 && lvl(user, 6) != 6 {
+                if uh < 40 || th < 40 || !rl(rng, 70) {
+                    sc -= 2;
+                }
+            }
+        }
+        // AI_CV_AttackDown.
+        Effect::StatChange(0, d, false) if d < 0 => {
+            if lvl(target, 0) != 6 {
+                sc -= 1;
+                if uh <= 90 {
+                    sc -= 1;
+                }
+                if lvl(target, 0) <= 3 && !rl(rng, 50) {
+                    sc -= 2;
+                }
+            }
+            if th <= 70 {
+                sc -= 2;
+            }
+            let phys = |t: u8| matches!(t, 0 | 1 | 4 | 5 | 6 | 8);
+            if !(phys(target.types.0) || phys(target.types.1)) && !rl(rng, 50) {
+                sc -= 2;
+            }
+        }
+        // AI_CV_SpAtkDown (the neutral test reads the target's *Attack*, as the script does).
+        Effect::StatChange(3, d, false) if d < 0 => {
+            if lvl(target, 0) != 6 {
+                sc -= 1;
+                if uh <= 90 {
+                    sc -= 1;
+                }
+                if lvl(target, 3) <= 3 && !rl(rng, 50) {
+                    sc -= 2;
+                }
+            }
+            if th <= 70 {
+                sc -= 2;
+            }
+            let special = |t: u8| t >= 10;
+            if !(special(target.types.0) || special(target.types.1)) && !rl(rng, 50) {
+                sc -= 2;
+            }
+        }
+        // AI_CV_DefenseDown / SpDefDown / EvasionDown share one shape.
+        Effect::StatChange(s @ (1 | 4 | 6), d, false) if d < 0 => {
+            let go2 = uh < 70 || lvl(target, s as usize) <= 3;
+            if go2 && !rl(rng, 50) {
+                sc -= 2;
+            }
+            if th <= 70 {
+                sc -= 2;
+            }
+        }
+        // AI_CV_SpeedDown (also Icy Wind / Rock Tomb / Mud Shot via `SpeedDownFromChance`).
+        Effect::StatChange(2, d, false) if d < 0 => sc += cv_speed_down(c, rng),
+        Effect::StatDownHit(2)
+            if matches!(
+                dex.moves[mv].name.as_str(),
+                "MOVE_ICY_WIND" | "MOVE_ROCK_TOMB" | "MOVE_MUD_SHOT"
+            ) =>
+        {
+            sc += cv_speed_down(c, rng)
+        }
+        // AI_CV_AccuracyDown.
+        Effect::StatChange(5, d, false) if d < 0 => {
+            if (uh < 70 || th <= 70) && !rl(rng, 100) {
+                sc -= 1;
+            }
+            if lvl(user, 5) <= 4 && !rl(rng, 80) {
+                sc -= 2;
+            }
+            if matches!(target.status, Status1::Toxic(_)) && !rl(rng, 70) {
+                sc += 2;
+            }
+            if target.seeded && !rl(rng, 70) {
+                sc += 2;
+            }
+            if uh <= 70 && lvl(target, 5) != 6 {
+                if uh < 40 || th < 40 || !rl(rng, 70) {
+                    sc -= 2;
+                }
+            }
+        }
+        // AI_CV_Roar: -3 unless the target is boosted to +3 or more in a stat the AI cares
+        // about, then +2 half the time.
+        Effect::Roar => {
+            if [0usize, 1, 3, 4, 6].iter().any(|&k| target.stages[k] >= 3) {
+                if !rl(rng, 128) {
+                    sc += 2;
+                }
+            } else {
+                sc -= 3;
+            }
+        }
+        // AI_CV_Heal (Recover, Softboiled); Synthesis / Morning Sun / Moonlight first lose 2
+        // in hail, rain or sandstorm (AI_CV_HealWeather).
+        Effect::RestoreHp => {
+            if matches!(
+                dex.moves[mv].effect.as_str(),
+                "EFFECT_SYNTHESIS" | "EFFECT_MORNING_SUN" | "EFFECT_MOONLIGHT"
+            ) && matches!(c.user_side.weather, W_RAIN | W_SAND | W_HAIL)
+            {
+                sc -= 2;
+            }
+            if uh == 100 {
+                sc -= 3;
+            } else if !c.target_faster {
+                sc -= 8;
+            } else if uh >= 70 && !rl(rng, 30) {
+                sc -= 3;
+            } else if !rl(rng, 20) {
+                sc += 2;
+            }
+        }
+        // AI_CV_Rest.
+        Effect::Rest => {
+            if !c.target_faster {
+                if uh == 100 {
+                    sc -= 8;
+                } else if uh >= 40 && (uh > 50 || !rl(rng, 70)) {
+                    sc -= 3;
+                } else if !rl(rng, 10) {
+                    sc += 3;
+                }
+            } else if uh >= 60 && (uh > 70 || !rl(rng, 50)) {
+                sc -= 3;
+            } else if !rl(rng, 10) {
+                sc += 3;
+            }
+        }
+        // AI_CV_Paralyze.
+        Effect::Paralyze => {
+            if c.target_faster {
+                if !rl(rng, 20) {
+                    sc += 3;
+                }
+            } else if uh <= 70 {
+                sc -= 1;
+            }
+        }
+        // AI_CV_Confuse (Swagger shares it; Flatter adds a coin flip).
+        Effect::Confuse | Effect::Swagger => {
+            if th <= 70 {
+                if !rl(rng, 128) {
+                    sc -= 1;
+                }
+                if th <= 50 {
+                    sc -= 1;
+                    if th <= 30 {
+                        sc -= 1;
+                    }
+                }
+            }
+        }
+        // AI_CV_Toxic (Leech Seed shares it).
+        Effect::Toxic | Effect::LeechSeed => {
+            let has_attack = user.moves.iter().any(|&m2| dex.moves[m2].power > 1);
+            if has_attack {
+                if uh <= 50 && !rl(rng, 50) {
+                    sc -= 3;
+                }
+                if th <= 50 && !rl(rng, 50) {
+                    sc -= 3;
+                }
+            }
+            let protects = user
+                .moves
+                .iter()
+                .any(|&m2| matches!(effect_from(&dex.moves[m2].effect), Effect::Protect));
+            if protects && !rl(rng, 60) {
+                sc += 2;
+            }
+        }
+        // AI_CV_Poison.
+        Effect::Poison => {
+            if uh < 50 || th <= 50 {
+                sc -= 1;
+            }
+        }
+        // AI_CV_Trap.
+        Effect::Trap => {
+            if (matches!(target.status, Status1::Toxic(_)) || target.infatuated) && !rl(rng, 128) {
+                sc += 1;
+            }
+        }
+        // AI_CV_HighCrit.
+        Effect::HighCrit => {
+            if c.eff >= 1.0 {
+                let two = c.eff >= 2.0;
+                if two || !rl(rng, 128) {
+                    if !rl(rng, 128) {
+                        sc += 1;
+                    }
+                }
+            }
+        }
+        // AI_CV_Absorb: Giga Drain and friends are discouraged when resisted.
+        Effect::Absorb => {
+            if c.eff > 0.0 && c.eff < 1.0 && !rl(rng, 50) {
+                sc -= 3;
+            }
+        }
+        // AI_CV_SelfKO, trimmed (no evasion bookkeeping on the player).
+        Effect::Explosion => {
+            if uh >= 80 && !c.target_faster {
+                if rl(rng, 50) {
+                    // no change
+                } else {
+                    sc -= 3;
+                }
+            } else if uh <= 50 {
+                if !rl(rng, 128) {
+                    sc += 1;
+                }
+                if uh <= 30 && !rl(rng, 50) {
+                    sc += 1;
+                }
+            } else if uh > 50 && !rl(rng, 50) {
+                sc -= 1;
+            }
+        }
+        // AI_CV_Recharge.
+        Effect::Recharge => {
+            if c.eff < 1.0 || (!c.target_faster && uh > 40) || (c.target_faster && uh >= 60) {
+                sc -= 1;
+            }
+        }
+        // AI_CV_AlwaysHit.
+        Effect::AlwaysHit => {
+            if lvl(target, 6) > 10 || lvl(user, 5) < 2 {
+                sc += 1;
+                if !rl(rng, 100) {
+                    sc += 1;
+                }
+            } else if (lvl(target, 6) > 8 || lvl(user, 5) < 4) && !rl(rng, 100) {
+                sc += 1;
+            }
+        }
+        // AI_CV_Counter, trimmed to its type/HP terms.
+        Effect::Counter => {
+            if matches!(target.status, Status1::Sleep(_))
+                || target.confusion > 0
+                || target.infatuated
+            {
+                sc -= 1;
+            } else {
+                if uh <= 30 && !rl(rng, 10) {
+                    sc -= 1;
+                }
+                if uh <= 50 && !rl(rng, 100) {
+                    sc -= 1;
+                }
+                match last {
+                    Some((pw, ty)) if pw > 0 => {
+                        if !is_physical(ty) {
+                            sc -= 1;
+                        } else if !rl(rng, 100) {
+                            sc += 1;
+                        }
+                    }
+                    _ => {
+                        let phys = is_physical(target.types.0) || is_physical(target.types.1);
+                        if !phys && !rl(rng, 50) {
+                            sc -= 1;
+                        }
+                    }
+                }
+            }
+        }
+        // AI_CV_Protect, trimmed.
+        Effect::Protect => {
+            if user.protect_count >= 2 {
+                sc -= 2;
+            } else {
+                if matches!(target.status, Status1::Toxic(_)) || target.seeded {
+                    sc += 2;
+                }
+                if user.protect_count >= 1 {
+                    sc -= 1;
+                    if !rl(rng, 128) {
+                        sc -= 1;
+                    }
+                }
+            }
+        }
+        // AI_CV_Sleep: +1 only when the target knows Dream Eater or Nightmare (never the
+        // player's moves here).
+        Effect::Sleep => {}
+        Effect::Reflect => {
+            // AI_CV_Reflect: -2 below half HP; else only worth it against a physical-type
+            // target (80% -2 against anything else).
+            let phys = is_physical(target.types.0) || is_physical(target.types.1);
+            if uh < 50 || (!phys && !rl(rng, 50)) {
+                sc -= 2;
+            }
+        }
+        Effect::LightScreen => {
+            // AI_CV_LightScreen: the mirror image (special-type targets).
+            let special = target.types.0 >= 10 || target.types.1 >= 10;
+            if uh < 50 || (!special && !rl(rng, 50)) {
+                sc -= 2;
+            }
+        }
+        Effect::Charge => {
+            // AI_CV_ChargeUpMove: -2 when resisted (or the target Protects), -1 at 38% HP
+            // or less.
+            if c.eff < 1.0 {
+                sc -= 2;
+            } else if uh <= 38 {
+                sc -= 1;
+            }
+        }
+        Effect::Foresight => {
+            // AI_CV_Foresight: -2 for a non-Ghost user without raised evasion.
+            let ghost = user.types.0 == 7 || user.types.1 == 7;
+            if ghost || user.stages[6] > 2 {
+                if !rl(rng, 80) {
+                    sc += 2;
+                }
+            } else {
+                sc -= 2;
+            }
+        }
+        // AI_CV_RainDance / SunnyDay / Hail: -1 below 40% HP, else +1 when a different
+        // weather is up.
+        Effect::Weather(w) => {
+            if w != W_SAND {
+                if uh < 40 {
+                    sc -= 1;
+                } else if c.user_side.weather != 0 && c.user_side.weather != w {
+                    sc += 1;
+                }
+            }
+        }
+        // AI_CV_Overheat.
+        Effect::Overheat => {
+            if c.eff < 1.0 {
+                sc -= 1;
+            } else if c.target_faster {
+                if uh <= 80 {
+                    sc -= 1;
+                }
+            } else if uh <= 60 {
+                sc -= 1;
+            }
+        }
+        _ => {}
+    }
+    sc
+}
+
+/// `AI_CV_SpeedDown`: worth +2 (72%) when the target is faster, else -3.
+fn cv_speed_down(c: &CvCtx, rng: &mut GameRng) -> i32 {
+    if c.target_faster {
+        if rng.modn(256) >= 70 {
+            2
+        } else {
+            0
+        }
+    } else {
+        -3
+    }
+}
+
+/// `AI_CV_DefenseUp` / `AI_CV_SpDefUp` for the stat `s` (1 Def, 4 SpD).
+fn cv_def_up(c: &CvCtx, s: usize, last: Option<(u32, u8)>, rng: &mut GameRng) -> i32 {
+    let rl = |rng: &mut GameRng, n: u32| rng.modn(256) < n;
+    let uh = c.user_hp;
+    let mut sc = 0;
+    if c.user.stages[s] as i32 + 6 < 9 {
+        if uh == 100 && !rl(rng, 128) {
+            sc += 2;
+        }
+    } else if !rl(rng, 100) {
+        sc -= 1;
+    }
+    // DU3: at 70%+ HP, 200/256 of the time that is all.
+    if uh >= 70 && rl(rng, 200) {
+        return sc;
+    }
+    // DU4: below 40% never; then it depends on what the target last did.
+    if uh < 40 {
+        return sc - 2;
+    }
+    if let Some((pw, ty)) = last {
+        if pw > 0 {
+            let phys = is_physical(ty);
+            // Defense Up wants physical hitters, Sp. Def Up special ones.
+            if (s == 1 && !phys) || (s == 4 && phys) {
+                return sc - 2;
+            }
+            if rl(rng, 60) {
+                return sc;
+            }
+        }
+    }
+    // DU5.
+    if rl(rng, 60) {
+        return sc;
+    }
+    sc - 2
 }
 
 /// The ported AI (`data/battle_ai_scripts.s`): CHECK_BAD_MOVE vetoes, TRY_TO_FAINT,
@@ -1083,324 +1596,19 @@ fn ai_choose(
             continue;
         }
 
-        // AI_CheckViability, ported per effect (`data/battle_ai_scripts.s`).
+        // AI_CheckViability (`data/battle_ai_scripts.s`).
         if ai_flags & 2 != 0 {
-            match fx {
-                Effect::Paralyze => {
-                    // AI_CV_Paralyze.
-                    if target_faster {
-                        if !(rng.modn(256) < 20) {
-                            score[i] += 3;
-                        }
-                    } else if user_hp <= 70 {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::Confuse | Effect::Swagger => {
-                    // AI_CV_Confuse.
-                    if target_hp <= 70 {
-                        if rng.modn(256) >= 128 {
-                            score[i] -= 1;
-                        } else {
-                            if target_hp <= 50 {
-                                score[i] -= 1;
-                            }
-                            if target_hp <= 30 {
-                                score[i] -= 1;
-                            }
-                        }
-                    }
-                }
-                Effect::Toxic | Effect::LeechSeed => {
-                    // AI_CV_Toxic (leech seed shares it).
-                    let has_attack = user.moves.iter().any(|&m2| dex.moves[m2].power > 1);
-                    if has_attack {
-                        if user_hp <= 50 && rng.modn(256) >= 50 {
-                            score[i] -= 3;
-                        } else if target_hp <= 50 && rng.modn(256) >= 50 {
-                            score[i] -= 3;
-                        }
-                    }
-                }
-                Effect::StatChange(6, d, true) if d > 0 => {
-                    // AI_CV_EvasionUp (Double Team, Minimize), trimmed to the
-                    // statuses the model tracks.
-                    if user_hp >= 90 && rng.modn(256) >= 100 {
-                        score[i] += 3;
-                    }
-                    if user.stages[6] >= 3 && rng.modn(256) >= 128 {
-                        score[i] -= 1;
-                    }
-                    if matches!(target.status, Status1::Toxic(_))
-                        && user_hp > 50
-                        && rng.modn(256) >= 50
-                    {
-                        score[i] += 3;
-                    }
-                    if target.seeded && rng.modn(256) >= 70 {
-                        score[i] += 3;
-                    }
-                    if user_hp <= 70 && user.stages[6] != 6 {
-                        if user_hp <= 40 || target_hp <= 40 {
-                            score[i] -= 2;
-                        } else if rng.modn(256) >= 70 {
-                            score[i] -= 2;
-                        }
-                    }
-                }
-                Effect::StatChange(5, d, false) if d < 0 => {
-                    // AI_CV_AccuracyDown, trimmed the same way.
-                    if user_hp < 70 && rng.modn(256) >= 100 {
-                        score[i] -= 1;
-                    }
-                    if user.stages[5] <= -2 && rng.modn(256) >= 80 {
-                        score[i] -= 2;
-                    }
-                    if matches!(target.status, Status1::Toxic(_)) && rng.modn(256) >= 70 {
-                        score[i] += 2;
-                    }
-                    if target.seeded && rng.modn(256) >= 70 {
-                        score[i] += 2;
-                    }
-                    if user_hp <= 70 && target.stages[5] != 6 && (user_hp <= 40 || target_hp <= 40)
-                    {
-                        score[i] -= 2;
-                    }
-                }
-                Effect::StatChange(0, d, true) | Effect::StatChange(3, d, true) if d > 0 => {
-                    // AI_CV_AttackUp / AI_CV_SpAtkUp.
-                    if user.stages[if matches!(fx, Effect::StatChange(0, _, _)) {
-                        0
-                    } else {
-                        3
-                    }] >= 3
-                        && rng.modn(256) >= 100
-                    {
-                        score[i] -= 1;
-                    } else if user_hp == 100 && rng.modn(256) >= 128 {
-                        score[i] += 2;
-                    }
-                    if user_hp <= 70 {
-                        if user_hp <= 40 {
-                            score[i] -= 2;
-                        } else if rng.modn(256) >= 70 {
-                            score[i] -= 2;
-                        }
-                    }
-                }
-                Effect::StatChange(1, d, true)
-                | Effect::StatChange(4, d, true)
-                | Effect::TwoStat(_, _, d)
-                    if d > 0 =>
-                {
-                    // AI_CV_DefenseUp shape; Calm Mind and friends are unhandled in
-                    // FRLG's script and keep 100, so only the generic HP discourage.
-                    if user_hp <= 40 {
-                        score[i] -= 2;
-                    }
-                }
-                Effect::StatChange(s, d, false) if d < 0 && s < 5 => {
-                    // AI_CV_AttackDown family: discouraged off full HP and vs low targets.
-                    if target.stages[s as usize] > -6 {
-                        score[i] -= 1;
-                        if user_hp <= 90 {
-                            score[i] -= 1;
-                        }
-                        if target.stages[s as usize] < -3 && rng.modn(256) >= 50 {
-                            score[i] -= 2;
-                        }
-                        if target_hp <= 70 {
-                            score[i] -= 2;
-                        }
-                    }
-                }
-                Effect::RestoreHp => {
-                    // AI_CV_Heal.
-                    if user_hp == 100 {
-                        score[i] -= 3;
-                    } else if !target_faster {
-                        score[i] -= 8;
-                    } else if user_hp >= 70 && rng.modn(256) >= 30 {
-                        score[i] -= 3;
-                    } else if rng.modn(256) >= 20 {
-                        score[i] += 2;
-                    }
-                }
-                Effect::Rest => {
-                    // AI_CV_Rest.
-                    if !target_faster {
-                        if user_hp == 100 {
-                            score[i] -= 8;
-                        } else if user_hp >= 40 && (user_hp > 50 || rng.modn(256) >= 70) {
-                            score[i] -= 3;
-                        } else if rng.modn(256) >= 10 {
-                            score[i] += 3;
-                        }
-                    } else if user_hp >= 60 && (user_hp > 70 || rng.modn(256) >= 50) {
-                        score[i] -= 3;
-                    } else if rng.modn(256) >= 10 {
-                        score[i] += 3;
-                    }
-                }
-                Effect::Roar => {
-                    // AI_CV_Roar: -3 unless the target is boosted to +3 or more in a stat
-                    // the AI cares about, then +2 half the time.
-                    let boosted = [0usize, 1, 3, 4, 6].iter().any(|&k| target.stages[k] >= 3);
-                    if boosted {
-                        if rng.modn(256) >= 128 {
-                            score[i] += 2;
-                        }
-                    } else {
-                        score[i] -= 3;
-                    }
-                }
-                Effect::Weather(w) => {
-                    // AI_CV_RainDance / SunnyDay / Hail: -1 below 40% HP, else +1 when a
-                    // different weather is up (Rain Dance: also Rain Dish).
-                    if w != W_SAND {
-                        if user_hp < 40 {
-                            score[i] -= 1;
-                        } else if user_side.weather != 0 && user_side.weather != w {
-                            score[i] += 1;
-                        }
-                    }
-                }
-                Effect::Reflect => {
-                    // AI_CV_Reflect: -2 below half HP; else only worth it against a
-                    // physical-type target (80% -2 against anything else).
-                    let phys = is_physical(target.types.0) || is_physical(target.types.1);
-                    if user_hp < 50 || (!phys && rng.modn(256) >= 50) {
-                        score[i] -= 2;
-                    }
-                }
-                Effect::LightScreen => {
-                    // AI_CV_LightScreen: the mirror image (special-type targets).
-                    let special = target.types.0 >= 10 || target.types.1 >= 10;
-                    if user_hp < 50 || (!special && rng.modn(256) >= 50) {
-                        score[i] -= 2;
-                    }
-                }
-                Effect::Charge => {
-                    // AI_CV_ChargeUpMove: -2 when resisted (or the target Protects), -1 at
-                    // 38% HP or less.
-                    if eff < 1.0 {
-                        score[i] -= 2;
-                    } else if user_hp <= 38 {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::Foresight => {
-                    // AI_CV_Foresight: -2 for a non-Ghost user without raised evasion.
-                    let ghost = user.types.0 == 7 || user.types.1 == 7;
-                    if ghost || user.stages[6] > 2 {
-                        if rng.modn(256) >= 80 {
-                            score[i] += 2;
-                        }
-                    } else {
-                        score[i] -= 2;
-                    }
-                }
-                Effect::Overheat => {
-                    // AI_CV_Overheat.
-                    if eff < 1.0 {
-                        score[i] -= 1;
-                    } else if target_faster {
-                        if user_hp <= 80 {
-                            score[i] -= 1;
-                        }
-                    } else if user_hp <= 60 {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::HighCrit => {
-                    // AI_CV_HighCrit.
-                    if eff >= 2.0 && rng.modn(256) >= 128 {
-                        score[i] += 1;
-                    }
-                }
-                Effect::Explosion => {
-                    // AI_CV_SelfKO, trimmed (no evasion bookkeeping on the player).
-                    if user_hp >= 80 && !target_faster {
-                        if rng.modn(256) >= 50 {
-                            score[i] -= 3;
-                        }
-                    } else if user_hp <= 50 {
-                        if rng.modn(256) >= 128 {
-                            score[i] += 1;
-                        }
-                        if user_hp <= 30 && rng.modn(256) >= 50 {
-                            score[i] += 1;
-                        }
-                    } else if rng.modn(256) >= 50 {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::Recharge => {
-                    // AI_CV_Recharge.
-                    if eff < 1.0
-                        || (!target_faster && user_hp > 40)
-                        || (target_faster && user_hp >= 60)
-                    {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::Trap => {
-                    // AI_CV_Trap.
-                    if matches!(target.status, Status1::Toxic(_)) && rng.modn(256) >= 128 {
-                        score[i] += 1;
-                    }
-                }
-                Effect::AlwaysHit => {
-                    // AI_CV_AlwaysHit.
-                    if target.stages[6] >= 5 || user.stages[5] <= -4 {
-                        score[i] += 1;
-                    } else if (target.stages[6] >= 3 || user.stages[5] <= -2)
-                        && rng.modn(256) >= 100
-                    {
-                        score[i] += 1;
-                    }
-                }
-                Effect::Counter => {
-                    // AI_CV_Counter, trimmed: discouraged at low HP, encouraged against
-                    // physical attackers.
-                    if matches!(target.status, Status1::Sleep(_)) || target.confusion > 0 {
-                        score[i] -= 1;
-                    }
-                    if user_hp <= 30 && rng.modn(256) >= 10 {
-                        score[i] -= 1;
-                    }
-                    if user_hp <= 50 && rng.modn(256) >= 100 {
-                        score[i] -= 1;
-                    }
-                    let phys_target = is_physical(target.types.0) || is_physical(target.types.1);
-                    if phys_target {
-                        if rng.modn(256) >= 100 {
-                            score[i] += 1;
-                        }
-                    } else if rng.modn(256) >= 50 {
-                        score[i] -= 1;
-                    }
-                }
-                Effect::Protect => {
-                    // AI_CV_Protect, trimmed.
-                    if user.protect_count >= 2 {
-                        score[i] -= 2;
-                    } else if matches!(target.status, Status1::Toxic(_)) || target.seeded {
-                        score[i] += 2;
-                    }
-                    if user.protect_count >= 1 {
-                        score[i] -= 1;
-                        if rng.modn(256) >= 128 {
-                            score[i] -= 1;
-                        }
-                    }
-                }
-                Effect::Sleep => {
-                    // AI_CV_Sleep: +1 only when the *target* knows Dream Eater or
-                    // Nightmare (the FRLG script checks AI_TARGET) — effectively never.
-                }
-                _ => {}
-            }
+            let cv = CvCtx {
+                user,
+                target,
+                user_side,
+                user_hp,
+                target_hp,
+                target_faster,
+                eff,
+                target_last: target.last_move,
+            };
+            score[i] += ai_cv(dex, &cv, fx, mv, rng);
         }
 
         // AI_TryToFaint.
@@ -1512,6 +1720,7 @@ fn do_move(
     if att.charging != Some(mv) {
         att.spend_pp(mv);
     }
+    att.last_move = Some(mv);
 
     // --- two-turn moves.
     if att.charging == Some(mv) {
@@ -2221,6 +2430,7 @@ fn greedy_action(
     tac: &Tactics,
     fs: &Fs,
     wild: bool,
+    next_foe: Option<&Mon>,
     out: &mut Outcome,
 ) -> (Action, Read) {
     let my_frac = me.hp as f64 / me.max_hp as f64;
@@ -2248,8 +2458,31 @@ fn greedy_action(
             && absorbs(e.ability, m.mtype).is_none()
             && (calc_damage(dex, me, e, mv, 0, false, &fs.en_side, None) * 85) / 100 >= e.hp
     });
+    // A sure kill the fighter lands first (or survives the wait for) makes any heal pointless
+    // — unless what comes next (a +1-priority Extreme Speed, a sandstorm tick) would finish a
+    // fighter that low.
+    let next_danger = next_foe
+        .map(|nf| {
+            nf.moves
+                .iter()
+                .map(|&mv| calc_damage(dex, nf, me, mv, 0, false, &fs.my_side, None))
+                .max()
+                .unwrap_or(0)
+        })
+        .unwrap_or(0);
+    let safe_kill = sure_kill
+        && (speed(me) > speed(e) || me.hp > danger)
+        && me.hp > next_danger + me.max_hp / 16;
     // Healing is only worth a turn if it actually leaves the KO range.
-    let in_danger = me.hp <= danger && me.max_hp > danger && !sure_kill;
+    let in_danger = me.hp <= danger && me.max_hp > danger && !safe_kill;
+    // The foe in front is harmless (or about to fall) but the next one would take the
+    // fighter in a single hit: spend the quiet turn on the heal ("two heals between E4
+    // fights" — and between mons when the lineup is known by heart).
+    let prep_heal = sure_kill
+        && next_danger > 0
+        && me.hp <= next_danger + me.max_hp / 16
+        && me.max_hp > next_danger
+        && (danger as f64) * 2.0 < me.hp as f64;
     // ... and never twice in a row for HP alone: after a heal the human takes the
     // free action instead of burning an item per turn against a foe that out-damages
     // the heal (the engine's old Lance loop: 11 Full Restores against Outrage).
@@ -2270,20 +2503,30 @@ fn greedy_action(
             || (my_frac < 0.6 && (me.status == Status1::Paralysis || me.confusion > 1))
             || ((my_frac < tac.heal_below && me.hp <= 2 * danger && me.max_hp > danger
                 || in_danger)
-                && heal_ok))
+                && heal_ok
+                && !safe_kill)
+            || (prep_heal && heal_ok))
     {
         Action::FullRestore
     } else if fs.heals_left > 0
         && ((my_frac < tac.heal_below
             && me.hp <= 2 * danger
             && tac.heal as f64 + me.hp as f64 > danger as f64)
-            || (in_danger && me.hp + tac.heal > danger))
+            || (in_danger && me.hp + tac.heal > danger)
+            || prep_heal && me.hp + tac.heal > next_danger)
         && heal_ok
+        && !(safe_kill && !prep_heal)
     {
         // A human only burns a heal turn when the foe can actually reach them
         // within ~2 hits (the WR run heals mid-fight only under real pressure).
         Action::Heal
-    } else if let (Some(x), true) = (next_x, me.hp * 2 > me.max_hp && !sure_kill) {
+    } else if let (Some(x), true) = (
+        next_x,
+        me.hp * 2 > me.max_hp && !sure_kill && turns_to_kill(dex, me, e, fs, wild) >= tac.setup_min,
+    ) {
+        // Setting up costs the foe a free hit; it only pays when the foe would otherwise
+        // take three or more attacks to drop (Pidgeot, Alakazam and Tyranitar fall to one
+        // or two, so a runner never spends a turn on an X item there).
         Action::XItem(x)
     } else {
         match best_attack(dex, me, e, fs, wild).0 {
@@ -2298,6 +2541,22 @@ fn greedy_action(
         }
     };
     (action, read)
+}
+
+/// Attacks the fighter's best move needs to drop the foe (mean roll, accuracy included).
+fn turns_to_kill(dex: &Dex, me: &Mon, e: &Mon, fs: &Fs, wild: bool) -> u32 {
+    let Some(mv) = best_attack(dex, me, e, fs, wild).0 else {
+        return 99;
+    };
+    let m = &dex.moves[mv];
+    let d = calc_damage(dex, me, e, mv, 0, false, &fs.en_side, None) as f64
+        * 0.925
+        * hit_pct(me, e, m) as f64
+        / 100.0;
+    if d < 1.0 {
+        return 99;
+    }
+    (e.hp as f64 / d).ceil() as u32
 }
 
 /// Hit chance of a move in percent after the attacker's accuracy and the target's evasion
@@ -2316,7 +2575,13 @@ fn hit_pct(att: &Mon, def: &Mon, m: &crate::data::MoveData) -> u32 {
 /// PP economy (engine-audit 2026-11-13): among kills, and among near-best non-kills
 /// (within 8%), prefer the slot with the most PP left — a human saves Surf/Blizzard PP on
 /// trash instead of draining the best slot.
-fn best_attack(dex: &Dex, me: &Mon, e: &Mon, fs: &Fs, wild: bool) -> (Option<usize>, Option<usize>) {
+fn best_attack(
+    dex: &Dex,
+    me: &Mon,
+    e: &Mon,
+    fs: &Fs,
+    wild: bool,
+) -> (Option<usize>, Option<usize>) {
     let mut cands: Vec<(usize, f64)> = vec![];
     let mut best: Option<(usize, f64)> = None;
     let mut killer: Option<(usize, f64, i32, u32)> = None;
@@ -2376,7 +2641,10 @@ fn best_attack(dex: &Dex, me: &Mon, e: &Mon, fs: &Fs, wild: bool) -> (Option<usi
             .map(|&(mv, s)| (mv, s))
             .unwrap()
     });
-    let chosen = killer.map(|(mv, s, _, _)| (mv, s)).or(pick).map(|(mv, _)| mv);
+    let chosen = killer
+        .map(|(mv, s, _, _)| (mv, s))
+        .or(pick)
+        .map(|(mv, _)| mv);
     // The runner-up: the highest-scoring other move.
     let alt = cands
         .iter()
@@ -2454,7 +2722,8 @@ fn run(
             out.turns += 1;
 
             // --- player action.
-            let (mut my_action, read) = greedy_action(dex, me, &e, tac, fs, wild, &mut out);
+            let (mut my_action, read) =
+                greedy_action(dex, me, &e, tac, fs, wild, foes.get(foe_idx + 1), &mut out);
             let danger = read.danger;
             let sure_kill = read.sure_kill;
             if let Some(a) = forced_first.take() {
@@ -2508,8 +2777,9 @@ fn run(
                 )
                 .map(|i| e.moves[i])
             };
-            let enemy_heals_now =
-                !en_forced && en_move.is_none() && ai_wants_item(ai_items_total, fs.ai_heals, valid, &e);
+            let enemy_heals_now = !en_forced
+                && en_move.is_none()
+                && ai_wants_item(ai_items_total, fs.ai_heals, valid, &e);
 
             // --- order (`GetWhoStrikesFirst`): priority, then speed, ties Random() & 1.
             let my_prio = match my_action {
@@ -2966,6 +3236,7 @@ mod tests {
                 others_alive: 0,
                 heal_stock: u32::MAX,
                 rollouts: 0,
+                setup_min: 1,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
