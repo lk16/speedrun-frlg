@@ -2347,6 +2347,62 @@ mod tests {
         assert_eq!(dmg, 43);
     }
 
+    /// The WR run's starter (video overlay: Rash, IVs HP15 Atk26 Def9 SpA30 SpD20 Spe29) has the HP the
+    /// video shows: 32 at Lv11 (Brock, "10/32") and 56 at Lv20 (Misty, "56/56"). The sim keeps IVs as
+    /// HP, Atk, Def, Spe, SpA, SpD (`manip::ManipParams::mins`).
+    #[test]
+    fn wr_starter_stats_match_the_video() {
+        let dex = Dex::load();
+        let rash = crate::manip::nature_index("Rash").unwrap();
+        let ivs = [15, 26, 9, 29, 30, 20];
+        let sq = make_mon(&dex, dex.id("SPECIES_SQUIRTLE"), 11, ivs, [0; 6], rash, 0);
+        assert_eq!(sq.max_hp, 32);
+        let wt = make_mon(&dex, dex.id("SPECIES_WARTORTLE"), 20, ivs, [0; 6], rash, 0);
+        assert_eq!(wt.max_hp, 56);
+        // Rash: +SpA, -SpD.
+        let neutral = make_mon(&dex, dex.id("SPECIES_WARTORTLE"), 20, ivs, [0; 6], 0, 0);
+        assert!(wt.stat[3] > neutral.stat[3] && wt.stat[4] < neutral.stat[4]);
+    }
+
+    /// The Torrent tactic at the WR's Brock state (Lv11, 10/32 HP, Tackle/Bubble/Withdraw): the engine wins
+    /// ~97% with about 2 player actions per foe (the video shows 2 for the whole fight).
+    #[test]
+    fn brock_at_one_third_hp_with_torrent_is_a_short_survivable_fight() {
+        let dex = Dex::load();
+        let rash = crate::manip::nature_index("Rash").unwrap();
+        let f = dex.fight("TRAINER_LEADER_BROCK");
+        let foes: Vec<Mon> = f.full.iter().map(|m| enemy_mon(&dex, m)).collect();
+        let (mut won, mut turns, n) = (0u32, 0u32, 3000u32);
+        for i in 0..n {
+            let mut me = make_mon(
+                &dex,
+                dex.id("SPECIES_SQUIRTLE"),
+                11,
+                [15, 26, 9, 29, 30, 20],
+                [0; 6],
+                rash,
+                0,
+            );
+            me.moves = vec![
+                dex.move_id("MOVE_TACKLE"),
+                dex.move_id("MOVE_BUBBLE"),
+                dex.move_id("MOVE_WITHDRAW"),
+            ];
+            me.hp = 10;
+            let tac = Tactics {
+                torrent: true,
+                ..Default::default()
+            };
+            let mut g = rng(i + 31000);
+            let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
+            won += o.won as u32;
+            turns += o.turns;
+        }
+        let (w, t) = (won as f64 / n as f64, turns as f64 / n as f64);
+        assert!(w > 0.9, "win rate {w}");
+        assert!(t < 4.5, "actions {t}");
+    }
+
     #[test]
     fn stages_and_badges_change_damage() {
         let dex = Dex::load();

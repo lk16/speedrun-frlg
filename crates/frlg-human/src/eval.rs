@@ -100,6 +100,7 @@ impl Plan {
                         sacs: t.sacs,
                         torrent: t.torrent,
                         entry: t.entry,
+                        power: t.power,
                     },
                 )
             })

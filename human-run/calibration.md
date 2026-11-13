@@ -90,3 +90,12 @@ residual rms ~75-80 s over 16 fights).
 The WR-level human factor in these rows is ~1.05 over the libmgba floor; the plan's `text_factor` and
 `path_overhead` stay at their own 1.05 / 1.04 for the ledger text and walking. Model fight *lengths in
 actions* are a separate matter: `frlg-human splits` prints model vs WR actions and seconds per fight.
+
+## Early fights against the WR video, 2026-11-14 (`frlg-human splits`, plan 377)
+
+The video durations (`video-analysis/data/calib/v1-early-fights.md`) are intro to the EXP/prize text; `splits` now prints the
+model's *core* seconds (intro to the last faint) next to them, and the full segment (outro and level-ups) separately. Brock: video
+31 s with a ~4 s intro, model core 43 s (intro 8 s: `trainer_intro` x0.8 of 600; the rest within 3 s per mon); Misty: video 54 s,
+model 60 s with 5.1 actions (video 6-8). Torrent figures: Brock at 10/32 HP, Lv11, 97% win, ~2 actions per foe (unit test); at full
+HP the same fight takes 3.9 actions. Field poison: 1 HP per 5 steps (`field_control_avatar.c:710-733`), the 70 frames per HP is a guess.
+Not measured on tier 1: the Torrent-window potion trips (priced as a battle turn each) and the Antidote trip (400 frames).

@@ -45,6 +45,7 @@ pub struct TacCfg {
     pub sacs: u32,
     pub torrent: bool,
     pub entry: bool,
+    pub power: f64,
 }
 
 impl Default for TacCfg {
@@ -55,6 +56,7 @@ impl Default for TacCfg {
             sacs: 0,
             torrent: false,
             entry: false,
+            power: 1.0,
         }
     }
 }
@@ -1146,7 +1148,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     let heal_below = if heal_override >= 0.0 {
         heal_override
     } else if in_torrent {
-        0.0
+        ctx.p.torrent_heal_below
     } else {
         ctx.p.heal_below
     };
@@ -1189,6 +1191,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             } else {
                 ctx.p.carry_power
             };
+            let cp = cp * cfg.power;
             if cp != 1.0 {
                 m.stat[0] = (m.stat[0] as f64 * cp) as i32;
                 m.stat[3] = (m.stat[3] as f64 * cp) as i32;
@@ -1278,7 +1281,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             if !mewtwo_now {
                 st.carry_status = out.end_status;
                 st.slot_pp = me.pp.clone();
-                if !in_torrent {
+                if !in_torrent || ctx.p.poison_frames_per_hp <= 0.0 {
                     cure_status(ctx, st);
                 }
             }

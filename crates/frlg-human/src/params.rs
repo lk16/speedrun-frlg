@@ -197,6 +197,10 @@ pub struct FightTactic {
     /// Before this fight, a potion heal only up to the Torrent window: heal when the HP is below the
     /// foes' best hit (with Withdraw) plus one, otherwise leave the HP alone (never heal up to full).
     pub entry: bool,
+    /// Multiplier on the carry's fitted `carry_power` in this fight (1 = as fitted): the fit is one number
+    /// over 16 fights, a fight whose action count it misses can be nudged (Misty: 4.4 actions against
+    /// the video's 6-8).
+    pub power: f64,
 }
 
 impl Default for FightTactic {
@@ -207,6 +211,7 @@ impl Default for FightTactic {
             sacs: 0,
             torrent: false,
             entry: false,
+            power: 1.0,
         }
     }
 }
@@ -466,6 +471,8 @@ pub struct Params {
     pub torrent_hits: f64,
     /// Stall turns in the Torrent tactic (Withdraw is always allowed).
     pub torrent_stall: bool,
+    /// In-battle heal threshold of the Torrent phase (0 = only when a hit could KO).
+    pub torrent_heal_below: f64,
     /// `carry_power` up to and including the segment `power_early_until`: the early fights (Brock,
     /// Misty, ...) use the engine's own Torrent and the real manip IVs, so the fitted stand-in is not
     /// needed there (empty = `carry_power` throughout).
@@ -570,6 +577,7 @@ impl Default for Params {
             poison_floor: 3,
             torrent_hits: 2.0,
             torrent_stall: true,
+            torrent_heal_below: 0.0,
             carry_power_early: 1.0,
             power_early_until: String::new(),
             extra_fights: vec![],
