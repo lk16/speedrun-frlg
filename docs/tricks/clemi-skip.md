@@ -127,3 +127,26 @@ longer than steady-state, or worth burning somewhere free.
   `docs/glitchless-run/plan.md` §"which second mon") saves once per catch.
 - The L press is an ordinary input in the `.bk2` L column; no settings or menu detour is
   needed since HELP is the default button mode.
+
+## 2026-11-13 addendum: tier-1 measured, and the level-up jingle too
+
+- **Measured on libmgba** (`frlg-calib --clemi`, forest catch state, 84 trials): control
+  catches mean 668 floor frames (min 412, spread from dex-page/species variation); catches
+  with an L press landing in the jingle complete in ~435-455, a saving of **170-230 floor
+  frames (≈3 s)** — consistent with the external ~2.68 s claim, and measured on the **GBA**
+  game, refuting the web's "Switch-port-only" framing (searched 2026-11-13: the trick is
+  credited to iamClemi, popularized by Gunnermaniac, reported ~2.68 s/catch; every fetch
+  of a primary source 403'd, snippets only). The harness burns the one-time Help welcome
+  (A to advance — it is not B-dismissable) before trials; a runner pays that once per save.
+- **The level-up jingle is the same gate**: `"{B_BUFF1} grew to\nLV. {B_BUFF2}!{WAIT_SE}\p"`
+  (`decompiled/src/battle_message.c:56`), with `MUS_LEVEL_UP` on SE player 2
+  (`decompiled/sound/song_table.inc:259`, `song mus_level_up, 2, 2`) played via `fanfare`
+  (`decompiled/data/battle_scripts_1.s:3113-3115`); `Task_Fanfare`'s 80-frame counter
+  (`decompiled/src/sound.c:51`) freezes while Help is open and gates nothing the text waits
+  on. So an L press during the level-up jingle should cut its wait the same way —
+  not yet tier-1 measured, and not yet credited in any model.
+- **Modelled in `frlg-human`** as `clemi_skip` (140 frames credited per successful catch,
+  conservative vs the floor measurement; `crates/frlg-human/src/params.rs`). Accepted into
+  the human-run plan chain (`370-clemi-skip`). **Open:** whether the console (GBA/GBI)
+  glitchless ruleset allows it — it is menuing, not a glitch, but the boards decide; a
+  human needs to check speedrun.com before any real run relies on it.

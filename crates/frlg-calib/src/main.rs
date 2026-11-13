@@ -149,8 +149,121 @@ fn fights(state: &std::path::Path, trials: u32) {
     }
 }
 
+/// Clemi skip (docs/tricks/clemi-skip.md): same forest catch as the default mode, but on odd
+/// trials L is tapped `k` frames after the Bag press to open the Help menu during the caught
+/// jingle, then B-mashed shut. `k` sweeps 220..400 so the press window and the per-catch saving
+/// fall out of the timing table; even trials are the control arm. Totals are Bag-press to free
+/// movement, so control minus skip at the best k is the measured saving.
+fn clemi(state: &std::path::Path, trials: u32) {
+    let rom = default_rom_path().expect("rom");
+    let mut emu = Emu::new(&rom).expect("emu");
+    boot_with_default_bios(&mut emu).expect("bios");
+    let sym_path = default_sym_path().expect("sym");
+    let g_battle_mons = SymbolTable::load(&sym_path)
+        .unwrap()
+        .get("gBattleMons")
+        .unwrap()
+        .addr;
+    let obs = Observer::new(SymbolTable::load(&sym_path).unwrap()).expect("observer");
+    emu.load_state_file(state).expect("state");
+    emu.idle(260);
+    let mut c = Ctx {
+        emu,
+        obs,
+        g_battle_mons,
+    };
+    // Burn the one-time Help welcome (A to page through, B to close) so trials measure the
+    // steady state a runner is actually in after their first Help open of the save.
+    c.tap(keys::L);
+    c.mash(keys::A, 240, |e, _| e.frame() == u32::MAX);
+    c.mash(keys::B, 240, |e, _| e.frame() == u32::MAX);
+    c.mash(keys::B, 600, |e, o| o.player_can_step(e));
+    let base = c.emu.save_state().expect("save");
+    let mut control = vec![];
+    let mut skip: Vec<(u32, u32)> = vec![];
+    for trial in 0..trials {
+        c.emu.load_state(&base).expect("load");
+        c.emu.idle(trial * 7);
+        let mut battle_at = None;
+        'walk: for leg in 0..80u32 {
+            let (dir, steps) = match leg {
+                0 => (keys::UP, 3),
+                1 => (keys::LEFT, 8),
+                2 => (keys::UP, 3),
+                l if l % 2 == 1 => (keys::LEFT, 3),
+                _ => (keys::RIGHT, 3),
+            };
+            for _ in 0..16 * steps {
+                c.emu.step(dir);
+                if c.obs.in_battle(&mut c.emu) {
+                    battle_at = Some(c.emu.frame());
+                    break 'walk;
+                }
+            }
+        }
+        if battle_at.is_none() {
+            continue;
+        }
+        c.mash(keys::A, 3000, |e, o| o.battle_choosing_actions(e));
+        let enemy = c.g_battle_mons + 0x58;
+        c.emu.write8(enemy + 0x28, 1);
+        c.emu.write8(enemy + 0x29, 0);
+        let t1 = c.emu.frame();
+        c.tap(keys::RIGHT); // Bag
+        if trial % 2 == 0 {
+            c.mash(keys::A, 3000, |e, o| !o.in_battle(e));
+            c.mash(keys::B, 3000, |e, o| o.player_can_step(e));
+            control.push(c.emu.frame() - t1);
+        } else {
+            let k = 220 + 30 * ((trial / 2) % 7); // L press at t1+k: 220..400
+            c.mash(keys::A, 3000, |e, _| e.frame() >= t1 + k - 20);
+            while c.emu.frame() < t1 + k {
+                c.emu.step(0);
+            }
+            c.tap(keys::L);
+            let spent = c.mash(keys::B, 3000, |e, o| !o.in_battle(e));
+            if spent >= 3000 {
+                if let Ok(d) = std::env::var("CLEMI_PNG") {
+                    let _ = c
+                        .emu
+                        .write_png(&PathBuf::from(d).join(format!("stuck-k{k}-t{trial}.png")));
+                }
+            }
+            c.mash(keys::B, 3000, |e, o| o.player_can_step(e));
+            skip.push((k, c.emu.frame() - t1));
+        }
+    }
+    let mut s = control.clone();
+    s.sort();
+    println!(
+        "control      n={:3} mean {:7.1} min {:?} max {:?}",
+        control.len(),
+        mean(&control),
+        s.first(),
+        s.last()
+    );
+    let mut by_k: std::collections::BTreeMap<u32, Vec<u32>> = Default::default();
+    for (k, v) in &skip {
+        by_k.entry(*k).or_default().push(*v);
+    }
+    for (k, v) in &by_k {
+        println!(
+            "skip k={k:3}   n={:3} mean {:7.1} saving {:+7.1} {:?}",
+            v.len(),
+            mean(v),
+            mean(&control) - mean(v),
+            v
+        );
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--clemi") {
+        let trials = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(60);
+        clemi(&PathBuf::from(&args[2]), trials);
+        return;
+    }
     if args.get(1).map(String::as_str) == Some("--fights") {
         let trials = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(50);
         fights(&PathBuf::from(&args[2]), trials);

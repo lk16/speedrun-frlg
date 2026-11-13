@@ -777,7 +777,53 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.walk("blaine-walk", 34, Era::Run, None, Src::Tiles);
     b.group("blaine-quiz", 2, 2, 38, 75);
     b.trainer("blaine", "TRAINER_LEADER_BLAINE", 600);
-    b.text("blaine-badge-and-sevii-scene", 5000, Src::Guess);
+    // The forced first Sevii trip. Previously one 5000-frame guess; audited 2026-11-13 against
+    // the scripts (journal of that date): sailing home needs VAR_MAP_SCENE_CINNABAR_ISLAND >= 4
+    // (data/scripts/seagallop.inc:4), reached only through Bill's sail-home scene, which needs
+    // the meteorite delivered (TwoIsland_JoyfulGameCorner/scripts.inc:149-152), which needs
+    // Lostelle rescued (ThreeIsland_BerryForest/scripts.inc:24-39, forced wild HYPNO Lv30), which
+    // needs the Three Island biker wall cleared: four forced fights (ThreeIsland/scripts.inc:195-260)
+    // and two unavoidable Bond Bridge trainers on the way. Tile counts are the audit's BFS (+-10%).
+    // Scene-text frames are guesses; walking, fights and grass are modelled pieces.
+    b.text("sevii-bill-boat", 2600, Src::Guess); // Bill scene, boat, harbor, scripted walk to the PC
+    b.text("celio-tri-pass", 2600, Src::Guess); // meteorite, Tri-Pass, town-map scene
+    b.walk("one-island-out", 33, Era::Run, None, Src::Tiles); // PC -> harbor, sailor
+    b.text("sail-to-two", 900, Src::Guess);
+    b.walk("two-island-in", 40, Era::Run, None, Src::Tiles);
+    b.text("corner-lostelle-scene", 1200, Src::Guess); // forced first-visit Game Corner scene
+    b.walk("two-island-out", 40, Era::Run, None, Src::Tiles);
+    b.text("sail-to-three", 900, Src::Guess);
+    b.walk("three-island-town", 56, Era::Run, None, Src::Tiles); // port + town to the biker wall
+    b.trainer("three-island-goon-1", "TRAINER_BIKER_GOON", 300);
+    b.trainer("three-island-goon-2", "TRAINER_BIKER_GOON_2", 300);
+    b.trainer("three-island-goon-3", "TRAINER_BIKER_GOON_3", 300);
+    b.trainer("three-island-paxton", "TRAINER_CUE_BALL_PAXTON", 400);
+    b.walk(
+        "bond-bridge",
+        125,
+        Era::Run,
+        Some(("MAP_BOND_BRIDGE", g(34, 34, 34))),
+        Src::Guess,
+    );
+    b.trainer("bond-bridge-nikki", "TRAINER_AROMA_LADY_NIKKI", 300);
+    b.trainer("bond-bridge-violet", "TRAINER_AROMA_LADY_VIOLET", 300);
+    b.walk(
+        "berry-forest",
+        197,
+        Era::Run,
+        Some(("MAP_THREE_ISLAND_BERRY_FOREST", g(55, 55, 55))),
+        Src::Guess,
+    );
+    // Lostelle's forced wild Hypno Lv30: intro plus a flee. Catching it instead is a plan
+    // special (kind "static", SPECIES_HYPNO, after "berry-forest"); that slightly double-counts
+    // this flee cost, which is within the guess error.
+    b.text("lostelle-hypno", 950, Src::Guess);
+    // Rescue warps straight to the Game Corner; delivery hands over the free Moon Stone.
+    b.text("deliver-meteorite", 1400, Src::Guess);
+    b.walk("two-island-out-2", 40, Era::Run, None, Src::Tiles);
+    b.text("sail-to-one", 900, Src::Guess);
+    b.walk("one-island-in", 18, Era::Run, None, Src::Tiles);
+    b.text("blaine-badge-and-sevii-scene", 2800, Src::Guess); // Bill sail-home + Cinnabar return
     b.split();
 
     // 11. Viridian Gym.

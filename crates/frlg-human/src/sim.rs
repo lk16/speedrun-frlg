@@ -192,10 +192,17 @@ impl Ctx<'_> {
     /// After the last shake: Gotcha text, dex page, nickname prompt. The measured throw-to-overworld
     /// total is 409-549, so what comes after the throw cycle is small.
     fn catch_end(&self) -> f64 {
-        if self.p.calib_enc {
+        let base = if self.p.calib_enc {
             150.0
         } else {
             CATCH_END as f64 * self.p.text_factor
+        };
+        // The caught-jingle wait spans catch_end and the tail of the throw animation; the
+        // measured whole-catch saving is credited here (clamped so the segment stays positive).
+        if self.p.clemi_skip {
+            (base - 140.0).max(10.0)
+        } else {
+            base
         }
     }
 

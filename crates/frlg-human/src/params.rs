@@ -353,6 +353,11 @@ pub struct Params {
     /// Fallback hunts, tried in order when Oak's check finds fewer than 60 caught.
     pub fill: Vec<Hunt>,
     pub stones: Vec<String>,
+    /// Clemi skip (docs/tricks/clemi-skip.md): an L press during the caught jingle opens the
+    /// Help menu, which kills the SE the "Gotcha!" text waits on. Measured on tier 1
+    /// (frlg-calib --clemi, 2026-11-13): good presses save 170-230 floor frames per successful
+    /// catch; the model credits a conservative 140 (late presses save less, misses save none).
+    pub clemi_skip: bool,
     /// Trainer groups the human walks around (by segment name).
     pub skip_groups: Vec<String>,
     /// Trainer count override per aggregated group (the others in the group are walked around).
@@ -450,6 +455,7 @@ impl Default for Params {
             rope_cerulean_cave: false,
             fill: vec![],
             stones: vec![],
+            clemi_skip: false,
             skip_groups: vec![],
             group_n: Default::default(),
             mewtwo: false,
