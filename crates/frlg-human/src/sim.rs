@@ -92,6 +92,8 @@ pub struct Probe {
     pub fill: Vec<(f64, f64, u64)>,
     /// Kanto species caught after each segment (filled when a probe is passed).
     pub caught_at: Vec<u32>,
+    /// The starter phase of a `manip` attempt (`manip.rs`).
+    pub phase: Option<crate::manip::PhaseSample>,
 }
 
 pub struct Outcome {
@@ -154,6 +156,11 @@ struct State {
     /// HP as a fraction, badges (bit 0 Boulder, 4 Soul, 6 Volcano) and whether Surf is known.
     ivs: [u32; 6],
     nature: u8,
+    /// Quiet wild seed (`manip.rs`): encounters still allowed in the first `quiet_window` rolls
+    /// (`u32::MAX` = no table) and rolls used so far.
+    quiet_hits_left: u32,
+    quiet_rolls: f64,
+    quiet_window: f64,
     evs: [u32; 6],
     hp_frac: f64,
     badges: u8,
@@ -811,15 +818,21 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
             }
         };
         if gap >= left {
+            quiet_account(st, left, cooldown);
             used += left as u32;
             break;
         }
+        let quiet_hit = quiet_account(st, gap + 1, cooldown);
         left -= gap + 1;
         used += gap as u32 + 1;
         cooldown = cd_steps;
         let slot = &slots[pick_slot(rng, &weights)];
         let level = rng.range(slot.min, slot.max);
         if repel && level < st.carry {
+            continue;
+        }
+        if quiet_hit == Some(true) {
+            // A quiet table seed: this roll is a miss (`manip.rs`, doc 3.4).
             continue;
         }
         encounter(
@@ -1348,6 +1361,89 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
     }
 }
 
+/// Counts the encounter rolls of `steps` steps (steps in the cooldown pass the dice at 5%, so
+/// they cost 0.05 of a roll) against the quiet window; the last of the steps is the roll that hit.
+/// Returns `Some(suppress)` for an encounter that falls inside the window of a quiet seed, `None`
+/// when it falls outside (or no table is active). Roll counting per step is a guess: the real
+/// stream index also moves with the 60% tile gate (journal 2026-11-13-12-30).
+fn quiet_account(st: &mut State, steps: u64, cooldown: u64) -> Option<bool> {
+    if st.quiet_hits_left == u32::MAX || st.quiet_rolls >= st.quiet_window {
+        return None;
+    }
+    let cd = steps.min(cooldown) as f64;
+    let rolls = cd * 0.05 + (steps as f64 - cd);
+    let inside = st.quiet_rolls + rolls <= st.quiet_window;
+    st.quiet_rolls += rolls;
+    if !inside {
+        return None;
+    }
+    if st.quiet_hits_left == 0 {
+        Some(true)
+    } else {
+        st.quiet_hits_left -= 1;
+        Some(false)
+    }
+}
+
+/// The `manip` starter: a planned (nature, IVs) when every press hit, else an independent random
+/// draw that is kept only if it happens to meet the tier. Returns (kept, strength, IVs, nature).
+fn manip_starter(
+    ctx: &Ctx,
+    draw: &crate::manip::AttemptDraw,
+    rng: &mut Rng,
+) -> (bool, f64, [u32; 6], u8) {
+    let mp = &ctx.p.manip;
+    let (ivs, nat) = if draw.planned {
+        crate::manip::sample_good(mp, rng)
+    } else {
+        let mut g = frlg_rng::Rng(rng.next_u64() as u32);
+        let genome = frlg_mon::create::gift_mon(&mut g);
+        let iv = genome.ivs;
+        (
+            [
+                iv.hp as u32,
+                iv.atk as u32,
+                iv.def as u32,
+                iv.spe as u32,
+                iv.spa as u32,
+                iv.spd as u32,
+            ],
+            genome.nature(),
+        )
+    };
+    let squirtle = frlg_mon::species::by_id(frlg_mon::species::SQUIRTLE).expect("base stats");
+    let s50 = calc_stats(
+        squirtle,
+        frlg_mon::stats::Ivs {
+            hp: ivs[0] as u8,
+            atk: ivs[1] as u8,
+            def: ivs[2] as u8,
+            spe: ivs[3] as u8,
+            spa: ivs[4] as u8,
+            spd: ivs[5] as u8,
+        },
+        50,
+        nat,
+    );
+    let neutral = calc_stats(
+        squirtle,
+        frlg_mon::stats::Ivs {
+            hp: 15,
+            atk: 15,
+            def: 15,
+            spe: 15,
+            spa: 15,
+            spd: 15,
+        },
+        50,
+        0,
+    );
+    let score = |s: &frlg_mon::stats::Stats| s.spa as f64 + 0.6 * s.hp as f64;
+    let strength = (score(&s50) / score(&neutral)).clamp(0.85, 1.15);
+    let kept = draw.planned || crate::manip::qualifies(mp, &ivs, nat);
+    (kept, strength, ivs, nat)
+}
+
 fn starter_ok(ctx: &Ctx, rng: &mut Rng) -> (bool, f64, [u32; 6], u8) {
     let squirtle = frlg_mon::species::by_id(match ctx.p.starter.as_str() {
         "bulbasaur" => frlg_mon::species::BULBASAUR,
@@ -1433,6 +1529,9 @@ pub fn attempt(
         repel_ok: false,
         ivs: [15; 6],
         nature: 0,
+        quiet_hits_left: u32::MAX,
+        quiet_rolls: 0.0,
+        quiet_window: 0.0,
         evs: [0; 6],
         hp_frac: 1.0,
         badges: 0,
@@ -1454,6 +1553,17 @@ pub fn attempt(
         revives: 0,
         candies: 0,
     };
+    let manip = ctx.p.starter_model == "manip";
+    let mut draw = crate::manip::AttemptDraw::default();
+    if manip {
+        draw = crate::manip::draw(&ctx.p.manip, &mut Rng::new(seed, idx, 0x4D41_4E49));
+        // Power-on to the title press and the wait for the table's frame: off the timer, in the wall.
+        st.off += (draw.pre_s * FPS).round() as u64;
+        if draw.quiet {
+            st.quiet_hits_left = ctx.p.manip.quiet_max_hits;
+            st.quiet_window = ctx.p.manip.quiet_window as f64;
+        }
+    }
     st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
     // The starter's level-5 moves (`level_up_learnsets.h`).
     for &(l, m) in &ctx.dex.species[ctx.starter_line[0]].learnset {
@@ -2018,7 +2128,43 @@ pub fn attempt(
                 };
             }
         }
-        if seg.starter_check {
+        if seg.starter_check && manip {
+            let mp = &ctx.p.manip;
+            // On-timer: the route's own segments plus the extra human seconds and the idle frames
+            // waiting for the table's frame.
+            let extra = (mp.s_title_naming + mp.s_naming_ball + mp.s_ball_stats) * FPS;
+            // Not `bump`: the game stream is re-keyed at the next segment, and an idle of
+            // hundreds of thousands of frames (one-dial tiers) would spin the LCG for nothing.
+            st.clock += (extra + draw.idle_frames).round() as u64;
+            let (ok, strength, ivs, nat) =
+                manip_starter(ctx, &draw, &mut Rng::new(seed, idx, 0x5748));
+            st.strength = strength;
+            st.ivs = ivs;
+            st.nature = nat;
+            if let Some(pr) = probe.as_deref_mut() {
+                pr.phase = Some(crate::manip::PhaseSample {
+                    wall_frames: (st.clock + st.off) as f64
+                        + if ok { 0.0 } else { mp.s_reset * FPS },
+                    pass: ok,
+                    hits: draw.title_hit as u8 + draw.naming_hit as u8 + draw.ball_hit as u8,
+                    quiet: draw.quiet,
+                    planned: draw.planned,
+                });
+            }
+            if !ok {
+                st.off += (mp.s_reset * FPS).round() as u64;
+                if let Some(r) = rec.as_deref_mut() {
+                    r[i].resets += 1;
+                }
+                return Outcome {
+                    wall: st.clock + st.off,
+                    run: st.clock,
+                    finished: false,
+                    caught: st.caught.count(),
+                    whiteouts: st.whiteouts,
+                };
+            }
+        } else if seg.starter_check {
             let (mut ok, mut strength, mut ivs, mut nat) =
                 starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747));
             if !ok && ctx.p.starter_save_reroll {

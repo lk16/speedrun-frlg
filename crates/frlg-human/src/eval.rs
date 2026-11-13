@@ -361,6 +361,21 @@ pub fn report(ctx: &Ctx, seed: u64, attempts: u64, target: u64) -> Report {
     }
 }
 
+/// The starter phase of `r` attempts (only meaningful for `starter_model = "manip"`).
+pub fn phase_report(ctx: &Ctx, seed: u64, r: u64) -> crate::manip::PhaseReport {
+    let samples: Vec<crate::manip::PhaseSample> = (0..r)
+        .into_par_iter()
+        .filter_map(|i| {
+            let mut pr = Probe::default();
+            attempt(ctx, seed, i, None, None, None, Some(&mut pr));
+            pr.phase
+        })
+        .collect();
+    let mut rep = crate::manip::summarize(&samples, ctx.p.manip.press_p(), seed);
+    rep.idle_s = ctx.p.manip.mean_idle_frames() / crate::manip::FPS;
+    rep
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -404,6 +419,23 @@ mod tests {
         // Another seed gives another score; the same seed the same one.
         let u = totals(&evaluate_blocks(&ctx, 3, 200, rung_frames(8)), 200);
         assert_eq!(t.wall_frames, u.wall_frames);
+    }
+
+    #[test]
+    fn manip_starter_is_reproducible_and_quiet_seed_runs() {
+        let dex = DEX.get_or_init(Dex::load);
+        let text = PLAN.replace(
+            "\"name\":\"t\"",
+            "\"name\":\"t\",\"starter_model\":\"manip\",\"manip\":{\"quiet_max_hits\":4}",
+        );
+        let plan = Plan::load(dex, &text).unwrap();
+        let ctx = plan.ctx();
+        let a = totals(&evaluate_blocks(&ctx, 5, 300, rung_frames(8)), 300);
+        let b = totals(&evaluate_blocks(&ctx, 5, 300, rung_frames(8)), 300);
+        assert_eq!(a.wall_frames, b.wall_frames);
+        let r = phase_report(&ctx, 5, 500);
+        assert!(r.p_pass > 0.1 && r.p_pass < 0.9);
+        assert!(r.mean_fail_s > r.mean_pass_s * 0.5);
     }
 
     #[test]

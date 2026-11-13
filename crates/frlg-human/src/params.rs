@@ -388,6 +388,10 @@ pub struct Params {
     /// Use the sight-cone audit (`human-run/tools/forced.py`) for which trainers the route cannot
     /// walk around, instead of the earlier guessed groups.
     pub audited_forced: bool,
+    /// `random` (a random starter per attempt, gated by `starter_min_*`) or `manip` (frame-exact
+    /// presses with a table, `manip.rs`; parameters in `manip`).
+    pub starter_model: String,
+    pub manip: crate::manip::ManipParams,
 }
 
 impl Default for Params {
@@ -470,6 +474,8 @@ impl Default for Params {
             ability_bonus: 0.0,
             type_floor: 0.0,
             audited_forced: false,
+            starter_model: "random".into(),
+            manip: Default::default(),
         }
     }
 }
@@ -480,6 +486,12 @@ impl Params {
         let start = text.find("```json").ok_or("plan has no ```json block")? + "```json".len();
         let rest = &text[start..];
         let end = rest.find("```").ok_or("unterminated ```json block")?;
-        serde_json::from_str(&rest[..end]).map_err(|e| format!("plan-params: {e}"))
+        let p: Params =
+            serde_json::from_str(&rest[..end]).map_err(|e| format!("plan-params: {e}"))?;
+        if !matches!(p.starter_model.as_str(), "random" | "manip") {
+            return Err(format!("unknown starter_model {}", p.starter_model));
+        }
+        p.manip.validate()?;
+        Ok(p)
     }
 }
