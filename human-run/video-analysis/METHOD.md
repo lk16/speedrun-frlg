@@ -42,10 +42,12 @@ rely on the mechanism.
 
 ## What there is no tool for
 
-- **Audio**: no speech-to-text exists in the sandbox (stdlib Python, no models,
-  no network). Runner commentary is lost unless it shows up in chat text. If a
-  video's main value is spoken explanation, say so in the findings file and ask
-  the host for a transcript instead of burning sheets on it.
+- **Audio**: `bin/frlg-transcribe VIDEO` (whisper.cpp from the deps tree; added
+  2026-11-13 by host-prep's `whisper` step). In a sandbox whose deps tree predates
+  that step it reports itself missing — the host re-runs `tools/host-prep.sh` and
+  starts a fresh sandbox. The `.srt` timestamps are video times, so transcript
+  quotes cross-reference the contact sheets directly. Until the tool exists in the
+  running sandbox, runner commentary is lost unless it shows up in chat text.
 - **OCR**: none scriptable; reading text is what the vision subagents are for.
 
 ## Overlay facts for Main97's layout (both 2026 videos)
