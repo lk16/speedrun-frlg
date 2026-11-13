@@ -245,6 +245,9 @@ def candidates(p):
             v = p.get('league_heals', 6) + d
             if v >= 0:
                 out.append(('xbuy', f"league_heals {p.get('league_heals', 6)}->{v}", {'league_heals': v}))
+        for v in (1, 2, 3):
+            if p.get('setup_min_turns', 1) != v:
+                out.append(('tactic', f"setup_min_turns {p.get('setup_min_turns', 1)}->{v}", {'setup_min_turns': v}))
         for v in (0.5, 0.7, 0.85):
             if abs(p.get('league_preheal', 0.7) - v) > 1e-9:
                 out.append(('heal', f"league_preheal {p.get('league_preheal', 0.7)}->{v}", {'league_preheal': v}))
@@ -275,6 +278,8 @@ def candidates(p):
             ('mewtwo', 'MOVE_BRICK_BREAK', 600, 3000, True),
             ('mewtwo', 'MOVE_ICE_BEAM', 600, 80000, True),
             ('mewtwo', 'MOVE_THUNDERBOLT', 600, 80000, True),
+            # TM34 is Surge's gift (VermilionCity_Gym/scripts.inc), unused by the model's carry.
+            ('mewtwo', 'MOVE_SHOCK_WAVE', 600, 0, True),
         ]
         for after, mv, frames, cost, mt in tm_candidates:
             if (after, mv, mt) in have_tm:
