@@ -205,6 +205,10 @@ pub struct Mart {
 pub struct Params {
     pub name: String,
     pub starter: String,
+    /// Route order: `old` (the original: Surge before Rock Tunnel, dex fill after the first Hall of
+    /// Fame) or `wr` (the world record's order, all 60 catches before the League:
+    /// `human-run/video-analysis/wr-3.25.25-main97.md`, `route_wr.rs`).
+    pub route_style: String,
     /// `FR` or `LG`: selects the wild tables (trainers are identical, `docs/glitchless-run/plan.md` §5).
     pub version: String,
     /// Reset the starter unless the sum of its six level-5 stats reaches this.
@@ -290,6 +294,10 @@ pub struct Params {
     /// Battle turn, per-mon and trainer-intro frames measured on libmgba (`calibration.md`)
     /// instead of `battle_scale` times the guessed constants.
     pub calib_battle: bool,
+    /// Battle frame constants fitted to the world-record video's measured fight durations
+    /// (`human-run/video-analysis/data/calib/v1..v4`; overrides `calib_battle`): the human factor
+    /// is already in them, `text_factor` is not applied again.
+    pub calib_wr: bool,
     /// Which rod the fish hunts use: `mixed` (the old model: all ten slots), `old`, `good` or
     /// `super`. A real rod costs a trip: Old Rod Vermilion, Good Rod Fuchsia, Super Rod Route 12
     /// south of the Snorlax (`decompiled/data/maps/*House*/scripts.inc`).
@@ -395,6 +403,7 @@ impl Default for Params {
         Params {
             name: "unnamed".into(),
             starter: "squirtle".into(),
+            route_style: "old".into(),
             version: "FR".into(),
             starter_min_total: 0,
             starter_save_reroll: false,
@@ -429,6 +438,7 @@ impl Default for Params {
             detour_bike: false,
             avoid_grass: false,
             calib_battle: false,
+            calib_wr: false,
             rod: "mixed".into(),
             repel_on: vec![],
             ball_batch: 10,

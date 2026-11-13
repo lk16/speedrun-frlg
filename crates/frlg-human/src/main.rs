@@ -389,6 +389,14 @@ fn main() {
                 );
             }
         }
+        Some("splits") => {
+            // splits <plan> [--R n] [--all]: no-reset cumulative clock at each WR split (or every segment).
+            let plan = load(&args[1]);
+            let ctx = plan.ctx();
+            let r: u64 = arg(&args, "--R", 4_000);
+            let all = args.iter().any(|a| a == "--all");
+            frlg_human::wrsplits::print_table(&plan, &ctx, seed, r, all);
+        }
         Some("names") => {
             let plan = load(&args[1]);
             for sg in &plan.segs {
