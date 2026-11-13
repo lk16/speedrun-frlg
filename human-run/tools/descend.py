@@ -427,6 +427,7 @@ for ps in range(max_passes):
         print(f'  ==> promoted {pname}', flush=True)
         accepts += 1
         changed = True
+        break  # regenerate candidates from the promoted plan (patches replace whole dicts)
         if accepts >= max_accepts:
             break
     if not changed or accepts >= max_accepts:
