@@ -81,6 +81,11 @@ const ACC_RATIO: [(u32, u32); 13] = [
 /// `sCriticalHitChance` (`decompiled/src/battle_script_commands.c:588`).
 const CRIT_CHANCE: [u32; 5] = [16, 8, 4, 3, 2];
 
+/// Moves whose base PP is at most this are "scarce" slots the human rations.
+const SCARCE_PP: u32 = 5;
+/// A scarce move's value is scaled by this unless it kills.
+const SCARCE_FACTOR: f64 = 0.6;
+
 /// How the engine interprets a move's `EFFECT_*` (`battle_moves.h`). Everything that the
 /// route's trainers, wilds and the player can carry maps to one of these; unmodelled
 /// effects fall into `Nop` (status moves that then do nothing) or `PlainHit`.
@@ -1942,11 +1947,18 @@ pub fn fight(
                             continue;
                         }
                     }
-                    let s = player_score(dex, me, &e, mv, &en_side);
+                    let mut s = player_score(dex, me, &e, mv, &en_side);
                     if s <= 0.0 {
                         continue;
                     }
                     let m = &dex.moves[mv];
+                    // A slot with a tiny PP pool (Blizzard, Fire Blast: 5) is saved for the
+                    // mon it decides — kills, or at least ~1.7x the next best — the way the
+                    // WR run keeps Blizzard for Lance ("Max Elixir between E4 fights"; the
+                    // exact-engine audit of 2026-11-14 found the pool drained by Agatha).
+                    if m.pp <= SCARCE_PP && !wild {
+                        s *= SCARCE_FACTOR;
+                    }
                     let min_roll =
                         (calc_damage(dex, me, &e, mv, 0, false, &en_side, None) * 85) / 100;
                     let acc_ok = m.acc == 0

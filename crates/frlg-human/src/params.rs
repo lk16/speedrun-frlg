@@ -353,6 +353,10 @@ pub struct Params {
     /// The same stand-in for the caught Mewtwo (R2 fights: the engine needs ~1.5x the WR video's
     /// actions with Mewtwo; no Torrent there, so this is the residual the Rash/IV/X lines do not explain).
     pub mewtwo_power: f64,
+    /// Max Elixirs a non-League fight leaves in the bag for the League ("Max Elixir between E4
+    /// fights", `human-run/video-analysis/STRATEGY.md`; the exact engine's Blizzard (5 PP) is empty
+    /// by Lance otherwise).
+    pub league_max_reserve: u32,
     /// Before a fight, heal with items when the carry is below this HP fraction (up to 0.85). The WR
     /// run walks into most fights at 1/3 HP or less to keep Torrent active
     /// (`human-run/video-analysis/data/calib/v2-mid-fights.md`: Koga 33/120, Giovanni 35/143, ...).
@@ -491,6 +495,7 @@ impl Default for Params {
             candy_early_n: 99,
             carry_power: 1.0,
             mewtwo_power: 1.0,
+            league_max_reserve: 2,
             keep_moves: vec![],
             cure_status: true,
             early_dig: false,

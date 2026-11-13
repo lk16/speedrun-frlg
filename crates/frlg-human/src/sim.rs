@@ -1084,9 +1084,24 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     // Low on attacking PP before a trainer fight: drink an Elixir (bag trip ~500f).
     // Before a League fight any empty slot is worth topping up — the next Centre is
     // several fights away.
-    let pp_low = st.slot_pp.iter().sum::<i32>() < 12 || (a.league && st.slot_pp.contains(&0));
+    // A scarce slot (base PP <= 5: Blizzard, Fire Blast) below 3 PP counts as empty before a
+    // League fight: the human tops up with the Max Elixir he kept for exactly this
+    // ("Max Elixir between E4 fights", `STRATEGY.md` section 4).
+    let scarce_low = st
+        .slots
+        .iter()
+        .zip(&st.slot_pp)
+        .any(|(&m, &p)| ctx.dex.moves[m].pp <= 5 && ctx.dex.moves[m].power > 0 && p < 3);
+    let pp_low = st.slot_pp.iter().sum::<i32>() < 12
+        || (a.league && (st.slot_pp.contains(&0) || scarce_low));
     if a.trainer && pp_low {
-        if st.max_elixirs > 0 {
+        // Outside the League the last `league_max_reserve` Max Elixirs stay in the bag.
+        let reserve = if a.league {
+            0
+        } else {
+            ctx.p.league_max_reserve
+        };
+        if st.max_elixirs > reserve {
             st.max_elixirs -= 1;
             bump(st, 500.0 * ctx.p.text_factor);
             for (k, &m) in st.slots.clone().iter().enumerate() {
@@ -1138,6 +1153,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             m.moves = st.slots.clone();
             m.pp = st.slot_pp.clone();
             m.status = st.carry_status;
+            if a.league && std::env::var_os("FRLG_HACK_PP").is_some() {
+                m.pp = vec![50; m.moves.len()];
+            }
             // `carry_power`: the WR carry out-damages the engine's (see the param's doc).
             if ctx.p.carry_power != 1.0 {
                 m.stat[0] = (m.stat[0] as f64 * ctx.p.carry_power) as i32;
@@ -1185,10 +1203,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
             eprintln!(
-                "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {}",
+                "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {} kos {} heals {} frs {} stats {:?}/{}",
                 a.name, me.level, st.hp_frac, stock, sacs, me.pp,
                 me.moves.iter().map(|&m| dex.moves[m].name.trim_start_matches("MOVE_").to_string()).collect::<Vec<_>>(),
-                out.won, out.turns, out.x_used, out.sacs_used
+                out.won, out.turns, out.x_used, out.sacs_used, out.kos.len(), out.heals_used, out.full_restores_used, me.stat, me.max_hp
             );
         }
         for x in xs.iter().take(out.x_used as usize) {
@@ -2090,6 +2108,12 @@ pub fn attempt(
                 }
             }
             Kind::XBuy { xbuy } => {
+                if std::env::var_os("FRLG_SIM_TRACE").is_some() {
+                    eprintln!(
+                        "STATE xbuy {} money {} x_stock {:?}",
+                        seg.name, st.money, st.x_stock
+                    );
+                }
                 bump(&mut st, xbuy.frames as f64 * ctx.p.text_factor);
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 // Prices (`items.json`): X Attack 500, X Defend 550, X Speed 350,
@@ -2152,6 +2176,12 @@ pub fn attempt(
             // (`ViridianCity_Gym/scripts.inc:28-30`); teaching it is a plan choice via
             // `tms`, not automatic (a taught move displaces a slot).
             "indigo-heal" => {
+                if std::env::var_os("FRLG_SIM_TRACE").is_some() {
+                    eprintln!(
+                        "STATE indigo-heal money {} x_stock {:?} revives {} fodder {} candies {} carry {} elixirs {} max {}",
+                        st.money, st.x_stock, st.revives, st.fodder, st.candies, st.carry, st.elixirs, st.max_elixirs
+                    );
+                }
                 st.league_items = true;
                 // Rare Candies kept for the League go down now: a level each, worth the
                 // most exp this late (~400 frames per use).
