@@ -81,6 +81,14 @@ const ACC_RATIO: [(u32, u32); 13] = [
 /// `sCriticalHitChance` (`decompiled/src/battle_script_commands.c:588`).
 const CRIT_CHANCE: [u32; 5] = [16, 8, 4, 3, 2];
 
+/// Weather numbers (`gBattleWeather`, `include/constants/battle.h` `B_WEATHER_*`).
+pub const W_RAIN: u8 = 1;
+pub const W_SUN: u8 = 2;
+pub const W_SAND: u8 = 3;
+pub const W_HAIL: u8 = 4;
+/// `turns` value of a permanent weather (Sand Stream: `B_WEATHER_SANDSTORM_PERMANENT`).
+const W_FOREVER: u8 = 255;
+
 /// Moves whose base PP is at most this are "scarce" slots the human rations.
 const SCARCE_PP: u32 = 5;
 /// A scarce move's value is scaled by this unless it kills.
@@ -155,6 +163,14 @@ pub enum Effect {
     Snore,
     Facade,
     Flail,
+    /// Rain Dance / Sunny Day / Sandstorm / Hail (weather number, `W_*`).
+    Weather(u8),
+    /// Overheat: the user's Special Attack falls by 2 after a hit (`EFFECT_OVERHEAT`).
+    Overheat,
+    /// Future Sight: damage lands two turns after the end of the turn it is used.
+    FutureSight,
+    /// Roar / Whirlwind: forces the target's switch in trainer battles.
+    Roar,
     Nop,
 }
 
@@ -276,7 +292,13 @@ pub fn effect_from(e: &str) -> Effect {
         "EFFECT_SNORE" => Snore,
         "EFFECT_FACADE" => Facade,
         "EFFECT_FLAIL" => Flail,
-        "EFFECT_OVERHEAT" => PlainHit,
+        "EFFECT_OVERHEAT" => Overheat,
+        "EFFECT_RAIN_DANCE" => Weather(W_RAIN),
+        "EFFECT_SUNNY_DAY" => Weather(W_SUN),
+        "EFFECT_SANDSTORM" => Weather(W_SAND),
+        "EFFECT_HAIL" => Weather(W_HAIL),
+        "EFFECT_FUTURE_SIGHT" => FutureSight,
+        "EFFECT_ROAR" => Roar,
         _ => Nop,
     }
 }
@@ -340,6 +362,8 @@ pub struct Mon {
     pub protected: bool,
     pub protect_count: u8,
     pub rampage: u8,
+    /// The move a Thrash/Outrage lock repeats (`gLockedMoves`, `battle_script_commands.c:2727`).
+    pub lock_move: Option<usize>,
     /// Player badge boosts ×100: Atk, Def, Spe, SpA, SpD (enemy: all 100).
     pub badge: [i32; 5],
     /// Physical damage taken this turn (Counter).
@@ -354,6 +378,23 @@ struct Side {
     light_screen: u8,
     mist: u8,
     safeguard: u8,
+    /// Field weather, mirrored on both sides so `calc_damage` and the AI can read it from
+    /// either (`gBattleWeather`; the 5-turn counter is `gWishFutureKnock.weatherDuration`).
+    weather: u8,
+    weather_turns: u8,
+    /// A Future Sight aimed at this side's mon: turns left and the damage fixed at cast
+    /// (`Cmd_trysetfutureattack`, `battle_script_commands.c:8544`).
+    future: u8,
+    future_dmg: i32,
+}
+
+/// Start `w` on both sides for `turns` turns (the turn it is set counts: the counter is
+/// decremented at that turn's end, `battle_util.c:654-710`).
+fn set_weather(a: &mut Side, b: &mut Side, w: u8, turns: u8) {
+    for s in [a, b] {
+        s.weather = w;
+        s.weather_turns = turns;
+    }
 }
 
 pub fn make_mon(
@@ -411,6 +452,7 @@ pub fn make_mon(
         protected: false,
         protect_count: 0,
         rampage: 0,
+        lock_move: None,
         badge: [bb(0), bb(4), bb(2), bb(6), bb(6)],
         counter_dmg: 0,
         yawned: false,
@@ -575,6 +617,29 @@ fn calc_damage(
     if !phys && def_side.light_screen > 0 && !crit {
         dmg /= 2;
     }
+    // Weather acts on special-type moves only, after the screens and before the final +2
+    // (`CalculateBaseDamage`, `decompiled/src/pokemon.c:2605-2640`).
+    if !phys && def_side.weather != 0 {
+        let w = def_side.weather;
+        let t = m.mtype;
+        if w == W_RAIN {
+            if t == 10 {
+                dmg /= 2;
+            } else if t == 11 {
+                dmg = dmg * 15 / 10;
+            }
+        }
+        if matches!(w, W_RAIN | W_SAND | W_HAIL) && m.name == "MOVE_SOLAR_BEAM" {
+            dmg /= 2;
+        }
+        if w == W_SUN {
+            if t == 10 {
+                dmg = dmg * 15 / 10;
+            } else if t == 11 {
+                dmg /= 2;
+            }
+        }
+    }
     if phys && dmg == 0 {
         dmg = 1;
     }
@@ -601,6 +666,25 @@ fn calc_damage(
         dmg = 1;
     }
     dmg
+}
+
+/// `Some(heals)` when the defender's ability swallows a move of this type.
+fn absorbs(ab: Ability, mtype: u8) -> Option<bool> {
+    match (ab, mtype) {
+        (Ability::WaterAbsorb, 11) | (Ability::VoltAbsorb, 13) => Some(true),
+        (Ability::FlashFire, 10) => Some(false),
+        _ => None,
+    }
+}
+
+/// `CalculateBaseDamage` alone: no STAB, no type chart, no roll, no crit (what Future
+/// Sight stores at cast, `Cmd_trysetfutureattack`).
+fn base_damage(dex: &Dex, att: &Mon, def: &Mon, mv: usize, def_side: &Side) -> i32 {
+    let mut a = att.clone();
+    a.types = (9, 9);
+    let mut d = def.clone();
+    d.types = (9, 9);
+    calc_damage(dex, &a, &d, mv, 0, false, def_side, None)
 }
 
 /// Type effectiveness with Levitate (`Cmd_typecalc`).
@@ -675,6 +759,8 @@ pub struct Tactics {
     /// maximum HP, one is sent out to take the hit while the fighter uses its next X item
     /// from the back (the universal speedrun sacrifice; each costs a faint + send-out).
     pub sacs: u32,
+    /// Living teammates besides the fighter (they take Roar/Whirlwind's drag-in).
+    pub others_alive: u32,
 }
 
 impl Default for Tactics {
@@ -685,6 +771,7 @@ impl Default for Tactics {
             heal: 50,
             full_restore: false,
             sacs: 0,
+            others_alive: 0,
         }
     }
 }
@@ -717,10 +804,19 @@ pub struct Outcome {
     pub full_restores_used: u32,
     /// Sacrificial faints spent (each costs a faint animation and a send-out).
     pub sacs_used: u32,
+    /// Healthy party mons besides the fighter (Roar/Whirlwind needs one to drag in;
+    /// `AI_CBM_Roar` counts them, `data/battle_ai_scripts.s`).
+    pub others_alive: u32,
+    /// A Roar/Whirlwind dragged the fighter out this turn.
+    pub forced_out: bool,
+    /// Times the fighter was dragged out.
+    pub dragged: u32,
 }
 
 enum Action {
     Move(usize),
+    /// Switch the fighter back in after a drag-out: no attack, the foe's move lands on it.
+    Switch,
     XItem(XItem),
     Heal,
     FullRestore,
@@ -734,6 +830,9 @@ enum Action {
 fn player_score(dex: &Dex, att: &Mon, def: &Mon, mv: usize, side: &Side) -> f64 {
     let m = &dex.moves[mv];
     let fx = effect_from(&m.effect);
+    if m.power > 0 && absorbs(def.ability, m.mtype).is_some() {
+        return 0.0;
+    }
     let base = match fx {
         Effect::SonicBoom => {
             20.0 * if effectiveness(dex, m.mtype, def) > 0.0 {
@@ -779,16 +878,15 @@ fn ai_damage(dex: &Dex, att: &Mon, def: &Mon, mv: usize, side: &Side, rng: &mut 
         return 0;
     }
     let fx = effect_from(&m.effect);
-    // `sDiscouragedPowerfulMoveEffects`: two-turn, recharge and self-KO moves are never
-    // "most powerful".
+    // `sDiscouragedPowerfulMoveEffects` (`battle_ai_script_commands.c:245`): two-turn,
+    // recharge, self-KO and Overheat are never "most powerful"; Dig/Fly are not on the list.
     if matches!(
         fx,
         Effect::Explosion
             | Effect::Charge
-            | Effect::SemiInvulnDig
-            | Effect::SemiInvulnFly
             | Effect::Recharge
             | Effect::DreamEater
+            | Effect::Overheat
     ) {
         return 0;
     }
@@ -812,6 +910,7 @@ fn ai_choose(
     user_side: &Side,
     target_side: &Side,
     _turn: u32,
+    target_others: u32,
     rng: &mut GameRng,
 ) -> Option<usize> {
     if user.moves.is_empty() {
@@ -843,6 +942,10 @@ fn ai_choose(
         // AI_CheckBadMove (always on: every trainer has the flag).
         if m.power > 1 && eff == 0.0 {
             score[i] -= 10;
+            continue;
+        }
+        if m.power > 1 && absorbs(target.ability, m.mtype).is_some() {
+            score[i] -= 12;
             continue;
         }
         match fx {
@@ -941,6 +1044,24 @@ fn ai_choose(
             }
             Effect::Disable if user.disabled.is_some() => {
                 score[i] -= 10;
+            }
+            // AI_CBM_RainDance / SunnyDay / Hail / Sandstorm: -8 when it is already up.
+            Effect::Weather(w) => {
+                if user_side.weather == w {
+                    score[i] -= 8;
+                }
+            }
+            // AI_CBM_FutureSight: -10 when one is already pending on the target's side.
+            Effect::FutureSight => {
+                if target_side.future > 0 {
+                    score[i] -= 10;
+                }
+            }
+            // AI_CBM_Roar: -10 when the target has no other mon alive.
+            Effect::Roar => {
+                if target_others == 0 {
+                    score[i] -= 10;
+                }
             }
             _ => {}
         }
@@ -1105,6 +1226,41 @@ fn ai_choose(
                         score[i] -= 3;
                     } else if rng.modn(256) >= 10 {
                         score[i] += 3;
+                    }
+                }
+                Effect::Roar => {
+                    // AI_CV_Roar: -3 unless the target is boosted to +3 or more in a stat
+                    // the AI cares about, then +2 half the time.
+                    let boosted = [0usize, 1, 3, 4, 6].iter().any(|&k| target.stages[k] >= 3);
+                    if boosted {
+                        if rng.modn(256) >= 128 {
+                            score[i] += 2;
+                        }
+                    } else {
+                        score[i] -= 3;
+                    }
+                }
+                Effect::Weather(w) => {
+                    // AI_CV_RainDance / SunnyDay / Hail: -1 below 40% HP, else +1 when a
+                    // different weather is up (Rain Dance: also Rain Dish).
+                    if w != W_SAND {
+                        if user_hp < 40 {
+                            score[i] -= 1;
+                        } else if user_side.weather != 0 && user_side.weather != w {
+                            score[i] += 1;
+                        }
+                    }
+                }
+                Effect::Overheat => {
+                    // AI_CV_Overheat.
+                    if eff < 1.0 {
+                        score[i] -= 1;
+                    } else if target_faster {
+                        if user_hp <= 80 {
+                            score[i] -= 1;
+                        }
+                    } else if user_hp <= 60 {
+                        score[i] -= 1;
                     }
                 }
                 Effect::HighCrit => {
@@ -1315,7 +1471,8 @@ fn do_move(
         att.airborne = false;
     } else {
         match fx {
-            Effect::Charge => {
+            // Solar Beam needs no charge turn in sun (`BattleScript_EffectSolarBeam`).
+            Effect::Charge if !(m.name == "MOVE_SOLAR_BEAM" && att_side.weather == W_SUN) => {
                 att.charging = Some(mv);
                 return false;
             }
@@ -1372,6 +1529,13 @@ fn do_move(
         }
         Effect::Safeguard => {
             att_side.safeguard = 5;
+            return false;
+        }
+        Effect::Weather(w) => {
+            // Fails when that weather is already up (`AI_CBM_*` mirrors it).
+            if att_side.weather != w {
+                set_weather(att_side, def_side, w, 5);
+            }
             return false;
         }
         Effect::Haze => {
@@ -1438,10 +1602,20 @@ fn do_move(
         }
     }
 
+    // Future Sight: no accuracy roll, damage fixed now (`Cmd_trysetfutureattack`).
+    if matches!(fx, Effect::FutureSight) {
+        if def_side.future == 0 {
+            def_side.future = 3;
+            def_side.future_dmg = base_damage(dex, att, def, mv, def_side);
+        }
+        return false;
+    }
+
     // --- status-only targeted moves (their own accuracy, no damage pipeline).
     let status_only = matches!(
         fx,
-        Effect::Sleep
+        Effect::Roar
+            | Effect::Sleep
             | Effect::Paralyze
             | Effect::Poison
             | Effect::Toxic
@@ -1570,6 +1744,14 @@ fn do_move(
                     def.trap = ((rng.roll() & 3) + 3) as u8;
                 }
             }
+            // Trainer battle: the target is replaced by a random healthy party mon
+            // (`Cmd_forcerandomswitch`, `battle_script_commands.c:6905`); it fails when
+            // the target has no teammate left.
+            Effect::Roar => {
+                if !ex.wild && !att_is_player && out.others_alive > 0 {
+                    out.forced_out = true;
+                }
+            }
             Effect::StatChange(stat, delta, false) => {
                 if def.ability == Ability::ShieldDust && delta < 0 {
                     // Shield Dust blocks secondaries, not status moves; no-op here.
@@ -1583,6 +1765,17 @@ fn do_move(
 
     // --- damaging moves.
     if effectiveness(dex, m.mtype, def) == 0.0 {
+        if att_is_player {
+            out.events += 1;
+        }
+        return false;
+    }
+    // Water Absorb / Volt Absorb heal a quarter and take the move; Flash Fire takes it
+    // (`battle_util.c` `ABILITYEFFECT_MOVES_BLOCK`).
+    if let Some(heal) = absorbs(def.ability, m.mtype) {
+        if heal {
+            def.hp = (def.hp + def.max_hp / 4).min(def.max_hp);
+        }
         if att_is_player {
             out.events += 1;
         }
@@ -1754,9 +1947,20 @@ fn do_move(
         Effect::Recharge => {
             att.recharging = true;
         }
+        // Thrash / Outrage: locked for 2-3 turns in total, confused when it ends
+        // (`MOVE_EFFECT_THRASH`, `battle_script_commands.c:2719-2729`; the end-of-turn count
+        // and confusion are `ENDTURN_THRASH`, `battle_util.c:952-972`).
+        Effect::Rampage if att.rampage == 0 => {
+            att.rampage = ((rng.roll() & 1) + 2) as u8;
+            att.lock_move = Some(mv);
+        }
         Effect::BrickBreak => {
             def_side.reflect = 0;
             def_side.light_screen = 0;
+        }
+        // `MOVE_EFFECT_SP_ATK_TWO_DOWN | AFFECTS_USER | CERTAIN`.
+        Effect::Overheat => {
+            apply_stat_change(att, 3, -2, false);
         }
         _ => {}
     }
@@ -1799,9 +2003,50 @@ fn do_move(
 }
 
 /// End-of-turn residual damage and timers for one mon.
-fn end_of_turn(m: &mut Mon, other: &mut Mon, side: &mut Side, out: &mut Outcome, is_player: bool) {
+fn end_of_turn(
+    m: &mut Mon,
+    other: &mut Mon,
+    side: &mut Side,
+    out: &mut Outcome,
+    is_player: bool,
+    rng: &mut GameRng,
+) {
     if m.hp <= 0 {
         return;
+    }
+    // Weather chip: Hail 1/16 to non-Ice, Sandstorm 1/16 to non-Rock/Ground/Steel
+    // (`battle_util.c` `ENDTURN_SANDSTORM` / `ENDTURN_HAIL`, `BattleScript_DamagingWeatherContinues`).
+    let immune = |t: u8| m.types.0 == t || m.types.1 == t;
+    if (side.weather == W_HAIL && !immune(15))
+        || (side.weather == W_SAND && !(immune(5) || immune(4) || immune(8)))
+    {
+        m.hp -= (m.max_hp / 16).max(1);
+    }
+    // Future Sight lands when its counter runs out (`ENDTURN_FUTURE_SIGHT`).
+    if side.future > 0 {
+        side.future -= 1;
+        if side.future == 0 {
+            m.hp -= side.future_dmg.max(1);
+            side.future_dmg = 0;
+            if is_player {
+                out.events += 1;
+            }
+        }
+    }
+    if m.hp <= 0 {
+        return;
+    }
+    if m.rampage > 0 {
+        m.rampage -= 1;
+        if m.rampage == 0 {
+            m.lock_move = None;
+            if m.confusion == 0 {
+                m.confusion = (rng.modn(4) + 2) as u8;
+                if is_player {
+                    out.events += 1;
+                }
+            }
+        }
     }
     match m.status {
         Status1::Burn | Status1::Poison => {
@@ -1864,9 +2109,20 @@ pub fn fight(
     let ex = Exec { dex, wild };
     let mut setup_idx = 0usize;
     let mut sacs_left = tac.sacs;
+    out.others_alive = tac.others_alive;
+    // After a Roar/Whirlwind the fighter's next turn is spent switching back in.
+    let mut must_switch = false;
     for foe in foes {
         let mut e = foe.clone();
         let mut guard = 0;
+        // Entry abilities (`battle_util.c` `ABILITYEFFECT_ON_SWITCHIN`): Intimidate lowers
+        // the fighter's Attack, Sand Stream raises a permanent sandstorm.
+        if e.ability == Ability::Intimidate && me.ability != Ability::HyperCutter {
+            apply_stat_change(me, 0, -1, false);
+        }
+        if e.ability == Ability::SandStream && my_side.weather != W_SAND {
+            set_weather(&mut my_side, &mut en_side, W_SAND, W_FOREVER);
+        }
         while e.hp > 0 && me.hp > 0 && guard < 120 {
             guard += 1;
             out.turns += 1;
@@ -1898,12 +2154,16 @@ pub fn fight(
             });
             // Healing is only worth a turn if it actually leaves the KO range.
             let in_danger = me.hp <= danger && me.max_hp > danger && !sure_kill;
-            let my_action = if forced {
-                Action::Move(me.charging.unwrap_or(me.moves[0]))
+            let my_action = if must_switch {
+                must_switch = false;
+                Action::Switch
+            } else if forced {
+                Action::Move(me.charging.or(me.lock_move).unwrap_or(me.moves[0]))
             } else if danger >= me.hp && sacs_left > 0 && (speed(&e) > speed(me) || !sure_kill) {
                 // A hit would (or could) faint the fighter: a teammate eats it. The free
                 // action goes to the next X item, else to the attack itself.
                 sacs_left -= 1;
+                out.others_alive = out.others_alive.saturating_sub(1);
                 if setup_idx < tac.x_items.len() {
                     let x = tac.x_items[setup_idx];
                     setup_idx += 1;
@@ -2012,15 +2272,28 @@ pub fn fight(
             };
 
             // --- enemy action.
-            let en_forced = e.recharging || e.charging.is_some();
+            let en_forced = e.recharging || e.charging.is_some() || e.rampage > 0;
             let en_move = if en_forced {
-                e.charging
+                // A recharge or locked turn still "uses" its move: `do_move` clears the
+                // recharge flag (the old code skipped it and the flag never cleared, so a
+                // Hyper Beam silenced the mon for the rest of its life).
+                Some(e.charging.or(e.lock_move).unwrap_or(e.moves[0]))
             } else if ai_heals > 0 && e.hp * 4 < e.max_hp {
                 // `ShouldUseItem`: Full Restore under 1/4 (`battle_ai_switch_items.c`).
                 None
             } else {
-                ai_choose(dex, &e, me, ai_flags, &en_side, &my_side, out.turns, rng)
-                    .map(|i| e.moves[i])
+                ai_choose(
+                    dex,
+                    &e,
+                    me,
+                    ai_flags,
+                    &en_side,
+                    &my_side,
+                    out.turns,
+                    out.others_alive,
+                    rng,
+                )
+                .map(|i| e.moves[i])
             };
             let enemy_heals_now = !en_forced && en_move.is_none() && ai_heals > 0;
 
@@ -2055,6 +2328,9 @@ pub fn fight(
                 match my_action {
                     Action::Move(mv) => {
                         do_move(&ex, me, e, mv, my_side, en_side, true, first, out, rng);
+                    }
+                    Action::Switch => {
+                        out.item_turns += 1;
                     }
                     Action::XItem(x) => {
                         out.item_turns += 1;
@@ -2156,6 +2432,7 @@ pub fn fight(
             if std::env::var_os("FRLG_BATTLE_TRACE").is_some() {
                 let an = match &my_action {
                     Action::Move(mv) => dex.moves[*mv].name.clone(),
+                    Action::Switch => "Switch".into(),
                     Action::XItem(x) => format!("X{x:?}"),
                     Action::Heal => "Heal".into(),
                     Action::FullRestore => "FullRestore".into(),
@@ -2193,8 +2470,31 @@ pub fn fight(
                 return out;
             }
 
-            end_of_turn(me, &mut e, &mut my_side, &mut out, true);
-            end_of_turn(&mut e, me, &mut en_side, &mut out, false);
+            end_of_turn(me, &mut e, &mut my_side, &mut out, true, rng);
+            end_of_turn(&mut e, me, &mut en_side, &mut out, false, rng);
+            for sd in [&mut my_side, &mut en_side] {
+                if sd.weather_turns != 0 && sd.weather_turns != W_FOREVER {
+                    sd.weather_turns -= 1;
+                    if sd.weather_turns == 0 {
+                        sd.weather = 0;
+                    }
+                }
+            }
+            if out.forced_out {
+                // The drag-out clears the fighter's stat stages and volatile state
+                // (`SwitchInClearSetData`); it comes back next turn.
+                out.forced_out = false;
+                out.dragged += 1;
+                if me.hp > 0 {
+                    me.stages = [0; 7];
+                    me.focus_energy = false;
+                    me.confusion = 0;
+                    me.seeded = false;
+                    me.infatuated = false;
+                    must_switch = true;
+                    out.events += 1;
+                }
+            }
         }
         if me.hp <= 0 || e.hp > 0 {
             out.won = false;
@@ -2320,6 +2620,7 @@ mod tests {
                 heal: 50,
                 full_restore: false,
                 sacs: 0,
+                others_alive: 0,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);

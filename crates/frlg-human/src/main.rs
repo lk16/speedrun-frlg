@@ -383,6 +383,7 @@ fn main() {
                     heal: heal_amount(level, league),
                     full_restore: league,
                     sacs: arg(&args, "--sacs", 0u32),
+                    others_alive: arg(&args, "--others", 0u32),
                 };
                 let mut g = frlg_human::rng::GameRng::from_u32(
                     (seed as u32).wrapping_mul(2654435761) ^ (i as u32).wrapping_mul(0x9E3779B9),

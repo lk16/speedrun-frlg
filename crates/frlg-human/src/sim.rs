@@ -1194,6 +1194,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             heal: heal_amount(me.level, st.league_items),
             full_restore: st.league_items,
             sacs,
+            others_alive: st.fodder,
         };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);

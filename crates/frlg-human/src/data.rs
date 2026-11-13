@@ -175,6 +175,8 @@ pub enum Ability {
     ShieldDust,
     /// Inner Focus: cannot flinch.
     InnerFocus,
+    /// Sand Stream: a permanent sandstorm on switch-in (`battle_util.c`).
+    SandStream,
     /// Synchronize, Pressure, and the rest that the model ignores map to None.
     Other,
 }
@@ -209,6 +211,7 @@ pub fn ability_from(name: &str) -> Ability {
         "ABILITY_HYPER_CUTTER" => Ability::HyperCutter,
         "ABILITY_SHIELD_DUST" => Ability::ShieldDust,
         "ABILITY_INNER_FOCUS" => Ability::InnerFocus,
+        "ABILITY_SAND_STREAM" => Ability::SandStream,
         "ABILITY_NONE" => Ability::None,
         _ => Ability::Other,
     }
