@@ -257,8 +257,12 @@ def candidates(p):
             ('mansion', 'MOVE_BLIZZARD', 1100, 0, False),
             ('celadon-tea', 'MOVE_BRICK_BREAK', 900, 3000, False),
             ('fly-celadon-2', 'MOVE_ICE_BEAM', 2000, 80000, False),
-            ('mewtwo', 'MOVE_SURF', 600, 0, True),
-            ('mewtwo', 'MOVE_BLIZZARD', 600, 0, True),
+            # Mewtwo cannot learn HM03 Surf (tmhm_learnsets.h). TM03 is Misty's gift,
+            # TM31 is sold in Celadon 2F, TM13/TM24 cost 4000 coins (80000 money).
+            ('mewtwo', 'MOVE_WATER_PULSE', 600, 0, True),
+            ('mewtwo', 'MOVE_BRICK_BREAK', 600, 3000, True),
+            ('mewtwo', 'MOVE_ICE_BEAM', 600, 80000, True),
+            ('mewtwo', 'MOVE_THUNDERBOLT', 600, 80000, True),
         ]
         for after, mv, frames, cost, mt in tm_candidates:
             if (after, mv, mt) in have_tm:

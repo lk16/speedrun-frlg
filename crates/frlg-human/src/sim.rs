@@ -130,6 +130,9 @@ struct State {
     evo_checked: bool,
     /// Living expendable teammates (sacrifices burn them; a Centre revives them).
     fodder: u32,
+    /// TM and tutor moves already taught: Gen 3 TMs are single-use and each tutor
+    /// teaches once (`FLAG_TUTOR_*`, `data/scripts/move_tutors.inc`); HMs are reusable.
+    taught_once: Vec<usize>,
     /// Elixirs and Max Elixirs in the bag.
     elixirs: u32,
     max_elixirs: u32,
@@ -1412,6 +1415,7 @@ pub fn attempt(
         mewtwo_moves: vec![],
         evo_checked: false,
         fodder: 0,
+        taught_once: vec![],
         elixirs: 0,
         max_elixirs: 0,
         revives: 0,
@@ -1783,11 +1787,26 @@ pub fn attempt(
                     carry_species(ctx, st.carry)
                 };
                 let affordable = !ctx.p.money_model || st.money >= teach.cost;
-                let possible =
-                    can_learn(ctx, learner, mv) && (!teach.mewtwo || st.mewtwo.is_some());
+                let is_hm = matches!(
+                    ctx.dex.moves[mv].name.as_str(),
+                    "MOVE_CUT"
+                        | "MOVE_FLY"
+                        | "MOVE_SURF"
+                        | "MOVE_STRENGTH"
+                        | "MOVE_FLASH"
+                        | "MOVE_ROCK_SMASH"
+                        | "MOVE_WATERFALL"
+                        | "MOVE_DIVE"
+                );
+                let possible = can_learn(ctx, learner, mv)
+                    && (!teach.mewtwo || st.mewtwo.is_some())
+                    && (is_hm || !st.taught_once.contains(&mv));
                 if affordable && possible {
                     if ctx.p.money_model {
                         st.money -= teach.cost;
+                    }
+                    if !is_hm {
+                        st.taught_once.push(mv);
                     }
                     bump(&mut st, teach.frames as f64 * ctx.p.text_factor);
                     bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
