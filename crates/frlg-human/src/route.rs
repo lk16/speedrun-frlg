@@ -903,14 +903,16 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     b.split();
 
     // 14. Post-game: National Dex, Celio's chain, Rocket Warehouse.
+    // Stones must evolve BEFORE Oak counts the dex — they used to sit after the check,
+    // where they could never contribute an entry (fill audit, 2026-11-13).
+    if !p.stones.is_empty() {
+        b.push("stones", Src::Guess, 0, Kind::Stones);
+    }
     b.text("fly-pallet-2", 700, Src::Guess);
     b.walk("pallet-to-oak", 30, e, None, Src::Tiles);
     b.push("oak-dex-check", Src::Guess, 0, Kind::OakCheck);
     b.text("oak-national-dex", 2500, Src::Guess);
     b.split();
-    if !p.stones.is_empty() {
-        b.push("stones", Src::Guess, 0, Kind::Stones);
-    }
     b.text("to-one-island", 3000, Src::Guess);
     b.text("celio-ruby-request", 1500, Src::Guess);
     b.walk("mt-ember", 300, Era::Run, None, Src::Guess);

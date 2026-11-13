@@ -658,6 +658,11 @@ fn encounter(
         bump(st, t * ctx.turn() + ctx.mon_overhead());
         let g = add_exp(ctx, st, e);
         bump(st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
+    } else if safari {
+        // Safari battles have no Run roll and a two-row menu: leaving an unwanted
+        // encounter is one press (`decompiled/src/battle_script_commands.c`, Safari
+        // flee always succeeds). 200 frames is the fill audit's estimate (guess).
+        bump(st, 200.0);
     } else {
         flee(ctx, st, rng);
     }
