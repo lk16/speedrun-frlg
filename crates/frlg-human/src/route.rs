@@ -244,6 +244,11 @@ impl<'a> B<'a> {
             fights.extend(o.into_iter().take(*k));
         }
         fights.sort_by_key(|f| std::cmp::Reverse(f.party.iter().map(|x| x.0).sum::<u32>()));
+        // `group_n` may cap the fights of a forced list (the hardest are kept): the WR run's window
+        // times are too short for every cone-forced trainer to be fought.
+        if let Some(&cap) = self.group_n.get(name) {
+            fights.truncate(cap as usize);
+        }
         let n = fights.len() as u32;
         let money = fights.iter().map(|f| f.money).sum();
         let parties = fights.iter().map(|f| f.party.clone()).collect();

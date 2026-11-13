@@ -336,6 +336,27 @@ pub struct Params {
     pub fight_tactics: std::collections::HashMap<String, FightTactic>,
     /// Global heal threshold in battle: use an item below this HP fraction.
     pub heal_below: f64,
+    /// Rare Candies picked up on the route are eaten on the spot instead of kept for the League
+    /// (the WR run is Lv20/27/41 at Misty/SS Anne/Koga but only Lv50 at the League:
+    /// `human-run/video-analysis/data/calib`).
+    pub candy_early: bool,
+    /// With `candy_early`, only the first this-many candies are eaten on the spot; the rest are kept
+    /// for the League.
+    pub candy_early_n: u32,
+    /// Multiplier on the starter-line carry's Attack and Special Attack in `battle_sim` fights.
+    /// The exact engine needs 1.5-4x the WR video's player actions in 10 of its 16 measured fights
+    /// (`frlg-human splits` fight table); the WR carry has a 30-IV SpA and a Rash nature, 6-12
+    /// X Specials per big fight sequence and plays at 1/3 HP for Torrent, none of which the engine's
+    /// carry reproduces. 1.0 = the engine as audited; a value fitted to the video is a stand-in, not a
+    /// mechanism.
+    pub carry_power: f64,
+    /// The same stand-in for the caught Mewtwo (R2 fights: the engine needs ~1.5x the WR video's
+    /// actions with Mewtwo; no Torrent there, so this is the residual the Rash/IV/X lines do not explain).
+    pub mewtwo_power: f64,
+    /// Before a fight, heal with items when the carry is below this HP fraction (up to 0.85). The WR
+    /// run walks into most fights at 1/3 HP or less to keep Torrent active
+    /// (`human-run/video-analysis/data/calib/v2-mid-fights.md`: Koga 33/120, Giovanni 35/143, ...).
+    pub preheal_below: f64,
     /// Moves the carry never forgets when a new one needs a slot.
     pub keep_moves: Vec<String>,
     /// Cure a status that outlives a battle with the matching item (frames + money).
@@ -461,6 +482,11 @@ impl Default for Params {
             elixirs: vec![],
             fight_tactics: Default::default(),
             heal_below: 0.4,
+            preheal_below: 0.5,
+            candy_early: false,
+            candy_early_n: 99,
+            carry_power: 1.0,
+            mewtwo_power: 1.0,
             keep_moves: vec![],
             cure_status: true,
             early_dig: false,

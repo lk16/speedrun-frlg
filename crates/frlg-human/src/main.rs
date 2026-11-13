@@ -196,10 +196,18 @@ fn main() {
             let mut fill: Vec<(f64, f64, u64)> = vec![];
             let mut missing = [0u64; 152];
             let mut gave_up = 0u64;
+            let mut oak_miss = [0u64; 152];
+            let mut miss_n = 0u64;
             for i in 0..r {
                 let mut pr = Probe::default();
                 let o = attempt(&ctx, seed, i, None, None, None, Some(&mut pr));
                 wo += o.whiteouts as u64;
+                if !pr.oak_missing.is_empty() {
+                    miss_n += 1;
+                    for &d in &pr.oak_missing {
+                        oak_miss[d as usize] += 1;
+                    }
+                }
                 if !pr.missing.is_empty() {
                     gave_up += 1;
                     for &d in &pr.missing {
@@ -242,6 +250,19 @@ fn main() {
                         f.0 / FPS / f.1.max(1e-9)
                     );
                 }
+            }
+            if miss_n > 0 {
+                let mut m: Vec<(u64, usize)> = (1..=151).map(|d| (oak_miss[d], d)).collect();
+                m.sort_by(|a, b| b.cmp(a));
+                let line: Vec<String> = m
+                    .iter()
+                    .filter(|x| x.0 * 10 >= miss_n)
+                    .map(|&(n, d)| format!("{d}:{:.0}%", n as f64 / miss_n as f64 * 100.0))
+                    .collect();
+                println!(
+                    "missing when the fill starts ({miss_n} attempts), national no.: {}",
+                    line.join(" ")
+                );
             }
             if gave_up > 0 {
                 let mut m: Vec<(u64, usize)> = (1..=151).map(|d| (missing[d], d)).collect();
@@ -344,6 +365,8 @@ fn main() {
                 let mut me = make_mon(dexr, species, level, [iv; 6], [0; 6], 0, badges as u8);
                 me.moves = moves.clone();
                 me.set_pp(dexr);
+                let hpf: f64 = arg(&args, "--hp", 1.0);
+                me.hp = ((me.max_hp as f64 * hpf).round() as i32).clamp(1, me.max_hp);
                 let tac = Tactics {
                     x_items: xs.clone(),
                     heal_below: arg(&args, "--heal-below", 0.4),

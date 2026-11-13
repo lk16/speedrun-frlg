@@ -61,16 +61,17 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.split(); // "Blaine"
     leg_sevii(b, p, h);
     b.split(); // "Sevii"
+               // The WR run evolves Pikachu and the rest with stones right after the Sevii trip (Raichu at
+               // 2:00 in the video): the stones bought in Celadon's store plus Two Island's Moon Stone.
+    if !p.stones.is_empty() {
+        b.push("stones", Src::Guess, 0, Kind::Stones);
+    }
 
     // Silph, Sabrina, then Erika (Celadon is a fly away), the Warden, Viridian.
     leg_silph(b, p, h);
     b.text("fly-celadon-3", 700, Src::Guess);
     let e = b.era;
     erika_leg(b, p, e);
-    // Stones bought at the Celadon store on this visit evolve what is already caught.
-    if !p.stones.is_empty() {
-        b.push("stones", Src::Guess, 0, Kind::Stones);
-    }
     b.text("fly-fuchsia", 700, Src::Guess);
     leg_warden(b, p, h);
     leg_viridian(b, p, h);

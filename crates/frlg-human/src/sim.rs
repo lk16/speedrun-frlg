@@ -99,6 +99,8 @@ pub struct Probe {
     pub fights: Vec<(String, u32, bool)>,
     /// National numbers still missing when the fill gave up (an abandoned attempt).
     pub missing: Vec<u32>,
+    /// National numbers missing when the fill (or Oak's check) starts.
+    pub oak_missing: Vec<u32>,
 }
 
 pub struct Outcome {
@@ -167,6 +169,8 @@ struct State {
     league_items: bool,
     /// Record each trainer fight (see `Probe::fights`).
     log_fights: bool,
+    /// Rare Candies eaten on the spot so far (`candy_early_n` caps it).
+    candies_eaten: u32,
     fight_log: Vec<(String, u32, bool)>,
 }
 
@@ -1103,6 +1107,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 st.badges,
             );
             m.moves = st.mewtwo_moves.clone();
+            if ctx.p.mewtwo_power != 1.0 {
+                m.stat[0] = (m.stat[0] as f64 * ctx.p.mewtwo_power) as i32;
+                m.stat[3] = (m.stat[3] as f64 * ctx.p.mewtwo_power) as i32;
+            }
             m
         } else {
             let mut m = make_mon(
@@ -1117,10 +1125,15 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             m.moves = st.slots.clone();
             m.pp = st.slot_pp.clone();
             m.status = st.carry_status;
+            // `carry_power`: the WR carry out-damages the engine's (see the param's doc).
+            if ctx.p.carry_power != 1.0 {
+                m.stat[0] = (m.stat[0] as f64 * ctx.p.carry_power) as i32;
+                m.stat[3] = (m.stat[3] as f64 * ctx.p.carry_power) as i32;
+            }
             m
         };
         // Heal with items before the fight when low (each use is a bag trip).
-        if st.hp_frac < 0.5 && !mewtwo_now {
+        if st.hp_frac < ctx.p.preheal_below && !mewtwo_now {
             let uses = (((0.85 - st.hp_frac) * me.max_hp as f64)
                 / heal_amount(me.level, st.league_items) as f64)
                 .ceil();
@@ -1507,6 +1520,7 @@ pub fn attempt(
         badges: 0,
         league_items: false,
         log_fights: probe.is_some(),
+        candies_eaten: 0,
         fight_log: vec![],
         whiteouts: 0,
         game: GameRng::from_u32(0),
@@ -1697,6 +1711,7 @@ pub fn attempt(
             Kind::OakCheck => {
                 if let Some(pr) = probe.as_deref_mut() {
                     pr.oak_count = st.caught.count();
+                    pr.oak_missing = (1..=151).filter(|&d| !st.caught.has(d)).collect();
                 }
                 // Once the list is exhausted the human goes round it again (at most 6 times).
                 let rounds = if ctx.p.fill.is_empty() { 0 } else { 6 };
@@ -1948,6 +1963,18 @@ pub fn attempt(
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 match pickup.kind.as_str() {
                     "max" => st.max_elixirs += 1,
+                    "candy" if ctx.p.candy_early && st.candies_eaten < ctx.p.candy_early_n => {
+                        st.candies_eaten += 1;
+                        // Eaten on the spot: a level now (400 frames), through the normal exp path
+                        // so evolutions and level-up moves happen.
+                        let need = exp_for_level(Growth::MediumSlow, (st.carry + 1) as u8)
+                            .saturating_sub(st.exp);
+                        let g = add_exp(ctx, &mut st, need.max(1));
+                        bump(
+                            &mut st,
+                            400.0 * ctx.p.text_factor + g as f64 * ctx.level_up(),
+                        );
+                    }
                     "candy" => st.candies += 1,
                     _ => st.elixirs += 1,
                 }
