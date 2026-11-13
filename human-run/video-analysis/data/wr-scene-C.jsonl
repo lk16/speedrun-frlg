@@ -1,0 +1,72 @@
+{"t":"2:24:00","scene":"menu","detail":"Bag ITEMS list (X Accuracy x3, Guard Spec. x2, Elixir x2, Rare Candy x2, Max Elixir x1, Full Heal x2); text: Where should the SUPER POTION be placed?","caught":52,"total":58}
+{"t":"2:25:00","scene":"battle","detail":"Opponent VENUSAUR Lv53 vs player 'A' Lv49 76/147; text: A used BLIZZARD!","caught":52,"total":58}
+{"t":"2:26:00","scene":"battle","detail":"Opponent GROWLITHE Lv45 vs player 'A' Lv50 79/150; text: A used BITE!","caught":52,"total":58}
+{"t":"2:27:00","scene":"menu","detail":"Pokedex-style list screen showing No019 RATTATA and No020 RATICATE (Brassland POKEMON header)","caught":52,"total":58}
+{"t":"2:28:00","scene":"battle","detail":"Opponent PSYDUCK Lv30 (player sending out, no player stats visible); text: Go! A!","caught":53,"total":59}
+{"t":"2:29:00","scene":"dialog","detail":"Mostly black screen with faded text box: '...a higher POKEMON catch rate than a GREAT BALL.'","caught":53,"total":59}
+{"t":"2:30:00","scene":"overworld","detail":"Cave: rocky brown walls and boulders, player sprite in the open area","caught":54,"total":59}
+{"t":"2:31:00","scene":"overworld","detail":"Cave: rocky walls and boulders with a boulder and an item ball nearby","caught":54,"total":59}
+{"t":"2:32:00","scene":"dialog","detail":"Pokemon Center interior with nurse and PC; text box shows 'A' (dialog start)","caught":55,"total":60}
+{"t":"2:33:00","scene":"menu","detail":"Party screen with PERSIAN Lv32 30/30 selected; party list CH'DING Lv6 23/23, GROWLITHE Lv32 77/77, PIDGEOTTO Lv37 93/93, GLOOM Lv35 95/95, EXEGGCUTE Lv27 70/70; text: Use on which POKEMON?","caught":60,"total":60}
+{"t":"2:34:00","scene":"menu","detail":"Party screen with PERSIAN Lv32 selected showing 'No use.' on party list; text: Use on which POKEMON?","caught":60,"total":60}
+{"t":"2:35:00","scene":"menu","detail":"PC box menu: WITHDRAW POKEMON, DEPOSIT POKEMON (selected), MOVE POKEMON, MOVE ITEMS, SEE YA!; text: You can deposit your party POKEMON in any BOX.","caught":60,"total":60}
+{"t":"2:36:00","scene":"battle","detail":"Opponent DEWGONG Lv52 (player sending out); text: Go! A!","caught":60,"total":60}
+{"t":"2:37:00","scene":"battle","detail":"Opponent DEWGONG Lv52 vs player 'A' Lv50 25/150; text: A used BITE!","caught":60,"total":60}
+{"t":"2:38:00","scene":"battle","detail":"Opponent LAPRAS Lv54 vs player 'A' Lv51 120/153; text: Foe LAPRAS used BODY SLAM!","caught":60,"total":60}
+{"t":"2:39:00","scene":"battle","detail":"Opponent ONIX Lv51 (player sending out); text: Go! A!","caught":60,"total":60}
+{"t":"2:40:00","scene":"battle","detail":"Opponent HITMONLEE Lv53 vs player 'A' Lv52 48/156; text: A used SURF!","caught":60,"total":60}
+{"t":"2:41:00","scene":"cutscene","detail":"Elite Four Agatha walking onto the field with trainer; text: ELITE FOUR AGATHA sent out G","caught":60,"total":60}
+{"t":"2:42:00","scene":"battle","detail":"Elite Four AGATHA's GENGAR sent out vs player 'A' Lv53 51/159; text: ELITE FOUR AGATHA sent out GENGAR!","caught":60,"total":60}
+{"t":"2:43:00","scene":"dialog","detail":"Elite Four hall interior, player on the platform; text: They're hard to catch and raise, but their powers are superior.","caught":60,"total":60}
+{"t":"2:44:00","scene":"battle","detail":"Opponent GYARADOS Lv56 vs player 'A' Lv54 82/162; text: A used BLIZZARD!","caught":60,"total":60}
+{"t":"2:45:00","scene":"battle","detail":"Opponent AERODACTYL Lv58 vs player 'A' Lv55 48/165; text: Foe AERODACTYL used ANCIENTPOWER!","caught":60,"total":60}
+{"t":"2:46:00","scene":"battle","detail":"Opponent PIDGEOT Lv59 (player sending out); text: Go! A!","caught":60,"total":60}
+{"t":"2:47:00","scene":"battle","detail":"Opponent VENUSAUR Lv63 vs player 'A' Lv55 129/165; text: A used BLIZZARD!","caught":60,"total":60}
+{"t":"2:48:00","scene":"battle","detail":"Post-battle, player 'A' Lv56 131/167; text: A gained 2704 EXP. Points!","caught":60,"total":60}
+{"t":"2:49:00","scene":"overworld","detail":"Indoor building interior (Pokemon Center-style room with people and a central healing pad)","caught":60,"total":60}
+{"t":"2:50:00","scene":"dialog","detail":"Indoor mart/shop interior with clerk and a Pokeball display; text: This time,","caught":60,"total":60}
+{"t":"2:51:00","scene":"overworld","detail":"Town exterior, ONE ISLAND label, building with trees and a sign (city)","caught":60,"total":60}
+{"t":"2:52:00","scene":"battle","detail":"Opponent CUBONE Lv37 (player sending out); text: Go! A!","caught":60,"total":60}
+{"t":"2:53:00","scene":"battle","detail":"Player 'A' Lv57 170/170 sending out, no opponent visible; text box blank","caught":60,"total":60}
+{"t":"2:54:00","scene":"overworld","detail":"Cave: rocky walls and boulders, player with a boulder nearby; text: Would you","caught":60,"total":60}
+{"t":"2:55:00","scene":"dialog","detail":"Outdoor city tiles near a building entrance with rival and NPC; text: A handed the RUBY to CELIO.","caught":60,"total":60}
+{"t":"2:56:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"2:57:00","scene":"overworld","detail":"Cave: ICEFALL CAVE label (partly obscured), ice floor and boulders","caught":60,"total":60}
+{"t":"2:58:00","scene":"overworld","detail":"Cave: icy floor beside water with three trainers standing in a row","caught":60,"total":60}
+{"t":"2:59:00","scene":"overworld","detail":"Outdoor grass area with trees, rocks and player sprite (grass)","caught":60,"total":60}
+{"t":"3:00:00","scene":"overworld","detail":"Cave: DOTTED HOLE label, player on rocky floor with holes","caught":60,"total":60}
+{"t":"3:01:00","scene":"battle","detail":"Opponent TEAM ROCKET GRUNT sent out WEE (trainer battle); player 'A' Lv57 170/170; text: TEAM ROCKET GRUNT sent out WEE","caught":60,"total":60}
+{"t":"3:02:00","scene":"overworld","detail":"Indoor building with spinner/arrow floor tiles and a grunt NPC (Rocket hideout-style interior)","caught":60,"total":60}
+{"t":"3:03:00","scene":"battle","detail":"Player 'A' Lv58 173/173, opponent not visible; text box blank","caught":60,"total":60}
+{"t":"3:04:00","scene":"battle","detail":"Opponent VILEPLUME Lv54 vs player 'A' Lv58 95/173; text: A used BLIZZARD!","caught":60,"total":60}
+{"t":"3:05:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:06:00","scene":"battle","detail":"Trainer battle won, player 'A' Lv59 109/176; text: A got P1760 for winning!","caught":60,"total":60}
+{"t":"3:07:00","scene":"battle","detail":"Opponent MAGNETON Lv46 vs player 'A' Lv59 109/176; text: A used SURF!","caught":60,"total":60}
+{"t":"3:08:00","scene":"overworld","detail":"Town exterior with a building and a yard (city)","caught":60,"total":60}
+{"t":"3:09:00","scene":"overworld","detail":"Water: player's Blastoise-style sprite surfing on water beside a bridge/road (water)","caught":60,"total":60}
+{"t":"3:10:00","scene":"overworld","detail":"Route on a bike with grass and rocks (grass)","caught":60,"total":60}
+{"t":"3:11:00","scene":"menu","detail":"Party selection for HM/move use: 'A' Lv59 NOT ABLE, CH'DING NOT ABLE, CLEFABLE ABLE, OMANYTE NOT ABLE, ABRA NOT ABLE; text: A wants to learn the move F","caught":60,"total":60}
+{"t":"3:12:00","scene":"battle","detail":"Opponent DEWGONG Lv64 (player sending out); text: Go! A!","caught":60,"total":60}
+{"t":"3:13:00","scene":"battle","detail":"Opponent JYNX Lv66 vs player 'A' Lv70 168/231; text: A used FIRE BLAST!","caught":60,"total":60}
+{"t":"3:14:00","scene":"dialog","detail":"Indoor gym-style hall with player on the central pad; text: Through rigorous training","caught":60,"total":60}
+{"t":"3:15:00","scene":"battle","detail":"Post-battle, player 'A' Lv70 213/231; text: A gained 1935 EXP. Points!","caught":60,"total":60}
+{"t":"3:16:00","scene":"cutscene","detail":"Elite Four Agatha walking out onto the field; text: ELITE FOUR AGATHA sent","caught":60,"total":60}
+{"t":"3:17:00","scene":"battle","detail":"Opponent MISDREAVUS Lv65 vs player 'A' Lv71 45/235; text box blank","caught":60,"total":60}
+{"t":"3:18:00","scene":"overworld","detail":"Indoor Elite Four hall with statues and the player walking (building)","caught":60,"total":60}
+{"t":"3:19:00","scene":"battle","detail":"Player 'A' Lv71 235/235; text: A gained 3117 EXP. Points!","caught":60,"total":60}
+{"t":"3:20:00","scene":"battle","detail":"Player 'A' Lv72 238/238; text: A gained 3363 EXP. Points!","caught":60,"total":60}
+{"t":"3:21:00","scene":"battle","detail":"Opponent ALAKAZAM Lv73 vs player 'A' Lv72 201/238; text: Foe ALAKAZAM used SHADOW BALL!","caught":60,"total":60}
+{"t":"3:22:00","scene":"battle","detail":"Opponent GYARADOS Lv73 vs player 'A' Lv73 164/241; text: CHAMPION A sent out GYARADOS!","caught":60,"total":60}
+{"t":"3:23:00","scene":"battle","detail":"Opponent ARCANINE Lv73 vs player 'A' Lv73 217/241; text: Foe ARCANINE used EXTREMESPEED!","caught":60,"total":60}
+{"t":"3:24:00","scene":"dialog","detail":"Indoor hall with two characters on a warp pad; text: But, when I got here, you","caught":60,"total":60}
+{"t":"3:25:00","scene":"cutscene","detail":"Hall of Fame-style fade: NAME A, IDNo. 40002, TIME 3:15 card over a champion scene; text: LEAGUE CHAMPION! CONGRATULATIONS!","caught":60,"total":60}
+{"t":"3:26:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:27:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:28:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:29:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:30:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:31:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:32:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:33:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:34:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"3:35:00","scene":"black","detail":"","caught":null,"total":null}

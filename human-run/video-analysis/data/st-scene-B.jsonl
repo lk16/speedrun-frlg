@@ -1,0 +1,60 @@
+{"t":"2:00:00","scene":"dialog","detail":"Brown-haired trainer stands; dialog 'As proof of your victory, I confer on you this...the'; player side A Lv13 HP 9/37 (turtle sprite).","caught":1,"total":28}
+{"t":"2:02:00","scene":"dialog","detail":"Post-battle dialog 'A gained 111 EXP. Points!'; player side A Lv13 HP 9/37.","caught":1,"total":28}
+{"t":"2:04:00","scene":"overworld","detail":"Grass route with rocky ledges and a yellow-hatted NPC; player on grass.","caught":1,"total":28}
+{"t":"2:06:00","scene":"other","detail":"Plain blue screen with a faint sparkle; no readable content.","caught":3,"total":28}
+{"t":"2:08:00","scene":"battle","detail":"Opponent (species not identifiable) vs player A Lv17 HP 10/51; dialog 'Foe'.","caught":3,"total":28}
+{"t":"2:10:00","scene":"overworld","detail":"Outdoor city area: buildings along a water-bordered path with red flowers (city).","caught":4,"total":28}
+{"t":"2:12:00","scene":"dialog","detail":"Indoor building with two NPCs; dialog 'Yo'.","caught":4,"total":28}
+{"t":"2:14:00","scene":"battle","detail":"Gengar and a Nidoran-type (species unclear) on screen; no level or HP box visible.","caught":null,"total":null}
+{"t":"2:16:00","scene":"other","detail":"Controls explanation screen: 'The various buttons will be explained in the order of their importance.'","caught":null,"total":null}
+{"t":"2:18:00","scene":"dialog","detail":"Rival (spiky hair) and player at encounter start; dialog 'RIVAL A'.","caught":null,"total":null}
+{"t":"2:20:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"2:22:00","scene":"other","detail":"Pale blue fade with a thin yellow line at the bottom; no readable text.","caught":null,"total":null}
+{"t":"2:24:00","scene":"overworld","detail":"Grass route with trees, ledges and flowers; player on grass.","caught":1,"total":28}
+{"t":"2:26:00","scene":"dialog","detail":"Outdoor town path with an NPC; dialog 'Well, now, I've had'.","caught":1,"total":28}
+{"t":"2:28:00","scene":"battle","detail":"Wild WEEDLE Lv9 vs player A Lv6 HP 16/22; dialog 'A'.","caught":1,"total":28}
+{"t":"2:30:00","scene":"overworld","detail":"Grass and trees around a building entrance (grass route).","caught":1,"total":28}
+{"t":"2:32:00","scene":"battle","detail":"CAMPER LIAM sent out SANDSHREW; player A Lv9 HP 8/28.","caught":4,"total":29}
+{"t":"2:34:00","scene":"dialog","detail":"Indoor gym-style room with Brock; dialog 'A received TM39 from BROCK.'","caught":4,"total":29}
+{"t":"2:36:00","scene":"battle","detail":"Opponent CATERPIE Lv10 vs player A Lv13 HP 9/36; dialog 'A used WATER GUN!'.","caught":4,"total":29}
+{"t":"2:38:00","scene":"battle","detail":"Opponent MANKEY Lv7; player trainer sends out A, dialog 'Go! A!'.","caught":4,"total":29}
+{"t":"2:40:00","scene":"overworld","detail":"Rocky ledges with a grass path (outdoor rocky terrain).","caught":5,"total":30}
+{"t":"2:42:00","scene":"overworld","detail":"Rocky outdoor terrain with boulders and a trainer NPC at top right.","caught":8,"total":30}
+{"t":"2:44:00","scene":"overworld","detail":"ROUTE 4 location banner; rocky ledges and water.","caught":8,"total":30}
+{"t":"2:46:00","scene":"black","detail":"","caught":8,"total":30}
+{"t":"2:48:00","scene":"battle","detail":"Opponent PIDGEOTTO Lv17 vs player A Lv21 HP 32/58; dialog 'Go! A!'.","caught":8,"total":30}
+{"t":"2:50:00","scene":"battle","detail":"Opponent METAPOD Lv10 vs player A Lv22 HP 10/60; dialog 'A used BITE!'.","caught":8,"total":30}
+{"t":"2:52:00","scene":"battle","detail":"Opponent NIDORAN(male) Lv16 vs player A Lv23 HP 13/63; dialog 'A used WATER PULSE!'.","caught":8,"total":30}
+{"t":"2:54:00","scene":"battle","detail":"HIKER FRANKLIN sent out GEODUDE Lv15; player A Lv24 HP 15/65.","caught":8,"total":30}
+{"t":"2:56:00","scene":"battle","detail":"Opponent ODDISH Lv13 vs player A Lv25 HP 18/68; dialog 'A used WATER PULSE!'.","caught":8,"total":30}
+{"t":"2:58:00","scene":"battle","detail":"Opponent MACHOP Lv17 vs player A Lv25 HP 10/68; dialog 'A used WATER GUN!'.","caught":8,"total":30}
+{"t":"3:00:00","scene":"overworld","detail":"Outdoor city: building beside a lawn with a tree (city).","caught":8,"total":30}
+{"t":"3:02:00","scene":"overworld","detail":"Building interior corridor with a staircase and an NPC (building).","caught":8,"total":30}
+{"t":"3:04:00","scene":"dialog","detail":"Shop/building interior with NPCs at a counter; dialog 'A received a BIKE VOUCHE' (text cut off in frame).","caught":8,"total":30}
+{"t":"3:06:00","scene":"battle","detail":"Opponent BELLSPROUT Lv18 vs player A Lv27 HP 64/72; command menu FIGHT/BAG/POKeMON/RUN shown.","caught":8,"total":30}
+{"t":"3:08:00","scene":"overworld","detail":"Outdoor rocky route with ledges; player on a bicycle (route).","caught":8,"total":30}
+{"t":"3:10:00","scene":"dialog","detail":"PICNICKER MARTHA sent out ODDISH; player side partly visible at Lv22.","caught":9,"total":30}
+{"t":"3:12:00","scene":"menu","detail":"Start menu with BAG selected over the overworld; description 'Equipped with pockets for storing items you bought, received, or found.'","caught":9,"total":30}
+{"t":"3:14:00","scene":"battle","detail":"PICNICKER DANA sent out MEOWTH; dialog visible, player side not visible.","caught":9,"total":30}
+{"t":"3:16:00","scene":"overworld","detail":"Outdoor berry-patch area with fences and grass (grass).","caught":9,"total":30}
+{"t":"3:18:00","scene":"battle","detail":"Opponent RATICATE Lv20 vs player A Lv31 HP 30/82; dialog 'Foe RATICATE used TAIL WHIP!'.","caught":9,"total":30}
+{"t":"3:20:00","scene":"overworld","detail":"Indoor ROCKET HIDEOUT B2F with spinner tiles and an NPC (building/cave-like interior).","caught":9,"total":30}
+{"t":"3:22:00","scene":"battle","detail":"TEAM ROCKET GRUNT sent out ARBOK; player A Lv32 HP 20/84.","caught":9,"total":30}
+{"t":"3:24:00","scene":"battle","detail":"Opponent KANGASKHAN Lv29 vs player A Lv36 HP 44/108; dialog 'A's DEFENSE fell!'.","caught":11,"total":30}
+{"t":"3:26:00","scene":"menu","detail":"Mart menu: X ATTACK 500, X DEFEND 550, X SPEED 350, X SPECIAL 350, X ACCURACY 950, GUARD SPEC 700; MONEY 38026; dialog 'X ATTA'.","caught":11,"total":30}
+{"t":"3:28:00","scene":"battle","detail":"Opponent PIDGEOTTO Lv25 vs player A Lv36 HP 36/108; dialog 'Foe PIDGEOTTO used SAND-ATTACK!'.","caught":11,"total":30}
+{"t":"3:30:00","scene":"battle","detail":"Opponent GASTLY Lv15; player trainer sends out A, dialog 'Go! A!'.","caught":11,"total":30}
+{"t":"3:32:00","scene":"battle","detail":"Opponent GASTLY Lv24 vs player A Lv37 HP 23/111; dialog 'A used WATER GUN!'.","caught":11,"total":30}
+{"t":"3:34:00","scene":"battle","detail":"Battle end: trainer at top right; dialog 'A got 800 for winning!'; player A Lv38 HP 26/114.","caught":13,"total":31}
+{"t":"3:36:00","scene":"dialog","detail":"Indoor room with PC-like machines and NPCs; dialog 'Upon hearing the POKE FLUTE'.","caught":14,"total":31}
+{"t":"3:38:00","scene":"battle","detail":"Opponent VOLTORB Lv21; player trainer sends out A, dialog 'Go! A'.","caught":14,"total":31}
+{"t":"3:40:00","scene":"overworld","detail":"ROUTE 18 location banner; narrow grass strip between water (water route).","caught":14,"total":31}
+{"t":"3:42:00","scene":"battle","detail":"Wild EXEGGCUTE (Lv27) appeared; dialog 'Wild EXEGGCUTE ap...'.","caught":16,"total":36}
+{"t":"3:44:00","scene":"overworld","detail":"Very dark outdoor screen with grass-like tiles; location unclear.","caught":16,"total":36}
+{"t":"3:46:00","scene":"overworld","detail":"Indoor pink-floored room with two machines and an NPC (building).","caught":18,"total":36}
+{"t":"3:48:00","scene":"cutscene","detail":"Red-scarf figure at bottom left and a character at right edge on blank screen with empty dialog box.","caught":18,"total":39}
+{"t":"3:50:00","scene":"overworld","detail":"Player surfing on open water (water).","caught":18,"total":39}
+{"t":"3:52:00","scene":"menu","detail":"Large yellow backpack illustration with a blank text panel (item/bag screen).","caught":18,"total":39}
+{"t":"3:54:00","scene":"battle","detail":"Wild orange fox-like Pokemon (species unclear); dialog 'Wild'; player side partly visible at Lv30.","caught":21,"total":43}
+{"t":"3:56:00","scene":"overworld","detail":"Indoor tiled-floor building with NPCs and a machine (building).","caught":22,"total":44}
+{"t":"3:58:00","scene":"battle","detail":"LEADER BLAINE sent out ARCANINE; player A Lv42 HP 60/125.","caught":22,"total":44}

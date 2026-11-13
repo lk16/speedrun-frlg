@@ -1,0 +1,60 @@
+{"t":"4:00:00","scene":"dialog","detail":"Overworld in a town; NPC CELIO dialog: 'A, if you are going to TWO ISLAND, please t' (cut off).","caught":22,"total":43}
+{"t":"4:02:00","scene":"battle","detail":"Opponent GRIMER Lv37; player A Lv43 HP 28/127. Text: 'A used SURF!'","caught":22,"total":41}
+{"t":"4:04:00","scene":"menu","detail":"TM/HM case: CUT, FLY, SURF (selected), TOXIC x1, BLIZZARD x1; SURF description shown (Water, power 95, accuracy 100, PP 15).","caught":22,"total":41}
+{"t":"4:06:00","scene":"overworld","detail":"Outdoor route: tall grass patches, trees, ledges (grass).","caught":25,"total":43}
+{"t":"4:08:00","scene":"battle","detail":"Opponent WEEPINBELL Lv35; player A Lv44 HP 41/131, poisoned (PSN). Text: 'A used ULTRA BALL!'","caught":25,"total":43}
+{"t":"4:10:00","scene":"battle","detail":"Opponent HYPNO Lv30; player A HP box cut off (131/13x). Text: 'Go! A!'","caught":26,"total":44}
+{"t":"4:12:00","scene":"overworld","detail":"Surfing on water near boulders and a building at the shore (water).","caught":29,"total":48}
+{"t":"4:14:00","scene":"overworld","detail":"Building interior: tiled floor, planters, walls (building).","caught":30,"total":48}
+{"t":"4:16:00","scene":"battle","detail":"Opponent VENUSAUR Lv40; player A Lv44 HP 79/131. Text: 'A used BLIZZARD!'","caught":30,"total":48}
+{"t":"4:18:00","scene":"battle","detail":"Trainer battle start: opponent CUBONE Lv32 shown; trainer text 'Go! KAKUNA!'","caught":30,"total":48}
+{"t":"4:20:00","scene":"battle","detail":"Opponent NIDORINO Lv37; player A Lv45 HP 57/133. Text: 'A used SURF!'","caught":30,"total":48}
+{"t":"4:22:00","scene":"overworld","detail":"Building interior: blue-gray tiled floor, purple walls, pillars (building).","caught":30,"total":48}
+{"t":"4:24:00","scene":"evolution","detail":"Text: 'Congratulations! Your METAPOD' (cut off); butterfly-type sprite shown.","caught":35,"total":48}
+{"t":"4:26:00","scene":"battle","detail":"Trainer battle end: female trainer sprite; player A Lv47 HP 12/139. Text: 'A got P1728 for winning!'","caught":35,"total":48}
+{"t":"4:28:00","scene":"battle","detail":"Trainer battle end: robed trainer sprite; player PONYTA Lv31 HP 76/76. Text: 'A got P2900 for winning!'","caught":36,"total":48}
+{"t":"4:30:00","scene":"battle","detail":"Opponent MAGNEMITE Lv25; player PONYTA Lv31 HP 49/76, poisoned (PSN). Text: 'A used ULTRA BALL!'","caught":37,"total":49}
+{"t":"4:32:00","scene":"overworld","detail":"Building interior: wooden floor, blue rug, shelves, potted plants; NPC and player (building).","caught":37,"total":49}
+{"t":"4:34:00","scene":"overworld","detail":"Building interior: grey tiled room with tables, chairs and a counter; NPCs (building).","caught":39,"total":51}
+{"t":"4:36:00","scene":"evolution","detail":"Text: 'Congratulations! Your NIDORINA evolved into NIDOQUEEN!' Nidoqueen sprite shown.","caught":39,"total":51}
+{"t":"4:38:00","scene":"black","detail":"","caught":null,"total":null}
+{"t":"4:40:00","scene":"battle","detail":"Trainer battle start: BLACK BELT TAKASHI sent out MACHOP (opponent MACHOP Lv38, name partly cut off); player A Lv47 HP 101/139.","caught":49,"total":54}
+{"t":"4:42:00","scene":"overworld","detail":"Building interior: teal tiled floor, counter, NPCs and player (building).","caught":49,"total":54}
+{"t":"4:44:00","scene":"overworld","detail":"Dense trees with grass path (grass).","caught":49,"total":54}
+{"t":"4:46:00","scene":"battle","detail":"Opponent GYARADOS Lv45; player A Lv50 HP 101/109. Text: 'Foe GYARADOS's INTIMIDATE cuts A's ATTACK!'","caught":50,"total":54}
+{"t":"4:48:00","scene":"overworld","detail":"Outdoor route: stone steps and gate, rocks and trees (route).","caught":50,"total":55}
+{"t":"4:50:00","scene":"battle","detail":"Opponent ONIX Lv40 (PAR); player VICTREEBEL Lv35 HP 98/110. Text: 'A used ULTRA BALL!'","caught":51,"total":56}
+{"t":"4:52:00","scene":"battle","detail":"Opponent MACHOP Lv32; player NIDOQUEEN Lv25 HP 82/82. Text: 'A used GREAT BALL!'","caught":54,"total":59}
+{"t":"4:54:00","scene":"menu","detail":"Bag, POKE BALLS pocket: POKE BALL x2, MASTER BALL x1 (selected), CANCEL; MASTER BALL description shown.","caught":55,"total":60}
+{"t":"4:56:00","scene":"menu","detail":"PC storage screen, BOX1, with MAROWAK Lv45 selected in the summary panel.","caught":56,"total":61}
+{"t":"4:58:00","scene":"evolution","detail":"Text: 'What? CLEFAIRY is evolving!' Clefairy sprite shown.","caught":55,"total":60}
+{"t":"5:00:00","scene":"menu","detail":"Start menu over an indoor room: POKeDEX (selected), POKeMON, BAG, A, SAVE, OPTION, EXIT; POKeDEX description shown.","caught":60,"total":60}
+{"t":"5:02:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"5:04:00","scene":"title","detail":"Continue screen: PLAYER A, TIME 1:13, POKeDEX 14, BADGES 2, NEW GAME.","caught":1,"total":28}
+{"t":"5:06:00","scene":"title","detail":"Continue screen: PLAYER A, TIME 1:13, POKeDEX 14, BADGES 2, NEW GAME.","caught":1,"total":28}
+{"t":"5:08:00","scene":"other","detail":"Stream break screen: 'BE RIGHT BACK' with starter sprites.","caught":null,"total":null}
+{"t":"5:10:00","scene":"other","detail":"Stream break screen: 'BE RIGHT BACK' with starter sprites.","caught":null,"total":null}
+{"t":"5:12:00","scene":"other","detail":"Stream break screen: 'BE RIGHT BACK' with starter sprites.","caught":null,"total":null}
+{"t":"5:14:00","scene":"cutscene","detail":"Intro: Professor Oak-style NPC standing; text 'This world...'","caught":1,"total":28}
+{"t":"5:16:00","scene":"title","detail":"POKeMON LEAFGREEN VERSION title screen, PRESS START.","caught":1,"total":28}
+{"t":"5:18:00","scene":"title","detail":"Copyright splash: 2004 Pokemon, Nintendo, Creatures Inc., GAME FREAK inc.","caught":1,"total":28}
+{"t":"5:20:00","scene":"overworld","detail":"Town: red-roofed houses, fence with flowers, path, sign (city/town).","caught":1,"total":28}
+{"t":"5:22:00","scene":"battle","detail":"Trainer battle intro: opponent trainer (purple pants) with no species visible; player A Lv6 HP 10/22. Text: 'If you win, you earn prize money, a' (cut off).","caught":1,"total":28}
+{"t":"5:24:00","scene":"dialog","detail":"Building interior with healing machine and PC; NPC text: 'A healthy POKeMON can escape. You have to'","caught":1,"total":28}
+{"t":"5:26:00","scene":"dialog","detail":"Outdoor path with trees and a building; NPC text: 'If there's something you don't understan' (cut off).","caught":1,"total":28}
+{"t":"5:28:00","scene":"battle","detail":"Opponent WEEDLE Lv9; player A Lv6 HP 18/22, poisoned (PSN). Text: 'Foe WEEDLE used STRING SHOT!'","caught":1,"total":28}
+{"t":"5:30:00","scene":"dialog","detail":"Intro text box with Pikachu avatar: 'Through your adventure, we hope that you will interact with all sorts of people and achieve personal growth... Press the A Button, and let your adventure begin!'","caught":1,"total":28}
+{"t":"5:32:00","scene":"overworld","detail":"Building interior with shelves, player and NPC (building); diagonal screen wipe visible.","caught":1,"total":28}
+{"t":"5:34:00","scene":"overworld","detail":"Outdoor route: trees and red flower patches (grass/route).","caught":1,"total":28}
+{"t":"5:36:00","scene":"overworld","detail":"Town street with a Pokemon Center (red roof) and paths (city).","caught":1,"total":28}
+{"t":"5:38:00","scene":"battle","detail":"Trainer battle intro: 'BUG CATCHER SAMMY sent ou' (cut off); trainer sprite shown, no species visible.","caught":1,"total":28}
+{"t":"5:40:00","scene":"other","detail":"Blank blue-grey transition screen with stripes.","caught":1,"total":28}
+{"t":"5:42:00","scene":"title","detail":"POKeMON LEAFGREEN VERSION title screen, PRESS START.","caught":1,"total":28}
+{"t":"5:44:00","scene":"title","detail":"Continue screen fading in: PLAYER HI, TIME 0:00, BADGES 0, NEW GAME.","caught":1,"total":28}
+{"t":"5:46:00","scene":"title","detail":"Continue screen: PLAYER HI, TIME 0:00, BADGES 0, NEW GAME.","caught":1,"total":28}
+{"t":"5:48:00","scene":"cutscene","detail":"Intro: Professor Oak-style NPC standing on pedestal, no text.","caught":1,"total":28}
+{"t":"5:50:00","scene":"cutscene","detail":"Rival and player standing facing each other, empty text box.","caught":1,"total":28}
+{"t":"5:52:00","scene":"title","detail":"POKeMON LEAFGREEN VERSION title screen, PRESS START.","caught":1,"total":28}
+{"t":"5:54:00","scene":"title","detail":"POKeMON LEAFGREEN VERSION title screen, PRESS START.","caught":1,"total":28}
+{"t":"5:56:00","scene":"overworld","detail":"Building interior: Pokemon Center-style room with healing machine, PC and Poke Ball counter (building).","caught":1,"total":28}
+{"t":"5:58:00","scene":"black","detail":"","caught":1,"total":28}

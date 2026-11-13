@@ -1,0 +1,72 @@
+{"t":"0:00:00","scene":"black","detail":"","caught":1,"total":22}
+{"t":"0:01:00","scene":"overworld","detail":"Town: building with windows and fenced flower beds, player visible (city)","caught":1,"total":22}
+{"t":"0:02:00","scene":"battle","detail":"Player A Lv5 20/20 vs BULBASAUR Lv5, text: pit their POKéMON against each other.","caught":1,"total":22}
+{"t":"0:03:00","scene":"overworld","detail":"Route: grass patch, path and flowers, player and NPC visible (grass)","caught":1,"total":22}
+{"t":"0:04:00","scene":"battle","detail":"Player A Lv6 19/22 vs RATTATA Lv3, text: Wild R","caught":1,"total":22}
+{"t":"0:05:00","scene":"overworld","detail":"Route: ledged path between trees, tall grass patch nearby, player visible (grass)","caught":1,"total":22}
+{"t":"0:06:00","scene":"overworld","detail":"Indoor building: shelves and NPCs, player near exit (shop interior)","caught":1,"total":22}
+{"t":"0:07:00","scene":"menu","detail":"Item description: A spray-type wound medicine. It restores the HP of one POKéMON by 20 points.","caught":1,"total":22}
+{"t":"0:08:00","scene":"overworld","detail":"Route: tall grass among trees, player and a small item-like sprite visible (grass)","caught":1,"total":22}
+{"t":"0:09:00","scene":"battle","detail":"Player A Lv7 18/24 vs WEEDLE Lv5, text: A used POKé BALL!","caught":3,"total":22}
+{"t":"0:10:00","scene":"overworld","detail":"Route: dense tall grass and trees, player visible (grass)","caught":3,"total":22}
+{"t":"0:11:00","scene":"battle","detail":"Player A Lv7 15/24 (poisoned), no opponent visible, text: A gained 99 EXP. Points!","caught":3,"total":22}
+{"t":"0:12:00","scene":"overworld","detail":"Indoor room with round boulder-like pillars and statues, two characters and an NPC (building)","caught":3,"total":22}
+{"t":"0:13:00","scene":"black","detail":"","caught":3,"total":22}
+{"t":"0:14:00","scene":"battle","detail":"Player A Lv13 9/36, text: A learned WATER GUN!","caught":3,"total":22}
+{"t":"0:15:00","scene":"menu","detail":"Poké Mart list: POKé BALL 200, POTION 300, ANTIDOTE 100, PARLYZ HEAL 200 (cursor), AWAKENING 250, BURN HEAL 250; MONEY ₽4508; text: PARLYZ HEAL? Certainly. Ho","caught":3,"total":22}
+{"t":"0:16:00","scene":"battle","detail":"Player A Lv13 9/36, text: A gained 112 EXP. Points!","caught":3,"total":22}
+{"t":"0:17:00","scene":"battle","detail":"Player A Lv14 11/38, text: A gained 102 EXP. Points!","caught":3,"total":22}
+{"t":"0:18:00","scene":"battle","detail":"Player A Lv15 13/40, text: Player defeated BUG CATCH","caught":3,"total":22}
+{"t":"0:19:00","scene":"black","detail":"","caught":3,"total":22}
+{"t":"0:20:00","scene":"battle","detail":"Trainer intro, text: BUG CATCHER ROBBY would like to battle!","caught":3,"total":22}
+{"t":"0:21:00","scene":"evolution","detail":"Evolution sequence, text: Congratulations! Your A... (new form shown, blue with long tail)","caught":7,"total":23}
+{"t":"0:22:00","scene":"dialog","detail":"Pokémon transfer, text: It was placed in BOX 'BOX1.' (Yes/No prompt box at right, sprite species not identifiable)","caught":7,"total":23}
+{"t":"0:23:00","scene":"battle","detail":"Player A Lv16 10/47, text: TEAM ROCKET GRUNT sent out ZUBAT!","caught":8,"total":24}
+{"t":"0:24:00","scene":"battle","detail":"Player A Lv17 8/49, text: A gained 264 EXP. Points!","caught":8,"total":24}
+{"t":"0:25:00","scene":"black","detail":"","caught":8,"total":24}
+{"t":"0:26:00","scene":"overworld","detail":"Indoor Pokémon Center: nurse counter, PC and NPCs (building)","caught":8,"total":24}
+{"t":"0:27:00","scene":"battle","detail":"Opponent STARYU Lv18, player A Lv20 49/56, text: A used BITE!","caught":8,"total":24}
+{"t":"0:28:00","scene":"menu","detail":"Move selection: TACKLE PP34/35, WATER GUN PP25/25, BITE PP21/25, MEGA KICK PP5/5, WATER PULSE PP20/20; description: A physical attack in which the user charges, full body, into the foe.","caught":8,"total":24}
+{"t":"0:29:00","scene":"battle","detail":"Opponent PIDGEOTTO Lv17, player A Lv21 35/59, text: A used WATER PULSE!","caught":8,"total":24}
+{"t":"0:30:00","scene":"overworld","detail":"Town: water edge, fenced houses and trees, player and NPC visible (city)","caught":8,"total":24}
+{"t":"0:31:00","scene":"battle","detail":"Opponent KAKUNA Lv10, player A Lv22 23/61, text: A used BITE!","caught":8,"total":24}
+{"t":"0:32:00","scene":"battle","detail":"Battle transition, opponent sprite partly visible at left, dialog box empty","caught":8,"total":24}
+{"t":"0:33:00","scene":"battle","detail":"Opponent NIDORAN♀ Lv16, player A Lv23 26/64, text: A used WATER PULSE!","caught":8,"total":24}
+{"t":"0:34:00","scene":"battle","detail":"Opponent EKANS Lv15, player A Lv23 26/64, text: A used WATER PULSE!","caught":8,"total":24}
+{"t":"0:35:00","scene":"battle","detail":"Opponent trainer sprite (backpacker) at right, player A Lv24 28/66, dialog box empty","caught":8,"total":24}
+{"t":"0:36:00","scene":"battle","detail":"Opponent RATTATA Lv14, player A Lv24 23/66, text: A used WATER PULSE!","caught":8,"total":24}
+{"t":"0:37:00","scene":"battle","detail":"Opponent ODDISH Lv13, player A Lv25 25/68, text: A used MEGA KICK!","caught":8,"total":24}
+{"t":"0:38:00","scene":"dialog","detail":"Indoor building with computers and two characters, text: They invited me to their party, bu","caught":8,"total":24}
+{"t":"0:39:00","scene":"battle","detail":"Opponent DROWZEE Lv17, player A Lv25 25/68, text: It's super effective!","caught":8,"total":24}
+{"t":"0:40:00","scene":"battle","detail":"Trainer intro, text: CAMPER JEFF sent out SPEAROW!","caught":8,"total":24}
+{"t":"0:41:00","scene":"overworld","detail":"Indoor ship deck with S.S. ANNE sign, player and NPCs (building)","caught":8,"total":24}
+{"t":"0:42:00","scene":"battle","detail":"Player A Lv26 44/71, text: RIVAL A sent ou","caught":8,"total":24}
+{"t":"0:43:00","scene":"dialog","detail":"Indoor room with desk, bookshelf and a character (building), text: Why not try it with","caught":8,"total":24}
+{"t":"0:44:00","scene":"cutscene","detail":"Full-screen handheld device graphic (Game Boy style), no readable text","caught":8,"total":24}
+{"t":"0:45:00","scene":"overworld","detail":"Route: pond edge, tall grass and trees, two NPCs and player visible (grass/water)","caught":8,"total":24}
+{"t":"0:46:00","scene":"menu","detail":"Bag list: BERRY POUCH, S.S. TICKET, BICYCLE (cursor), CANCEL; description: A folding bicycle that allows faster movement than the RUNNING SHOES.","caught":8,"total":24}
+{"t":"0:47:00","scene":"battle","detail":"Opponent BELLSPROUT Lv18, player A Lv27 46/73, dialog box empty","caught":9,"total":24}
+{"t":"0:48:00","scene":"battle","detail":"Opponent VENONAT Lv20, player A Lv27 37/73 (poisoned), text: A used BITE!","caught":9,"total":24}
+{"t":"0:49:00","scene":"battle","detail":"Opponent CUBONE Lv23, player A Lv28 25/75, text: Go! A!","caught":9,"total":24}
+{"t":"0:50:00","scene":"battle","detail":"Opponent SLOWPOKE Lv25, player A Lv28 19/75, text: It's super effective!","caught":9,"total":24}
+{"t":"0:51:00","scene":"overworld","detail":"Dark cave, player visible inside a flash-lit circle (cave)","caught":9,"total":24}
+{"t":"0:52:00","scene":"battle","detail":"Player A Lv29 22/78, text: A gained 349 EXP. Points!","caught":9,"total":24}
+{"t":"0:53:00","scene":"battle","detail":"Opponent PIDGEY Lv21, player A Lv30 24/80, text: A used WATER PULSE!","caught":9,"total":24}
+{"t":"0:54:00","scene":"battle","detail":"Trainer HIKER DUDLEY sent out GRAVELER!, player A Lv30 24/80","caught":9,"total":24}
+{"t":"0:55:00","scene":"battle","detail":"Player A Lv31 27/83, text: A did not learn PROTECT.","caught":9,"total":24}
+{"t":"0:56:00","scene":"battle","detail":"Opponent VULPIX Lv24, player A Lv31 27/83, text: Foe VULPIX used QUICK ATTACK!","caught":9,"total":24}
+{"t":"0:57:00","scene":"overworld","detail":"Indoor building: PC, table and chairs, NPC and plants (building)","caught":9,"total":24}
+{"t":"0:58:00","scene":"dialog","detail":"Indoor building (game corner style), text: A found 40 COINS!","caught":9,"total":24}
+{"t":"0:59:00","scene":"dialog","detail":"Indoor building with plants, text: A put the PP UP in the ITEMS POCKET.","caught":10,"total":24}
+{"t":"1:00:00","scene":"battle","detail":"Trainer battle won, opponent dark-haired trainer sprite, player A Lv31 23/83, text: A got ₽672 for winning!","caught":10,"total":24}
+{"t":"1:01:00","scene":"battle","detail":"Opponent SANDSHREW Lv23, text: Go! A!","caught":10,"total":24}
+{"t":"1:02:00","scene":"battle","detail":"Opponent EKANS Lv23, player A Lv32 25/85, text: Foe EKANS's INTIMIDATE cuts A's ATTACK!","caught":10,"total":24}
+{"t":"1:03:00","scene":"menu","detail":"Bag ITEMS: POTION x3, REPEL x1, NUGGET x2, RARE CANDY x1 (cursor), SUPER POTION x1, PP UP x2; description: A candy that is packed with energy. It raises the level of a POKéMON by one.","caught":10,"total":24}
+{"t":"1:04:00","scene":"battle","detail":"Opponent RHYHORN Lv24, player A Lv36 44/109, text: A used WATER GUN!","caught":11,"total":24}
+{"t":"1:05:00","scene":"dialog","detail":"Game corner style room with COINS 180 COINS box, text: A obtained the CLEFAIRY!","caught":11,"total":24}
+{"t":"1:06:00","scene":"menu","detail":"Shop menu: BUY, SELL, SEE YA! (indoor shop), text: Is there anything else I can do?","caught":11,"total":24}
+{"t":"1:07:00","scene":"dialog","detail":"Route: fence, trees and grass (grass), text: This tree looks like it can be CUT down!","caught":11,"total":24}
+{"t":"1:08:00","scene":"battle","detail":"Opponent PIDGEOTTO Lv25, player A Lv36 42/109, text: What will A do? (FIGHT/BAG/POKéMON/RUN)","caught":11,"total":24}
+{"t":"1:09:00","scene":"battle","detail":"Player A Lv37 15/112, opponent not visible, six party balls shown, dialog box empty","caught":11,"total":24}
+{"t":"1:10:00","scene":"battle","detail":"Opponent GASTLY Lv15, player CH'DING Lv6 23/23, text: It doesn't","caught":11,"total":24}
+{"t":"1:11:00","scene":"overworld","detail":"POKéMON TOWER graveyard (tower), tombstones and NPCs visible","caught":11,"total":24}

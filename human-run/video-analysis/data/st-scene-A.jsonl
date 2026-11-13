@@ -1,0 +1,60 @@
+{"t":"0:00:00","scene":"overworld","detail":"Overworld on a route with tall grass patches and ledges (grass).","caught":1,"total":28}
+{"t":"0:02:00","scene":"dialog","detail":"Dialog text 'Well, now, I've had my' over a town street with a green-roofed building and two people.","caught":1,"total":28}
+{"t":"0:04:00","scene":"battle","detail":"Opponent WEEDLE Lv9; player side A Lv6, HP 22/22 (turtle-like sprite); text 'A used'.","caught":1,"total":28}
+{"t":"0:06:00","scene":"battle","detail":"Opponent SANDSHREW Lv11; player side A Lv9, HP 8/29; text 'It's super effective!'.","caught":1,"total":28}
+{"t":"0:08:00","scene":"title","detail":"Grayscale Venusaur sprite on red background with partial 'PRESS' text, intro/title screen.","caught":1,"total":28}
+{"t":"0:10:00","scene":"dialog","detail":"Text screen: 'Through your adventure, we hope that you will interact with all sorts of people... Press the A Button, and let your adventure begin!'","caught":1,"total":28}
+{"t":"0:12:00","scene":"battle","detail":"Opponent BULBASAUR Lv5; player side A Lv5, HP 20/20; text 'You've never had a POKéMON battle before, have'.","caught":1,"total":28}
+{"t":"0:14:00","scene":"cutscene","detail":"Player character standing on a pad in a plain room; text 'A world of dreams and adventures with POKéMON awaits! Let's go!'","caught":1,"total":28}
+{"t":"0:16:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"0:18:00","scene":"menu","detail":"Continue menu: PLAYER GM, TIME 0:00, BADGES 0; NEW GAME option.","caught":1,"total":28}
+{"t":"0:20:00","scene":"dialog","detail":"Indoor building interior with two characters and shop shelves; text 'Oh, that's right, I told you to come! Just wai'.","caught":1,"total":28}
+{"t":"0:22:00","scene":"overworld","detail":"Overworld on a route with trees, flower patches and ledges (grass).","caught":1,"total":28}
+{"t":"0:24:00","scene":"overworld","detail":"Overworld on a route with trees, ledges and flower patches (grass).","caught":1,"total":28}
+{"t":"0:26:00","scene":"overworld","detail":"Overworld in dense forest with tall trees and tall grass (grass).","caught":1,"total":28}
+{"t":"0:28:00","scene":"battle","detail":"Opponent CATERPIE Lv4 (sprite); text 'Go! A!'; player side not yet shown.","caught":1,"total":28}
+{"t":"0:30:00","scene":"battle","detail":"Opponent GEODUDE Lv10; player side A Lv8, HP 6/27; text 'It's super effective!'.","caught":1,"total":28}
+{"t":"0:32:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"0:34:00","scene":"battle","detail":"Two sprites on a forest background, a purple spiky one and a pink one; no name or HP box visible, species not confirmed.","caught":1,"total":28}
+{"t":"0:36:00","scene":"menu","detail":"Continue menu: PLAYER GM, TIME 0:00, BADGES 0; NEW GAME option.","caught":1,"total":28}
+{"t":"0:38:00","scene":"dialog","detail":"Indoor Oak's lab interior; text 'OAK: A? Let me think...'.","caught":1,"total":28}
+{"t":"0:40:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"0:42:00","scene":"dialog","detail":"Indoor lab interior with characters and a table of Poke Balls; text 'A received t'.","caught":1,"total":28}
+{"t":"0:44:00","scene":"title","detail":"LeafGreen Version title screen with Venusaur sprite and 'PRESS START'.","caught":1,"total":28}
+{"t":"0:46:00","scene":"cutscene","detail":"Player character standing on a pad in a plain room; text 'A world of dreams and adventures with POKéMON awaits! Let's go!'","caught":1,"total":28}
+{"t":"0:48:00","scene":"title","detail":"GAME FREAK logo on dark blue background.","caught":1,"total":28}
+{"t":"0:50:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"0:52:00","scene":"cutscene","detail":"Player character standing on a pad outdoors; text 'Let's begin wit'.","caught":1,"total":28}
+{"t":"0:54:00","scene":"battle","detail":"Battle intro with no HUD: purple spiky sprite and pink sprite on a forest background.","caught":1,"total":28}
+{"t":"0:56:00","scene":"battle","detail":"Battle intro with no HUD: purple spiky sprite and pink sprite on a forest background.","caught":1,"total":28}
+{"t":"0:58:00","scene":"title","detail":"LeafGreen Version title screen with Venusaur sprite and 'PRESS START'.","caught":1,"total":28}
+{"t":"1:00:00","scene":"menu","detail":"Control help screen: D-pad moves the main character, A confirms and scrolls text, B exits; NEXT/BACK header.","caught":1,"total":28}
+{"t":"1:02:00","scene":"title","detail":"LeafGreen Version title screen with Venusaur sprite and 'PRESS START'.","caught":1,"total":28}
+{"t":"1:04:00","scene":"title","detail":"LeafGreen Version title screen with Venusaur sprite and 'PRESS START'.","caught":1,"total":28}
+{"t":"1:06:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"1:08:00","scene":"battle","detail":"Close-up battle intro on orange background: purple spiky sprite and pink sprite, no HUD visible.","caught":1,"total":28}
+{"t":"1:10:00","scene":"dialog","detail":"Professor Oak with a small green-blue creature on a pad; text 'I study POKéMON a'.","caught":1,"total":28}
+{"t":"1:12:00","scene":"battle","detail":"Opponent BULBASAUR Lv5; player side A Lv5, HP 19/19; text 'A used TACKLE!'.","caught":1,"total":28}
+{"t":"1:14:00","scene":"overworld","detail":"Overworld in town outside a building, with water and a fence (city).","caught":1,"total":28}
+{"t":"1:16:00","scene":"battle","detail":"Wild WEEDLE Lv5 appeared; player side not visible; text 'Wild WEEDLE appeared!'.","caught":1,"total":28}
+{"t":"1:18:00","scene":"battle","detail":"Opponent WEEDLE Lv3 (as read); player side A Lv6, HP 10/21; text 'Foe WEEDLE used POISON STING!'.","caught":1,"total":28}
+{"t":"1:20:00","scene":"battle","detail":"Player side A Lv8, HP 5/25; opponent not visible; text 'A gained 183 EXP. Points!'.","caught":1,"total":28}
+{"t":"1:22:00","scene":"title","detail":"GAME FREAK logo on dark background.","caught":1,"total":28}
+{"t":"1:24:00","scene":"menu","detail":"Continue menu: PLAYER GM, TIME 0:00, BADGES 0; NEW GAME option.","caught":1,"total":28}
+{"t":"1:26:00","scene":"menu","detail":"Continue menu: PLAYER GM, TIME 0:00, BADGES 0; NEW GAME option.","caught":1,"total":28}
+{"t":"1:28:00","scene":"overworld","detail":"Indoor building interior (shop-like shelves and counter) with two characters (building).","caught":1,"total":28}
+{"t":"1:30:00","scene":"menu","detail":"Continue menu: PLAYER GM, TIME 0:00, BADGES 0; NEW GAME option.","caught":1,"total":28}
+{"t":"1:32:00","scene":"dialog","detail":"Indoor building interior; text 'This POKéMON is really quite energetic!'.","caught":1,"total":28}
+{"t":"1:34:00","scene":"menu","detail":"Continue menu: PLAYER GM, TIME 0:00, BADGES 0; NEW GAME highlighted.","caught":1,"total":28}
+{"t":"1:36:00","scene":"battle","detail":"Rival trainer intro (spiky hair, purple pants) with player's back visible; text box empty.","caught":1,"total":28}
+{"t":"1:38:00","scene":"dialog","detail":"Rival standing on a pad; text 'That's right! I remember now! His nam'.","caught":1,"total":28}
+{"t":"1:40:00","scene":"battle","detail":"Opponent BULBASAUR Lv5; player side A Lv5, HP 0/20; text 'A critical hit!'.","caught":1,"total":28}
+{"t":"1:42:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"1:44:00","scene":"dialog","detail":"Outdoor route between rows of trees, player walking; text 'OAK: Hey! Wait! Don't go out!'.","caught":1,"total":28}
+{"t":"1:46:00","scene":"other","detail":"Game Boy boot splash ('GAME BOY', 'Nintendo').","caught":1,"total":28}
+{"t":"1:48:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"1:50:00","scene":"battle","detail":"Opponent BULBASAUR Lv5; player side A Lv5, HP 20/20; text 'Foe BULBASAUR used TACKLE!'.","caught":1,"total":28}
+{"t":"1:52:00","scene":"dialog","detail":"Indoor Oak's lab interior; text 'You must be talente'.","caught":1,"total":28}
+{"t":"1:54:00","scene":"battle","detail":"Battle command menu (FIGHT, BAG, POKéMON, RUN) vs an old man; opponent WEEDLE Lv5; text 'What will the old man do?'.","caught":1,"total":28}
+{"t":"1:56:00","scene":"battle","detail":"Opponent WEEDLE Lv9; player side A Lv6, HP 10/22; text 'A's' (partial).","caught":1,"total":28}
+{"t":"1:58:00","scene":"battle","detail":"Opponent GEODUDE Lv10; player side A Lv8, HP 5/27; text 'It's' (partial).","caught":1,"total":28}

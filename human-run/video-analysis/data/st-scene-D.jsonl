@@ -1,0 +1,72 @@
+{"t":"6:00:00","scene":"title","detail":"Title screen save menu: CONTINUE, PLAYER HI, TIME 0:00, BADGES 0; NEW GAME option.","caught":1,"total":28}
+{"t":"6:02:00","scene":"overworld","detail":"Indoor shop with shelves and a counter, player and NPCs visible; no text.","caught":1,"total":28}
+{"t":"6:04:00","scene":"overworld","detail":"Town (city) exterior with a blue-roofed building, a red-roofed house and flower beds; no text.","caught":1,"total":28}
+{"t":"6:06:00","scene":"battle","detail":"Wild RATTATA Lv3 vs player Squirtle-sprite nicknamed A, Lv6, HP 17/23; text: A's DEFENSE fell!","caught":1,"total":28}
+{"t":"6:08:00","scene":"overworld","detail":"Grass area with tall trees and a path (grass/forest).","caught":1,"total":28}
+{"t":"6:10:00","scene":"overworld","detail":"Town (city) with paved paths, buildings and small trees; no text.","caught":1,"total":28}
+{"t":"6:12:00","scene":"battle","detail":"Foe ONIX Lv14 vs player Squirtle-sprite nicknamed A, Lv11, HP 0/33; text: Foe ONIX used ROCK TOMB!","caught":1,"total":28}
+{"t":"6:14:00","scene":"title","detail":"LeafGreen title screen with PRESS START.","caught":1,"total":28}
+{"t":"6:16:00","scene":"dialog","detail":"Dialog box reading So over an indoor room; a Squirtle-sprite is shown in a framed box.","caught":1,"total":28}
+{"t":"6:18:00","scene":"title","detail":"GAME FREAK intro logo on dark blue background.","caught":1,"total":28}
+{"t":"6:20:00","scene":"cutscene","detail":"Intro artwork: two purple Pokemon on an orange background; no text.","caught":1,"total":28}
+{"t":"6:22:00","scene":"cutscene","detail":"Player sprite standing on a light pad over a green fade; no text.","caught":1,"total":28}
+{"t":"6:24:00","scene":"menu","detail":"Start menu open (POKeMON, BAG, A, SAVE, OPTION, EXIT) over an indoor room; dialog reads: Check and organize POKeMON that are traveling with you in your party.","caught":1,"total":28}
+{"t":"6:26:00","scene":"title","detail":"LeafGreen title screen artwork; no PRESS START visible.","caught":1,"total":28}
+{"t":"6:28:00","scene":"cutscene","detail":"Rival sprite standing on a light pad; no text.","caught":1,"total":28}
+{"t":"6:30:00","scene":"title","detail":"GAME FREAK intro logo.","caught":1,"total":28}
+{"t":"6:32:00","scene":"cutscene","detail":"Lab-coat NPC standing on a light pad; no text.","caught":1,"total":28}
+{"t":"6:34:00","scene":"battle","detail":"Opponent RIVAL A sent out BULBASAUR (Lv5 shown); player side not yet visible.","caught":1,"total":28}
+{"t":"6:36:00","scene":"overworld","detail":"Town (city) exterior beside a Pokemon Center building with a P.C sign; no text.","caught":1,"total":28}
+{"t":"6:38:00","scene":"overworld","detail":"Tall grass field with trees, player standing in grass.","caught":1,"total":28}
+{"t":"6:40:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"6:42:00","scene":"title","detail":"GAME FREAK intro logo.","caught":1,"total":28}
+{"t":"6:44:00","scene":"dialog","detail":"Dialog box reading You over a forest path with trees.","caught":1,"total":28}
+{"t":"6:46:00","scene":"battle","detail":"Trainer opponent with no Pokemon visible yet; player side Squirtle-sprite nicknamed A, Lv6, HP 11/23; dialog box empty.","caught":1,"total":28}
+{"t":"6:48:00","scene":"dialog","detail":"Dialog box reading: A put the POKe BALLS in the POKe BALLS POCKET. over an indoor shop room.","caught":1,"total":28}
+{"t":"6:50:00","scene":"overworld","detail":"Town (city) outdoors with a green-roofed building and trees.","caught":1,"total":28}
+{"t":"6:52:00","scene":"menu","detail":"Summary stats for a Squirtle-sprite: MAX HP 25, ATTACK 12, DEFENSE 15, SP.ATK 15, SP.DEF 13, SPEED 13.","caught":1,"total":28}
+{"t":"6:54:00","scene":"overworld","detail":"Cave interior (rocky ground with boulders) with player and rival; dim light cone (cave).","caught":1,"total":28}
+{"t":"6:56:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"6:58:00","scene":"title","detail":"Title screen save menu: CONTINUE, PLAYER HI, TIME 0:00, BADGES 0; NEW GAME option.","caught":1,"total":28}
+{"t":"7:00:00","scene":"overworld","detail":"Town (city) exterior between red-roofed houses and trees, with an NPC.","caught":1,"total":28}
+{"t":"7:02:00","scene":"title","detail":"Copyright notice screen (Pokemon, Nintendo, Creatures Inc., GAME FREAK inc., 2004).","caught":1,"total":28}
+{"t":"7:04:00","scene":"overworld","detail":"Town (city) exterior between houses and trees; player walking.","caught":1,"total":28}
+{"t":"7:06:00","scene":"title","detail":"LeafGreen title screen artwork.","caught":1,"total":28}
+{"t":"7:08:00","scene":"dialog","detail":"Rival sprite on a light pad with dialog reading: ...Er, was it A?","caught":1,"total":28}
+{"t":"7:10:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"7:12:00","scene":"title","detail":"Title screen save menu: CONTINUE, PLAYER HI, TIME 0:00, BADGES 0; NEW GAME option.","caught":1,"total":28}
+{"t":"7:14:00","scene":"dialog","detail":"Dialog box reading: A: I'll take this one, then! in an indoor shop.","caught":1,"total":28}
+{"t":"7:16:00","scene":"title","detail":"LeafGreen title screen artwork; no PRESS START visible.","caught":1,"total":28}
+{"t":"7:18:00","scene":"dialog","detail":"Dialog box reading: Oh, that's right, I told you to come! Just in an indoor room.","caught":1,"total":28}
+{"t":"7:20:00","scene":"title","detail":"LeafGreen title screen with PRESS START.","caught":1,"total":28}
+{"t":"7:22:00","scene":"cutscene","detail":"Intro artwork: two purple Pokemon in a forest background.","caught":1,"total":28}
+{"t":"7:24:00","scene":"dialog","detail":"Dialog box reading: You need your own POKeMON for your over a forest path with trees.","caught":1,"total":28}
+{"t":"7:26:00","scene":"title","detail":"LeafGreen title screen artwork.","caught":1,"total":28}
+{"t":"7:28:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"7:30:00","scene":"title","detail":"GAME FREAK intro logo.","caught":1,"total":28}
+{"t":"7:32:00","scene":"overworld","detail":"Town (city) with fences, a building and the player; no text.","caught":1,"total":28}
+{"t":"7:34:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"7:36:00","scene":"overworld","detail":"Town (city) exterior between trees and red-roofed houses; player walking.","caught":1,"total":28}
+{"t":"7:38:00","scene":"title","detail":"GAME FREAK intro logo.","caught":1,"total":28}
+{"t":"7:40:00","scene":"overworld","detail":"Town (city) exterior with houses, a fence and a building; player walking.","caught":1,"total":28}
+{"t":"7:42:00","scene":"title","detail":"GAME FREAK logo with sparkle effect, fading.","caught":1,"total":28}
+{"t":"7:44:00","scene":"cutscene","detail":"Intro artwork: two purple Pokemon in a forest background.","caught":1,"total":28}
+{"t":"7:46:00","scene":"title","detail":"Faded title artwork fading on a black background.","caught":1,"total":28}
+{"t":"7:48:00","scene":"title","detail":"LeafGreen title screen artwork.","caught":1,"total":28}
+{"t":"7:50:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"7:52:00","scene":"title","detail":"LeafGreen title screen with PRESS START.","caught":1,"total":28}
+{"t":"7:54:00","scene":"cutscene","detail":"Faded player sprite fading in or out on a light background; no text.","caught":1,"total":28}
+{"t":"7:56:00","scene":"battle","detail":"Opponent BULBASAUR Lv5 vs player Squirtle-sprite nicknamed A, Lv5, HP 10/20; move menu TACKLE / TAIL WHIP, PP 33/35.","caught":1,"total":28}
+{"t":"7:58:00","scene":"title","detail":"GAME FREAK intro logo.","caught":1,"total":28}
+{"t":"8:00:00","scene":"overworld","detail":"Town (city) exterior beside a building, a pond and the player with a companion; no text.","caught":1,"total":28}
+{"t":"8:02:00","scene":"cutscene","detail":"Intro artwork: two purple Pokemon in a forest background.","caught":1,"total":28}
+{"t":"8:04:00","scene":"overworld","detail":"Indoor shop with shelves, NPCs and a mat; no text.","caught":1,"total":28}
+{"t":"8:06:00","scene":"title","detail":"LeafGreen title screen artwork.","caught":1,"total":28}
+{"t":"8:08:00","scene":"dialog","detail":"Dialog box reading: This POKeMON is really quite energetic! over an indoor shop.","caught":1,"total":28}
+{"t":"8:10:00","scene":"black","detail":"","caught":1,"total":28}
+{"t":"8:12:00","scene":"battle","detail":"Wild PIDGEY Lv3 vs player Squirtle-sprite nicknamed A, Lv6, HP 22/22; text: Wild PIDGEY used TACKLE!","caught":1,"total":28}
+{"t":"8:14:00","scene":"overworld","detail":"Tall grass and forest path with trees (grass).","caught":1,"total":28}
+{"t":"8:16:00","scene":"overworld","detail":"Town (city) exterior beside a building with a GYM sign, a fence and the player.","caught":1,"total":28}
+{"t":"8:18:00","scene":"other","detail":"Webcam view of a person in a room with posters; not game footage.","caught":1,"total":28}
+{"t":"8:20:00","scene":"cutscene","detail":"ENDING title card over night-sky artwork.","caught":1,"total":28}
+{"t":"8:22:00","scene":"cutscene","detail":"ENDING title card over night-sky artwork.","caught":1,"total":28}

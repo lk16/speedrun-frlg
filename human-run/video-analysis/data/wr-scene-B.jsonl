@@ -1,0 +1,72 @@
+{"t":"1:12:00","scene":"battle","detail":"vs GASTLY Lv24; player A Lv37 15/112; move menu open (WATER GUN, WATER PULSE, BITE, MEGA KICK)","caught":11,"total":24}
+{"t":"1:13:00","scene":"battle","detail":"vs MAROWAK Lv30; player A Lv37 15/112; text: A used WATER PULSE!","caught":11,"total":24}
+{"t":"1:14:00","scene":"battle","detail":"Post-fight; player A Lv38 18/115; text: A gained 915 EXP. Points!","caught":14,"total":25}
+{"t":"1:15:00","scene":"battle","detail":"Trainer intro; text: TEAM ROCKET GRUNT sent out ZUBAT!","caught":14,"total":25}
+{"t":"1:16:00","scene":"dialog","detail":"Indoor room; text: A received a POKE FLUTE from MR. FUJI.","caught":14,"total":25}
+{"t":"1:17:00","scene":"menu","detail":"Save screen: VERMILION CITY, PLAYER A, BADGES 2, POKEDEX 14, TIME 1:13; text: SAVING... DON'T TURN OFF THE POWER.","caught":14,"total":25}
+{"t":"1:18:00","scene":"battle","detail":"vs VOLTORB Lv21; player A Lv39 21/118; text: A used WATER GUN!","caught":14,"total":25}
+{"t":"1:19:00","scene":"overworld","detail":"Outdoor route with trees, path and building edge (city/route)","caught":14,"total":25}
+{"t":"1:20:00","scene":"overworld","detail":"Outdoor city area beside a pond, buildings and fence (city)","caught":14,"total":25}
+{"t":"1:21:00","scene":"overworld","detail":"Tall grass area (grass)","caught":14,"total":25}
+{"t":"1:22:00","scene":"battle","detail":"vs NIDORAN Lv30; text: A used SAFARI BALL! (Safari Balls left 29)","caught":14,"total":25}
+{"t":"1:23:00","scene":"overworld","detail":"Outdoor path through grass with ledges (route)","caught":14,"total":25}
+{"t":"1:24:00","scene":"battle","detail":"vs NIDORINA Lv30; text: Wild NIDORINA appeared!","caught":17,"total":29}
+{"t":"1:25:00","scene":"battle","detail":"vs EXEGGCUTE Lv27; Safari Balls left 22; text: A used SAFARI BALL!","caught":18,"total":31}
+{"t":"1:26:00","scene":"battle","detail":"vs RHYHORN Lv26; Safari Balls left 21; text: Got awa (truncated)","caught":20,"total":34}
+{"t":"1:27:00","scene":"battle","detail":"vs NIDORAN Lv30; Safari Balls left 20; text: A used SAFARI BALL!","caught":20,"total":34}
+{"t":"1:28:00","scene":"other","detail":"Dark screen with a brown flying bird sprite over a road; no text visible","caught":21,"total":37}
+{"t":"1:29:00","scene":"battle","detail":"Post-fight; player A Lv39 31/118; text: A gained 676 EXP. Points!","caught":21,"total":37}
+{"t":"1:30:00","scene":"battle","detail":"Trainer battle intro, trainer and player sprites facing off; text box empty","caught":21,"total":37}
+{"t":"1:31:00","scene":"battle","detail":"vs WEEZING Lv43; player A Lv40 1/120; text: A used BITE!","caught":21,"total":37}
+{"t":"1:32:00","scene":"overworld","detail":"Outdoor Pokemon Center exterior (city)","caught":21,"total":37}
+{"t":"1:33:00","scene":"overworld","detail":"Indoor area with grey walls and boulder obstacles (cave or building interior)","caught":22,"total":38}
+{"t":"1:34:00","scene":"battle","detail":"vs PIKACHU Lv22; player EEVEE Lv25 28/65 (PAR); text: Wild PIKACHU used DOUBLE TEAM!","caught":23,"total":39}
+{"t":"1:35:00","scene":"overworld","detail":"Surfing on water; ROUTE 21 sign at top (water)","caught":24,"total":39}
+{"t":"1:36:00","scene":"overworld","detail":"Indoor building floor with stairs; POKEMON MANSION sign (building/cave interior)","caught":24,"total":42}
+{"t":"1:37:00","scene":"battle","detail":"vs RATICATE Lv34; player A Lv41 109/123; text: A used ULTRA BALL!","caught":24,"total":42}
+{"t":"1:38:00","scene":"battle","detail":"vs GRIMER Lv28; player A Lv41 109/123; text: Wild GRIMER flinched!","caught":27,"total":46}
+{"t":"1:39:00","scene":"black","detail":"","caught":27,"total":46}
+{"t":"1:40:00","scene":"overworld","detail":"Indoor building room with green walls (building)","caught":29,"total":47}
+{"t":"1:41:00","scene":"dialog","detail":"Indoor building with NPC; text: Hah! You","caught":29,"total":47}
+{"t":"1:42:00","scene":"battle","detail":"vs ARCANINE Lv47; player A Lv41 109/123; text: A used WATER PULSE!","caught":29,"total":47}
+{"t":"1:43:00","scene":"overworld","detail":"Outdoor city beside water with GYM sign on a building (city)","caught":29,"total":47}
+{"t":"1:44:00","scene":"dialog","detail":"Indoor building; text: Obtained the TRI-PASS!","caught":29,"total":47}
+{"t":"1:45:00","scene":"menu","detail":"Party select screen 'Choose a POKEMON.' (dimmed); visible entries WEEDLE Lv5, FLAREON Lv25, CLEFAIRY, ABRA Lv9; top entry partly unreadable","caught":29,"total":47}
+{"t":"1:46:00","scene":"black","detail":"","caught":30,"total":50}
+{"t":"1:47:00","scene":"battle","detail":"vs GRIMER Lv37; player A Lv42 112/126; text: A used SURF!","caught":30,"total":50}
+{"t":"1:48:00","scene":"overworld","detail":"Outdoor town path with trees, Pokemon Center building and trainer (city)","caught":30,"total":50}
+{"t":"1:49:00","scene":"menu","detail":"Party select 'Use on which POKEMON?'; party includes ABRA Lv9, WEEDLE Lv5, FLAREON Lv25, CLEFAIRY Lv8; selected A Lv43 25/123","caught":30,"total":50}
+{"t":"1:50:00","scene":"battle","detail":"vs PIDGEY Lv32; player A Lv43 129/129; text: A used ULTRA BALL!","caught":30,"total":50}
+{"t":"1:51:00","scene":"battle","detail":"vs IVYSAUR Lv36; player A Lv43 97/129; text: A used BLIZZARD!","caught":31,"total":51}
+{"t":"1:52:00","scene":"battle","detail":"vs GLOOM Lv35; player A Lv43 97/129; text: Wild GLOOM used STUN SPORE!","caught":31,"total":51}
+{"t":"1:53:00","scene":"battle","detail":"Send-out; enemy GLOOM Lv35 visible; text: Go! A!","caught":32,"total":51}
+{"t":"1:54:00","scene":"battle","detail":"vs DROWZEE Lv34; player A Lv43 83/129; text: A used ULTRA BALL!","caught":33,"total":53}
+{"t":"1:55:00","scene":"dialog","detail":"Outdoor berry garden in tall grass area (grass); text: LOSTELLE came to pick some BE(RRIES)","caught":34,"total":54}
+{"t":"1:56:00","scene":"dialog","detail":"Meowth sprite; text: MEOWTH was transf(erred); Yes/No prompt shown","caught":36,"total":56}
+{"t":"1:57:00","scene":"dialog","detail":"Pokemon Center interior; text: A booted up the PC","caught":37,"total":57}
+{"t":"1:58:00","scene":"overworld","detail":"Indoor corridor with plants and doors (building)","caught":37,"total":58}
+{"t":"1:59:00","scene":"dialog","detail":"Lab-style interior; text: Do you want to give a nickname to this OMA(NYTE)?","caught":38,"total":58}
+{"t":"2:00:00","scene":"evolution","detail":"Blank grey screen; text: What? PIKACHU is evolving!","caught":38,"total":58}
+{"t":"2:01:00","scene":"dialog","detail":"Dark screen with Venonat sprite; text: VENONAT will be sent to NORMA.","caught":38,"total":58}
+{"t":"2:02:00","scene":"overworld","detail":"Indoor building interior with stairs and counter (building)","caught":38,"total":58}
+{"t":"2:03:00","scene":"dialog","detail":"Indoor building; text: I saw you in","caught":38,"total":58}
+{"t":"2:04:00","scene":"battle","detail":"vs VENUSAUR Lv40; player A Lv43 81/129; text: It's super effective!","caught":38,"total":58}
+{"t":"2:05:00","scene":"evolution","detail":"Green screen with Weedle sprite; text: What? WEEDLE is evolving!","caught":38,"total":58}
+{"t":"2:06:00","scene":"menu","detail":"Party select 'Choose a POKEMON.'; selected KAKUNA Lv9 27/27; party includes CH?DING Lv8, A Lv44, SEELOR Lv35 116/116, TANGELY Lv22 (some names partly unreadable)","caught":46,"total":58}
+{"t":"2:07:00","scene":"evolution","detail":"Dark swirl with Kakuna silhouette; text: What? KAKUNA is evolving!","caught":46,"total":58}
+{"t":"2:08:00","scene":"battle","detail":"vs NIDORINO Lv37; player A Lv45 57/135; text: A used SURF!","caught":46,"total":58}
+{"t":"2:09:00","scene":"dialog","detail":"Indoor room with NPCs; text: A obtained a MASTER (BALL)","caught":46,"total":58}
+{"t":"2:10:00","scene":"black","detail":"","caught":46,"total":58}
+{"t":"2:11:00","scene":"menu","detail":"Items menu: LEAF STONE x2, X ATTACK x3, X SPEED x5 (cursor), X SPECIAL x20, X ACCURACY x3, GUARD SPEC x2; text: X SPEED is selected.","caught":46,"total":58}
+{"t":"2:12:00","scene":"overworld","detail":"Outdoor town street with buildings and fence (city)","caught":46,"total":58}
+{"t":"2:13:00","scene":"overworld","detail":"Enclosed hedge yard with NPCs and plants (building/yard)","caught":46,"total":58}
+{"t":"2:14:00","scene":"battle","detail":"vs TANGELA Lv24; player A Lv47 14/141; text: A use (truncated)","caught":46,"total":58}
+{"t":"2:15:00","scene":"dialog","detail":"Indoor room with NPC; text: A gave the GOLD TEETH to the WARDEN.","caught":46,"total":58}
+{"t":"2:16:00","scene":"evolution","detail":"Blue flash with Nidorino silhouette; text: What? NIDORINO is evolving!","caught":50,"total":58}
+{"t":"2:17:00","scene":"evolution","detail":"Clefairy sprite with sparkles; text: What? CLEFAIRY is evolving!","caught":50,"total":58}
+{"t":"2:18:00","scene":"overworld","detail":"Indoor building with doorway and NPC (building)","caught":50,"total":58}
+{"t":"2:19:00","scene":"battle","detail":"vs MACHOKE Lv38; player A Lv47 44/141; text: A used SURF!","caught":50,"total":58}
+{"t":"2:20:00","scene":"battle","detail":"vs MAROWAK Lv37; text: Go! A!","caught":50,"total":58}
+{"t":"2:21:00","scene":"battle","detail":"Trainer intro; text: COOLTRAINER WARREN sent out NIDOQUEEN!; player A Lv48 35/103","caught":52,"total":58}
+{"t":"2:22:00","scene":"black","detail":"","caught":52,"total":58}
+{"t":"2:23:00","scene":"battle","detail":"vs NIDOKING Lv45; player A Lv49 39/107; text: It's super effective!","caught":52,"total":58}
