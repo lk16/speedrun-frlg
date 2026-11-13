@@ -107,8 +107,9 @@ def candidates(p):
         out.append(('aggr', f"global aggr {p.get('reset_aggr', 0)}->{round(p.get('reset_aggr', 0) + d, 2)}",
                     {'reset_aggr': round(p.get('reset_aggr', 0) + d, 2)}))
     for d in (-1, 1):
-        out.append(('starter', f"starter_min_total {p['starter_min_total']}->{p['starter_min_total'] + d}",
-                    {'starter_min_total': p['starter_min_total'] + d}))
+        if 'starter_min_total' in p:
+            out.append(('starter', f"starter_min_total {p['starter_min_total']}->{p['starter_min_total'] + d}",
+                        {'starter_min_total': p['starter_min_total'] + d}))
         out.append(('fight', f"fight_until_level {p['fight_until_level']}->{p['fight_until_level'] + d}",
                     {'fight_until_level': p['fight_until_level'] + d}))
     sm = p.get('starter_min_stats', [0] * 6)
