@@ -42,6 +42,7 @@ fn usage() -> ! {
          \x20 eval    <plan> --rung <i|WR|WR+10m> [--R n]       EHT at one rung\n\
          \x20 compare <a> <b> --rung <r> [--R n]                paired difference EHT(a)-EHT(b) with 95% CI\n\
          \x20 report  <plan> --rung <r> [--R n]                 per-segment mean, spread, resets, time by source\n\
+         \x20 starter-phase <plan> [--R n]                     manip starter phase: attempts and wall time to a good starter\n\
          \x20 dist    <plan> [--R n]                            run-time distribution with no resets\n\
          \x20 starter [--min n]                                 level-5 stat-total distribution of a Squirtle"
     );
@@ -179,12 +180,21 @@ fn main() {
                 hms(total_runs)
             );
             let tot: f64 = by_src.iter().sum();
+            if plan.params.starter_model == "manip" {
+                println!("{}", phase_report(&ctx, seed, r.min(20_000)).text());
+            }
             println!(
                 "time by source: ledger {:.0}%  tiles {:.0}%  guess {:.0}%",
                 by_src[0] / tot * 100.0,
                 by_src[1] / tot * 100.0,
                 by_src[2] / tot * 100.0
             );
+        }
+        Some("starter-phase") => {
+            let plan = load(&args[1]);
+            let ctx = plan.ctx();
+            let r: u64 = arg(&args, "--R", 20_000);
+            println!("{}", phase_report(&ctx, seed, r).text());
         }
         Some("dist") => {
             let plan = load(&args[1]);
