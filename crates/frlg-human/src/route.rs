@@ -1065,6 +1065,28 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
             },
         );
     }
+    for h in p.extra_heals.iter().rev() {
+        let at = b
+            .segs
+            .iter()
+            .position(|s| s.name == *h)
+            .unwrap_or_else(|| panic!("heal anchor {h} matches no segment"));
+        // The name contains "heal": the sim restores HP, PP, status and fodder there.
+        b.segs.insert(
+            at + 1,
+            Seg {
+                name: format!("center-heal@{h}"),
+                src: Src::Guess,
+                inputs: 8,
+                split: false,
+                off_timer: false,
+                starter_check: false,
+                kind: Kind::Text {
+                    frames: p.extra_heal_frames,
+                },
+            },
+        );
+    }
     for e in p.elixirs.iter().rev() {
         let at = b
             .segs

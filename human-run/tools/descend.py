@@ -329,6 +329,14 @@ def candidates(p):
                     q = copy.deepcopy(p['xbuys'])
                     q[i] = dict(q[i]); q[i]['revives'] = v
                     out.append(('xbuy', f"xbuys[{i}] revives {xb.get('revives', 0)}->{v}", {'xbuys': q}))
+        # Pokémon Center stops along the route (towns with a Center the route passes:
+        # Viridian, Pewter, Vermilion, Celadon, Fuchsia, Saffron, Cinnabar).
+        cur_heals = list(p.get('extra_heals', []))
+        for anchor in ('to-viridian', 'to-pewter', 'forest-trainers', 'captain-hm01',
+                       'surge-walk', 'tea', 'koga-walk', 'silph-walk', 'blaine-walk',
+                       'viridian-gym-walk'):
+            new = [x for x in cur_heals if x != anchor] if anchor in cur_heals else cur_heals + [anchor]
+            out.append(('heal', f"extra_heals {'-' if anchor in cur_heals else '+'}{anchor}", {'extra_heals': new}))
         # Evolution stat gate (visible stats of the evolved form; SpA is index 4).
         em = p.get('evo_min_stats', [0] * 6)
         for k in (1, 4):

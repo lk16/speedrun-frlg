@@ -339,6 +339,11 @@ pub struct Params {
     /// than level 5 can: Wartortle at 16 has SpA 25-30 across IVs, so "SpA >= 30" is a
     /// top-decile gate — the WR's reported rule.
     pub evo_min_stats: [u32; 6],
+    /// Pokémon Center stops inserted after the named segments (restore HP, PP, status
+    /// and fodder). Each costs `extra_heal_frames` (walking in, the nurse's text,
+    /// walking out; guess) before `text_factor`.
+    pub extra_heals: Vec<String>,
+    pub extra_heal_frames: u32,
     /// Escape-Rope out of dungeon fill sites instead of walking back (rope 550,
     /// `items.json`; one use per entry).
     pub rope_fills: bool,
@@ -439,6 +444,8 @@ impl Default for Params {
             early_dig: false,
             erika_after_tower: false,
             evo_min_stats: [0; 6],
+            extra_heals: vec![],
+            extra_heal_frames: 700,
             rope_fills: false,
             rope_cerulean_cave: false,
             fill: vec![],
