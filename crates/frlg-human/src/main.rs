@@ -488,6 +488,7 @@ fn main() {
             let mut cnt = [0u64; 152];
             let mut lv = [0f64; 152];
             let mut seq = [0f64; 152];
+            let mut by_src = [0f64; 7];
             for i in 0..r {
                 let mut pr = Probe {
                     snap_at: Some(idx),
@@ -499,7 +500,8 @@ fn main() {
                 cand += sn.candies as f64;
                 money += sn.money as f64;
                 carry += sn.carry as f64;
-                for (d, l, q) in sn.mons {
+                for (d, l, q, sr) in sn.mons {
+                    by_src[sr as usize % 7] += 1.0;
                     cnt[d as usize] += 1;
                     lv[d as usize] += l as f64;
                     seq[d as usize] += q as f64;
@@ -532,6 +534,12 @@ fn main() {
                 }
             }
             println!("expected species {tot:.2}");
+            let parts: Vec<String> = frlg_human::sim::SRC_NAMES
+                .iter()
+                .zip(by_src)
+                .map(|(nm, c)| format!("{nm} {:.1}", c / n.max(1) as f64))
+                .collect();
+            println!("entries by source: {}", parts.join(", "));
         }
         Some("names") => {
             let plan = load(&args[1]);

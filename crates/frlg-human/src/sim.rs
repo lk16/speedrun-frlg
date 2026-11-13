@@ -112,7 +112,7 @@ pub struct Probe {
 #[derive(Clone, Debug, Default)]
 pub struct Snapshot {
     /// (national number, catch level, order of first catch).
-    pub mons: Vec<(u32, u32, u32)>,
+    pub mons: Vec<(u32, u32, u32, u8)>,
     pub candies: u32,
     pub money: u32,
     pub clock: u64,
@@ -200,6 +200,11 @@ struct State {
     /// Living bodies of each species in the party or box: a catch adds one, an evolution moves one
     /// from the pre-evolution to the target, a trade gives one away. The dex flag stays set.
     bodies: [u8; 152],
+    /// How each species was obtained (`SRC_NAMES`) and the source the next `got` records.
+    src: [u8; 152],
+    cur_src: u8,
+    /// Evolution stones in the bag: Moon, Leaf, Thunder, Fire, Water (`stone_ix`).
+    stones: [u8; 5],
     /// The tier the current throw sequence wants (`ball_tier`), `None` = the plan's single ball.
     ball_tier: Option<usize>,
     catch_n: u16,
@@ -369,6 +374,17 @@ impl Ctx<'_> {
     }
 }
 
+/// Where a dex entry came from, for `frlg-human bag`: caught, gift, trade, bought, evolved by stone,
+/// by candy, by a level-up (lead swap).
+pub const SRC_NAMES: [&str; 7] = ["catch", "gift", "trade", "buy", "stone", "candy", "level"];
+
+/// Index of an evolution stone in `State::stones` by the plan's name for it.
+fn stone_ix(name: &str) -> Option<usize> {
+    ["MOON", "LEAF", "THUNDER", "FIRE", "WATER"]
+        .iter()
+        .position(|&n| name.eq_ignore_ascii_case(n))
+}
+
 /// A Kanto species obtained for the first time (caught, gifted, traded, evolved): remembers the level
 /// and the order, for the candy arithmetic and the PC logistics of `Evolve` and trades.
 fn got(st: &mut State, dex: u32, level: u32) -> bool {
@@ -378,6 +394,7 @@ fn got(st: &mut State, dex: u32, level: u32) -> bool {
         st.catch_lv[dex as usize] = level.min(255) as u8;
         st.catch_seq[dex as usize] = st.catch_n;
         st.bodies[dex as usize] = st.bodies[dex as usize].saturating_add(1);
+        st.src[dex as usize] = st.cur_src;
     }
     new
 }
@@ -1423,7 +1440,7 @@ fn group_battle(
 const EVO_STONE: u32 = 1100;
 const EVO_CANDY: u32 = 700;
 const EVO_CANDY_EACH: u32 = 300;
-const EVO_LEVEL: u32 = 1400;
+const EVO_LEVEL: u32 = 2000;
 /// Walking into the Celadon 4F shop and buying one stone (guess).
 const EVO_STONE_SHOP: u32 = 800;
 
@@ -1458,7 +1475,12 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
             if frames == 0 {
                 frames = EVO_STONE;
             }
-            if evo.buy {
+            let have = stone_ix(&evo.item).filter(|&ix| st.stones[ix] > 0);
+            if let Some(ix) = have {
+                st.stones[ix] -= 1;
+            } else if !evo.buy {
+                return;
+            } else {
                 let price = item
                     .as_ref()
                     .and_then(|i| ctx.dex.item_prices.get(i))
@@ -1511,7 +1533,13 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
     } else {
         lv.max(param.parse().unwrap_or(lv))
     };
+    st.cur_src = match evo.via.as_str() {
+        "stone" => 4,
+        "candy" => 5,
+        _ => 6,
+    };
     got(st, tdex, at_lv);
+    st.cur_src = 0;
 }
 
 fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
@@ -1828,6 +1856,9 @@ pub fn attempt(
         catch_lv: [0; 152],
         catch_seq: [0; 152],
         bodies: [0; 152],
+        src: [0; 152],
+        cur_src: 0,
+        stones: [0; 5],
         ball_tier: None,
         catch_n: 0,
         pc_paid: 0,
@@ -2153,7 +2184,13 @@ pub fn attempt(
                     let id = ctx.dex.id(n);
                     let sp = &ctx.dex.species[id];
                     if special.kind == "gift" || special.kind == "trade" || special.kind == "buy" {
+                        st.cur_src = match special.kind.as_str() {
+                            "trade" => 2,
+                            "buy" => 3,
+                            _ => 1,
+                        };
                         got(&mut st, sp.dex, special.level);
+                        st.cur_src = 0;
                     } else {
                         bump(&mut st, ctx.enc_intro() + react(ctx, &mut rng) as f64);
                         let turns = (((1.0 - special.hp_frac) / 0.25).ceil() as u32).max(1);
@@ -2317,6 +2354,7 @@ pub fn attempt(
                         );
                     }
                     "candy" => st.candies += 1,
+                    k if stone_ix(k).is_some() => st.stones[stone_ix(k).unwrap_or(0)] += 1,
                     _ => st.elixirs += 1,
                 }
             }
@@ -2551,6 +2589,7 @@ pub fn attempt(
                                 d,
                                 st.catch_lv[d as usize] as u32,
                                 st.catch_seq[d as usize] as u32,
+                                st.src[d as usize],
                             )
                         })
                         .collect(),

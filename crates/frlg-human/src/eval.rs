@@ -488,6 +488,48 @@ mod tests {
     }
 
     #[test]
+    fn evolutions_need_a_body_and_a_stock() {
+        let dex = DEX.get_or_init(Dex::load);
+        // Moon Stone evolution of Clefairy (bought at the Game Corner): with no stone in the bag the
+        // event does nothing; with a pickup before it Clefable is in the dex afterwards.
+        let base = "\"name\":\"t\",\"route_style\":\"wr\",\"audited_forced\":true,\"calib_wr\":true,\"version\":\"LG\",\
+            \"specials\":[{\"after\":\"koga-badge\",\"kind\":\"buy\",\"species\":[\"SPECIES_CLEFAIRY\"],\"cost\":0,\"frames\":600,\"level\":12}]";
+        let run = |extra: &str| {
+            let text = PLAN.replace("\"name\":\"t\"", &format!("{base},{extra}"));
+            let plan = Plan::load(dex, &text).unwrap();
+            let ctx = plan.ctx();
+            let at = plan
+                .segs
+                .iter()
+                .position(|s| s.name == "evo-clefable@koga-badge")
+                .expect("evolution segment");
+            // The first attempt (same seeds on every call) that survives to the segment.
+            for i in 0..3000 {
+                let mut pr = Probe {
+                    snap_at: Some(at),
+                    ..Default::default()
+                };
+                attempt(&ctx, 11, i, None, None, None, Some(&mut pr));
+                if let Some(sn) = pr.snap {
+                    return sn.mons;
+                }
+            }
+            panic!("no attempt reached the segment")
+        };
+        let evo = "\"evolutions\":[{\"after\":\"koga-badge\",\"species\":\"SPECIES_CLEFABLE\",\"via\":\"stone\",\"item\":\"MOON\"}]";
+        let none = run(evo);
+        assert!(none.iter().any(|m| m.0 == 35), "Clefairy bought");
+        assert!(!none.iter().any(|m| m.0 == 36), "no stone, no Clefable");
+        let with = run(&format!(
+            "{evo},\"elixirs\":[{{\"after\":\"koga-badge\",\"kind\":\"moon\",\"frames\":60}}]"
+        ));
+        assert!(
+            with.iter().any(|m| m.0 == 36),
+            "stone in the bag evolves it"
+        );
+    }
+
+    #[test]
     fn plan_without_json_block_is_an_error() {
         let dex = DEX.get_or_init(Dex::load);
         assert!(Plan::load(dex, "no block here").is_err());

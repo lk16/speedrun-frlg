@@ -34,6 +34,11 @@ max_passes = opt('--passes', 3)
 only = opt('--only', '').split(',') if '--only' in args else None
 cap = opt('--cap', 400000)
 POINTER = opt('--pointer', 'CURRENT')
+# --set dex: candidates over the WR-order dex economy (dexknobs.py) instead of the older list;
+# --set all: both. --kinds a,b: keep only those candidate kinds of the chosen set.
+SET = opt('--set', 'old')
+KINDS = opt('--kinds', '').split(',') if '--kinds' in args else None
+SKIP_FIRST = opt('--skip', 0)
 FIXED_RUNG = opt('--rung', '')
 os.environ['FRLG_POINTER'] = POINTER
 
@@ -376,7 +381,16 @@ for ps in range(max_passes):
     changed = False
     cur = current()
     p = load(cur)
-    cands = candidates(p)
+    if SET in ('dex', 'all'):
+        sys.path.insert(0, HERE)
+        import dexknobs
+        cands = dexknobs.candidates(p) + (candidates(p) if SET == 'all' else [])
+    else:
+        cands = candidates(p)
+    if KINDS:
+        cands = [c for c in cands if c[0] in KINDS]
+    if ps == 0 and SKIP_FIRST:
+        cands = cands[SKIP_FIRST:]
     print(f'pass {ps}: {len(cands)} candidates from {cur}', flush=True)
     for ci, (kind, label, patch) in enumerate(cands):
         cur = current()
