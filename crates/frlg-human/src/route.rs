@@ -129,16 +129,16 @@ pub struct Seg {
     pub kind: Kind,
 }
 
-struct B<'a> {
-    segs: Vec<Seg>,
-    dex: &'a Dex,
-    skip: &'a [String],
-    group_n: &'a std::collections::HashMap<String, u32>,
-    era: Era,
+pub struct B<'a> {
+    pub(crate) segs: Vec<Seg>,
+    pub(crate) dex: &'a Dex,
+    pub(crate) skip: &'a [String],
+    pub(crate) group_n: &'a std::collections::HashMap<String, u32>,
+    pub(crate) era: Era,
 }
 
 impl<'a> B<'a> {
-    fn push(&mut self, name: &str, src: Src, inputs: u32, kind: Kind) -> &mut Seg {
+    pub(crate) fn push(&mut self, name: &str, src: Src, inputs: u32, kind: Kind) -> &mut Seg {
         self.segs.push(Seg {
             name: name.to_string(),
             src,
@@ -151,11 +151,18 @@ impl<'a> B<'a> {
         self.segs.last_mut().unwrap()
     }
 
-    fn text(&mut self, name: &str, frames: u32, src: Src) -> &mut Seg {
+    pub(crate) fn text(&mut self, name: &str, frames: u32, src: Src) -> &mut Seg {
         self.push(name, src, frames / 45, Kind::Text { frames })
     }
 
-    fn walk(&mut self, name: &str, tiles: u32, era: Era, enc: Option<(&str, u32)>, src: Src) {
+    pub(crate) fn walk(
+        &mut self,
+        name: &str,
+        tiles: u32,
+        era: Era,
+        enc: Option<(&str, u32)>,
+        src: Src,
+    ) {
         let enc = enc.map(|(s, steps)| Encounters {
             site: s.to_string(),
             area: Area::Land,
@@ -164,12 +171,12 @@ impl<'a> B<'a> {
         self.push(name, src, tiles / 10, Kind::Walk { tiles, era, enc });
     }
 
-    fn wander(&mut self, name: &str, site: &str, steps: u32) {
+    pub(crate) fn wander(&mut self, name: &str, site: &str, steps: u32) {
         let era = self.era;
         self.wander_area(name, site, Area::Land, steps, era);
     }
 
-    fn wander_area(&mut self, name: &str, site: &str, area: Area, steps: u32, era: Era) {
+    pub(crate) fn wander_area(&mut self, name: &str, site: &str, area: Area, steps: u32, era: Era) {
         self.push(
             name,
             Src::Guess,
@@ -185,11 +192,11 @@ impl<'a> B<'a> {
         );
     }
 
-    fn trainer(&mut self, name: &str, id: &str, intro: u32) {
+    pub(crate) fn trainer(&mut self, name: &str, id: &str, intro: u32) {
         self.trainer_adv(name, id, intro, 1.0);
     }
 
-    fn trainer_adv(&mut self, name: &str, id: &str, intro: u32, adv: f64) {
+    pub(crate) fn trainer_adv(&mut self, name: &str, id: &str, intro: u32, adv: f64) {
         let f = self.dex.fight(id);
         self.push(
             name,
@@ -207,7 +214,7 @@ impl<'a> B<'a> {
         );
     }
 
-    fn group(&mut self, name: &str, n: u32, mons: u32, level: u32, yield_: u32) {
+    pub(crate) fn group(&mut self, name: &str, n: u32, mons: u32, level: u32, yield_: u32) {
         if self.skip.iter().any(|s| s == name) {
             return;
         }
@@ -228,7 +235,7 @@ impl<'a> B<'a> {
     /// Trainers the sight-cone audit (`human-run/tools/forced.py`) says the leg cannot avoid:
     /// `always` all fought, and from each `(k, options)` the `k` weakest options (the human walks
     /// into the cheapest of the interchangeable ones).
-    fn forced(&mut self, name: &str, always: &[&str], alts: &[(usize, &[&str])]) {
+    pub(crate) fn forced(&mut self, name: &str, always: &[&str], alts: &[(usize, &[&str])]) {
         let fight = |l: &&str| self.dex.fight(self.dex.script_trainer(l));
         let mut fights: Vec<crate::data::Fight> = always.iter().map(fight).collect();
         for (k, opts) in alts {
@@ -237,6 +244,11 @@ impl<'a> B<'a> {
             fights.extend(o.into_iter().take(*k));
         }
         fights.sort_by_key(|f| std::cmp::Reverse(f.party.iter().map(|x| x.0).sum::<u32>()));
+        // `group_n` may cap the fights of a forced list (the hardest are kept): the WR run's window
+        // times are too short for every cone-forced trainer to be fought.
+        if let Some(&cap) = self.group_n.get(name) {
+            fights.truncate(cap as usize);
+        }
         let n = fights.len() as u32;
         let money = fights.iter().map(|f| f.money).sum();
         let parties = fights.iter().map(|f| f.party.clone()).collect();
@@ -257,7 +269,7 @@ impl<'a> B<'a> {
 
     /// The `n` hardest trainers on the given maps. `n` is a routing assumption (which ones the
     /// route cannot walk around), the parties are the decomp's.
-    fn maps_group(&mut self, name: &str, maps: &[&str], n: u32) {
+    pub(crate) fn maps_group(&mut self, name: &str, maps: &[&str], n: u32) {
         if self.skip.iter().any(|s| s == name) {
             return;
         }
@@ -280,12 +292,12 @@ impl<'a> B<'a> {
         );
     }
 
-    fn split(&mut self) {
+    pub(crate) fn split(&mut self) {
         self.segs.last_mut().unwrap().split = true;
     }
 }
 
-fn erika_leg(b: &mut B<'_>, p: &Params, e: Era) {
+pub(crate) fn erika_leg(b: &mut B<'_>, p: &Params, e: Era) {
     b.walk("erika-walk", 146, e, None, Src::Tiles);
     if p.audited_forced {
         b.forced(
@@ -310,6 +322,760 @@ fn erika_leg(b: &mut B<'_>, p: &Params, e: Era) {
     b.trainer("erika", "TRAINER_LEADER_ERIKA", 600);
     b.text("erika-badge", 600, Src::Guess);
     b.split();
+}
+
+/// Closures `build` shares with the route-order functions (grass-step table, encounter and detour
+/// helpers, the rival's trainer-id suffix).
+pub struct Helpers<'h> {
+    pub g: &'h dyn Fn(u32, u32, u32) -> u32,
+    pub enc: &'h dyn Fn(&'static str, u32, u32, u32) -> Option<(&'static str, u32)>,
+    pub detour: &'h dyn Fn(&mut B, &str, u32),
+    pub tn: &'h dyn Fn(&str) -> String,
+}
+
+/// The original order (Brock, Misty, Surge, Rock Tunnel, Celadon, ..., the Hall of Fame, then the
+/// dex fill and the post-game).
+#[allow(unused_variables)]
+pub(crate) fn leg_pewter_cerulean(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 2. Pewter to Cerulean: 492 tiles (distances.json pewter-gym_to_cerulean-pc), split by guess.
+    b.walk(
+        "route3",
+        120,
+        b.era,
+        enc("MAP_ROUTE3", 0, 0, 50),
+        Src::Guess,
+    );
+    if p.audited_forced {
+        b.forced(
+            "route3-trainers",
+            &["Route3_EventScript_Colton", "Route3_EventScript_James"],
+            &[(1, &["Route3_EventScript_Greg", "Route3_EventScript_Sally"])],
+        );
+    } else {
+        b.group("route3-trainers", 4, 2, 9, 55);
+    }
+    b.walk(
+        "mt-moon-1f",
+        90,
+        b.era,
+        enc("MAP_MT_MOON_1F", 65, 65, 90),
+        Src::Guess,
+    );
+    b.walk(
+        "mt-moon-b1f",
+        100,
+        b.era,
+        enc("MAP_MT_MOON_B1F", 13, 13, 100),
+        Src::Guess,
+    );
+    b.walk(
+        "mt-moon-b2f",
+        100,
+        b.era,
+        enc("MAP_MT_MOON_B2F", 116, 116, 100),
+        Src::Guess,
+    );
+    if p.audited_forced {
+        b.forced(
+            "mt-moon-miguel",
+            &[
+                "MtMoon_B2F_EventScript_BattleMiguel",
+                "MtMoon_B2F_EventScript_Grunt1",
+            ],
+            &[],
+        );
+    } else {
+        b.group("mt-moon-trainers", 5, 2, 11, 60);
+        b.maps_group("mt-moon-miguel", &["MtMoon_B2F"], 1);
+    }
+    b.walk("route4", 82, b.era, enc("MAP_ROUTE4", 0, 0, 30), Src::Guess);
+    b.text("cerulean-heal", 500, Src::Guess);
+    if p.early_dig && !p.no_dig {
+        // The robbed house's Rocket is visible from the first Cerulean arrival
+        // (`data/maps/CeruleanCity/map.json:67` hides him behind
+        // FLAG_HIDE_CERULEAN_ROCKET, which nothing in the decomp ever sets), so TM28
+        // Dig can be fetched before the rival (`CeruleanCity/scripts.inc:164-187`).
+        b.trainer("dig-grunt", "TRAINER_TEAM_ROCKET_GRUNT_5", 600);
+        b.text("tm28-dig", 900, Src::Guess);
+    }
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_nugget_bill(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 3. Cerulean: rival, Nugget Bridge, Bill, Misty.
+    b.trainer("rival-cerulean", &tn("TRAINER_RIVAL_CERULEAN"), 700);
+    b.walk(
+        "nugget-bridge",
+        100,
+        b.era,
+        enc("MAP_ROUTE24", 0, 0, 60),
+        Src::Guess,
+    );
+    if p.audited_forced {
+        b.forced(
+            "nugget-bridge-trainers",
+            &[
+                "Route24_EventScript_Ethan",
+                "Route24_EventScript_Reli",
+                "Route24_EventScript_Timmy",
+                "Route24_EventScript_Ali",
+                "Route24_EventScript_Cale",
+                "Route24_EventScript_BattleRocket",
+            ],
+            &[],
+        );
+    } else {
+        b.maps_group("nugget-bridge-trainers", &["Route24"], 6);
+    }
+    b.walk("bill", 56, b.era, enc("MAP_ROUTE25", 0, 0, 40), Src::Guess);
+    if p.audited_forced {
+        b.forced(
+            "route25-trainers",
+            &["Route25_EventScript_Haley", "Route25_EventScript_Kelsey"],
+            &[(
+                2,
+                &[
+                    "Route25_EventScript_Flint",
+                    "Route25_EventScript_Franklin",
+                    "Route25_EventScript_Nob",
+                    "Route25_EventScript_Wayne",
+                ],
+            )],
+        );
+    }
+    b.text("bill-cottage", 2400, Src::Guess);
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_bill_return(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    if p.teleport_abra {
+        b.push(
+            "teleport-cerulean",
+            Src::Guess,
+            15,
+            Kind::TeleportOrWalk {
+                frames: 700,
+                tiles: 156,
+            },
+        );
+    } else {
+        b.walk("bill-return", 156, b.era, None, Src::Tiles);
+    }
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_misty(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    b.walk("misty-walk", 26, b.era, None, Src::Tiles);
+    if p.audited_forced {
+        b.forced(
+            "cerulean-gym-trainer",
+            &["CeruleanCity_Gym_EventScript_Diana"],
+            &[],
+        );
+    } else {
+        b.group("cerulean-gym-trainer", 1, 2, 16, 65);
+    }
+    b.trainer("misty", "TRAINER_LEADER_MISTY", 600);
+    b.text("misty-badge", 600, Src::Guess);
+    b.split();
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_ssanne(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 4. Vermilion: S.S. Anne and Surge, no Vermilion heal.
+    b.walk(
+        "route5-6",
+        260,
+        b.era,
+        enc("MAP_ROUTE5", 6, 0, 40),
+        Src::Tiles,
+    );
+    detour(b, "route5-6-detour", 21);
+    b.wander("route6-encounters", "MAP_ROUTE6", g(3, 0, 40));
+    if p.audited_forced {
+        b.forced("route6-trainers", &["Route6_EventScript_Jeff"], &[]);
+    }
+    if p.bike {
+        b.walk("fan-club", 60, b.era, None, Src::Tiles);
+        b.text("bike-voucher", 900, Src::Guess);
+    }
+    b.walk("ss-anne", 210, b.era, None, Src::Guess);
+    b.trainer("rival-ss-anne", &tn("TRAINER_RIVAL_SS_ANNE"), 700);
+    b.text("captain-hm01", 1500, Src::Guess);
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_surge(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    b.walk("surge-walk", 156, b.era, None, Src::Guess);
+    b.group("surge-gym-trainers", 2, 2, 20, 65);
+    b.trainer("surge", "TRAINER_LEADER_LT_SURGE", 600);
+    b.text("surge-badge", 600, Src::Guess);
+    b.split();
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_vermilion_return(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    if p.teleport_abra {
+        b.push(
+            "teleport-cerulean-2",
+            Src::Guess,
+            15,
+            Kind::TeleportOrWalk {
+                frames: 700,
+                tiles: 260,
+            },
+        );
+    } else {
+        b.walk("vermilion-return", 260, b.era, None, Src::Tiles);
+    }
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_bike(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 5. Bike, Dig, Rock Tunnel, Lavender.
+    if p.bike {
+        b.walk("bike-shop", 40, b.era, None, Src::Tiles);
+        b.text("bike-redeem", 1200, Src::Guess);
+        b.era = Era::Bike;
+    }
+    if !p.early_dig && !p.no_dig {
+        // The Rocket who stole TM28 (`CeruleanCity/scripts.inc:172`).
+        b.trainer("dig-grunt", "TRAINER_TEAM_ROCKET_GRUNT_5", 600);
+        b.text("tm28-dig", 900, Src::Guess);
+    }
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_rock_tunnel(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    let e = b.era;
+    b.walk("route9", 60, e, enc("MAP_ROUTE9", 0, 0, 30), Src::Guess);
+    b.walk(
+        "route10-north",
+        20,
+        e,
+        enc("MAP_ROUTE10", 0, 0, 10),
+        Src::Guess,
+    );
+    b.walk(
+        "rock-tunnel",
+        138,
+        e,
+        enc("MAP_ROCK_TUNNEL_1F", 252, 252, 138),
+        Src::Guess,
+    );
+    if p.audited_forced {
+        b.forced(
+            "rock-tunnel-trainers",
+            &[
+                "Route9_EventScript_Alicia",
+                "Route9_EventScript_Conner",
+                "RockTunnel_1F_EventScript_Ashton",
+                "RockTunnel_1F_EventScript_Dana",
+                "RockTunnel_B1F_EventScript_Dudley",
+                "RockTunnel_B1F_EventScript_Martha",
+                "RockTunnel_B1F_EventScript_Sofia",
+                "RockTunnel_B1F_EventScript_Winston",
+            ],
+            &[
+                (
+                    1,
+                    &[
+                        "RockTunnel_1F_EventScript_Lenny",
+                        "RockTunnel_1F_EventScript_Oliver",
+                    ],
+                ),
+                (
+                    1,
+                    &[
+                        "RockTunnel_B1F_EventScript_Allen",
+                        "RockTunnel_B1F_EventScript_Eric",
+                    ],
+                ),
+            ],
+        );
+    } else {
+        b.maps_group(
+            "rock-tunnel-trainers",
+            &["RockTunnel_1F", "RockTunnel_B1F"],
+            7,
+        );
+    }
+    b.text("lavender-heal", 500, Src::Guess);
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_celadon(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 6. Celadon: Tea, Hideout, Erika, HM02.
+    b.walk("route8-7", 227, e, enc("MAP_ROUTE8", 0, 0, 40), Src::Tiles);
+    if p.audited_forced {
+        b.forced(
+            "route8-trainers",
+            &[],
+            &[(1, &["Route8_EventScript_Julia", "Route8_EventScript_Rich"])],
+        );
+    }
+    b.walk("celadon-tea", 40, e, None, Src::Tiles);
+    b.text("tea", 600, Src::Guess);
+    b.walk("hideout-walk", 526, e, None, Src::Guess);
+    b.maps_group(
+        "hideout-grunts",
+        &[
+            "RocketHideout_B1F",
+            "RocketHideout_B2F",
+            "RocketHideout_B3F",
+            "RocketHideout_B4F",
+        ],
+        8,
+    );
+    b.trainer("hideout-giovanni", "TRAINER_BOSS_GIOVANNI", 700);
+    b.text("scope-and-dig", 1800, Src::Guess);
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_hm02(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    b.walk("hm02-trip", 218, e, None, Src::Tiles);
+    b.text("hm02-fly", 800, Src::Guess);
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_tower(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 7. Pokémon Tower and the flute.
+    b.text("fly-lavender", 700, Src::Guess);
+    b.walk("tower-walk", 215, e, None, Src::Guess);
+    b.wander("tower-encounters", "MAP_POKEMON_TOWER_5F", g(108, 108, 80));
+    b.trainer("rival-tower", &tn("TRAINER_RIVAL_POKEMON_TOWER"), 700);
+    if p.audited_forced {
+        b.forced(
+            "tower-channelers",
+            &[
+                "PokemonTower_6F_EventScript_Emilia",
+                "PokemonTower_6F_EventScript_Jennifer",
+            ],
+            &[(
+                1,
+                &[
+                    "PokemonTower_5F_EventScript_Karina",
+                    "PokemonTower_5F_EventScript_Tammy",
+                ],
+            )],
+        );
+    }
+    b.maps_group("tower-rockets", &["PokemonTower_7F"], 3);
+    b.text("fuji-flute", 1500, Src::Guess);
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_cycling(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 8. Cycling Road to Fuchsia, Safari, HM03 and HM04, Koga.
+    b.text("fly-celadon", 700, Src::Guess);
+    if p.erika_after_tower && p.route_style != "wr" {
+        // Erika postponed past the tower: the carry is two levels up and usually a
+        // Blastoise by now, and the fly lands in Celadon anyway (walk re-used; Guess).
+        let e = b.era;
+        erika_leg(b, p, e);
+    }
+    b.walk(
+        "cycling-road",
+        374,
+        e,
+        enc("MAP_ROUTE16", 0, 0, 60),
+        Src::Tiles,
+    );
+    b.text("snorlax", 1500, Src::Guess);
+    // The rod's house trip (guess: walking there and back plus the Fishing Guru's text).
+    match p.rod.as_str() {
+        "old" => {
+            b.text("old-rod", 900, Src::Guess);
+        }
+        "good" => {
+            b.text("good-rod", 1500, Src::Guess);
+        }
+        "super" => {
+            b.text("super-rod", 2400, Src::Guess);
+        }
+        _ => {}
+    }
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_safari(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    b.walk("safari-trip", 198, e, None, Src::Tiles);
+    b.text("safari-fee-and-hms", 2400, Src::Guess);
+    b.walk("safari-walk", 460, Era::Run, None, Src::Tiles);
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_warden(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    b.walk("warden", 18, e, None, Src::Tiles);
+    b.text("warden-strength", 1400, Src::Guess);
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_koga(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    b.walk("koga-walk", 119, e, None, Src::Guess);
+    if p.audited_forced {
+        b.forced(
+            "fuchsia-gym-trainers",
+            &["FuchsiaCity_Gym_EventScript_Kirk"],
+            &[],
+        );
+    } else {
+        b.group("fuchsia-gym-trainers", 3, 2, 34, 75);
+    }
+    b.trainer("koga", "TRAINER_LEADER_KOGA", 600);
+    b.text("koga-badge", 600, Src::Guess);
+    b.split();
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_silph(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 9. Silph Co. and Sabrina.
+    b.text("fly-celadon-2", 700, Src::Guess);
+    b.walk("silph-walk", 479, e, None, Src::Guess);
+    b.trainer("rival-silph", &tn("TRAINER_RIVAL_SILPH"), 700);
+    b.group("silph-grunts", 4, 2, 32, 70);
+    b.trainer("silph-giovanni", "TRAINER_BOSS_GIOVANNI_2", 700);
+    b.text("master-ball", 1800, Src::Guess);
+    b.walk("sabrina-walk", 123, e, None, Src::Guess);
+    // The audit reaches Sabrina through the teleport pads without crossing any cone.
+    if !p.audited_forced {
+        b.group("saffron-gym-trainers", 2, 2, 36, 75);
+    }
+    b.trainer("sabrina", "TRAINER_LEADER_SABRINA", 600);
+    b.text("sabrina-badge", 600, Src::Guess);
+    b.split();
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_mansion_blaine(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 10. Cinnabar: Mansion, Blaine, and the forced trip to One Island.
+    b.text("fly-pallet", 700, Src::Guess);
+    b.walk("surf-cinnabar", 146, Era::Surf, None, Src::Tiles);
+    if p.enc_path {
+        // Surfing Route 21: 47 + 42 water-encounter steps (`pathenc.py`, pallet_to_cinnabar-pc).
+        b.wander_area(
+            "surf-route21-n",
+            "MAP_ROUTE21_NORTH",
+            Area::Water,
+            g(47, 38, 47),
+            Era::Surf,
+        );
+        b.wander_area(
+            "surf-route21-s",
+            "MAP_ROUTE21_SOUTH",
+            Area::Water,
+            g(36, 38, 36),
+            Era::Surf,
+        );
+    }
+    b.walk(
+        "mansion",
+        400,
+        Era::Run,
+        Some(("MAP_POKEMON_MANSION_1F", 120)),
+        Src::Guess,
+    );
+    b.group("mansion-trainers", 3, 2, 36, 75);
+    b.text("secret-key", 900, Src::Guess);
+    b.walk("blaine-walk", 34, Era::Run, None, Src::Tiles);
+    b.group("blaine-quiz", 2, 2, 38, 75);
+    b.trainer("blaine", "TRAINER_LEADER_BLAINE", 600);
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_sevii(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // The forced first Sevii trip. Previously one 5000-frame guess; audited 2026-11-13 against
+    // the scripts (journal of that date): sailing home needs VAR_MAP_SCENE_CINNABAR_ISLAND >= 4
+    // (data/scripts/seagallop.inc:4), reached only through Bill's sail-home scene, which needs
+    // the meteorite delivered (TwoIsland_JoyfulGameCorner/scripts.inc:149-152), which needs
+    // Lostelle rescued (ThreeIsland_BerryForest/scripts.inc:24-39, forced wild HYPNO Lv30), which
+    // needs the Three Island biker wall cleared: four forced fights (ThreeIsland/scripts.inc:195-260)
+    // and two unavoidable Bond Bridge trainers on the way. Tile counts are the audit's BFS (+-10%).
+    // Scene-text frames are guesses; walking, fights and grass are modelled pieces.
+    b.text("sevii-bill-boat", 2600, Src::Guess); // Bill scene, boat, harbor, scripted walk to the PC
+    b.text("celio-tri-pass", 2600, Src::Guess); // meteorite, Tri-Pass, town-map scene
+    b.walk("one-island-out", 33, Era::Run, None, Src::Tiles); // PC -> harbor, sailor
+    b.text("sail-to-two", 900, Src::Guess);
+    b.walk("two-island-in", 40, Era::Run, None, Src::Tiles);
+    b.text("corner-lostelle-scene", 1200, Src::Guess); // forced first-visit Game Corner scene
+    b.walk("two-island-out", 40, Era::Run, None, Src::Tiles);
+    b.text("sail-to-three", 900, Src::Guess);
+    b.walk("three-island-town", 56, Era::Run, None, Src::Tiles); // port + town to the biker wall
+    b.trainer("three-island-goon-1", "TRAINER_BIKER_GOON", 300);
+    b.trainer("three-island-goon-2", "TRAINER_BIKER_GOON_2", 300);
+    b.trainer("three-island-goon-3", "TRAINER_BIKER_GOON_3", 300);
+    b.trainer("three-island-paxton", "TRAINER_CUE_BALL_PAXTON", 400);
+    b.walk(
+        "bond-bridge",
+        125,
+        Era::Run,
+        Some(("MAP_BOND_BRIDGE", g(34, 34, 34))),
+        Src::Guess,
+    );
+    b.trainer("bond-bridge-nikki", "TRAINER_AROMA_LADY_NIKKI", 300);
+    b.trainer("bond-bridge-violet", "TRAINER_AROMA_LADY_VIOLET", 300);
+    b.walk(
+        "berry-forest",
+        197,
+        Era::Run,
+        Some(("MAP_THREE_ISLAND_BERRY_FOREST", g(55, 55, 55))),
+        Src::Guess,
+    );
+    // Lostelle's forced wild Hypno Lv30: intro plus a flee. Catching it instead is a plan
+    // special (kind "static", SPECIES_HYPNO, after "berry-forest"); that slightly double-counts
+    // this flee cost, which is within the guess error.
+    b.text("lostelle-hypno", 950, Src::Guess);
+    // Rescue warps straight to the Game Corner; delivery hands over the free Moon Stone.
+    b.text("deliver-meteorite", 1400, Src::Guess);
+    b.walk("two-island-out-2", 40, Era::Run, None, Src::Tiles);
+    b.text("sail-to-one", 900, Src::Guess);
+    b.walk("one-island-in", 18, Era::Run, None, Src::Tiles);
+    b.text("blaine-badge-and-sevii-scene", 2800, Src::Guess); // Bill sail-home + Cinnabar return
+    b.split();
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_viridian(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 11. Viridian Gym.
+    b.text("fly-viridian", 700, Src::Guess);
+    b.walk("viridian-gym-walk", 55, e, None, Src::Tiles);
+    if p.audited_forced {
+        b.forced(
+            "viridian-gym-trainers",
+            &["ViridianCity_Gym_EventScript_Takashi"],
+            &[],
+        );
+    } else {
+        b.group("viridian-gym-trainers", 3, 2, 42, 80);
+    }
+    b.trainer("giovanni", "TRAINER_LEADER_GIOVANNI", 600);
+    b.text("giovanni-badge", 600, Src::Guess);
+    b.split();
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_league_approach(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 12. League approach.
+    b.walk("route22", 113, e, enc("MAP_ROUTE22", 10, 9, 20), Src::Tiles);
+    b.trainer("rival-route22", &tn("TRAINER_RIVAL_ROUTE22_LATE"), 700);
+    b.walk("route23", 167, Era::Surf, None, Src::Tiles);
+    if p.enc_path {
+        // 39 water-encounter steps on Route 23 (`pathenc.py`, route22-gate_to_victoryroad).
+        b.wander_area(
+            "route23-water",
+            "MAP_ROUTE23",
+            Area::Water,
+            g(39, 31, 39),
+            Era::Surf,
+        );
+    }
+    b.text("badge-gates", 900, Src::Guess);
+    b.walk(
+        "victory-road",
+        255,
+        e,
+        enc("MAP_VICTORY_ROAD_1F", 91, 91, 150),
+        Src::Guess,
+    );
+    // The audit finds no trainer on Victory Road the route cannot walk around.
+    if !p.audited_forced {
+        b.maps_group(
+            "victory-road-trainers",
+            &["VictoryRoad_1F", "VictoryRoad_2F", "VictoryRoad_3F"],
+            8,
+        );
+    }
+    b.text("indigo-heal", 500, Src::Guess);
+    if p.grind_pre_e4 > 0 {
+        b.push(
+            "grind-pre-e4",
+            Src::Guess,
+            0,
+            Kind::Grind {
+                battles: p.grind_pre_e4,
+                level: p.grind_level,
+                yield_: p.grind_yield,
+            },
+        );
+    }
+    b.split();
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_e4_1(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 13. First Elite Four, Champion and Hall of Fame.
+    for (nm, id) in [
+        ("lorelei", "TRAINER_ELITE_FOUR_LORELEI".to_string()),
+        ("bruno", "TRAINER_ELITE_FOUR_BRUNO".to_string()),
+        ("agatha", "TRAINER_ELITE_FOUR_AGATHA".to_string()),
+        ("lance", "TRAINER_ELITE_FOUR_LANCE".to_string()),
+        ("champion", tn("TRAINER_CHAMPION_FIRST")),
+    ] {
+        b.trainer(nm, &id, 900);
+    }
+    b.text("hall-of-fame-1", 5400, Src::Guess);
+    b.split();
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_postgame(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 14. Post-game: National Dex, Celio's chain, Rocket Warehouse.
+    // Stones must evolve BEFORE Oak counts the dex — they used to sit after the check,
+    // where they could never contribute an entry (fill audit, 2026-11-13).
+    if !p.stones.is_empty() {
+        b.push("stones", Src::Guess, 0, Kind::Stones);
+    }
+    b.text("fly-pallet-2", 700, Src::Guess);
+    b.walk("pallet-to-oak", 30, e, None, Src::Tiles);
+    b.push("oak-dex-check", Src::Guess, 0, Kind::OakCheck);
+    b.text("oak-national-dex", 2500, Src::Guess);
+    b.split();
+    b.text("to-one-island", 3000, Src::Guess);
+    b.text("celio-ruby-request", 1500, Src::Guess);
+    b.walk("mt-ember", 300, Era::Run, None, Src::Guess);
+    if p.audited_forced {
+        b.forced(
+            "mt-ember-trainers",
+            &["MtEmber_Exterior_EventScript_Logan"],
+            &[],
+        );
+    } else {
+        b.group("mt-ember-trainers", 3, 3, 38, 75);
+    }
+    b.walk("mt-ember-back", 150, Era::Run, None, Src::Guess);
+    b.text("celio-rainbow-pass", 2800, Src::Guess);
+    b.walk("five-island-approach", 250, Era::Run, None, Src::Guess);
+    b.trainer("warehouse-grunt-1", "TRAINER_TEAM_ROCKET_GRUNT_47", 500);
+    b.trainer("warehouse-admin-1", "TRAINER_TEAM_ROCKET_ADMIN", 700);
+    b.trainer("warehouse-admin-2", "TRAINER_TEAM_ROCKET_ADMIN_2", 700);
+    b.trainer("warehouse-gideon", "TRAINER_SCIENTIST_GIDEON", 700);
+    b.text("sapphire-and-sail-back", 3200, Src::Guess);
+    b.text("celio-network-machine", 2400, Src::Guess);
+    b.split();
+    if p.mewtwo {
+        b.text("fly-cerulean", 700, Src::Guess);
+        b.walk(
+            "cerulean-cave",
+            if p.rope_cerulean_cave { 275 } else { 450 },
+            Era::Run,
+            Some((
+                "MAP_CERULEAN_CAVE_1F",
+                if p.rope_cerulean_cave { 95 } else { 150 },
+            )),
+            Src::Guess,
+        );
+        b.push("mewtwo", Src::Guess, 10, Kind::Mewtwo);
+    }
+    if p.grind_pre_rematch > 0 {
+        b.push(
+            "grind-pre-rematch",
+            Src::Guess,
+            0,
+            Kind::Grind {
+                battles: p.grind_pre_rematch,
+                level: p.grind_level,
+                yield_: p.grind_yield,
+            },
+        );
+    }
+}
+
+#[allow(unused_variables)]
+pub(crate) fn leg_e4_2(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
+    // 15. Rematches: Elite Four, Champion, second Hall of Fame (timer ends on the black frame).
+    b.text("fly-indigo", 700, Src::Guess);
+    b.text("league-entry", 700, Src::Guess);
+    for (nm, id) in [
+        ("lorelei-2", "TRAINER_ELITE_FOUR_LORELEI_2".to_string()),
+        ("bruno-2", "TRAINER_ELITE_FOUR_BRUNO_2".to_string()),
+        ("agatha-2", "TRAINER_ELITE_FOUR_AGATHA_2".to_string()),
+        ("lance-2", "TRAINER_ELITE_FOUR_LANCE_2".to_string()),
+        ("champion-2", tn("TRAINER_CHAMPION_REMATCH")),
+    ] {
+        b.trainer(nm, &id, 900);
+    }
+    b.text("hall-of-fame-2", 2400, Src::Guess);
+}
+
+fn old_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let _ = (g, enc, detour, tn);
+    leg_pewter_cerulean(b, p, h);
+    leg_nugget_bill(b, p, h);
+    leg_bill_return(b, p, h);
+    leg_misty(b, p, h);
+    leg_ssanne(b, p, h);
+    leg_surge(b, p, h);
+    leg_vermilion_return(b, p, h);
+    leg_bike(b, p, h);
+    leg_rock_tunnel(b, p, h);
+    leg_celadon(b, p, h);
+    let e = b.era;
+    if !p.erika_after_tower {
+        erika_leg(b, p, e);
+    }
+    leg_hm02(b, p, h);
+    leg_tower(b, p, h);
+    leg_cycling(b, p, h);
+    leg_safari(b, p, h);
+    leg_warden(b, p, h);
+    leg_koga(b, p, h);
+    leg_silph(b, p, h);
+    leg_mansion_blaine(b, p, h);
+    leg_sevii(b, p, h);
+    leg_viridian(b, p, h);
+    leg_league_approach(b, p, h);
+    leg_e4_1(b, p, h);
+    leg_postgame(b, p, h);
+    leg_e4_2(b, p, h);
 }
 
 pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
@@ -389,592 +1155,30 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     } else {
         b.maps_group("forest-trainers", &["ViridianForest"], 3);
     }
+    if p.route_style == "wr" {
+        // Camper Liam stands in the gym (`decompiled/data/maps/PewterCity_Gym/scripts.inc:38-41`); the
+        // WR run's Squirtle went from Lv8 to Lv11 on him before Brock (video fight analysis).
+        b.forced(
+            "pewter-gym-trainer",
+            &["PewterCity_Gym_EventScript_Liam"],
+            &[],
+        );
+    }
     b.trainer_adv("brock", "TRAINER_LEADER_BROCK", 600, 1.4);
     b.split();
     b.era = Era::Run;
 
-    // 2. Pewter to Cerulean: 492 tiles (distances.json pewter-gym_to_cerulean-pc), split by guess.
-    b.walk(
-        "route3",
-        120,
-        b.era,
-        enc("MAP_ROUTE3", 0, 0, 50),
-        Src::Guess,
-    );
-    if p.audited_forced {
-        b.forced(
-            "route3-trainers",
-            &["Route3_EventScript_Colton", "Route3_EventScript_James"],
-            &[(1, &["Route3_EventScript_Greg", "Route3_EventScript_Sally"])],
-        );
+    let helpers = Helpers {
+        g: &g,
+        enc: &enc,
+        detour: &detour,
+        tn: &tn,
+    };
+    if p.route_style == "wr" {
+        crate::route_wr::wr_order(&mut b, p, &helpers);
     } else {
-        b.group("route3-trainers", 4, 2, 9, 55);
+        old_order(&mut b, p, &helpers);
     }
-    b.walk(
-        "mt-moon-1f",
-        90,
-        b.era,
-        enc("MAP_MT_MOON_1F", 65, 65, 90),
-        Src::Guess,
-    );
-    b.walk(
-        "mt-moon-b1f",
-        100,
-        b.era,
-        enc("MAP_MT_MOON_B1F", 13, 13, 100),
-        Src::Guess,
-    );
-    b.walk(
-        "mt-moon-b2f",
-        100,
-        b.era,
-        enc("MAP_MT_MOON_B2F", 116, 116, 100),
-        Src::Guess,
-    );
-    if p.audited_forced {
-        b.forced(
-            "mt-moon-miguel",
-            &[
-                "MtMoon_B2F_EventScript_BattleMiguel",
-                "MtMoon_B2F_EventScript_Grunt1",
-            ],
-            &[],
-        );
-    } else {
-        b.group("mt-moon-trainers", 5, 2, 11, 60);
-        b.maps_group("mt-moon-miguel", &["MtMoon_B2F"], 1);
-    }
-    b.walk("route4", 82, b.era, enc("MAP_ROUTE4", 0, 0, 30), Src::Guess);
-    b.text("cerulean-heal", 500, Src::Guess);
-    if p.early_dig {
-        // The robbed house's Rocket is visible from the first Cerulean arrival
-        // (`data/maps/CeruleanCity/map.json:67` hides him behind
-        // FLAG_HIDE_CERULEAN_ROCKET, which nothing in the decomp ever sets), so TM28
-        // Dig can be fetched before the rival (`CeruleanCity/scripts.inc:164-187`).
-        b.trainer("dig-grunt", "TRAINER_TEAM_ROCKET_GRUNT_5", 600);
-        b.text("tm28-dig", 900, Src::Guess);
-    }
-
-    // 3. Cerulean: rival, Nugget Bridge, Bill, Misty.
-    b.trainer("rival-cerulean", &tn("TRAINER_RIVAL_CERULEAN"), 700);
-    b.walk(
-        "nugget-bridge",
-        100,
-        b.era,
-        enc("MAP_ROUTE24", 0, 0, 60),
-        Src::Guess,
-    );
-    if p.audited_forced {
-        b.forced(
-            "nugget-bridge-trainers",
-            &[
-                "Route24_EventScript_Ethan",
-                "Route24_EventScript_Reli",
-                "Route24_EventScript_Timmy",
-                "Route24_EventScript_Ali",
-                "Route24_EventScript_Cale",
-                "Route24_EventScript_BattleRocket",
-            ],
-            &[],
-        );
-    } else {
-        b.maps_group("nugget-bridge-trainers", &["Route24"], 6);
-    }
-    b.walk("bill", 56, b.era, enc("MAP_ROUTE25", 0, 0, 40), Src::Guess);
-    if p.audited_forced {
-        b.forced(
-            "route25-trainers",
-            &["Route25_EventScript_Haley", "Route25_EventScript_Kelsey"],
-            &[(
-                2,
-                &[
-                    "Route25_EventScript_Flint",
-                    "Route25_EventScript_Franklin",
-                    "Route25_EventScript_Nob",
-                    "Route25_EventScript_Wayne",
-                ],
-            )],
-        );
-    }
-    b.text("bill-cottage", 2400, Src::Guess);
-    if p.teleport_abra {
-        b.push(
-            "teleport-cerulean",
-            Src::Guess,
-            15,
-            Kind::TeleportOrWalk {
-                frames: 700,
-                tiles: 156,
-            },
-        );
-    } else {
-        b.walk("bill-return", 156, b.era, None, Src::Tiles);
-    }
-    b.walk("misty-walk", 26, b.era, None, Src::Tiles);
-    if p.audited_forced {
-        b.forced(
-            "cerulean-gym-trainer",
-            &["CeruleanCity_Gym_EventScript_Diana"],
-            &[],
-        );
-    } else {
-        b.group("cerulean-gym-trainer", 1, 2, 16, 65);
-    }
-    b.trainer("misty", "TRAINER_LEADER_MISTY", 600);
-    b.text("misty-badge", 600, Src::Guess);
-    b.split();
-
-    // 4. Vermilion: S.S. Anne and Surge, no Vermilion heal.
-    b.walk(
-        "route5-6",
-        260,
-        b.era,
-        enc("MAP_ROUTE5", 6, 0, 40),
-        Src::Tiles,
-    );
-    detour(&mut b, "route5-6-detour", 21);
-    b.wander("route6-encounters", "MAP_ROUTE6", g(3, 0, 40));
-    if p.audited_forced {
-        b.forced("route6-trainers", &["Route6_EventScript_Jeff"], &[]);
-    }
-    if p.bike {
-        b.walk("fan-club", 60, b.era, None, Src::Tiles);
-        b.text("bike-voucher", 900, Src::Guess);
-    }
-    b.walk("ss-anne", 210, b.era, None, Src::Guess);
-    b.trainer("rival-ss-anne", &tn("TRAINER_RIVAL_SS_ANNE"), 700);
-    b.text("captain-hm01", 1500, Src::Guess);
-    b.walk("surge-walk", 156, b.era, None, Src::Guess);
-    b.group("surge-gym-trainers", 2, 2, 20, 65);
-    b.trainer("surge", "TRAINER_LEADER_LT_SURGE", 600);
-    b.text("surge-badge", 600, Src::Guess);
-    b.split();
-    if p.teleport_abra {
-        b.push(
-            "teleport-cerulean-2",
-            Src::Guess,
-            15,
-            Kind::TeleportOrWalk {
-                frames: 700,
-                tiles: 260,
-            },
-        );
-    } else {
-        b.walk("vermilion-return", 260, b.era, None, Src::Tiles);
-    }
-
-    // 5. Bike, Dig, Rock Tunnel, Lavender.
-    if p.bike {
-        b.walk("bike-shop", 40, b.era, None, Src::Tiles);
-        b.text("bike-redeem", 1200, Src::Guess);
-        b.era = Era::Bike;
-    }
-    if !p.early_dig {
-        // The Rocket who stole TM28 (`CeruleanCity/scripts.inc:172`).
-        b.trainer("dig-grunt", "TRAINER_TEAM_ROCKET_GRUNT_5", 600);
-        b.text("tm28-dig", 900, Src::Guess);
-    }
-    let e = b.era;
-    b.walk("route9", 60, e, enc("MAP_ROUTE9", 0, 0, 30), Src::Guess);
-    b.walk(
-        "route10-north",
-        20,
-        e,
-        enc("MAP_ROUTE10", 0, 0, 10),
-        Src::Guess,
-    );
-    b.walk(
-        "rock-tunnel",
-        138,
-        e,
-        enc("MAP_ROCK_TUNNEL_1F", 252, 252, 138),
-        Src::Guess,
-    );
-    if p.audited_forced {
-        b.forced(
-            "rock-tunnel-trainers",
-            &[
-                "Route9_EventScript_Alicia",
-                "Route9_EventScript_Conner",
-                "RockTunnel_1F_EventScript_Ashton",
-                "RockTunnel_1F_EventScript_Dana",
-                "RockTunnel_B1F_EventScript_Dudley",
-                "RockTunnel_B1F_EventScript_Martha",
-                "RockTunnel_B1F_EventScript_Sofia",
-                "RockTunnel_B1F_EventScript_Winston",
-            ],
-            &[
-                (
-                    1,
-                    &[
-                        "RockTunnel_1F_EventScript_Lenny",
-                        "RockTunnel_1F_EventScript_Oliver",
-                    ],
-                ),
-                (
-                    1,
-                    &[
-                        "RockTunnel_B1F_EventScript_Allen",
-                        "RockTunnel_B1F_EventScript_Eric",
-                    ],
-                ),
-            ],
-        );
-    } else {
-        b.maps_group(
-            "rock-tunnel-trainers",
-            &["RockTunnel_1F", "RockTunnel_B1F"],
-            7,
-        );
-    }
-    b.text("lavender-heal", 500, Src::Guess);
-
-    // 6. Celadon: Tea, Hideout, Erika, HM02.
-    b.walk("route8-7", 227, e, enc("MAP_ROUTE8", 0, 0, 40), Src::Tiles);
-    if p.audited_forced {
-        b.forced(
-            "route8-trainers",
-            &[],
-            &[(1, &["Route8_EventScript_Julia", "Route8_EventScript_Rich"])],
-        );
-    }
-    b.walk("celadon-tea", 40, e, None, Src::Tiles);
-    b.text("tea", 600, Src::Guess);
-    b.walk("hideout-walk", 526, e, None, Src::Guess);
-    b.maps_group(
-        "hideout-grunts",
-        &[
-            "RocketHideout_B1F",
-            "RocketHideout_B2F",
-            "RocketHideout_B3F",
-            "RocketHideout_B4F",
-        ],
-        8,
-    );
-    b.trainer("hideout-giovanni", "TRAINER_BOSS_GIOVANNI", 700);
-    b.text("scope-and-dig", 1800, Src::Guess);
-    if !p.erika_after_tower {
-        erika_leg(&mut b, p, e);
-    }
-    b.walk("hm02-trip", 218, e, None, Src::Tiles);
-    b.text("hm02-fly", 800, Src::Guess);
-
-    // 7. Pokémon Tower and the flute.
-    b.text("fly-lavender", 700, Src::Guess);
-    b.walk("tower-walk", 215, e, None, Src::Guess);
-    b.wander("tower-encounters", "MAP_POKEMON_TOWER_5F", g(108, 108, 80));
-    b.trainer("rival-tower", &tn("TRAINER_RIVAL_POKEMON_TOWER"), 700);
-    if p.audited_forced {
-        b.forced(
-            "tower-channelers",
-            &[
-                "PokemonTower_6F_EventScript_Emilia",
-                "PokemonTower_6F_EventScript_Jennifer",
-            ],
-            &[(
-                1,
-                &[
-                    "PokemonTower_5F_EventScript_Karina",
-                    "PokemonTower_5F_EventScript_Tammy",
-                ],
-            )],
-        );
-    }
-    b.maps_group("tower-rockets", &["PokemonTower_7F"], 3);
-    b.text("fuji-flute", 1500, Src::Guess);
-
-    // 8. Cycling Road to Fuchsia, Safari, HM03 and HM04, Koga.
-    b.text("fly-celadon", 700, Src::Guess);
-    if p.erika_after_tower {
-        // Erika postponed past the tower: the carry is two levels up and usually a
-        // Blastoise by now, and the fly lands in Celadon anyway (walk re-used; Guess).
-        let e = b.era;
-        erika_leg(&mut b, p, e);
-    }
-    b.walk(
-        "cycling-road",
-        374,
-        e,
-        enc("MAP_ROUTE16", 0, 0, 60),
-        Src::Tiles,
-    );
-    b.text("snorlax", 1500, Src::Guess);
-    // The rod's house trip (guess: walking there and back plus the Fishing Guru's text).
-    match p.rod.as_str() {
-        "old" => {
-            b.text("old-rod", 900, Src::Guess);
-        }
-        "good" => {
-            b.text("good-rod", 1500, Src::Guess);
-        }
-        "super" => {
-            b.text("super-rod", 2400, Src::Guess);
-        }
-        _ => {}
-    }
-    b.walk("safari-trip", 198, e, None, Src::Tiles);
-    b.text("safari-fee-and-hms", 2400, Src::Guess);
-    b.walk("safari-walk", 460, Era::Run, None, Src::Tiles);
-    b.walk("warden", 18, e, None, Src::Tiles);
-    b.text("warden-strength", 1400, Src::Guess);
-    b.walk("koga-walk", 119, e, None, Src::Guess);
-    if p.audited_forced {
-        b.forced(
-            "fuchsia-gym-trainers",
-            &["FuchsiaCity_Gym_EventScript_Kirk"],
-            &[],
-        );
-    } else {
-        b.group("fuchsia-gym-trainers", 3, 2, 34, 75);
-    }
-    b.trainer("koga", "TRAINER_LEADER_KOGA", 600);
-    b.text("koga-badge", 600, Src::Guess);
-    b.split();
-
-    // 9. Silph Co. and Sabrina.
-    b.text("fly-celadon-2", 700, Src::Guess);
-    b.walk("silph-walk", 479, e, None, Src::Guess);
-    b.trainer("rival-silph", &tn("TRAINER_RIVAL_SILPH"), 700);
-    b.group("silph-grunts", 4, 2, 32, 70);
-    b.trainer("silph-giovanni", "TRAINER_BOSS_GIOVANNI_2", 700);
-    b.text("master-ball", 1800, Src::Guess);
-    b.walk("sabrina-walk", 123, e, None, Src::Guess);
-    // The audit reaches Sabrina through the teleport pads without crossing any cone.
-    if !p.audited_forced {
-        b.group("saffron-gym-trainers", 2, 2, 36, 75);
-    }
-    b.trainer("sabrina", "TRAINER_LEADER_SABRINA", 600);
-    b.text("sabrina-badge", 600, Src::Guess);
-    b.split();
-
-    // 10. Cinnabar: Mansion, Blaine, and the forced trip to One Island.
-    b.text("fly-pallet", 700, Src::Guess);
-    b.walk("surf-cinnabar", 146, Era::Surf, None, Src::Tiles);
-    if p.enc_path {
-        // Surfing Route 21: 47 + 42 water-encounter steps (`pathenc.py`, pallet_to_cinnabar-pc).
-        b.wander_area(
-            "surf-route21-n",
-            "MAP_ROUTE21_NORTH",
-            Area::Water,
-            g(47, 38, 47),
-            Era::Surf,
-        );
-        b.wander_area(
-            "surf-route21-s",
-            "MAP_ROUTE21_SOUTH",
-            Area::Water,
-            g(36, 38, 36),
-            Era::Surf,
-        );
-    }
-    b.walk(
-        "mansion",
-        400,
-        Era::Run,
-        Some(("MAP_POKEMON_MANSION_1F", 120)),
-        Src::Guess,
-    );
-    b.group("mansion-trainers", 3, 2, 36, 75);
-    b.text("secret-key", 900, Src::Guess);
-    b.walk("blaine-walk", 34, Era::Run, None, Src::Tiles);
-    b.group("blaine-quiz", 2, 2, 38, 75);
-    b.trainer("blaine", "TRAINER_LEADER_BLAINE", 600);
-    // The forced first Sevii trip. Previously one 5000-frame guess; audited 2026-11-13 against
-    // the scripts (journal of that date): sailing home needs VAR_MAP_SCENE_CINNABAR_ISLAND >= 4
-    // (data/scripts/seagallop.inc:4), reached only through Bill's sail-home scene, which needs
-    // the meteorite delivered (TwoIsland_JoyfulGameCorner/scripts.inc:149-152), which needs
-    // Lostelle rescued (ThreeIsland_BerryForest/scripts.inc:24-39, forced wild HYPNO Lv30), which
-    // needs the Three Island biker wall cleared: four forced fights (ThreeIsland/scripts.inc:195-260)
-    // and two unavoidable Bond Bridge trainers on the way. Tile counts are the audit's BFS (+-10%).
-    // Scene-text frames are guesses; walking, fights and grass are modelled pieces.
-    b.text("sevii-bill-boat", 2600, Src::Guess); // Bill scene, boat, harbor, scripted walk to the PC
-    b.text("celio-tri-pass", 2600, Src::Guess); // meteorite, Tri-Pass, town-map scene
-    b.walk("one-island-out", 33, Era::Run, None, Src::Tiles); // PC -> harbor, sailor
-    b.text("sail-to-two", 900, Src::Guess);
-    b.walk("two-island-in", 40, Era::Run, None, Src::Tiles);
-    b.text("corner-lostelle-scene", 1200, Src::Guess); // forced first-visit Game Corner scene
-    b.walk("two-island-out", 40, Era::Run, None, Src::Tiles);
-    b.text("sail-to-three", 900, Src::Guess);
-    b.walk("three-island-town", 56, Era::Run, None, Src::Tiles); // port + town to the biker wall
-    b.trainer("three-island-goon-1", "TRAINER_BIKER_GOON", 300);
-    b.trainer("three-island-goon-2", "TRAINER_BIKER_GOON_2", 300);
-    b.trainer("three-island-goon-3", "TRAINER_BIKER_GOON_3", 300);
-    b.trainer("three-island-paxton", "TRAINER_CUE_BALL_PAXTON", 400);
-    b.walk(
-        "bond-bridge",
-        125,
-        Era::Run,
-        Some(("MAP_BOND_BRIDGE", g(34, 34, 34))),
-        Src::Guess,
-    );
-    b.trainer("bond-bridge-nikki", "TRAINER_AROMA_LADY_NIKKI", 300);
-    b.trainer("bond-bridge-violet", "TRAINER_AROMA_LADY_VIOLET", 300);
-    b.walk(
-        "berry-forest",
-        197,
-        Era::Run,
-        Some(("MAP_THREE_ISLAND_BERRY_FOREST", g(55, 55, 55))),
-        Src::Guess,
-    );
-    // Lostelle's forced wild Hypno Lv30: intro plus a flee. Catching it instead is a plan
-    // special (kind "static", SPECIES_HYPNO, after "berry-forest"); that slightly double-counts
-    // this flee cost, which is within the guess error.
-    b.text("lostelle-hypno", 950, Src::Guess);
-    // Rescue warps straight to the Game Corner; delivery hands over the free Moon Stone.
-    b.text("deliver-meteorite", 1400, Src::Guess);
-    b.walk("two-island-out-2", 40, Era::Run, None, Src::Tiles);
-    b.text("sail-to-one", 900, Src::Guess);
-    b.walk("one-island-in", 18, Era::Run, None, Src::Tiles);
-    b.text("blaine-badge-and-sevii-scene", 2800, Src::Guess); // Bill sail-home + Cinnabar return
-    b.split();
-
-    // 11. Viridian Gym.
-    b.text("fly-viridian", 700, Src::Guess);
-    b.walk("viridian-gym-walk", 55, e, None, Src::Tiles);
-    if p.audited_forced {
-        b.forced(
-            "viridian-gym-trainers",
-            &["ViridianCity_Gym_EventScript_Takashi"],
-            &[],
-        );
-    } else {
-        b.group("viridian-gym-trainers", 3, 2, 42, 80);
-    }
-    b.trainer("giovanni", "TRAINER_LEADER_GIOVANNI", 600);
-    b.text("giovanni-badge", 600, Src::Guess);
-    b.split();
-
-    // 12. League approach.
-    b.walk("route22", 113, e, enc("MAP_ROUTE22", 10, 9, 20), Src::Tiles);
-    b.trainer("rival-route22", &tn("TRAINER_RIVAL_ROUTE22_LATE"), 700);
-    b.walk("route23", 167, Era::Surf, None, Src::Tiles);
-    if p.enc_path {
-        // 39 water-encounter steps on Route 23 (`pathenc.py`, route22-gate_to_victoryroad).
-        b.wander_area(
-            "route23-water",
-            "MAP_ROUTE23",
-            Area::Water,
-            g(39, 31, 39),
-            Era::Surf,
-        );
-    }
-    b.text("badge-gates", 900, Src::Guess);
-    b.walk(
-        "victory-road",
-        255,
-        e,
-        enc("MAP_VICTORY_ROAD_1F", 91, 91, 150),
-        Src::Guess,
-    );
-    // The audit finds no trainer on Victory Road the route cannot walk around.
-    if !p.audited_forced {
-        b.maps_group(
-            "victory-road-trainers",
-            &["VictoryRoad_1F", "VictoryRoad_2F", "VictoryRoad_3F"],
-            8,
-        );
-    }
-    b.text("indigo-heal", 500, Src::Guess);
-    if p.grind_pre_e4 > 0 {
-        b.push(
-            "grind-pre-e4",
-            Src::Guess,
-            0,
-            Kind::Grind {
-                battles: p.grind_pre_e4,
-                level: p.grind_level,
-                yield_: p.grind_yield,
-            },
-        );
-    }
-    b.split();
-
-    // 13. First Elite Four, Champion and Hall of Fame.
-    for (nm, id) in [
-        ("lorelei", "TRAINER_ELITE_FOUR_LORELEI".to_string()),
-        ("bruno", "TRAINER_ELITE_FOUR_BRUNO".to_string()),
-        ("agatha", "TRAINER_ELITE_FOUR_AGATHA".to_string()),
-        ("lance", "TRAINER_ELITE_FOUR_LANCE".to_string()),
-        ("champion", tn("TRAINER_CHAMPION_FIRST")),
-    ] {
-        b.trainer(nm, &id, 900);
-    }
-    b.text("hall-of-fame-1", 5400, Src::Guess);
-    b.split();
-
-    // 14. Post-game: National Dex, Celio's chain, Rocket Warehouse.
-    // Stones must evolve BEFORE Oak counts the dex — they used to sit after the check,
-    // where they could never contribute an entry (fill audit, 2026-11-13).
-    if !p.stones.is_empty() {
-        b.push("stones", Src::Guess, 0, Kind::Stones);
-    }
-    b.text("fly-pallet-2", 700, Src::Guess);
-    b.walk("pallet-to-oak", 30, e, None, Src::Tiles);
-    b.push("oak-dex-check", Src::Guess, 0, Kind::OakCheck);
-    b.text("oak-national-dex", 2500, Src::Guess);
-    b.split();
-    b.text("to-one-island", 3000, Src::Guess);
-    b.text("celio-ruby-request", 1500, Src::Guess);
-    b.walk("mt-ember", 300, Era::Run, None, Src::Guess);
-    if p.audited_forced {
-        b.forced(
-            "mt-ember-trainers",
-            &["MtEmber_Exterior_EventScript_Logan"],
-            &[],
-        );
-    } else {
-        b.group("mt-ember-trainers", 3, 3, 38, 75);
-    }
-    b.walk("mt-ember-back", 150, Era::Run, None, Src::Guess);
-    b.text("celio-rainbow-pass", 2800, Src::Guess);
-    b.walk("five-island-approach", 250, Era::Run, None, Src::Guess);
-    b.trainer("warehouse-grunt-1", "TRAINER_TEAM_ROCKET_GRUNT_47", 500);
-    b.trainer("warehouse-admin-1", "TRAINER_TEAM_ROCKET_ADMIN", 700);
-    b.trainer("warehouse-admin-2", "TRAINER_TEAM_ROCKET_ADMIN_2", 700);
-    b.trainer("warehouse-gideon", "TRAINER_SCIENTIST_GIDEON", 700);
-    b.text("sapphire-and-sail-back", 3200, Src::Guess);
-    b.text("celio-network-machine", 2400, Src::Guess);
-    b.split();
-    if p.mewtwo {
-        b.text("fly-cerulean", 700, Src::Guess);
-        b.walk(
-            "cerulean-cave",
-            if p.rope_cerulean_cave { 275 } else { 450 },
-            Era::Run,
-            Some((
-                "MAP_CERULEAN_CAVE_1F",
-                if p.rope_cerulean_cave { 95 } else { 150 },
-            )),
-            Src::Guess,
-        );
-        b.push("mewtwo", Src::Guess, 10, Kind::Mewtwo);
-    }
-    if p.grind_pre_rematch > 0 {
-        b.push(
-            "grind-pre-rematch",
-            Src::Guess,
-            0,
-            Kind::Grind {
-                battles: p.grind_pre_rematch,
-                level: p.grind_level,
-                yield_: p.grind_yield,
-            },
-        );
-    }
-
-    // 15. Rematches: Elite Four, Champion, second Hall of Fame (timer ends on the black frame).
-    b.text("fly-indigo", 700, Src::Guess);
-    b.text("league-entry", 700, Src::Guess);
-    for (nm, id) in [
-        ("lorelei-2", "TRAINER_ELITE_FOUR_LORELEI_2".to_string()),
-        ("bruno-2", "TRAINER_ELITE_FOUR_BRUNO_2".to_string()),
-        ("agatha-2", "TRAINER_ELITE_FOUR_AGATHA_2".to_string()),
-        ("lance-2", "TRAINER_ELITE_FOUR_LANCE_2".to_string()),
-        ("champion-2", tn("TRAINER_CHAMPION_REMATCH")),
-    ] {
-        b.trainer(nm, &id, 900);
-    }
-    b.text("hall-of-fame-2", 2400, Src::Guess);
 
     for name in &p.extra_splits {
         let seg = b

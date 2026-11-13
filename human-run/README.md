@@ -36,6 +36,7 @@ No plan reaches the WR rung (or WR+1m ... WR+20m). The no-reset finishing time o
     ./target/release/frlg-human eval   human-run/plans/<plan>.md --rung 7 --R 100000  # EHT at WR+80m
     ./target/release/frlg-human report human-run/plans/<plan>.md --rung 7              # per segment: time, resets, money, balls
     python3 human-run/tools/final_table.py <plan>                                       # all rungs
+    ./target/release/frlg-human splits human-run/plans/373-wr-order.md --R 20000       # no-reset clock at each WR split vs the real run's, levels, species, fight lengths
     python3 human-run/tools/try.py <parent.md> "idea" '{"param": value}' [--rung WR+80m]
 
 ## Reading the numbers
@@ -46,6 +47,9 @@ No plan reaches the WR rung (or WR+1m ... WR+20m). The no-reset finishing time o
 * **Model-change lines.** `scores.jsonl` lines whose idea starts "MODEL CHANGE" re-baseline the model (rival ids,
   type matchups, audited trainers, Safari rules, money, measured encounter and battle costs, fishing rods, grass
   steps and fill-site walks from the map). Numbers before and after one are not comparable.
+* **Route orders.** `route_style: "wr"` (plan 373 on, `plans/CURRENT-WR`) builds the WR's order with all 60 species before
+  the League; `old` is the original order. `calib_wr`, `carry_power` and `mewtwo_power` are the WR-video calibration
+  (`calibration.md`, journal 2026-11-13-22-00); 373's MODEL CHANGE line re-baselines the model again.
 * **Sensitivity lines** (idea starts SENSITIVITY / RULES ASSUMPTION / VOID) are never accepted plans.
 * **Guess share.** `frlg-human report` prints the time by source (ledger, tile count, guess); about 70% of the run
   is still guess.

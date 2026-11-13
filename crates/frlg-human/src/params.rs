@@ -16,6 +16,10 @@ pub struct Hunt {
     pub skip: Vec<String>,
     /// Frames to get to the hunting spot and back (walking out of the way), run speed.
     pub detour_tiles: u32,
+    /// The hunting spot is on the route (the WR order catches in the Safari Zone, the Power Plant,
+    /// the Mansion on the way): `detour_tiles` is the whole extra walk (the Fly-point table is not
+    /// used) and a Safari entry is already paid by the route's own fee segment.
+    pub on_route: bool,
 }
 
 impl Default for Hunt {
@@ -27,6 +31,7 @@ impl Default for Hunt {
             steps: 200,
             skip: vec![],
             detour_tiles: 0,
+            on_route: false,
         }
     }
 }
@@ -205,6 +210,10 @@ pub struct Mart {
 pub struct Params {
     pub name: String,
     pub starter: String,
+    /// Route order: `old` (the original: Surge before Rock Tunnel, dex fill after the first Hall of
+    /// Fame) or `wr` (the world record's order, all 60 catches before the League:
+    /// `human-run/video-analysis/wr-3.25.25-main97.md`, `route_wr.rs`).
+    pub route_style: String,
     /// `FR` or `LG`: selects the wild tables (trainers are identical, `docs/glitchless-run/plan.md` §5).
     pub version: String,
     /// Reset the starter unless the sum of its six level-5 stats reaches this.
@@ -290,6 +299,10 @@ pub struct Params {
     /// Battle turn, per-mon and trainer-intro frames measured on libmgba (`calibration.md`)
     /// instead of `battle_scale` times the guessed constants.
     pub calib_battle: bool,
+    /// Battle frame constants fitted to the world-record video's measured fight durations
+    /// (`human-run/video-analysis/data/calib/v1..v4`; overrides `calib_battle`): the human factor
+    /// is already in them, `text_factor` is not applied again.
+    pub calib_wr: bool,
     /// Which rod the fish hunts use: `mixed` (the old model: all ten slots), `old`, `good` or
     /// `super`. A real rod costs a trip: Old Rod Vermilion, Good Rod Fuchsia, Super Rod Route 12
     /// south of the Snorlax (`decompiled/data/maps/*House*/scripts.inc`).
@@ -323,6 +336,27 @@ pub struct Params {
     pub fight_tactics: std::collections::HashMap<String, FightTactic>,
     /// Global heal threshold in battle: use an item below this HP fraction.
     pub heal_below: f64,
+    /// Rare Candies picked up on the route are eaten on the spot instead of kept for the League
+    /// (the WR run is Lv20/27/41 at Misty/SS Anne/Koga but only Lv50 at the League:
+    /// `human-run/video-analysis/data/calib`).
+    pub candy_early: bool,
+    /// With `candy_early`, only the first this-many candies are eaten on the spot; the rest are kept
+    /// for the League.
+    pub candy_early_n: u32,
+    /// Multiplier on the starter-line carry's Attack and Special Attack in `battle_sim` fights.
+    /// The exact engine needs 1.5-4x the WR video's player actions in 10 of its 16 measured fights
+    /// (`frlg-human splits` fight table); the WR carry has a 30-IV SpA and a Rash nature, 6-12
+    /// X Specials per big fight sequence and plays at 1/3 HP for Torrent, none of which the engine's
+    /// carry reproduces. 1.0 = the engine as audited; a value fitted to the video is a stand-in, not a
+    /// mechanism.
+    pub carry_power: f64,
+    /// The same stand-in for the caught Mewtwo (R2 fights: the engine needs ~1.5x the WR video's
+    /// actions with Mewtwo; no Torrent there, so this is the residual the Rash/IV/X lines do not explain).
+    pub mewtwo_power: f64,
+    /// Before a fight, heal with items when the carry is below this HP fraction (up to 0.85). The WR
+    /// run walks into most fights at 1/3 HP or less to keep Torrent active
+    /// (`human-run/video-analysis/data/calib/v2-mid-fights.md`: Koga 33/120, Giovanni 35/143, ...).
+    pub preheal_below: f64,
     /// Moves the carry never forgets when a new one needs a slot.
     pub keep_moves: Vec<String>,
     /// Cure a status that outlives a battle with the matching item (frames + money).
@@ -331,6 +365,8 @@ pub struct Params {
     /// there from the start: `data/maps/CeruleanCity/map.json:67`'s hide flag is never
     /// set anywhere in the decomp).
     pub early_dig: bool,
+    /// Skip the Cerulean Rocket and TM28 Dig altogether (the WR run does not use Dig).
+    pub no_dig: bool,
     /// Fight Erika after the Pokémon Tower leg (fly-celadon lands beside the gym): the
     /// carry is ~2 levels higher and usually evolved.
     pub erika_after_tower: bool,
@@ -399,6 +435,7 @@ impl Default for Params {
         Params {
             name: "unnamed".into(),
             starter: "squirtle".into(),
+            route_style: "old".into(),
             version: "FR".into(),
             starter_min_total: 0,
             starter_save_reroll: false,
@@ -433,6 +470,7 @@ impl Default for Params {
             detour_bike: false,
             avoid_grass: false,
             calib_battle: false,
+            calib_wr: false,
             rod: "mixed".into(),
             repel_on: vec![],
             ball_batch: 10,
@@ -448,9 +486,15 @@ impl Default for Params {
             elixirs: vec![],
             fight_tactics: Default::default(),
             heal_below: 0.4,
+            preheal_below: 0.5,
+            candy_early: false,
+            candy_early_n: 99,
+            carry_power: 1.0,
+            mewtwo_power: 1.0,
             keep_moves: vec![],
             cure_status: true,
             early_dig: false,
+            no_dig: false,
             erika_after_tower: false,
             evo_min_stats: [0; 6],
             extra_heals: vec![],

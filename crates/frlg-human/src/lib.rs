@@ -6,4 +6,6 @@ pub mod manip;
 pub mod params;
 pub mod rng;
 pub mod route;
+pub mod route_wr;
 pub mod sim;
+pub mod wrsplits;

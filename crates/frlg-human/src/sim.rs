@@ -94,6 +94,15 @@ pub struct Probe {
     pub caught_at: Vec<u32>,
     /// The starter phase of a `manip` attempt (`manip.rs`).
     pub phase: Option<crate::manip::PhaseSample>,
+    /// The carry's level after each segment (filled when a probe is passed).
+    pub level_at: Vec<u32>,
+    /// Trainer fights of the attempt: (segment name, player actions, whether it was won). Only
+    /// recorded when a probe is passed.
+    pub fights: Vec<(String, u32, bool)>,
+    /// National numbers still missing when the fill gave up (an abandoned attempt).
+    pub missing: Vec<u32>,
+    /// National numbers missing when the fill (or Oak's check) starts.
+    pub oak_missing: Vec<u32>,
 }
 
 pub struct Outcome {
@@ -165,6 +174,11 @@ struct State {
     hp_frac: f64,
     badges: u8,
     league_items: bool,
+    /// Record each trainer fight (see `Probe::fights`).
+    log_fights: bool,
+    /// Rare Candies eaten on the spot so far (`candy_early_n` caps it).
+    candies_eaten: u32,
+    fight_log: Vec<(String, u32, bool)>,
 }
 
 impl Ctx<'_> {
@@ -180,7 +194,10 @@ impl Ctx<'_> {
     /// Frames from the battle starting to the first action menu. Measured on libmgba with A
     /// mashed: 358 (`human-run/calibration.md`), times 1.25 for a human; the older guess was 220.
     fn enc_intro(&self) -> f64 {
-        if self.p.calib_enc {
+        if self.p.calib_wr {
+            // The libmgba floor 358 (`calibration.md`) x ~1.06, the WR-level human factor.
+            380.0
+        } else if self.p.calib_enc {
             450.0
         } else {
             ENC_INTRO as f64
@@ -189,7 +206,10 @@ impl Ctx<'_> {
 
     /// One ball thrown and its result back at the menu: 397-416 measured, x1.2.
     fn throw_cost(&self) -> f64 {
-        if self.p.calib_enc {
+        if self.p.calib_wr {
+            // Measured floor 397-416 per ball (`calibration.md`) x ~1.05.
+            425.0
+        } else if self.p.calib_enc {
             480.0
         } else {
             THROW as f64
@@ -199,7 +219,9 @@ impl Ctx<'_> {
     /// After the last shake: Gotcha text, dex page, nickname prompt. The measured throw-to-overworld
     /// total is 409-549, so what comes after the throw cycle is small.
     fn catch_end(&self) -> f64 {
-        let base = if self.p.calib_enc {
+        let base = if self.p.calib_wr {
+            130.0
+        } else if self.p.calib_enc {
             150.0
         } else {
             CATCH_END as f64 * self.p.text_factor
@@ -213,10 +235,35 @@ impl Ctx<'_> {
         }
     }
 
+    /// After a trainer's last mon faints: the defeat text, prize money, walking on. `calib_wr`: 240
+    /// frames (guess; the WR video's fight durations end at the "defeated" box, so this part of a
+    /// trainer encounter is not measured).
+    fn outro(&self) -> f64 {
+        if self.p.calib_wr {
+            self.k("trainer_outro", 240.0)
+        } else {
+            self.k("trainer_outro", TRAINER_OUTRO as f64)
+        }
+    }
+
+    /// A level-up: the "grew to" box and the stat screen. `calib_wr`: 240 frames (Brock in the WR
+    /// video: victory text +28 s, "grew to LV 13" +32 s, next prompt +44 s with a learn prompt between).
+    fn level_up(&self) -> f64 {
+        if self.p.calib_wr {
+            self.k("level_up", 240.0)
+        } else {
+            self.k("level_up", LEVEL_UP as f64)
+        }
+    }
+
     /// One battle turn. `calib_battle`: 385 = the 280-406 frame floor measured on libmgba
     /// (mean ~320 with A mashed) times 1.2 (`human-run/calibration.md`).
     fn turn(&self) -> f64 {
-        if self.p.calib_battle {
+        if self.p.calib_wr {
+            // 345 = 5.74 s per player action, fitted with `mon_overhead` to the 16 fight durations
+            // read off the WR video (`human-run/calibration.md`, "WR fight fit").
+            345.0
+        } else if self.p.calib_battle {
             385.0
         } else {
             TURN as f64 * self.p.battle_scale
@@ -226,7 +273,10 @@ impl Ctx<'_> {
     /// Faint, exp text and the next send-out per enemy mon beyond the turn itself. `calib_battle`:
     /// 810 = (975 measured wild kill cycle - 320 turn) x 1.2.
     fn mon_overhead(&self) -> f64 {
-        if self.p.calib_battle {
+        if self.p.calib_wr {
+            // 10.5 s per enemy mon (send-out, faint, exp text), same fit as `turn`.
+            630.0
+        } else if self.p.calib_battle {
             810.0
         } else {
             MON_OVERHEAD as f64 * self.p.battle_scale
@@ -236,6 +286,11 @@ impl Ctx<'_> {
     /// Frames from a trainer battle starting to its first menu. `calib_battle`: at least
     /// 1250 = the 1040 frames measured for the lab rival x 1.2.
     fn trainer_intro(&self, intro: u32) -> f64 {
+        if self.p.calib_wr {
+            // Swirl, the trainer's text and the send-out: ~10-14 s observed for E4 rounds (intro
+            // 900 -> 720 frames); the fit is insensitive to it (video fight durations include it).
+            return intro as f64 * 0.8;
+        }
         let t = intro as f64 * self.p.text_factor;
         if self.p.calib_battle {
             t.max(1250.0)
@@ -254,21 +309,21 @@ impl Ctx<'_> {
             Kind::Trainer { party, intro, .. } => {
                 self.trainer_intro(*intro)
                     + party.len() as f64 * (self.turn() + self.mon_overhead())
-                    + self.k("trainer_outro", TRAINER_OUTRO as f64)
+                    + self.outro()
             }
             Kind::Parties { parties, .. } => parties
                 .iter()
                 .map(|p| {
                     self.trainer_intro(600)
                         + p.len() as f64 * (self.turn() + self.mon_overhead())
-                        + self.k("trainer_outro", TRAINER_OUTRO as f64)
+                        + self.outro()
                 })
                 .sum(),
             Kind::Group { n, mons, .. } => {
                 *n as f64
                     * (self.trainer_intro(600)
                         + *mons as f64 * (self.turn() + self.mon_overhead())
-                        + self.k("trainer_outro", TRAINER_OUTRO as f64))
+                        + self.outro())
             }
             Kind::Wander { .. }
             | Kind::Hunt { .. }
@@ -664,7 +719,7 @@ fn encounter(
         let t = turns_per_mon(level as f64, effective_level(st, ctx.p), st.strength, 1.0);
         bump(st, t * ctx.turn() + ctx.mon_overhead());
         let g = add_exp(ctx, st, e);
-        bump(st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
+        bump(st, g as f64 * ctx.level_up());
     } else if safari {
         // Safari battles have no Run roll and a two-row menu: leaving an unwanted
         // encounter is one press (`decompiled/src/battle_script_commands.c`, Safari
@@ -686,12 +741,19 @@ fn flee(ctx: &Ctx, st: &mut State, rng: &mut Rng) {
         return;
     }
     let p_ok = if st.carry < 15 { 0.2 } else { 1.0 };
+    // Measured 400-1025 per successful Run and 277-596 per failure (`calibration.md`); the WR-level
+    // factor (~1.06) over the floors, not the 1.25 of the default human.
+    let (ok_cost, fail_cost) = if ctx.p.calib_wr {
+        (430.0, 400.0)
+    } else {
+        (500.0, 470.0)
+    };
     loop {
         if rng.chance(p_ok) {
-            bump(st, 500.0);
+            bump(st, ok_cost);
             return;
         }
-        bump(st, 470.0);
+        bump(st, fail_cost);
     }
 }
 
@@ -946,7 +1008,7 @@ fn battle(
         let heal_turns = ((r - 0.95).max(0.0) * enemies.len() as f64 * 2.0).round();
         bump(st, heal_turns * ctx.turn());
         if trainer {
-            bump(st, ctx.k("trainer_outro", TRAINER_OUTRO as f64));
+            bump(st, ctx.outro());
         }
         let danger = p_lose(r, ctx.k("p_lose_center", 1.25), ctx.k("p_lose_slope", 0.05))
             * 0.5f64.powi(tries);
@@ -962,7 +1024,7 @@ fn battle(
             continue;
         }
         let g = add_exp(ctx, st, total_exp);
-        bump(st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
+        bump(st, g as f64 * ctx.level_up());
         return true;
     }
 }
@@ -1058,6 +1120,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 st.badges,
             );
             m.moves = st.mewtwo_moves.clone();
+            if ctx.p.mewtwo_power != 1.0 {
+                m.stat[0] = (m.stat[0] as f64 * ctx.p.mewtwo_power) as i32;
+                m.stat[3] = (m.stat[3] as f64 * ctx.p.mewtwo_power) as i32;
+            }
             m
         } else {
             let mut m = make_mon(
@@ -1072,10 +1138,15 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             m.moves = st.slots.clone();
             m.pp = st.slot_pp.clone();
             m.status = st.carry_status;
+            // `carry_power`: the WR carry out-damages the engine's (see the param's doc).
+            if ctx.p.carry_power != 1.0 {
+                m.stat[0] = (m.stat[0] as f64 * ctx.p.carry_power) as i32;
+                m.stat[3] = (m.stat[3] as f64 * ctx.p.carry_power) as i32;
+            }
             m
         };
         // Heal with items before the fight when low (each use is a bag trip).
-        if st.hp_frac < 0.5 && !mewtwo_now {
+        if st.hp_frac < ctx.p.preheal_below && !mewtwo_now {
             let uses = (((0.85 - st.hp_frac) * me.max_hp as f64)
                 / heal_amount(me.level, st.league_items) as f64)
                 .ceil();
@@ -1109,6 +1180,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
+        if a.trainer && st.log_fights {
+            st.fight_log.push((a.name.to_string(), out.turns, out.won));
+        }
         if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
             eprintln!(
                 "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {}",
@@ -1141,7 +1215,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 if !mewtwo_now {
                     let e = exp_gain(yld as u8, lvl as u8, a.trainer);
                     let g = add_exp(ctx, st, e);
-                    bump(st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
+                    bump(st, g as f64 * ctx.level_up());
                     let ev = dex.species[sp].ev_yield;
                     for (e, y) in st.evs.iter_mut().zip(ev) {
                         *e = (*e + y).min(255);
@@ -1149,7 +1223,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 }
             }
             if a.trainer {
-                bump(st, ctx.k("trainer_outro", TRAINER_OUTRO as f64));
+                bump(st, ctx.outro());
             }
             return true;
         }
@@ -1276,6 +1350,12 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
     if !safari {
         st.safari_open = false;
     } else {
+        if !st.safari_open && h.on_route {
+            // The route's own `safari-fee-and-hms` segment paid the gate.
+            st.safari_open = true;
+            st.safari_steps = 600;
+            st.safari_balls = 30;
+        }
         if !st.safari_open {
             if ctx.p.money_model {
                 // 500 at the gate (`decompiled/data/maps/FuchsiaCity_SafariZone_Entrance/scripts.inc`).
@@ -1294,7 +1374,9 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
             steps = steps.min(st.safari_steps);
         }
     }
-    let walk_tiles = if ctx.p.detour_map {
+    let walk_tiles = if h.on_route {
+        h.detour_tiles
+    } else if ctx.p.detour_map {
         ctx.dex
             .fly_tiles(&h.site, &h.area)
             .unwrap_or(h.detour_tiles)
@@ -1536,6 +1618,9 @@ pub fn attempt(
         hp_frac: 1.0,
         badges: 0,
         league_items: false,
+        log_fights: probe.is_some(),
+        candies_eaten: 0,
+        fight_log: vec![],
         whiteouts: 0,
         game: GameRng::from_u32(0),
         slots: vec![],
@@ -1730,12 +1815,13 @@ pub fn attempt(
                         turns_per_mon(*level as f64, effective_level(&st, ctx.p), st.strength, 1.0);
                     bump(&mut st, t * ctx.turn() + ctx.mon_overhead());
                     let g = add_exp(ctx, &mut st, exp_gain(*yield_ as u8, *level as u8, false));
-                    bump(&mut st, g as f64 * ctx.k("level_up", LEVEL_UP as f64));
+                    bump(&mut st, g as f64 * ctx.level_up());
                 }
             }
             Kind::OakCheck => {
                 if let Some(pr) = probe.as_deref_mut() {
                     pr.oak_count = st.caught.count();
+                    pr.oak_missing = (1..=151).filter(|&d| !st.caught.has(d)).collect();
                 }
                 // Once the list is exhausted the human goes round it again (at most 6 times).
                 let rounds = if ctx.p.fill.is_empty() { 0 } else { 6 };
@@ -1784,6 +1870,9 @@ pub fn attempt(
                     }
                 }
                 if st.caught.count() < 60 {
+                    if let Some(pr) = probe.as_deref_mut() {
+                        pr.missing = (1..=151).filter(|&d| !st.caught.has(d)).collect();
+                    }
                     st.abandoned = true;
                     break;
                 }
@@ -1984,6 +2073,18 @@ pub fn attempt(
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 match pickup.kind.as_str() {
                     "max" => st.max_elixirs += 1,
+                    "candy" if ctx.p.candy_early && st.candies_eaten < ctx.p.candy_early_n => {
+                        st.candies_eaten += 1;
+                        // Eaten on the spot: a level now (400 frames), through the normal exp path
+                        // so evolutions and level-up moves happen.
+                        let need = exp_for_level(Growth::MediumSlow, (st.carry + 1) as u8)
+                            .saturating_sub(st.exp);
+                        let g = add_exp(ctx, &mut st, need.max(1));
+                        bump(
+                            &mut st,
+                            400.0 * ctx.p.text_factor + g as f64 * ctx.level_up(),
+                        );
+                    }
                     "candy" => st.candies += 1,
                     _ => st.elixirs += 1,
                 }
@@ -2210,10 +2311,15 @@ pub fn attempt(
             sc[i] = st.clock;
         }
         if let Some(pr) = probe.as_deref_mut() {
+            pr.fights.append(&mut st.fight_log);
             if pr.caught_at.len() <= i {
                 pr.caught_at.resize(i + 1, 0);
             }
             pr.caught_at[i] = st.caught.count();
+            if pr.level_at.len() <= i {
+                pr.level_at.resize(i + 1, 0);
+            }
+            pr.level_at[i] = st.carry;
         }
         if seg.split {
             if let Some(t) = target {

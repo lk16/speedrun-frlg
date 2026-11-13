@@ -66,3 +66,27 @@ catch-end    n= 39 mean     4.6 min 4 max 5
 flee-ok      n= 34 mean   681.4 min 400 max 1025
 flee-fail    n=148 mean   380.9 min 277 max 596
 ```
+
+## WR fight fit (`calib_wr`, 2026-11-13)
+
+External evidence, not a decomp citation: 16 fight durations read off the WR video
+(`human-run/video-analysis/data/calib/v1..v4`, intro to the "defeated" box, 4-5 s sampling, +-5 s).
+Duration = a + m * (enemy mons) + t * (player actions): least squares over the 16 fights gives
+`m` = 10.5-12.3 s and `t` = 5.7-5.9 s for any assumed intro `a` of 0-14 s (the fit is insensitive to `a`;
+residual rms ~75-80 s over 16 fights).
+
+| Constant | `calib_battle` (human 1.2x floor) | `calib_wr` | source |
+| --- | --- | --- | --- |
+| player action | 385 frames | 345 | fit `t` = 5.74 s |
+| enemy mon (send-out, faint, exp text) | 810 | 630 | fit `m` = 10.5 s |
+| trainer intro | max(intro x 1.25, 1250) | intro x 0.8 | E4 swirl to first menu 12-16 s |
+| trainer outro | 300 | 240 | guess (not in the video durations) |
+| level-up | 300 | 240 | Brock: victory +28 s, "grew to" +32 s |
+| wild encounter intro | 450 | 380 | libmgba floor 358 x 1.06 |
+| ball throw | 480 | 425 | libmgba floor 397-416 x 1.05 |
+| catch end | 150 | 130 | libmgba floor |
+| Run, ok / fail | 500 / 470 | 430 / 400 | libmgba floors 400-1025 / 277-596 |
+
+The WR-level human factor in these rows is ~1.05 over the libmgba floor; the plan's `text_factor` and
+`path_overhead` stay at their own 1.05 / 1.04 for the ledger text and walking. Model fight *lengths in
+actions* are a separate matter: `frlg-human splits` prints model vs WR actions and seconds per fight.

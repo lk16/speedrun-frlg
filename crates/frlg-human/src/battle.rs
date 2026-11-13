@@ -2151,7 +2151,7 @@ pub fn fight(
                 };
                 eprintln!(
                     "t{} me {}/{} st{:?} stg{:?} | foe {} {}/{} | act {} | en {:?} first {} danger {} kill {} sacs {}",
-                    out.turns, me.hp, me.max_hp, me.status, me.stages, foe.species, e.hp, e.max_hp,
+                    out.turns, me.hp, me.max_hp, me.status, me.stages, dex.species[foe.species].name, e.hp, e.max_hp,
                     an, en_move.map(|m| dex.moves[m].name.clone()), me_first, danger, sure_kill, sacs_left
                 );
             }
