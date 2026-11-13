@@ -41,26 +41,32 @@ of the League-only multiplier on Attack/SpA (`league_power`): mean |log ratio| 0
 absorbs: the WR carry's EVs, Black Glasses/Mystic Water (not modelled), vitamins. It is a fit, labelled as one.
 `mewtwo_power` 1.5 already matches round 2's counts (Bruno-2 5.4/5, Agatha-2 5.0/6.5, Lance-2 7.9/7.5, Champion-2 10.6/11.5).
 
-## Result (plan `377-league-calib`, engine as of this commit, R=20 000 reaching the League)
+## Result (plan `382-sacs-champ2`, R = 30 000 attempts, fights of attempts that reach them)
 
 | fight | win | model actions | WR actions | model s | WR s |
 | --- | --- | --- | --- | --- | --- |
-| Lorelei | 98.5% | 10.9 | 11 | 149 | 148 |
-| Bruno | 97.5% | 6.0 | 7 | 108 | 104 |
-| Agatha | 97.9% | 6.1 | 6 | 112 | 88 |
-| Lance | 94.5% | 8.7-10.9 | 8 | 145 | 120 |
-| Champion | 94% | 10.3 | 10 | 185 | 154 |
-| Lorelei-2 | 99.5% | | | 118 | |
-| Bruno-2 | 99.7% | 5.4 | 5 | 102 | 92 |
+| Lorelei | 99.1% | 9.9 | 11 | 142 | 148 |
+| Bruno | 97.9% | 6.0 | 7 | 108 | 104 |
+| Agatha | 97.8% | 6.1 | 6 | 112 | 88 |
+| Lance | 94.4% | 10.8 | 8 | 145 | 120 |
+| Champion | 95.2% | 9.4 | 10 | 172 | 154 |
+| Lorelei-2 | 100% | 6.5 | | | |
+| Bruno-2 | 99.8% | 5.4 | 5 | 102 | 92 |
 | Agatha-2 | 100% | 5.0 | 6.5 | 99 | 98 |
-| Lance-2 | 94-99% | 7.9 | 7.5 | 116 | 110 |
-| Champion-2 | **~55%** | 10.6 | 11.5 | 158 | 196 |
+| Lance-2 | 98.9% | 7.9 | 7.5 | 116 | 110 |
+| Champion-2 | 81.3% | 11.9 | 11.5 | 167 | 196 |
 
-Round 1 chain: ~75-80% (was ~45% for plan 376 on the fixed engine, ~70% before the audit by accident of the bugs).
-**Champion-2 is the open problem**: Mewtwo (Psychic) is weak to Dark/Bug/Ghost: Tyranitar's Crunch does ~145 of its
-~240 HP, Megahorn OHKOs, and Tyranitar's Sand Stream chips 1/16 per turn. Mewtwo wins that duel only when it
-enters with ~180 HP and kills in two Earthquakes; the greedy human heals at the wrong time. A lookahead human
-(`league_rollouts`, opt-in) lifts it to ~58% but costs ~35x runtime, so it is off.
+Round 1 chain 85% (plan 376 on the fixed engine: ~45%; before the audit the old engine said ~70% by accident of the
+bugs); round 2 chain ~79%. Champion-2 was 56% until the plan took 3 sacrifices there (descend step, seeds 1 and 2:
+-6.3 h, CI [-7.8, -4.9]). Lance's Dragonite (Outrage, Blizzard 70%) and Champion-2's Tyranitar (Crunch is
+super effective on Psychic Mewtwo: ~145 of ~240 HP) are the remaining dangerous mons.
+
+Score (model, WR+10m rung): 376 on the fixed engine 878 h (66 finishes in 80 000), 377-league-calib 24.1 h, 381 22.5 h,
+**382-sacs-champ2 16.6 h** (R = 20 000, 1019 finishes). The old engine's number for 376 (138.6 h) is not comparable.
+No-reset finishers: min 3:21:13, p10 3:31:06, p50 3:37:49, p90 3:44:59 (WR 3:25:25). Descent steps that were
+accepted: 378 (Lorelei +X Special), 379 (Agatha +X Attack), 380/381 (Champion -X Special, twice), 382. The first
+descent pass was poisoned by a `descend.py` bug (patches replace whole dicts, so every candidate after the first accept
+reverted it); `descend.py` now regenerates candidates after each promotion.
 
 ## Not done / next
 

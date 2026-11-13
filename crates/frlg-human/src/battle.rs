@@ -960,12 +960,8 @@ fn ai_cv(dex: &Dex, c: &CvCtx, fx: Effect, mv: usize, rng: &mut GameRng) -> i32 
                 sc -= 1;
             }
             // AU3: AttackUp discourages with rl(40), SpAtkUp with rl(70).
-            if uh <= 70 {
-                if uh < 40 {
-                    sc -= 2;
-                } else if !rl(rng, if s == 0 { 40 } else { 70 }) {
-                    sc -= 2;
-                }
+            if uh <= 70 && (uh < 40 || !rl(rng, if s == 0 { 40 } else { 70 })) {
+                sc -= 2;
             }
         }
         // AI_CV_DefenseUp / SpDefUp (Bulk Up, Calm Mind and Cosmic Power share them).
@@ -1022,10 +1018,8 @@ fn ai_cv(dex: &Dex, c: &CvCtx, fx: Effect, mv: usize, rng: &mut GameRng) -> i32 
             if target.seeded && !rl(rng, 70) {
                 sc += 3;
             }
-            if uh <= 70 && lvl(user, 6) != 6 {
-                if uh < 40 || th < 40 || !rl(rng, 70) {
-                    sc -= 2;
-                }
+            if uh <= 70 && lvl(user, 6) != 6 && (uh < 40 || th < 40 || !rl(rng, 70)) {
+                sc -= 2;
             }
         }
         // AI_CV_AttackDown.
@@ -1100,10 +1094,8 @@ fn ai_cv(dex: &Dex, c: &CvCtx, fx: Effect, mv: usize, rng: &mut GameRng) -> i32 
             if target.seeded && !rl(rng, 70) {
                 sc += 2;
             }
-            if uh <= 70 && lvl(target, 5) != 6 {
-                if uh < 40 || th < 40 || !rl(rng, 70) {
-                    sc -= 2;
-                }
+            if uh <= 70 && lvl(target, 5) != 6 && (uh < 40 || th < 40 || !rl(rng, 70)) {
+                sc -= 2;
             }
         }
         // AI_CV_Roar: -3 unless the target is boosted to +3 or more in a stat the AI cares
@@ -1212,10 +1204,8 @@ fn ai_cv(dex: &Dex, c: &CvCtx, fx: Effect, mv: usize, rng: &mut GameRng) -> i32 
         Effect::HighCrit => {
             if c.eff >= 1.0 {
                 let two = c.eff >= 2.0;
-                if two || !rl(rng, 128) {
-                    if !rl(rng, 128) {
-                        sc += 1;
-                    }
+                if (two || !rl(rng, 128)) && !rl(rng, 128) {
+                    sc += 1;
                 }
             }
         }
@@ -2423,6 +2413,7 @@ pub fn fight(
 }
 
 /// The greedy human policy for one turn (the pure part: nothing is committed).
+#[allow(clippy::too_many_arguments)]
 fn greedy_action(
     dex: &Dex,
     me: &Mon,
