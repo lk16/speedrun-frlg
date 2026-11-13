@@ -376,11 +376,7 @@ def try_it(parent, label, patch, name, seed):
     return (lines[0] if lines else 'error: ' + r.stdout[-200:] + r.stderr[-200:])
 
 
-accepts = 0
-for ps in range(max_passes):
-    changed = False
-    cur = current()
-    p = load(cur)
+def gen(p):
     if SET in ('dex', 'all'):
         sys.path.insert(0, HERE)
         import dexknobs
@@ -389,10 +385,26 @@ for ps in range(max_passes):
         cands = candidates(p)
     if KINDS:
         cands = [c for c in cands if c[0] in KINDS]
+    return cands
+
+
+accepts = 0
+for ps in range(max_passes):
+    changed = False
+    cur = current()
+    p = load(cur)
+    cands = gen(p)
     if ps == 0 and SKIP_FIRST:
         cands = cands[SKIP_FIRST:]
+    tried = set()
     print(f'pass {ps}: {len(cands)} candidates from {cur}', flush=True)
-    for ci, (kind, label, patch) in enumerate(cands):
+    ci = -1
+    while ci + 1 < len(cands):
+        ci += 1
+        kind, label, patch = cands[ci]
+        if (kind, label) in tried:
+            continue
+        tried.add((kind, label))
         cur = current()
         p = load(cur)
         # skip candidates that no longer differ from the current plan
@@ -425,6 +437,10 @@ for ps in range(max_passes):
         changed = True
         if accepts >= max_accepts:
             break
+        # Candidate patches replace whole list knobs: rebuild them from the new plan so an accepted
+        # change is never overwritten by a stale list; the ones already tried are skipped.
+        cands = gen(load(current()))
+        ci = -1
     if not changed or accepts >= max_accepts:
         break
 print('done; accepted', accepts)
