@@ -16,6 +16,10 @@ pub struct Hunt {
     pub skip: Vec<String>,
     /// Frames to get to the hunting spot and back (walking out of the way), run speed.
     pub detour_tiles: u32,
+    /// The hunting spot is on the route (the WR order catches in the Safari Zone, the Power Plant,
+    /// the Mansion on the way): `detour_tiles` is the whole extra walk (the Fly-point table is not
+    /// used) and a Safari entry is already paid by the route's own fee segment.
+    pub on_route: bool,
 }
 
 impl Default for Hunt {
@@ -27,6 +31,7 @@ impl Default for Hunt {
             steps: 200,
             skip: vec![],
             detour_tiles: 0,
+            on_route: false,
         }
     }
 }
@@ -339,6 +344,8 @@ pub struct Params {
     /// there from the start: `data/maps/CeruleanCity/map.json:67`'s hide flag is never
     /// set anywhere in the decomp).
     pub early_dig: bool,
+    /// Skip the Cerulean Rocket and TM28 Dig altogether (the WR run does not use Dig).
+    pub no_dig: bool,
     /// Fight Erika after the Pokémon Tower leg (fly-celadon lands beside the gym): the
     /// carry is ~2 levels higher and usually evolved.
     pub erika_after_tower: bool,
@@ -457,6 +464,7 @@ impl Default for Params {
             keep_moves: vec![],
             cure_status: true,
             early_dig: false,
+            no_dig: false,
             erika_after_tower: false,
             evo_min_stats: [0; 6],
             extra_heals: vec![],

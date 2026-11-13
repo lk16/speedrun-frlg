@@ -67,6 +67,10 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.text("fly-celadon-3", 700, Src::Guess);
     let e = b.era;
     erika_leg(b, p, e);
+    // Stones bought at the Celadon store on this visit evolve what is already caught.
+    if !p.stones.is_empty() {
+        b.push("stones", Src::Guess, 0, Kind::Stones);
+    }
     b.text("fly-fuchsia", 700, Src::Guess);
     leg_warden(b, p, h);
     leg_viridian(b, p, h);

@@ -387,7 +387,7 @@ pub(crate) fn leg_pewter_cerulean(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     }
     b.walk("route4", 82, b.era, enc("MAP_ROUTE4", 0, 0, 30), Src::Guess);
     b.text("cerulean-heal", 500, Src::Guess);
-    if p.early_dig {
+    if p.early_dig && !p.no_dig {
         // The robbed house's Rocket is visible from the first Cerulean arrival
         // (`data/maps/CeruleanCity/map.json:67` hides him behind
         // FLAG_HIDE_CERULEAN_ROCKET, which nothing in the decomp ever sets), so TM28
@@ -549,7 +549,7 @@ pub(crate) fn leg_bike(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         b.text("bike-redeem", 1200, Src::Guess);
         b.era = Era::Bike;
     }
-    if !p.early_dig {
+    if !p.early_dig && !p.no_dig {
         // The Rocket who stole TM28 (`CeruleanCity/scripts.inc:172`).
         b.trainer("dig-grunt", "TRAINER_TEAM_ROCKET_GRUNT_5", 600);
         b.text("tm28-dig", 900, Src::Guess);
@@ -1149,6 +1149,15 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         );
     } else {
         b.maps_group("forest-trainers", &["ViridianForest"], 3);
+    }
+    if p.route_style == "wr" {
+        // Camper Liam stands in the gym (`decompiled/data/maps/PewterCity_Gym/scripts.inc:38-41`); the
+        // WR run's Squirtle went from Lv8 to Lv11 on him before Brock (video fight analysis).
+        b.forced(
+            "pewter-gym-trainer",
+            &["PewterCity_Gym_EventScript_Liam"],
+            &[],
+        );
     }
     b.trainer_adv("brock", "TRAINER_LEADER_BROCK", 600, 1.4);
     b.split();

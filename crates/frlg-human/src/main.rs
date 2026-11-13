@@ -194,10 +194,18 @@ fn main() {
             let mut unfinished = 0;
             let (mut oak_sum, mut oak_n, mut wo) = (0u64, 0u64, 0u64);
             let mut fill: Vec<(f64, f64, u64)> = vec![];
+            let mut missing = [0u64; 152];
+            let mut gave_up = 0u64;
             for i in 0..r {
                 let mut pr = Probe::default();
                 let o = attempt(&ctx, seed, i, None, None, None, Some(&mut pr));
                 wo += o.whiteouts as u64;
+                if !pr.missing.is_empty() {
+                    gave_up += 1;
+                    for &d in &pr.missing {
+                        missing[d as usize] += 1;
+                    }
+                }
                 if pr.oak_count > 0 {
                     oak_sum += pr.oak_count as u64;
                     oak_n += 1;
@@ -234,6 +242,18 @@ fn main() {
                         f.0 / FPS / f.1.max(1e-9)
                     );
                 }
+            }
+            if gave_up > 0 {
+                let mut m: Vec<(u64, usize)> = (1..=151).map(|d| (missing[d], d)).collect();
+                m.sort_by(|a, b| b.cmp(a));
+                println!("fill gave up in {gave_up} attempts; most often missing (national no. x share):");
+                let line: Vec<String> = m
+                    .iter()
+                    .take(30)
+                    .filter(|x| x.0 * 5 >= gave_up)
+                    .map(|&(n, d)| format!("{d}:{:.0}%", n as f64 / gave_up as f64 * 100.0))
+                    .collect();
+                println!("  {}", line.join(" "));
             }
             runs.sort_by(|a, b| a.partial_cmp(b).unwrap());
             if runs.is_empty() {

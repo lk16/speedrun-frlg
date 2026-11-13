@@ -92,6 +92,13 @@ pub struct Probe {
     pub fill: Vec<(f64, f64, u64)>,
     /// Kanto species caught after each segment (filled when a probe is passed).
     pub caught_at: Vec<u32>,
+    /// The carry's level after each segment (filled when a probe is passed).
+    pub level_at: Vec<u32>,
+    /// Trainer fights of the attempt: (segment name, player actions, whether it was won). Only
+    /// recorded when a probe is passed.
+    pub fights: Vec<(String, u32, bool)>,
+    /// National numbers still missing when the fill gave up (an abandoned attempt).
+    pub missing: Vec<u32>,
 }
 
 pub struct Outcome {
@@ -158,6 +165,9 @@ struct State {
     hp_frac: f64,
     badges: u8,
     league_items: bool,
+    /// Record each trainer fight (see `Probe::fights`).
+    log_fights: bool,
+    fight_log: Vec<(String, u32, bool)>,
 }
 
 impl Ctx<'_> {
@@ -173,7 +183,10 @@ impl Ctx<'_> {
     /// Frames from the battle starting to the first action menu. Measured on libmgba with A
     /// mashed: 358 (`human-run/calibration.md`), times 1.25 for a human; the older guess was 220.
     fn enc_intro(&self) -> f64 {
-        if self.p.calib_enc {
+        if self.p.calib_wr {
+            // The libmgba floor 358 (`calibration.md`) x ~1.06, the WR-level human factor.
+            380.0
+        } else if self.p.calib_enc {
             450.0
         } else {
             ENC_INTRO as f64
@@ -182,7 +195,10 @@ impl Ctx<'_> {
 
     /// One ball thrown and its result back at the menu: 397-416 measured, x1.2.
     fn throw_cost(&self) -> f64 {
-        if self.p.calib_enc {
+        if self.p.calib_wr {
+            // Measured floor 397-416 per ball (`calibration.md`) x ~1.05.
+            425.0
+        } else if self.p.calib_enc {
             480.0
         } else {
             THROW as f64
@@ -192,7 +208,9 @@ impl Ctx<'_> {
     /// After the last shake: Gotcha text, dex page, nickname prompt. The measured throw-to-overworld
     /// total is 409-549, so what comes after the throw cycle is small.
     fn catch_end(&self) -> f64 {
-        let base = if self.p.calib_enc {
+        let base = if self.p.calib_wr {
+            130.0
+        } else if self.p.calib_enc {
             150.0
         } else {
             CATCH_END as f64 * self.p.text_factor
@@ -712,12 +730,19 @@ fn flee(ctx: &Ctx, st: &mut State, rng: &mut Rng) {
         return;
     }
     let p_ok = if st.carry < 15 { 0.2 } else { 1.0 };
+    // Measured 400-1025 per successful Run and 277-596 per failure (`calibration.md`); the WR-level
+    // factor (~1.06) over the floors, not the 1.25 of the default human.
+    let (ok_cost, fail_cost) = if ctx.p.calib_wr {
+        (430.0, 400.0)
+    } else {
+        (500.0, 470.0)
+    };
     loop {
         if rng.chance(p_ok) {
-            bump(st, 500.0);
+            bump(st, ok_cost);
             return;
         }
-        bump(st, 470.0);
+        bump(st, fail_cost);
     }
 }
 
@@ -1129,6 +1154,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
+        if a.trainer && st.log_fights {
+            st.fight_log.push((a.name.to_string(), out.turns, out.won));
+        }
         if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
             eprintln!(
                 "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {}",
@@ -1296,6 +1324,12 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
     if !safari {
         st.safari_open = false;
     } else {
+        if !st.safari_open && h.on_route {
+            // The route's own `safari-fee-and-hms` segment paid the gate.
+            st.safari_open = true;
+            st.safari_steps = 600;
+            st.safari_balls = 30;
+        }
         if !st.safari_open {
             if ctx.p.money_model {
                 // 500 at the gate (`decompiled/data/maps/FuchsiaCity_SafariZone_Entrance/scripts.inc`).
@@ -1314,7 +1348,9 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
             steps = steps.min(st.safari_steps);
         }
     }
-    let walk_tiles = if ctx.p.detour_map {
+    let walk_tiles = if h.on_route {
+        h.detour_tiles
+    } else if ctx.p.detour_map {
         ctx.dex
             .fly_tiles(&h.site, &h.area)
             .unwrap_or(h.detour_tiles)
@@ -1470,6 +1506,8 @@ pub fn attempt(
         hp_frac: 1.0,
         badges: 0,
         league_items: false,
+        log_fights: probe.is_some(),
+        fight_log: vec![],
         whiteouts: 0,
         game: GameRng::from_u32(0),
         slots: vec![],
@@ -1707,6 +1745,9 @@ pub fn attempt(
                     }
                 }
                 if st.caught.count() < 60 {
+                    if let Some(pr) = probe.as_deref_mut() {
+                        pr.missing = (1..=151).filter(|&d| !st.caught.has(d)).collect();
+                    }
                     st.abandoned = true;
                     break;
                 }
@@ -2097,10 +2138,15 @@ pub fn attempt(
             sc[i] = st.clock;
         }
         if let Some(pr) = probe.as_deref_mut() {
+            pr.fights.append(&mut st.fight_log);
             if pr.caught_at.len() <= i {
                 pr.caught_at.resize(i + 1, 0);
             }
             pr.caught_at[i] = st.caught.count();
+            if pr.level_at.len() <= i {
+                pr.level_at.resize(i + 1, 0);
+            }
+            pr.level_at[i] = st.carry;
         }
         if seg.split {
             if let Some(t) = target {
