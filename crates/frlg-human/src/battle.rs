@@ -1058,10 +1058,8 @@ fn ai_choose(
                 }
             }
             // AI_CBM_Roar: -10 when the target has no other mon alive.
-            Effect::Roar => {
-                if target_others == 0 {
-                    score[i] -= 10;
-                }
+            Effect::Roar if target_others == 0 => {
+                score[i] -= 10;
             }
             _ => {}
         }
