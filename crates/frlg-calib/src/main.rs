@@ -88,8 +88,74 @@ fn trainer(state: &std::path::Path) {
     }
 }
 
+/// The same trainer fight replayed `trials` times from `state`, idling `k` frames first so
+/// each trial draws from a different point of the RNG stream, with A mashed throughout:
+/// the player always uses move slot 0. One JSON line per trial: outcome
+/// (`gBattleOutcome`), player turns (visits to `HandleTurnActionSelectionState`), and the
+/// player's and each enemy's `gBattleMons` entry as first seen at an action menu — what
+/// `frlg-human engine-check` needs to replay the same fight in the engine.
+fn fights(state: &std::path::Path, trials: u32) {
+    let rom = default_rom_path().expect("rom");
+    let mut emu = Emu::new(&rom).expect("emu");
+    boot_with_default_bios(&mut emu).expect("bios");
+    let sym_path = default_sym_path().expect("sym");
+    let obs = Observer::new(SymbolTable::load(&sym_path).unwrap()).expect("observer");
+    let mon_json = |m: &frlg_route::observe::BattleMon| {
+        format!(
+            "{{\"species\":{},\"level\":{},\"hp\":{},\"max_hp\":{},\"moves\":{:?},\"stats\":{:?}}}",
+            m.species, m.level, m.hp, m.max_hp, m.moves, m.stats
+        )
+    };
+    for k in 0..trials {
+        emu.load_state_file(state).expect("state");
+        for _ in 0..k {
+            emu.step(0);
+        }
+        // Into the battle (the state may stand in front of the trainer or in its text).
+        let mut n = 0u32;
+        while !obs.in_battle(&mut emu) && n < 6000 {
+            emu.step(if n.is_multiple_of(2) { keys::A } else { 0 });
+            n += 1;
+        }
+        let mut turns = 0u32;
+        let mut was = false;
+        let mut player: Option<String> = None;
+        let mut enemies: Vec<(u16, String)> = vec![];
+        let mut m = 0u32;
+        while obs.in_battle(&mut emu) && m < 40000 {
+            let menu = obs.battle_choosing_actions(&mut emu);
+            if menu && !was {
+                turns += 1;
+                let me = obs.battle_mon(&mut emu, 0);
+                let foe = obs.battle_mon(&mut emu, 1);
+                if player.is_none() {
+                    player = Some(mon_json(&me));
+                }
+                if enemies.last().map(|e| e.0) != Some(foe.species) {
+                    enemies.push((foe.species, mon_json(&foe)));
+                }
+            }
+            was = menu;
+            emu.step(if m.is_multiple_of(2) { keys::A } else { 0 });
+            m += 1;
+        }
+        let outcome = obs.battle_outcome(&mut emu);
+        let foes: Vec<&str> = enemies.iter().map(|e| e.1.as_str()).collect();
+        println!(
+            "{{\"k\":{k},\"outcome\":{outcome},\"turns\":{turns},\"frames\":{m},\"player\":{},\"enemies\":[{}]}}",
+            player.unwrap_or_else(|| "null".into()),
+            foes.join(",")
+        );
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--fights") {
+        let trials = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(50);
+        fights(&PathBuf::from(&args[2]), trials);
+        return;
+    }
     if args.get(1).map(String::as_str) == Some("--trainer") {
         trainer(&PathBuf::from(&args[2]));
         return;
