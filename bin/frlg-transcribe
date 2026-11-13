@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# frlg-transcribe VIDEO [OUTBASE] -- speech-to-text for a downloaded VOD, in the sandbox.
+#
+# Extracts the audio with ffmpeg (16 kHz mono wav in scratch) and runs whisper.cpp from
+# the deps tree, writing OUTBASE.txt and OUTBASE.srt (default: the video's basename in
+# the current directory). The .srt timestamps line up with the video times the
+# video-analysis contact sheets burn in, so transcript quotes can be cross-referenced.
+#
+# Needs $FRLG_DEPS/whisper (built by tools/host-prep.sh's `whisper` step). If it is
+# missing, the deps tree predates that step: re-run tools/host-prep.sh on the host and
+# start a fresh sandbox. This reports that plainly rather than degrading.
+set -euo pipefail
+
+VIDEO=${1:?usage: frlg-transcribe VIDEO [OUTBASE]}
+OUT=${2:-$(basename "${VIDEO%.*}")}
+DEPS=${FRLG_DEPS:?FRLG_DEPS is not set; is this the frlg sandbox?}
+CLI="$DEPS/whisper/bin/whisper-cli"
+MODEL=$(ls "$DEPS/whisper/models/"ggml-*.bin 2>/dev/null | head -1 || true)
+
+[ -x "$CLI" ] || { echo "frlg-transcribe: $CLI is missing -- the deps tree predates the" >&2
+  echo "whisper step. On the host: tools/host-prep.sh, then start a fresh sandbox." >&2; exit 1; }
+[ -n "$MODEL" ] || { echo "frlg-transcribe: no ggml model under $DEPS/whisper/models" >&2; exit 1; }
+[ -f "$VIDEO" ] || { echo "frlg-transcribe: no such file: $VIDEO" >&2; exit 1; }
+command -v ffmpeg >/dev/null || { echo "frlg-transcribe: ffmpeg is not in this image" >&2; exit 1; }
+
+SCRATCH="${FRLG_ARTIFACTS:-/tmp}/scratch"
+mkdir -p "$SCRATCH"
+WAV="$SCRATCH/transcribe-$$.wav"
+trap 'rm -f "$WAV"' EXIT
+
+echo "extracting audio..." >&2
+ffmpeg -v error -y -i "$VIDEO" -vn -ac 1 -ar 16000 -c:a pcm_s16le "$WAV"
+echo "transcribing with $(basename "$MODEL") on $(nproc) threads..." >&2
+"$CLI" -m "$MODEL" -f "$WAV" -t "$(nproc)" -l en \
+  --output-txt --output-srt --output-file "$OUT" --no-prints
+echo "wrote $OUT.txt and $OUT.srt" >&2

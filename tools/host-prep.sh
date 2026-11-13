@@ -45,6 +45,12 @@ RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-stable}" # resolved version is recorded in MAN
 # run on its own code has to be pulled in here or it is simply absent in there.
 RUST_COMPONENTS=(clippy rustfmt)
 SCCACHE_VER="${SCCACHE_VER:-0.17.0}"      # musl release tarball, so it runs on any image
+# Speech-to-text for downloaded VODs (bin/frlg-transcribe in the sandbox). whisper.cpp is
+# a plain cmake build with no Python; the GGML model is fetched once and lives in deps.
+# small.en is the speed/quality sweet spot for English stream audio (~8h VOD in ~30 min
+# on 16 threads); override WHISPER_MODEL=medium.en for harder audio at ~3x the time.
+WHISPER_VER="${WHISPER_VER:-1.7.5}"
+WHISPER_MODEL="${WHISPER_MODEL:-small.en}"
 
 # The sandbox image. sbx's stock claude image is Ubuntu 26.04 with no compiler at all --
 # not gcc, not cpp, not a native as/ld, not even crt1.o -- and there is no network in the
@@ -326,6 +332,34 @@ do_sccache() {
   manifest sccache "$SCCACHE_VER"
 }
 
+do_whisper() {
+  # Built on the host like the rest of the deps tree, so the same glibc caveat applies
+  # (frlg-doctor smoke-runs it). Static ggml keeps the install to one binary + model.
+  rm -rf "$WORK/whisper" "$DEPS/whisper"
+  mkdir -p "$WORK/whisper" "$DEPS/whisper/bin" "$DEPS/whisper/models"
+  local url="https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v$WHISPER_VER.tar.gz"
+  curl -fsSL "$url" | tar -C "$WORK/whisper" --strip-components=1 -xzf - \
+    || die "could not download whisper.cpp v$WHISPER_VER from $url"
+  cmake -S "$WORK/whisper" -B "$WORK/whisper/build" -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_EXAMPLES=ON >/dev/null \
+    || die "whisper.cpp cmake configure failed"
+  cmake --build "$WORK/whisper/build" -j"$(nproc)" --target whisper-cli >/dev/null \
+    || die "whisper.cpp build failed"
+  local cli
+  cli=$(find "$WORK/whisper/build" -name whisper-cli -type f | head -1)
+  [ -n "$cli" ] || die "whisper-cli not found in the build tree"
+  install -m755 "$cli" "$DEPS/whisper/bin/whisper-cli"
+  local murl="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$WHISPER_MODEL.bin"
+  curl -fsSL -o "$DEPS/whisper/models/ggml-$WHISPER_MODEL.bin" "$murl" \
+    || die "could not download the $WHISPER_MODEL model from $murl"
+  [ "$(stat -c%s "$DEPS/whisper/models/ggml-$WHISPER_MODEL.bin")" -gt 100000000 ] \
+    || die "ggml-$WHISPER_MODEL.bin is implausibly small; the download was mangled"
+  "$DEPS/whisper/bin/whisper-cli" --help >/dev/null 2>&1 \
+    || die "$DEPS/whisper/bin/whisper-cli does not run on this host"
+  rm -rf "$WORK/whisper"
+  manifest whisper "whisper.cpp v$WHISPER_VER + ggml-$WHISPER_MODEL"
+}
+
 do_vendor() {
   # The crate set is committed in tools/vendor-manifest/Cargo.toml. Adding a dependency
   # is a host-side act: edit that file, re-run this script, start a fresh sandbox.
@@ -423,6 +457,7 @@ step agbcc     "$AGBCC_REF"      do_agbcc
 step mgba      "$MGBA_REF"       do_mgba
 step rust      "$RUST_TOOLCHAIN+$(printf '%s,' "${RUST_COMPONENTS[@]}")" do_rust
 step sccache   "$SCCACHE_VER"    do_sccache
+step whisper   "v$WHISPER_VER+$WHISPER_MODEL" do_whisper
 step vendor    "$(sha1sum "$REPO/tools/vendor-manifest/Cargo.toml" 2>/dev/null | cut -c1-12)" do_vendor
 step bizhawk   "$BIZHAWK_VER"    do_bizhawk
 step artifacts "$ARTIFACTS_DEFAULT" do_artifacts
