@@ -98,6 +98,9 @@ impl Plan {
                         torrent: t.torrent,
                         entry: t.entry,
                         power: t.power,
+                        potions: t.potions,
+                        risk_power: t.risk_power,
+                        risk_foe: t.risk_foe,
                     },
                 )
             })
@@ -131,6 +134,7 @@ impl Plan {
                 })
                 .collect(),
             power_early_end: seg_index(&self.segs, &self.params.power_early_until),
+            risk_end: seg_index(&self.segs, &self.params.risk_until),
             torrent_end: seg_index(&self.segs, &self.params.torrent_until),
             no_salvage_end: seg_index(&self.segs, &self.params.no_salvage_until),
             salvage: self
@@ -682,6 +686,47 @@ mod tests {
         let off =
             run(",\"slow\":[{\"seg\":\"to-lab\",\"p\":1.0,\"mean_s\":60}],\"slow_scale\":0.0");
         assert_eq!(off.wall_frames, base.wall_frames);
+    }
+
+    #[test]
+    fn risk_lane_deaths_respond_to_the_potion_budget_and_the_foes() {
+        let dex = DEX.get_or_init(Dex::load);
+        // Attempts that get through Brock out of 600 (a trainer death ends the attempt without an abandon row).
+        let deaths = |extra: &str| {
+            let text = PLAN.replace(
+                "\"name\":\"t\"",
+                &format!(
+                    "\"name\":\"t\",\"route_style\":\"wr\",\"audited_forced\":true,\"calib_wr\":true,\
+                     \"version\":\"LG\",\"battle_sim\":true,\"no_salvage_until\":\"rival-ss-anne\",\
+                     \"torrent_until\":\"hall-of-fame-1\",{extra}"
+                ),
+            );
+            let plan = Plan::load(dex, &text).unwrap();
+            let ctx = plan.ctx();
+            let at = plan.segs.iter().position(|s| s.name == "brock").unwrap();
+            let mut rec = vec![SegStats::default(); plan.segs.len()];
+            for i in 0..600 {
+                attempt(&ctx, 3, i, Some(rung_frames(8)), Some(&mut rec), None, None);
+            }
+            rec[at].n
+        };
+        // Lane off: the timing lane's fights at the fitted power almost never lose at Brock.
+        let off = deaths("\"mistake_rate\":0.0");
+        assert!(off > 100, "attempts reach Brock: {off}");
+        let on = |pots: u32, foe: f64| {
+            deaths(&format!(
+                "\"risk_until\":\"brock\",\"risk_foe\":{foe},\"fight_tactics\":{{\"brock\":{{\"entry\":true,\"potions\":{pots}}}}}"
+            ))
+        };
+        let (none, many) = (on(0, 1.0), on(9, 1.0));
+        assert!(none < many, "survivors: no potions {none}, nine {many}");
+        assert!(
+            none < off,
+            "the honest lane kills more than the stand-in: {none} vs {off}"
+        );
+        assert!(on(0, 1.5) < none, "stronger foes kill more");
+        // Same seed, same deaths.
+        assert_eq!(none, on(0, 1.0));
     }
 
     #[test]

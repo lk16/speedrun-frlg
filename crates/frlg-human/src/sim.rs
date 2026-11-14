@@ -46,6 +46,9 @@ pub struct TacCfg {
     pub torrent: bool,
     pub entry: bool,
     pub power: f64,
+    pub potions: i32,
+    pub risk_power: f64,
+    pub risk_foe: f64,
 }
 
 impl Default for TacCfg {
@@ -57,6 +60,9 @@ impl Default for TacCfg {
             torrent: false,
             entry: false,
             power: 1.0,
+            potions: -1,
+            risk_power: 0.0,
+            risk_foe: 0.0,
         }
     }
 }
@@ -86,6 +92,8 @@ pub struct Ctx<'a> {
     /// `Params::no_salvage_until`).
     pub torrent_end: Option<usize>,
     pub power_early_end: Option<usize>,
+    /// Last segment of the risk lane (`Params::risk_until`).
+    pub risk_end: Option<usize>,
     pub no_salvage_end: Option<usize>,
     /// Salvage check aggressiveness per segment (negative = none), `Params::salvage_at`.
     pub salvage: Vec<f64>,
@@ -230,6 +238,10 @@ struct State {
     /// Mystic Water bought and held (`Params::mystic_after`).
     mystic: bool,
     hp_frac: f64,
+    /// Risk lane (`Params::risk_until`): the honest copy's HP fraction, and the timing lane's HP at
+    /// the end of the last fight (a rise since then, a heal or a rest, is applied to the risk lane).
+    risk_hp: f64,
+    risk_real: f64,
     badges: u8,
     league_items: bool,
     /// Heal items left for the League round in progress (bought at its first fight).
@@ -1483,6 +1495,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             setup_min: ctx.p.setup_min_turns,
             menu_slip: ctx.p.menu_slip,
         };
+        // Risk lane: the honest copy of this fight decides whether the attempt survives it.
+        let risk_lost = !mewtwo_now
+            && !a.league
+            && ctx.risk_end.is_some_and(|e| st.seg_i <= e)
+            && risk_fight(ctx, st, rng, a, &tac, &cfg, in_torrent);
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
@@ -1529,7 +1546,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 l.3 = (st.clock - t0) as f64;
             }
         }
-        if out.won {
+        if out.won && !risk_lost {
             if mewtwo_now {
                 st.mewtwo_hp = out.hp_frac;
             } else {
@@ -1580,11 +1597,12 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             if a.trainer {
                 bump(st, ctx.outro());
             }
+            st.risk_real = st.hp_frac;
             return true;
         }
         // A wild battle the engine ended without a win and without fainting is a flee
         // (a wild Abra's Teleport): carry on.
-        if a.wild && out.hp_frac > 0.0 {
+        if a.wild && out.hp_frac > 0.0 && !risk_lost {
             st.hp_frac = out.hp_frac;
             st.carry_status = out.end_status;
             cure_status(ctx, st);
@@ -1635,6 +1653,106 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             return false;
         }
     }
+}
+
+/// The risk lane of one fight (`Params::risk_until`): the same fight again with the formula's own
+/// damage (`risk_power`), foes scaled by the noise knob `risk_foe`, from the lane's own HP and with a
+/// finite potion budget. Returns true when the carry faints in it (or the fight's `risk_noise` draw
+/// hits). The lane's HP follows the timing lane's heals and rests (`risk_real`).
+fn risk_fight(
+    ctx: &Ctx,
+    st: &mut State,
+    rng: &mut Rng,
+    a: &BattleArgs,
+    tac: &crate::battle::Tactics,
+    cfg: &TacCfg,
+    in_torrent: bool,
+) -> bool {
+    use crate::battle::{entry_floor, fight, heal_amount, make_mon};
+    let dex = ctx.dex;
+    let mut me = make_mon(
+        dex,
+        carry_species(ctx, st.carry),
+        st.carry,
+        st.ivs,
+        st.evs,
+        st.nature,
+        st.badges,
+    );
+    me.moves = st.slots.clone();
+    me.pp = st.slot_pp.clone();
+    me.status = st.carry_status;
+    if st.mystic {
+        me.boost = Some((11, 10));
+    } else if ctx.p.black_glasses && st.glasses {
+        me.boost = Some((17, 10));
+    }
+    let rp = if cfg.risk_power > 0.0 {
+        cfg.risk_power
+    } else {
+        ctx.p.risk_power
+    };
+    if rp != 1.0 {
+        me.stat[0] = (me.stat[0] as f64 * rp) as i32;
+        me.stat[3] = (me.stat[3] as f64 * rp) as i32;
+    }
+    let rf = if cfg.risk_foe > 0.0 {
+        cfg.risk_foe
+    } else {
+        ctx.p.risk_foe
+    };
+    let mut foes: Vec<crate::battle::Mon> = a.foes.to_vec();
+    if rf != 1.0 {
+        for f in &mut foes {
+            f.stat[0] = (f.stat[0] as f64 * rf) as i32;
+            f.stat[3] = (f.stat[3] as f64 * rf) as i32;
+        }
+    }
+    // Lane sync: what the timing lane gained since the last fight (a heal, a rest) the lane gains
+    // too; what it lost between fights (field poison) it loses too.
+    st.risk_hp = if st.hp_frac >= 0.999 {
+        1.0
+    } else {
+        (st.risk_hp + st.hp_frac - st.risk_real).clamp(0.0, 1.0)
+    };
+    let mut potions = if cfg.potions >= 0 {
+        cfg.potions as u32
+    } else {
+        ctx.p.risk_potions
+    };
+    // The entry heal of the Torrent phase, as in the timing lane but paid from the potion budget.
+    if (cfg.entry || in_torrent) && potions > 0 {
+        let hits = if cfg.entry { 1.0 } else { ctx.p.torrent_hits };
+        let lo = (entry_floor(dex, &me, &foes) as f64 * hits).ceil() as i32 + 1;
+        let cur = (me.max_hp as f64 * st.risk_hp).round() as i32;
+        if cur < lo {
+            let per = heal_amount(me.level, st.league_items);
+            let uses = (((lo - cur + per - 1) / per).max(1) as u32).min(potions);
+            potions -= uses;
+            st.risk_hp = ((cur + uses as i32 * per) as f64 / me.max_hp as f64).min(1.0);
+        }
+    }
+    me.hp = ((me.max_hp as f64 * st.risk_hp).round() as i32).clamp(1, me.max_hp);
+    let mut t2 = tac.clone();
+    t2.heal_stock = potions;
+    t2.rollouts = 0;
+    let mut g = crate::rng::GameRng::from_u32(rng.next_u64() as u32);
+    let out = fight(dex, &mut me, &t2, &foes, a.ai, a.heals, a.wild, &mut g);
+    let fled = a.wild && !out.won && out.hp_frac > 0.0;
+    let mut lost = !out.won && !fled;
+    if std::env::var_os("FRLG_RISK_TRACE").is_some() {
+        eprintln!(
+            "risk {} L{} hp_in {:.2} pots {} -> won {} turns {} hp_out {:.2}",
+            a.name, st.carry, st.risk_hp, potions, !lost, out.turns, out.hp_frac
+        );
+    }
+    if !lost {
+        st.risk_hp = out.hp_frac.max(0.0);
+        if let Some(&p) = ctx.p.risk_noise.get(a.name) {
+            lost = rng.chance(p);
+        }
+    }
+    lost
 }
 
 /// Field poison (`field_control_avatar.c:710-733`, `field_poison.c:92-119`: 1 HP per 5 steps, a
@@ -2188,6 +2306,8 @@ pub fn attempt(
         glasses: false,
         mystic: false,
         hp_frac: 1.0,
+        risk_hp: 1.0,
+        risk_real: 1.0,
         badges: 0,
         league_items: false,
         heal_items: 0,

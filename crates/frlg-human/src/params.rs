@@ -262,6 +262,14 @@ pub struct FightTactic {
     /// over 16 fights, a fight whose action count it misses can be nudged (Misty: 4.4 actions against
     /// the video's 6-8).
     pub power: f64,
+    /// Heal items (potions) the risk lane may spend in this fight, entry heal included (-1 = the
+    /// global `risk_potions`; 0 = "never heal in Brock").
+    pub potions: i32,
+    /// This fight's risk-lane `risk_power` / `risk_foe` (0 = the global value). The rivals' and
+    /// leaders' fights carry the human's own skill (switching, sacrifices, X items) that the timing
+    /// lane's `carry_power` stands in for; their risk lane runs at that same stand-in.
+    pub risk_power: f64,
+    pub risk_foe: f64,
 }
 
 impl Default for FightTactic {
@@ -273,6 +281,9 @@ impl Default for FightTactic {
             torrent: false,
             entry: false,
             power: 1.0,
+            potions: -1,
+            risk_power: 0.0,
+            risk_foe: 0.0,
         }
     }
 }
@@ -726,6 +737,23 @@ pub struct Params {
     pub carry_power_early: f64,
     pub power_early_until: String,
     pub extra_fights: Vec<ExtraFight>,
+    /// Risk lane (plan 930; empty = off): in every fight up to and including this segment a second,
+    /// *honest* copy of the fight is played from the lane's own HP (the real HP plus what the
+    /// calibrated `carry_power` hid), and a loss there is an unsalvaged death. The timing lane is
+    /// untouched. Replaces the flat `fatal` of the segments it covers (remove those entries).
+    pub risk_until: String,
+    /// The carry's Atk/SpA multiplier in the risk lane (1.0 = the formula's own damage; the timing
+    /// lane's `carry_power` 2.0 is a fitted stand-in for the human's play, not a damage claim).
+    pub risk_power: f64,
+    /// The foes' Atk/SpA multiplier in the risk lane: the one fitted noise knob (crits beyond the
+    /// engine's, Rock Tomb rolls, speed ties, misclicks, wild Pikachu: everything the runner's
+    /// 40/64/71% pass rates contain that a single fight sim does not).
+    pub risk_foe: f64,
+    /// Potions per fight (entry heal + in-fight) in the risk lane unless the fight's tactic says
+    /// otherwise (`FightTactic::potions`).
+    pub risk_potions: u32,
+    /// Extra per-fight loss probability in the risk lane, by segment name (documented guesses).
+    pub risk_noise: std::collections::HashMap<String, f64>,
 }
 
 impl Default for Params {
@@ -874,6 +902,11 @@ impl Default for Params {
             carry_power_early: 1.0,
             power_early_until: String::new(),
             extra_fights: vec![],
+            risk_until: String::new(),
+            risk_power: 1.0,
+            risk_foe: 1.0,
+            risk_potions: 3,
+            risk_noise: Default::default(),
         }
     }
 }

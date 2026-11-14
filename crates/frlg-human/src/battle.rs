@@ -765,6 +765,7 @@ fn apply_stat_change(m: &mut Mon, stat: u8, delta: i8, mist: bool) -> bool {
 }
 
 /// What the player brings to one fight.
+#[derive(Clone)]
 pub struct Tactics {
     /// X items used on the opening turns while above half HP, in order
     /// (+1 stage each, Dire Hit = Focus Energy; `item_effects.h:235-260`).
