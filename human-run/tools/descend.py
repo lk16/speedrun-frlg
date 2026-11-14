@@ -41,6 +41,8 @@ SET = opt('--set', 'old')
 KINDS = opt('--kinds', '').split(',') if '--kinds' in args else None
 SKIP_FIRST = opt('--skip', 0)
 FIXED_RUNG = opt('--rung', '')
+R1 = opt('--r1', 0)  # fixed start R for screening (0 = grow from 10000)
+R2 = opt('--r2', 0)  # fixed R for the seed-2 confirmation
 os.environ['FRLG_POINTER'] = POINTER
 
 
@@ -385,9 +387,13 @@ def candidates(p):
     return out
 
 
-def try_it(parent, label, patch, name, seed):
+def try_it(parent, label, patch, name, seed, r0=0):
+    if r0:
+        os.environ['FRLG_R0'] = str(r0)
+    else:
+        os.environ.pop('FRLG_R0', None)
     r = subprocess.run([sys.executable, os.path.join(HERE, 'try.py'), os.path.join(PLANS, parent + '.md'), label,
-                        json.dumps(patch), '--name', name, '--cap', str(cap), '--seed', str(seed)]
+                        json.dumps(patch), '--name', name, '--cap', str(max(cap, r0)), '--seed', str(seed)]
                        + (['--rung', FIXED_RUNG] if FIXED_RUNG else []),
                        capture_output=True, text=True)
     lines = [l for l in r.stdout.strip().splitlines() if l.startswith(('ACCEPT', 'refuted'))]
@@ -429,11 +435,11 @@ for ps in range(max_passes):
         if all(p.get(k) == v for k, v in patch.items()):
             continue
         name = f'd{next_number()}-{ci}'
-        v1 = try_it(cur, f'[{kind}] {label}', patch, name, 1)
+        v1 = try_it(cur, f'[{kind}] {label}', patch, name, 1, R1)
         print(f'  {label}: {v1}', flush=True)
         if not v1.startswith('ACCEPT'):
             continue
-        v2 = try_it(cur, f'[{kind}] {label} (confirm seed 2)', patch, name + 's2', 2)
+        v2 = try_it(cur, f'[{kind}] {label} (confirm seed 2)', patch, name + 's2', 2, R2)
         print(f'    confirm: {v2}', flush=True)
         if not v2.startswith('ACCEPT'):
             continue

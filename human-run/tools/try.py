@@ -53,7 +53,7 @@ open(cpath, 'w').write('```json\n' + json.dumps(child, indent=1) + '\n```\n')
 if fixed:
     # Objective fixed at one rung: no ladder, compare the two plans there (finishes >= 50 on both sides).
     rec = dict(plan=child['name'], parent=params.get('name'), idea=idea, diff=patch, seed=seed)
-    r = 10000
+    r = int(os.environ.get('FRLG_R0', '10000'))
     while True:
         out = run('compare', cpath, parent, '--rung', fixed, '--R', str(r), '--seed', str(seed))
         j = json.loads([l for l in out.splitlines() if l.startswith('JSON ')][0][5:])
