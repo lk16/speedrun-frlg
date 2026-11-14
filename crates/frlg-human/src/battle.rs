@@ -371,6 +371,9 @@ pub struct Mon {
     pub last_move: Option<usize>,
     /// Holds a Sitrus Berry (`HOLD_EFFECT_RESTORE_HP`, 30 HP at <= 1/2, `battle_util.c:2562`).
     pub sitrus: bool,
+    /// Held type booster (`sHoldEffectToType`, `decompiled/src/pokemon.c:1461-1480`): moves of this type
+    /// use `stat * (100 + pct) / 100` (Black Glasses = Dark, +10: `items.json` `holdEffectParam`).
+    pub boost: Option<(u8, i32)>,
     /// Player badge boosts ×100: Atk, Def, Spe, SpA, SpD (enemy: all 100).
     pub badge: [i32; 5],
     /// Physical damage taken this turn (Counter).
@@ -462,6 +465,7 @@ pub fn make_mon(
         lock_move: None,
         last_move: None,
         sitrus: false,
+        boost: None,
         badge: [bb(0), bb(4), bb(2), bb(6), bb(6)],
         counter_dmg: 0,
         yawned: false,
@@ -593,6 +597,12 @@ fn calc_damage(
     };
     let mut a = a_raw * a_badge / 100;
     let mut d = d_raw * d_badge / 100;
+    // Held type booster, after the badge and before the ability halvings (`CalculateBaseDamage`).
+    if let Some((t, pct)) = att.boost {
+        if t == m.mtype {
+            a = a * (100 + pct) / 100;
+        }
+    }
     // Thick Fat halves Fire/Ice special attack (`CalculateBaseDamage`).
     if def.ability == Ability::ThickFat && (m.mtype == 10 || m.mtype == 15) {
         a /= 2;
@@ -817,6 +827,10 @@ pub enum XItem {
     Speed,
     Special,
     DireHit,
+    /// X Accuracy: +1 accuracy stage (`item_effects.h`).
+    Accuracy,
+    /// Guard Spec: Mist for five turns on the player's side (`ITEM_GUARD_SPEC`, `item_effects.h`).
+    GuardSpec,
 }
 
 /// What happened in a fight.
@@ -2974,6 +2988,10 @@ fn run(
                                 apply_stat_change(me, 3, 1, false);
                             }
                             XItem::DireHit => me.focus_energy = true,
+                            XItem::Accuracy => {
+                                apply_stat_change(me, 5, 1, false);
+                            }
+                            XItem::GuardSpec => my_side.mist = 5,
                         }
                     }
                     Action::Heal => {
@@ -3010,6 +3028,10 @@ fn run(
                                         apply_stat_change(me, 3, 1, false);
                                     }
                                     XItem::DireHit => me.focus_energy = true,
+                                    XItem::Accuracy => {
+                                        apply_stat_change(me, 5, 1, false);
+                                    }
+                                    XItem::GuardSpec => my_side.mist = 5,
                                 }
                             }
                             None => {

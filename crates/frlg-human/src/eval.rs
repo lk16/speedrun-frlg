@@ -80,6 +80,8 @@ impl Plan {
             "speed" => crate::battle::XItem::Speed,
             "special" => crate::battle::XItem::Special,
             "dire" => crate::battle::XItem::DireHit,
+            "accuracy" => crate::battle::XItem::Accuracy,
+            "guard" => crate::battle::XItem::GuardSpec,
             other => panic!("unknown x item {other}"),
         };
         let tactics = self

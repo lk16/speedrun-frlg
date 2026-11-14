@@ -218,6 +218,9 @@ pub struct XBuy {
     pub speed: u32,
     pub special: u32,
     pub dire: u32,
+    /// X Accuracy (950, `items.json`; the WR bag holds 2-3) and Guard Spec (700; the WR bag holds 2).
+    pub accuracy: u32,
+    pub guard: u32,
     /// Revives (1500 each, `items.json`): bring sacrificed teammates back between
     /// League fights.
     pub revives: u32,
@@ -471,6 +474,36 @@ pub struct Params {
     /// (`human-run/video-analysis/data/calib/v4-e4r2.md`): each level-up costs `level_up()` frames and
     /// its stats follow the level.
     pub mewtwo_levels: bool,
+    /// Mechanics model (journal 2026-11-16): `MonGainEVs` stops at 510 total EVs (255 per stat);
+    /// `decompiled/src/pokemon.c:5512-5595`. Off = per-stat cap only (the old model).
+    pub ev_cap: bool,
+    /// Mechanics model: a mon's stats change only when `CalculateMonStats` runs (level-up, Rare Candy,
+    /// evolution), not when `MonGainEVs` writes the EV bytes (`pokemon.c:5591-5593` only `SetMonData`s the
+    /// EV; stats are cached). The carry and Mewtwo fight with the EVs they had at their last level-up.
+    pub ev_lag: bool,
+    /// Mechanics model: Mewtwo gains EVs from every R2 foe it defeats (`MonGainEVs`, the foe's `evYield_*`).
+    pub mewtwo_evs: bool,
+    /// Mechanics model: the carry holds Black Glasses from the equip swap on (`black-glasses-swap`):
+    /// Dark moves (Bite) use `spAttack * 110 / 100` (`HOLD_EFFECT_DARK_POWER`, `pokemon.c:1468`, param 10
+    /// in `items.json`).
+    pub black_glasses: bool,
+    /// Mechanics model: in League fights the human plays the carry inside Torrent (<= 1/3 HP: Water moves
+    /// x1.5, `CalculateBaseDamage`) like the WR runner (Lorelei/Bruno/Agatha at 28-54 of 153-162 HP in
+    /// `v3-e4r1.md`): no pre-fight heal while the carry sits in the window the next foes' best hit allows,
+    /// and the in-fight Torrent tactic (Withdraw, stall turns) is on.
+    pub league_torrent: bool,
+    /// Mechanics model: after this segment the human buys a Mystic Water at the Celadon Game Corner prize
+    /// counter (1,000 coins, `src/strings.c:537`; 50 coins cost 1,000 yen, `strings.c:425`, so
+    /// `mystic_cost` = 20,000 yen) and the carry holds it instead of the Black Glasses: Water moves use
+    /// `spAttack * 110 / 100` (`HOLD_EFFECT_WATER_POWER`, `pokemon.c:1471`). Empty = never bought.
+    pub mystic_after: String,
+    pub mystic_cost: u32,
+    /// Frames of the prize-counter trip (walk, exchange text, equip).
+    pub mystic_frames: u32,
+    /// Mewtwo's moves that a TM teach never replaces (default Psychic and Recover, the old model).
+    /// The WR's Mewtwo runs Psychic / Fire Blast / Safeguard / Earthquake (`v4-e4r2.md`), i.e. it keeps
+    /// Safeguard and loses Recover.
+    pub mewtwo_keep: Vec<String>,
     /// Which rod the fish hunts use: `mixed` (the old model: all ten slots), `old`, `good` or
     /// `super`. A real rod costs a trip: Old Rod Vermilion, Good Rod Fuchsia, Super Rod Route 12
     /// south of the Snorlax (`decompiled/data/maps/*House*/scripts.inc`).
@@ -753,6 +786,15 @@ impl Default for Params {
             mewtwo_hp_bar: 0.0,
             mewtwo_heal_extra: 0.0,
             mewtwo_levels: false,
+            ev_cap: false,
+            ev_lag: false,
+            mewtwo_evs: false,
+            black_glasses: false,
+            league_torrent: false,
+            mewtwo_keep: vec![],
+            mystic_after: String::new(),
+            mystic_cost: 20_000,
+            mystic_frames: 1800,
             rod: "mixed".into(),
             repel_on: vec![],
             ball_batch: 10,
