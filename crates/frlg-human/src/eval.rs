@@ -48,15 +48,7 @@ pub struct Plan {
 impl Plan {
     pub fn load(dex: &'static Dex, text: &str) -> Result<Plan, String> {
         let params = Params::from_plan_text(text)?;
-        let segs = build(dex, &params);
-        for h in params.hunts.iter() {
-            if params.skip_powerplant && h.after == "powerplant-out" {
-                continue;
-            }
-            if !segs.iter().any(|s| s.name == h.after) {
-                return Err(format!("hunt anchor {} matches no segment", h.after));
-            }
-        }
+        let segs = build(dex, &params)?;
         Ok(Plan { dex, params, segs })
     }
 
@@ -435,6 +427,27 @@ mod tests {
         assert_eq!(a.wall_frames, b.wall_frames);
         let c = totals(&evaluate_blocks(&ctx, 8, 400, rung_frames(8)), 400);
         assert_ne!(a.wall_frames, c.wall_frames);
+    }
+
+    #[test]
+    fn anchors_on_skipped_or_absent_segments_are_handled_not_panics() {
+        let dex = DEX.get_or_init(Dex::load);
+        let with = |extra: &str| PLAN.replace("\"name\":\"t\"", &format!("\"name\":\"t\",{extra}"));
+        // An elixir anchored at a skipped group resolves to the segment before it.
+        let ok = with("\"skip_groups\":[\"silph-grunts\"],\"elixirs\":[{\"after\":\"silph-grunts\",\"kind\":\"elixir\",\"frames\":400}]");
+        let plan = Plan::load(dex, &ok).unwrap();
+        assert!(plan
+            .segs
+            .iter()
+            .any(|s| s.name == "elixir-elixir@silph-grunts"));
+        // A teach for Mewtwo is dropped when the plan does not catch Mewtwo.
+        let tm = "\"tms\":[{\"after\":\"mewtwo\",\"mv\":\"MOVE_EARTHQUAKE\",\"frames\":600,\"cost\":0,\"mewtwo\":true}]";
+        let plan = Plan::load(dex, &with(&format!("\"mewtwo\":false,{tm}"))).unwrap();
+        assert!(!plan.segs.iter().any(|s| s.name.starts_with("tm-")));
+        // A teach anchored at TM28 with no_dig has no segment to follow: a clean error.
+        let dig = "\"no_dig\":true,\"tms\":[{\"after\":\"tm28-dig\",\"mv\":\"MOVE_DIG\",\"frames\":800,\"cost\":0}]";
+        let e = Plan::load(dex, &with(dig)).err().expect("must be rejected");
+        assert!(e.contains("tm28-dig") && e.contains("no_dig"), "{e}");
     }
 
     #[test]

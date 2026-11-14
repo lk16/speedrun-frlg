@@ -294,7 +294,13 @@ def candidates(p):
                 continue
             q = copy.deepcopy(tms)
             q.append({'after': after, 'mv': mv, 'frames': frames, 'cost': cost, 'mewtwo': mt})
-            out.append(('tm', f"teach {mv}@{after}{' (mewtwo)' if mt else ''}", {'tms': q}))
+            patch = {'tms': q}
+            label = f"teach {mv}@{after}{' (mewtwo)' if mt else ''}"
+            if after == 'tm28-dig' and p.get('no_dig'):
+                # The plan skips TM28 (no_dig); teaching it means fetching it too (rocket fight + text).
+                patch['no_dig'] = False
+                label += ' (+fetch TM28)'
+            out.append(('tm', label, patch))
         # Grinds: resize, drop, add at checkpoints.
         for i, g in enumerate(p.get('grinds', [])):
             for d in (-3, 3):

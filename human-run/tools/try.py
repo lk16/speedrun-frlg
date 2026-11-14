@@ -33,7 +33,21 @@ parent, idea = args[0], args[1]
 patch = json.loads(open(args[2][1:]).read() if args[2].startswith('@') else args[2])
 
 def run(*a):
-    return subprocess.check_output([BIN, *a], text=True)
+    # frlg-human exits 2 for an invalid plan (a candidate the route cannot express, e.g. a teach
+    # anchored at a segment the plan skips): log it as rejected instead of crashing the descent.
+    r = subprocess.run([BIN, *a], capture_output=True, text=True)
+    if r.returncode == 2:
+        msg = r.stderr.strip().splitlines()[-1] if r.stderr.strip() else 'invalid plan'
+        rec = dict(plan=child['name'], parent=params.get('name'), idea=idea, diff=patch, seed=seed,
+                   rung=None, eht_hours=None, accepted=False, commit=None, verdict='rejected: ' + msg)
+        with open(os.path.join(ROOT, 'human-run', 'scores.jsonl'), 'a') as f:
+            f.write(json.dumps(rec) + '\n')
+        print('refuted: ' + msg)
+        sys.exit(0)
+    if r.returncode != 0:
+        sys.stderr.write(r.stderr)
+        raise subprocess.CalledProcessError(r.returncode, r.args, r.stdout, r.stderr)
+    return r.stdout
 
 def ladder(path):
     out = json.loads(run('ladder', path, '--R', '10000', '--cap', str(cap), '--seed', str(seed)).strip().splitlines()[-1])

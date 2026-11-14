@@ -137,9 +137,19 @@ pub struct B<'a> {
     pub(crate) skip: &'a [String],
     pub(crate) group_n: &'a std::collections::HashMap<String, u32>,
     pub(crate) era: Era,
+    /// Optional groups the plan skips, each mapped to the segment that precedes where it would
+    /// have been, so anchors naming a skipped group still resolve (to the point just before it).
+    pub(crate) skipped: std::collections::HashMap<String, String>,
 }
 
 impl<'a> B<'a> {
+    /// Index of the segment a plan anchor names: the segment itself, or, for a skipped group,
+    /// the segment before it.
+    pub(crate) fn find(&self, name: &str) -> Option<usize> {
+        let by = |n: &str| self.segs.iter().position(|s| s.name == n);
+        by(name).or_else(|| self.skipped.get(name).and_then(|prev| by(prev)))
+    }
+
     pub(crate) fn push(&mut self, name: &str, src: Src, inputs: u32, kind: Kind) -> &mut Seg {
         self.segs.push(Seg {
             name: name.to_string(),
@@ -218,6 +228,9 @@ impl<'a> B<'a> {
 
     pub(crate) fn group(&mut self, name: &str, n: u32, mons: u32, level: u32, yield_: u32) {
         if self.skip.iter().any(|s| s == name) {
+            if let Some(prev) = self.segs.last() {
+                self.skipped.insert(name.to_string(), prev.name.clone());
+            }
             return;
         }
         let n = *self.group_n.get(name).unwrap_or(&n);
@@ -1120,7 +1133,7 @@ fn old_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     leg_e4_2(b, p, h);
 }
 
-pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
+pub fn build(dex: &Dex, p: &Params) -> Result<Vec<Seg>, String> {
     // The rival's trainer ids are named after the *rival's* starter, which is the one that beats
     // the player's: `decompiled/data/maps/PalletTown_ProfessorOaksLab/scripts.inc:303-306`
     // ("Names below refer to the Rival's mon (e.g. for RivalBattleSquirtle, player has Charmander)").
@@ -1137,6 +1150,7 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         skip: &p.skip_groups,
         group_n: &p.group_n,
         era: Era::Walk,
+        skipped: Default::default(),
     };
 
     // Grass steps: the path table (`pathenc.py`: shortest path in tiles, fewest grass tiles among the
@@ -1234,11 +1248,11 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     // Hunts go in right after the segment they are anchored to.
     for h in p.hunts.iter().rev() {
         assert!(dex.has_site(&h.site), "hunt site {} unknown", h.site);
-        let Some(at) = b.segs.iter().position(|s| s.name == h.after) else {
+        let Some(at) = b.find(&h.after) else {
             if p.skip_powerplant && h.after == "powerplant-out" {
                 continue;
             }
-            panic!("hunt anchor {} matches no segment", h.after);
+            return Err(format!("hunt anchor {} matches no segment", h.after));
         };
         let label = format!(
             "hunt-{}-{}@{}",
@@ -1269,10 +1283,8 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     }
     for g in p.grinds.iter().rev() {
         let at = b
-            .segs
-            .iter()
-            .position(|s| s.name == g.after)
-            .unwrap_or_else(|| panic!("grind anchor {} matches no segment", g.after));
+            .find(&g.after)
+            .ok_or_else(|| format!("grind anchor {} matches no segment", g.after))?;
         b.segs.insert(
             at + 1,
             Seg {
@@ -1292,10 +1304,8 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     }
     for m in p.marts.iter().rev() {
         let at = b
-            .segs
-            .iter()
-            .position(|s| s.name == m.after)
-            .unwrap_or_else(|| panic!("mart anchor {} matches no segment", m.after));
+            .find(&m.after)
+            .ok_or_else(|| format!("mart anchor {} matches no segment", m.after))?;
         b.segs.insert(
             at + 1,
             Seg {
@@ -1310,11 +1320,11 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         );
     }
     for sp in p.specials.iter().rev() {
-        let Some(at) = b.segs.iter().position(|s| s.name == sp.after) else {
+        let Some(at) = b.find(&sp.after) else {
             if p.skip_powerplant && sp.after == "powerplant-out" {
                 continue;
             }
-            panic!("special anchor {} matches no segment", sp.after);
+            return Err(format!("special anchor {} matches no segment", sp.after));
         };
         for n in &sp.species {
             dex.id(n);
@@ -1341,10 +1351,8 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     }
     for x in p.extra_fights.iter().rev() {
         let at = b
-            .segs
-            .iter()
-            .position(|s| s.name == x.after)
-            .unwrap_or_else(|| panic!("extra fight anchor {} matches no segment", x.after));
+            .find(&x.after)
+            .ok_or_else(|| format!("extra fight anchor {} matches no segment", x.after))?;
         let scripts: Vec<&str> = x.scripts.iter().map(|s| s.as_str()).collect();
         b.forced(&x.name, &scripts, &[]);
         let seg = b.segs.pop().expect("forced pushes a segment");
@@ -1352,11 +1360,11 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     }
     for ev in p.evolutions.iter().rev() {
         dex.id(&ev.species);
-        let Some(at) = b.segs.iter().position(|s| s.name == ev.after) else {
+        let Some(at) = b.find(&ev.after) else {
             if p.skip_powerplant && ev.after == "powerplant-out" {
                 continue;
             }
-            panic!("evolution anchor {} matches no segment", ev.after);
+            return Err(format!("evolution anchor {} matches no segment", ev.after));
         };
         b.segs.insert(
             at + 1,
@@ -1376,12 +1384,19 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         );
     }
     for t in p.tms.iter().rev() {
+        // A teach aimed at Mewtwo means nothing when the plan does not catch it.
+        if t.mewtwo && !p.mewtwo {
+            continue;
+        }
         dex.move_id(&t.mv);
-        let at = b
-            .segs
-            .iter()
-            .position(|s| s.name == t.after)
-            .unwrap_or_else(|| panic!("tm anchor {} matches no segment", t.after));
+        let at = b.find(&t.after).ok_or_else(|| {
+            let why = if t.after == "tm28-dig" && p.no_dig {
+                " (the plan sets no_dig, so TM28 is never fetched)"
+            } else {
+                ""
+            };
+            format!("tm anchor {} matches no segment{why}", t.after)
+        })?;
         b.segs.insert(
             at + 1,
             Seg {
@@ -1401,10 +1416,8 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     }
     for h in p.extra_heals.iter().rev() {
         let at = b
-            .segs
-            .iter()
-            .position(|s| s.name == *h)
-            .unwrap_or_else(|| panic!("heal anchor {h} matches no segment"));
+            .find(h)
+            .ok_or_else(|| format!("heal anchor {h} matches no segment"))?;
         // The name contains "heal": the sim restores HP, PP, status and fodder there.
         b.segs.insert(
             at + 1,
@@ -1422,11 +1435,11 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
         );
     }
     for e in p.elixirs.iter().rev() {
-        let Some(at) = b.segs.iter().position(|s| s.name == e.after) else {
+        let Some(at) = b.find(&e.after) else {
             if p.skip_powerplant && e.after == "powerplant-out" {
                 continue;
             }
-            panic!("elixir anchor {} matches no segment", e.after);
+            return Err(format!("elixir anchor {} matches no segment", e.after));
         };
         b.segs.insert(
             at + 1,
@@ -1443,10 +1456,8 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
     }
     for x in p.xbuys.iter().rev() {
         let at = b
-            .segs
-            .iter()
-            .position(|s| s.name == x.after)
-            .unwrap_or_else(|| panic!("xbuy anchor {} matches no segment", x.after));
+            .find(&x.after)
+            .ok_or_else(|| format!("xbuy anchor {} matches no segment", x.after))?;
         b.segs.insert(
             at + 1,
             Seg {
@@ -1460,5 +1471,5 @@ pub fn build(dex: &Dex, p: &Params) -> Vec<Seg> {
             },
         );
     }
-    b.segs
+    Ok(b.segs)
 }

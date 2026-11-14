@@ -27,7 +27,12 @@ fn rung_arg(args: &[String]) -> usize {
 
 fn load(path: &str) -> Plan {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-    Plan::load(dex(), &text).unwrap_or_else(|e| panic!("{path}: {e}"))
+    // An invalid plan (a candidate whose anchors the route does not have) is a rejected input, not a
+    // bug: say so on stderr and exit 2 so callers can tell it from a panic (101).
+    Plan::load(dex(), &text).unwrap_or_else(|e| {
+        eprintln!("invalid plan {path}: {e}");
+        std::process::exit(2)
+    })
 }
 
 fn hms(frames: f64) -> String {
