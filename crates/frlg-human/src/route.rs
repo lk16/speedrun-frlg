@@ -1051,9 +1051,28 @@ pub(crate) fn leg_e4_2(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         ("lance-2", "TRAINER_ELITE_FOUR_LANCE_2".to_string()),
         ("champion-2", tn("TRAINER_CHAMPION_REMATCH")),
     ] {
+        if p.league_transit {
+            // Seconds between rooms from the WR's split windows minus its fight durations
+            // (Bruno-2 124-92, Agatha-2 113-98, Lance-2 154-110, Champion-2 222-196).
+            let t = match nm {
+                "bruno-2" => 1920,
+                "agatha-2" => 900,
+                "lance-2" => 2640,
+                "champion-2" => 1560,
+                _ => 0,
+            };
+            if t > 0 {
+                b.text(&format!("e4-transit-{nm}"), t, Src::Guess);
+            }
+        }
         b.trainer(nm, &id, 900);
     }
-    b.text("hall-of-fame-2", 2400, Src::Guess);
+    // The WR's End split (Champion 2 -> black frame) is 73 s against the model's 43 s.
+    b.text(
+        "hall-of-fame-2",
+        if p.league_transit { 4200 } else { 2400 },
+        Src::Guess,
+    );
 }
 
 fn old_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {

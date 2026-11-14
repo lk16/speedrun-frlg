@@ -460,6 +460,32 @@ mod tests {
     }
 
     #[test]
+    fn fidelity_audit_knobs_add_their_segments_and_only_when_on() {
+        let dex = DEX.get_or_init(Dex::load);
+        let base = "\"name\":\"t\",\"route_style\":\"wr\",\"audited_forced\":true,\"calib_wr\":true,\"stones\":[\"MOON\"]";
+        let off = Plan::load(dex, &PLAN.replace("\"name\":\"t\"", base)).unwrap();
+        let on_text = PLAN.replace(
+            "\"name\":\"t\"",
+            &format!("{base},\"league_transit\":true,\"postgame_calib\":true,\"item_swaps\":true"),
+        );
+        let on = Plan::load(dex, &on_text).unwrap();
+        let has = |p: &Plan, n: &str| p.segs.iter().any(|s| s.name == n);
+        for n in [
+            "e4-transit-lorelei",
+            "e4-transit-bruno-2",
+            "mt-ember-ruby-climb",
+            "icefall-ice-slides",
+            "five-island-resort",
+            "warehouse-interior",
+            "persim-and-potions",
+            "black-glasses-swap",
+        ] {
+            assert!(has(&on, n), "{n} missing with the knobs on");
+            assert!(!has(&off, n), "{n} present with the knobs off");
+        }
+    }
+
+    #[test]
     fn wr_route_style_orders_the_run_like_the_wr_splits() {
         let dex = DEX.get_or_init(Dex::load);
         let text = PLAN.replace(

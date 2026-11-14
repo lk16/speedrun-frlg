@@ -1217,8 +1217,17 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     use crate::battle::{fight, heal_amount, make_mon, Status1, Tactics};
     let dex = ctx.dex;
     let t0 = st.clock;
+    if a.trainer && hazard_death(ctx, st, rng, a.name) {
+        return false;
+    }
+    // Non-League trainer fights run `trainer_fit` x the fitted intro and per-mon overhead.
+    let fit = if a.trainer && !a.league && ctx.p.trainer_fit > 0.0 {
+        ctx.p.trainer_fit
+    } else {
+        1.0
+    };
     if a.trainer {
-        bump(st, ctx.trainer_intro(a.intro));
+        bump(st, ctx.trainer_intro(a.intro) * fit);
         bump(st, jitter(ctx, rng, 8) as f64);
     }
     let cfg = ctx.tactics.get(a.name).cloned().unwrap_or_default();
@@ -1404,6 +1413,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             heal_stock: if a.league { st.heal_items } else { u32::MAX },
             rollouts: if a.league { ctx.p.league_rollouts } else { 0 },
             setup_min: ctx.p.setup_min_turns,
+            menu_slip: ctx.p.menu_slip,
         };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
@@ -1424,7 +1434,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             st.x_stock[x_index(*x)] -= 1;
         }
         bump(st, out.turns as f64 * ctx.turn());
-        bump(st, out.kos.len() as f64 * ctx.mon_overhead());
+        bump(st, out.kos.len() as f64 * ctx.mon_overhead() * fit);
         // A sacrifice costs its faint animation and the send-outs both ways. guess.
         bump(st, out.sacs_used as f64 * 900.0);
         st.fodder = st.fodder.saturating_sub(out.sacs_used);
@@ -1571,6 +1581,25 @@ fn cure_status(ctx: &Ctx, st: &mut State) {
     }
     bump(st, 400.0 * ctx.p.text_factor);
     st.carry_status = Status1::None;
+}
+
+/// A death the fight engine does not produce (`Params::hazard`): the human's own misjudgment or an
+/// unlucky event in the named segment. Same consequence as losing the fight: a whiteout, and an
+/// abandoned attempt while no salvage is allowed. Returns true when the attempt is over.
+fn hazard_death(ctx: &Ctx, st: &mut State, rng: &mut Rng, name: &str) -> bool {
+    let p = ctx.p.hazard.get(name).copied().unwrap_or(0.0);
+    if p <= 0.0 || !rng.chance(p) {
+        return false;
+    }
+    st.whiteouts += 1;
+    if ctx.no_salvage_end.is_some_and(|e| st.seg_i <= e) {
+        st.abandoned = true;
+        return true;
+    }
+    bump(st, ctx.k("whiteout", WHITEOUT as f64));
+    st.hp_frac = 1.0;
+    st.carry_status = crate::battle::Status1::None;
+    false
 }
 
 fn is_league(name: &str) -> bool {
@@ -2234,6 +2263,9 @@ pub fn attempt(
                 level,
                 yield_,
             } => {
+                if hazard_death(ctx, &mut st, &mut rng, &seg.name) {
+                    break;
+                }
                 if !group_battle(ctx, &mut st, &mut rng, *n, *mons, *level, *yield_) {
                     break;
                 }

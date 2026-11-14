@@ -433,6 +433,7 @@ fn main() {
                     heal_stock: arg(&args, "--heals", u32::MAX),
                     rollouts: arg(&args, "--rollouts", 0u32),
                     setup_min: arg(&args, "--setup-min", 1u32),
+                    menu_slip: arg(&args, "--menu-slip", 0.0f64),
                 };
                 let mut g = frlg_human::rng::GameRng::from_u32(
                     (seed as u32).wrapping_mul(2654435761) ^ (i as u32).wrapping_mul(0x9E3779B9),

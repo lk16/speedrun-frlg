@@ -374,6 +374,36 @@ pub struct Params {
     /// (`human-run/video-analysis/data/calib/v1..v4`; overrides `calib_battle`): the human factor
     /// is already in them, `text_factor` is not applied again.
     pub calib_wr: bool,
+    /// Fidelity audit 2026-11-14 (`human-run/journal/2026-11-14-18-00-fidelity-audit.md`): walking,
+    /// doors, speeches and bag trips between Elite Four rooms, which the fight constants (fitted to
+    /// the video's battle-to-battle durations) do not contain. Frames per room are the WR's split
+    /// window minus the WR's fight duration (`wr-3.25.25-main97.md`, `wrsplits.rs`). `route_style = "wr"`
+    /// only; 0 = off.
+    pub league_transit: bool,
+    /// Same audit: extra death probability per named segment (trainer fights and groups), for the
+    /// losses the fight engine's tidy human does not have: the runner's deaths list of the
+    /// 2026-11-12 stream (brock x5, sammy x2, liam, rival 1, rival 2 in 12 attempts past the
+    /// starter gate, `stream-2026-11-12-main97.md`) and "Brock-split win 75% on a good day, 2/12 and
+    /// 3/14 on bad days" (`STRATEGY.md` 4, 7). guess for every value; empty = off.
+    pub hazard: std::collections::HashMap<String, f64>,
+    /// Same audit: multiplier on the fitted trainer intro and per-enemy-mon overhead for every
+    /// battle that is not an Elite Four / Champion fight (0 or 1 = off). The model's eight
+    /// non-League fights of the WR video run 727 s against the video's 596 s (1.22x) with the
+    /// League fights at 1.0x (`frlg-human splits`, fight table); 0.71 closes that gap.
+    pub trainer_fit: f64,
+    /// Same audit: the post-Hall-of-Fame chain (Mt. Ember, Icefall Cave, Five Island, the Warehouse
+    /// interior, the Celio hand-in) costs 342 s more than the guessed frames of `route_wr.rs`, the
+    /// difference between the WR's Champ 1 -> Rocket Warehouse splits (18:58) and the model's
+    /// (13:15), spread over the scenes the WR scene log places there.
+    pub postgame_calib: bool,
+    /// Same audit: Persim Berry (Misty), Black Glasses swaps (Lavender rival, Lorelei) and the
+    /// Mark-guy / potion shopping menus (`STRATEGY.md` sections 4, 6): bag trips in frames.
+    pub item_swaps: bool,
+    /// Same audit: probability that one player action in a battle is a menu slip (wrong move row,
+    /// Right+A on the same frame, a late A): the turn goes to another move of the set and the foe
+    /// acts as usual. guess; `STRATEGY.md` section 4 (T10 2:49:21 "kick-select input errors nearly
+    /// killed runs"), section 1.3 (late-day errors, T03/T10). 0 = off.
+    pub menu_slip: f64,
     /// Which rod the fish hunts use: `mixed` (the old model: all ten slots), `old`, `good` or
     /// `super`. A real rod costs a trip: Old Rod Vermilion, Good Rod Fuchsia, Super Rod Route 12
     /// south of the Snorlax (`decompiled/data/maps/*House*/scripts.inc`).
@@ -618,6 +648,12 @@ impl Default for Params {
             avoid_grass: false,
             calib_battle: false,
             calib_wr: false,
+            league_transit: false,
+            hazard: Default::default(),
+            trainer_fit: 0.0,
+            postgame_calib: false,
+            item_swaps: false,
+            menu_slip: 0.0,
             rod: "mixed".into(),
             repel_on: vec![],
             ball_batch: 10,
