@@ -53,12 +53,15 @@ open(cpath, 'w').write('```json\n' + json.dumps(child, indent=1) + '\n```\n')
 if fixed:
     # Objective fixed at one rung: no ladder, compare the two plans there (finishes >= 50 on both sides).
     rec = dict(plan=child['name'], parent=params.get('name'), idea=idea, diff=patch, seed=seed)
-    r = 10000
+    # FRLG_R0: first R (default 10000); FRLG_MINFIN: no stopping on the CI before the parent has this many
+    # finishes (a rung with a handful of finishes gives a degenerate CI of [0, 0]). Both default to the old rule.
+    r = int(os.environ.get('FRLG_R0', 10000))
+    minfin = int(os.environ.get('FRLG_MINFIN', 0))
     while True:
         out = run('compare', cpath, parent, '--rung', fixed, '--R', str(r), '--seed', str(seed))
         j = json.loads([l for l in out.splitlines() if l.startswith('JSON ')][0][5:])
         lo, hi, b = j['ci_lo'], j['ci_hi'], j['b_eht']
-        if lo is not None and (lo > 0 or hi < 0 or (b and (hi - lo) < 0.01 * b)):
+        if lo is not None and (j.get('b_fin') or 0) >= minfin and (lo > 0 or hi < 0 or (b and (hi - lo) < 0.01 * b)):
             break
         if r >= min(2_000_000, max(cap, 20_000)) or (lo is None and r >= 400_000):
             break
