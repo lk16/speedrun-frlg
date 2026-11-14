@@ -55,8 +55,6 @@ def candidates(p):
         v = p.get('safari_stop', 5) + d
         if v > 0:
             out.append(('misc', f'safari_stop {p.get("safari_stop")}->{v}', {'safari_stop': v}))
-    for v in (1000, 1250, 1750, 2000):
-        out.append(('misc', f'pc_frames ->{v}', {'pc_frames': v}))
     for d in (-2, 2):
         out.append(('misc', f'level_gap {p.get("level_gap")}->{p.get("level_gap", 8) + d}', {'level_gap': p.get('level_gap', 8) + d}))
     for k in ('no_dig', 'clemi_skip', 'league_transit', 'item_swaps', 'candy_early', 'teleport_abra', 'safari_model', 'skip_powerplant'):
