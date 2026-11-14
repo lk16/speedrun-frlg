@@ -78,4 +78,37 @@ bugs unless poisoned) is a branch the plan does not express; the camp costs HP, 
   have no hazard row; the engine gives Koga 96%, Sabrina 96%, Route 22 rival 85%, Champion 2 76% of its fights. After SS Anne a loss is
   a salvage (a whiteout) and the pace reset ends the run, which has the right sign.
 * Misty (9.6 vs 6.5 actions) and the dex schedule (12 vs 8 at Misty) are model-side gaps listed above; neither moves the door time.
-* Plan retune on the new model: see the score rows after this entry.
+
+## Retune on the audited model (plan 452-fidelity-retune, `CURRENT`)
+
+451 (450 unchanged, new model) has WR 635 h / WR+2m ~30 h. Retuned at WR+2m (WR itself has 100-300 finishes per 400 000, too few
+for a descent), every accept confirmed at R >= 300 000 on a second seed (try.py's early stop at R = 10 000 gave -7.1 h for
+`reset_aggr` and confirmed -7.5; the same trap as in the 2026-11-14 early-merge entry):
+
+| change | WR+2m, paired vs 451 | |
+| --- | --- | --- |
+| `reset_aggr` 0.94 -> 0.80 (0.88, 0.70, 0.60 the same, 1.0 never finishes) | -7.5 h | the global default at the splits `reset_aggr_at` does not list; 0.94 sat on a cliff |
+| drop the Route 3 / 4 / 9 hunts | -4.9 h (3+4 only: -1.3) | the model is no longer 12 min behind the WR, so early catches stop paying; dex at Misty 11.7 -> 8.3 (WR 8) |
+| Misty `power` 0.9 -> 1.0 | -2.3 h | the old tuning knob; Misty is the fight that takes 9.6 actions against the WR's 6.5 |
+| indigo-heal reset 0.65 -> 0.85 / 1.0 / 0.45 | -0.05 / +1.0 / +0.06 | flat: below the 1% bar |
+
+Combined (452): -10.4 h at WR+2m (seeds 3, 5); WR rung (R = 800 000): 451 280 finishes / 638.7 h (seed 4), 452 5297 / 59.8 h; ladder
+(seed 2): WR 60.5 h, WR+2m 21.6, WR+5m 10.8, WR+10m 7.2. Regime mixture (w_good 0.5): EHT(WR) 121.6 h, EHT(WR+10m) 13.3 h. No-reset
+finishers p10 / p50 / p90 3:24:19 / 3:29:57 / 3:36:35; Start E4R1 2:40:12; Misty 27:14 (WR 28:01), Sabrina 2:15:05 (+2.4%).
+
+**The score is still optimistic and the plan header says so.** At 452 the model reaches the door for 5% of starter passers (the
+stream day: 1 in 12) and its mean attempt runs 21 min of clock; those match. P(finish <= WR | door) is 41%; for the runner it
+is ~1% or less (350-ish doors, one WR). The 15 811 attempts of the WR chain are ~3 000 h; 60 h is 50x below, 121 h with bad days
+is 25x. What the model still does not have, in order of how much each would move P(finish <= WR | door): (1) the real spread
+of the post-door chain (Mewtwo's five cave encounters 1:30, the Warehouse, Champion 2 where the runner "died six times"; the model's
+post-door sd is ~3.5 min), (2) late hazards in the same style as `hazard` for Koga, Erika, Lance, Champion 2 (no per-fight data
+beyond anecdotes, so none were invented), (3) the runner's bad-pace tail (Safari 3:20 for two, spec strats 1.5-2 min). Raising
+`trainer_fit` to hit ~600 h instead would move the whole pace by ~5 min and contradict the runner's typical entry; it was not done.
+
+## Next
+
+* A per-fight death table from the Main97 deaths list over more days (the stream gives one: S12) to calibrate hazards past Misty;
+  a full-run LG VOD and R2 E4 footage remain the highest-value downloads (`HOST-REQUESTS.md`).
+* Fight-time fit with the League fights split by number of enemy mons and by items used: the fit table above shows Lance-2 10.2
+  actions against 7.5 and Champion-2 13.7 against 11.5 (the model's Champion 2 wins 76% of the fights it reaches).
+* Dex schedule: 452 has 48 at Sabrina against the WR's 45 (window +192 s); a hunt-position descent on the audited model.
