@@ -55,8 +55,8 @@ def candidates(p):
         v = p.get('safari_stop', 5) + d
         if v > 0:
             out.append(('misc', f'safari_stop {p.get("safari_stop")}->{v}', {'safari_stop': v}))
-    for d in (-2, 2):
-        out.append(('misc', f'level_gap {p.get("level_gap")}->{p.get("level_gap", 8) + d}', {'level_gap': p.get('level_gap', 8) + d}))
-    for k in ('no_dig', 'clemi_skip', 'league_transit', 'item_swaps', 'candy_early', 'teleport_abra', 'safari_model', 'skip_powerplant'):
+    # Not searched (model-fidelity flags / guessed constants; descending them removes real costs):
+    # league_transit, item_swaps, clemi_skip, safari_model, level_gap, pc_frames, postgame_events, transit_outro.
+    for k in ('no_dig', 'candy_early', 'teleport_abra', 'skip_powerplant'):
         out.append(('toggle', f'{k} {p.get(k)}->{not p.get(k)}', {k: not p.get(k)}))
     return out
