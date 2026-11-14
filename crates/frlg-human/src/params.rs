@@ -645,6 +645,13 @@ pub struct Params {
     /// Use the sight-cone audit (`human-run/tools/forced.py`) for which trainers the route cannot
     /// walk around, instead of the earlier guessed groups.
     pub audited_forced: bool,
+    /// Second audit (`human-run/tools/silph_audit.py`, `forced-audit.md` round 2): Silph Co. card-key
+    /// doors and the Vermilion gym barrier modelled. 0 = off (earlier plans: `skip_groups` decides
+    /// the four optional groups). 1 = the cone-forced trainers are fought whatever `skip_groups`
+    /// says (Silph 11F Grunt2, Vermilion gym Tucker) and the door / quiz texts are charged.
+    /// 2 = pessimistic: rotating trainers on the path count too (Silph 5F Grunt1, one of the
+    /// Vermilion gym's two LOOK_AROUND trainers).
+    pub audit2: u32,
     /// `random` (a random starter per attempt, gated by `starter_min_*`) or `manip` (frame-exact
     /// presses with a table, `manip.rs`; parameters in `manip`).
     pub starter_model: String,
@@ -809,6 +816,7 @@ impl Default for Params {
             ability_bonus: 0.0,
             type_floor: 0.0,
             audited_forced: false,
+            audit2: 0,
             starter_model: "random".into(),
             manip: Default::default(),
             torrent_until: String::new(),

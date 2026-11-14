@@ -534,7 +534,28 @@ pub(crate) fn leg_surge(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
     let e = b.era;
     b.walk("surge-walk", 156, b.era, None, Src::Guess);
-    b.group("surge-gym-trainers", 2, 2, 20, 65);
+    if p.audit2 > 0 {
+        // Tucker (7,8), FACE_LEFT sight 3, covers (4..6,8), the only way up to the barrier gap
+        // (`VermilionCity_Gym/map.json`; `forced.py` with the gap opened: Tucker forced).
+        let alts: &[(usize, &[&str])] = if p.audit2 > 1 {
+            &[(
+                1,
+                &[
+                    "VermilionCity_Gym_EventScript_Baily",
+                    "VermilionCity_Gym_EventScript_Dwayne",
+                ],
+            )]
+        } else {
+            &[]
+        };
+        b.forced(
+            "surge-gym-trainers",
+            &["VermilionCity_Gym_EventScript_Tucker"],
+            alts,
+        );
+    } else {
+        b.group("surge-gym-trainers", 2, 2, 20, 65);
+    }
     b.trainer("surge", "TRAINER_LEADER_LT_SURGE", 600);
     b.text("surge-badge", 600, Src::Guess);
     b.split();
@@ -790,7 +811,20 @@ pub(crate) fn leg_silph_walk(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let e = b.era;
     b.walk("silph-walk", 479, e, None, Src::Guess);
     b.trainer("rival-silph", &tn("TRAINER_RIVAL_SILPH"), 700);
-    b.group("silph-grunts", 4, 2, 32, 70);
+    if p.audit2 > 0 {
+        // 11F: the only way from the warp pad's landing to the Giovanni trigger passes (2,18),
+        // inside Grunt2's FACE_UP sight-5 cone; three card-key doors on the path
+        // (`silph_audit.py`: 5F D2, 3F D2, 11F D), each a fanfare + message.
+        let alts: &[(usize, &[&str])] = if p.audit2 > 1 {
+            &[(1, &["SilphCo_5F_EventScript_Grunt1"])]
+        } else {
+            &[]
+        };
+        b.text("silph-card-doors", 600, Src::Guess);
+        b.forced("silph-grunts", &["SilphCo_11F_EventScript_Grunt2"], alts);
+    } else {
+        b.group("silph-grunts", 4, 2, 32, 70);
+    }
     b.trainer("silph-giovanni", "TRAINER_BOSS_GIOVANNI_2", 700);
     b.text("master-ball", 1800, Src::Guess);
     b.walk("sabrina-walk", 123, e, None, Src::Guess);
@@ -837,7 +871,14 @@ pub(crate) fn leg_mansion_blaine(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.group("mansion-trainers", 3, 2, 36, 75);
     b.text("secret-key", 900, Src::Guess);
     b.walk("blaine-walk", 34, Era::Run, None, Src::Tiles);
-    b.group("blaine-quiz", 2, 2, 38, 75);
+    if p.audit2 > 0 {
+        // Six quiz statues, one door each, chained to Blaine (`CinnabarIsland_Gym/scripts.inc`
+        // OpenDoor1-6); every trainer has sight 0, so a correct answer costs text only.
+        // Guess: ~450 frames per question.
+        b.text("blaine-quiz-text", 2700, Src::Guess);
+    } else {
+        b.group("blaine-quiz", 2, 2, 38, 75);
+    }
     b.trainer("blaine", "TRAINER_LEADER_BLAINE", 600);
 }
 

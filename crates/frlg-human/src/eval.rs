@@ -451,6 +451,24 @@ mod tests {
     }
 
     #[test]
+    fn audit2_fights_the_cone_forced_trainers_despite_skip_groups() {
+        let dex = DEX.get_or_init(Dex::load);
+        let skip = "\"name\":\"t\",\"skip_groups\":[\"silph-grunts\",\"surge-gym-trainers\",\"blaine-quiz\"]";
+        let has = |extra: &str, seg: &str| {
+            let text = PLAN.replace("\"name\":\"t\"", &format!("{skip}{extra}"));
+            Plan::load(dex, &text)
+                .unwrap()
+                .segs
+                .iter()
+                .any(|s| s.name == seg)
+        };
+        assert!(!has("", "silph-grunts") && !has("", "surge-gym-trainers"));
+        let on = ",\"audit2\":1";
+        assert!(has(on, "silph-grunts") && has(on, "surge-gym-trainers"));
+        assert!(has(on, "blaine-quiz-text") && has(on, "silph-card-doors"));
+    }
+
+    #[test]
     fn every_model_option_builds_and_runs() {
         let dex = DEX.get_or_init(Dex::load);
         let text = PLAN.replace(
