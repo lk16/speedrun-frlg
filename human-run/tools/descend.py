@@ -401,7 +401,11 @@ def try_it(parent, label, patch, name, seed, r0=0):
 
 
 def gen(p):
-    if SET == 'honest':
+    if SET == 'recalib':
+        sys.path.insert(0, HERE)
+        import dexknobs, honestknobs, manipknobs
+        cands = manipknobs.candidates(p) + honestknobs.candidates(p) + candidates(p) + dexknobs.candidates(p)
+    elif SET == 'honest':
         sys.path.insert(0, HERE)
         import dexknobs, honestknobs
         cands = honestknobs.candidates(p) + candidates(p) + dexknobs.candidates(p)
@@ -411,6 +415,8 @@ def gen(p):
         cands = dexknobs.candidates(p) + (candidates(p) if SET == 'all' else [])
     else:
         cands = candidates(p)
+    if '--notkinds' in args:
+        cands = [c for c in cands if c[0] not in opt('--notkinds', '').split(',')]
     if KINDS:
         cands = [c for c in cands if c[0] in KINDS]
     return cands
