@@ -66,7 +66,10 @@ if fixed:
         if r >= min(2_000_000, max(cap, 20_000)) or (lo is None and r >= 400_000):
             break
         r *= 2
-    better = j['ci_hi'] is not None and j['ci_hi'] < 0 and (j.get('a_fin') or 0) >= 50
+    # FRLG_MINGAIN: the upper end of the CI must also be below this fraction of the parent's score
+    # (the 1% bar of the 452 retune: a paired CI can exclude 0 for a change worth 0.06%). Default 0 = old rule.
+    mingain = float(os.environ.get('FRLG_MINGAIN', 0))
+    better = j['ci_hi'] is not None and j['ci_hi'] < -mingain * (j['b_eht'] or 0) and (j.get('a_fin') or 0) >= 50
     inconclusive = j['ci_lo'] is not None and j['ci_lo'] <= 0 <= j['ci_hi']
     verdict = ('ACCEPT' if better else ('refuted (not significant)' if inconclusive else 'refuted (worse)')) + \
         f" at {fixed} (fixed rung): diff {j['diff']} h CI [{j['ci_lo']},{j['ci_hi']}] R={j['R']}"
