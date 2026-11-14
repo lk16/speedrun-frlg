@@ -79,3 +79,14 @@ scenario (-12..-17%).**
 * What would shrink the spread: the real attempt log (every attempt's last split) to fit S and the pre-door hazards jointly, and the per-fight death rates; a
   hazard that responds to tactics (`fatal` is flat, so the descent can never find a safer Brock). None of the evidence here changes a choice; it only bounds the
   absolute numbers.
+
+## 5. Update 2026-11-15 (evening): S from the door attempts, `slow` checked, thresholds past the door
+
+Journal `journal/2026-11-15-18-00-post-door-evidence.md`; data `video-analysis/data/post-door-evidence.json`; tools `fit_post_evidence.py`, `post_joint.py`, `post_rank.py`.
+
+* **S is now data-bounded, not a free residual**: 4 attempts fought after the door, 1 finished (Wilson 5-70%); joint with the runner's 15 811 attempts per finish (plan 480
+  as his policy) S = 0.2, 90% [0.06, 0.5]. Per fight (Beta posterior, prior k = 3): Bruno .18, Lance .25, Lorelei/Agatha .04-.05, Champion .10, Warehouse chain .08-.13,
+  round 2 .07-.14, product 0.205. Plan 802 = 801 with this map (CURRENT; WR 141 h, WR+2m ~112 h at the point estimate; 801's S .183 gave 159 h / 130 h).
+* The ranking of section 2 survives: 607 < 700 < 608 < 801 < 800 < 600 < 492 in six post-door models (S .06 .. .5) and two seeds. 801 spans 48 h (S .5) to 387 h (S .06).
+* Slow events: Safari 3/12 bad, Power Plant 1/8, cave 1 run: inside the model's values, left unchanged; slow off is -14%, Safari p .5 +7%.
+* `reset_aggr_at` past the door: no retune (best -0.8%, under the 1% bar; raising it costs up to +3%).
