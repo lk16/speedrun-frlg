@@ -20,6 +20,9 @@ pub struct Hunt {
     /// the Mansion on the way): `detour_tiles` is the whole extra walk (the Fly-point table is not
     /// used) and a Safari entry is already paid by the route's own fee segment.
     pub on_route: bool,
+    /// Leave after this many new species were caught on this visit (0 = stay until the site is
+    /// complete or the step budget is spent).
+    pub stop_after: u32,
 }
 
 impl Default for Hunt {
@@ -32,6 +35,7 @@ impl Default for Hunt {
             skip: vec![],
             detour_tiles: 0,
             on_route: false,
+            stop_after: 0,
         }
     }
 }
@@ -93,6 +97,46 @@ impl Default for Special {
             max_throws: 30,
             requires: vec![],
             cost: 0,
+        }
+    }
+}
+
+/// One evolution the human performs to bank a dex entry without a catch ("evos", the WR runner's
+/// word). `species` is the evolved form obtained; its pre-evolution comes from the species table
+/// (`decompiled/src/data/pokemon/evolution.h`) and must already be caught, else the event is skipped
+/// for free. `via`:
+///
+/// * `stone`: the evolution item `item` (`MOON`, `LEAF`, `FIRE`, `THUNDER`, `WATER`). A stone that is
+///   found costs nothing; `buy` pays the Celadon price (`CeladonCity_DepartmentStore_4F/scripts.inc:31-34`,
+///   `items.json`, 2100) and the event is skipped when the money is not there.
+/// * `candy`: Rare Candies from the stock the pickups fill: one candy per level the mon is short of its
+///   evolution level, at least one (a mon caught above its level evolves on its next level-up).
+/// * `level`: the pre-evolution takes part in a fight (lead swap) and levels past its evolution level:
+///   frames only (a guess; the WR's bug chains, `wr-3.25.25-main97.md` 2:05-2:07).
+#[derive(Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct Evolve {
+    pub after: String,
+    pub species: String,
+    pub via: String,
+    pub item: String,
+    pub buy: bool,
+    /// Candies for `candy` (0 = derive from the catch level).
+    pub candies: u32,
+    /// Scene frames before `text_factor` (0 = the default of the kind).
+    pub frames: u32,
+}
+
+impl Default for Evolve {
+    fn default() -> Self {
+        Evolve {
+            after: String::new(),
+            species: String::new(),
+            via: "stone".into(),
+            item: String::new(),
+            buy: false,
+            candies: 0,
+            frames: 0,
         }
     }
 }
@@ -352,6 +396,30 @@ pub struct Params {
     pub team_bonus: f64,
     pub hunts: Vec<Hunt>,
     pub specials: Vec<Special>,
+    /// Evolutions as dex currency (stones, candies, lead-swap levels), see `Evolve`.
+    pub evolutions: Vec<Evolve>,
+    /// Safari: leave the zone for good once this many new species were caught in it (0 = use the
+    /// whole 600 steps / 30 balls; the WR route plans 7-10 and leaves,
+    /// `video-analysis/STRATEGY.md` 5.3).
+    pub safari_stop: u32,
+    /// Ball rule under the money model, by the species' catch rate (`species_info.h`): at least
+    /// `poke_from` is thrown a Poke Ball, below `ultra_below` an Ultra Ball, else a Great Ball
+    /// (0 / 0 = the plan's single `ball`).
+    pub poke_from: u32,
+    pub ultra_below: u32,
+    /// Drop the Power Plant detour (fly to Lavender, surf to the plant and back) and every hunt
+    /// anchored to it (`route_wr.rs`).
+    pub skip_powerplant: bool,
+    /// Frames of one PC visit (withdraw / deposit between a catch and the evolution or trade that
+    /// needs it): charged once per anchor when the mon was caught after the party was full (0 = free,
+    /// the old model).
+    pub pc_frames: u32,
+    /// Segments (by name) where a passing wild encounter is never caught even with `catch_on_pass`
+    /// (the WR runner's "never catch anything on Route 1", `STRATEGY.md` 4).
+    pub pass_off: Vec<String>,
+    /// `Evolve` via `level`: the pre-evolution must be within this many levels of its evolution level
+    /// when caught (it levels by taking part in fights; a guess).
+    pub level_gap: u32,
     pub grinds: Vec<Grind>,
     /// TM / tutor teaches (battle_sim).
     pub tms: Vec<Teach>,
@@ -559,6 +627,14 @@ impl Default for Params {
             team_bonus: 1.08,
             hunts: vec![],
             specials: vec![],
+            evolutions: vec![],
+            safari_stop: 0,
+            poke_from: 0,
+            ultra_below: 0,
+            skip_powerplant: false,
+            pc_frames: 0,
+            pass_off: vec![],
+            level_gap: 12,
             grinds: vec![],
             tms: vec![],
             xbuys: vec![],

@@ -5,7 +5,7 @@
 
 use crate::battle::{Status1, XItem};
 use crate::data::{Area, Caught, Dex, Slot};
-use crate::params::{Hunt, Params};
+use crate::params::{Evolve, Hunt, Params};
 use crate::rng::{hash_str, GameRng, Rng};
 use crate::route::{Era, Kind, Seg};
 use frlg_mon::stats::{calc_stats, exp_for_level, exp_gain, level_from_exp, Growth};
@@ -133,6 +133,20 @@ pub struct Probe {
     pub missing: Vec<u32>,
     /// National numbers missing when the fill (or Oak's check) starts.
     pub oak_missing: Vec<u32>,
+    /// A snapshot of the bag after segment `snap_at` (set by the caller; `frlg-human bag`): species
+    /// caught with the level each was caught at, the Rare Candies in stock, the money and the clock.
+    pub snap_at: Option<usize>,
+    pub snap: Option<Snapshot>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Snapshot {
+    /// (national number, catch level, order of first catch).
+    pub mons: Vec<(u32, u32, u32, u8)>,
+    pub candies: u32,
+    pub money: u32,
+    pub clock: u64,
+    pub carry: u32,
 }
 
 pub struct Outcome {
@@ -216,6 +230,26 @@ struct State {
     /// Index of the segment being played, and the poison HP not yet charged (frames).
     seg_i: usize,
     poison_acc: f64,
+    /// Level each Kanto species was caught at (0 = unknown / not a catch) and the order of first
+    /// catches (1 = the starter): a mon caught after the party of six filled up sits in the PC.
+    catch_lv: [u8; 152],
+    catch_seq: [u16; 152],
+    /// Living bodies of each species in the party or box: a catch adds one, an evolution moves one
+    /// from the pre-evolution to the target, a trade gives one away. The dex flag stays set.
+    bodies: [u8; 152],
+    /// How each species was obtained (`SRC_NAMES`) and the source the next `got` records.
+    src: [u8; 152],
+    cur_src: u8,
+    /// Evolution stones in the bag: Moon, Leaf, Thunder, Fire, Water (`stone_ix`).
+    stones: [u8; 5],
+    /// The tier the current throw sequence wants (`ball_tier`), `None` = the plan's single ball.
+    ball_tier: Option<usize>,
+    catch_n: u16,
+    /// The anchor whose PC visit was already paid (hash), new species caught in the current Safari
+    /// entry, and whether the plan's `safari_stop` was reached (the zone is left for good).
+    pc_paid: u64,
+    safari_new: u32,
+    safari_done: bool,
 }
 
 impl Ctx<'_> {
@@ -367,13 +401,51 @@ impl Ctx<'_> {
             | Kind::OakCheck
             | Kind::Stones
             | Kind::Mewtwo => 0.0,
-            Kind::Special { .. } | Kind::Mart { .. } => 0.0,
+            Kind::Special { .. } | Kind::Mart { .. } | Kind::Evolve { .. } => 0.0,
             Kind::Teach { teach } => teach.frames as f64 * self.p.text_factor,
             Kind::XBuy { xbuy } => xbuy.frames as f64 * self.p.text_factor,
             Kind::Elixir { pickup } => pickup.frames as f64 * self.p.text_factor,
             Kind::TeleportOrWalk { frames, .. } => *frames as f64 * self.p.text_factor,
             Kind::Grind { .. } => 0.0,
         }
+    }
+}
+
+/// Where a dex entry came from, for `frlg-human bag`: caught, gift, trade, bought, evolved by stone,
+/// by candy, by a level-up (lead swap).
+pub const SRC_NAMES: [&str; 7] = ["catch", "gift", "trade", "buy", "stone", "candy", "level"];
+
+/// Index of an evolution stone in `State::stones` by the plan's name for it.
+fn stone_ix(name: &str) -> Option<usize> {
+    ["MOON", "LEAF", "THUNDER", "FIRE", "WATER"]
+        .iter()
+        .position(|&n| name.eq_ignore_ascii_case(n))
+}
+
+/// A Kanto species obtained for the first time (caught, gifted, traded, evolved): remembers the level
+/// and the order, for the candy arithmetic and the PC logistics of `Evolve` and trades.
+fn got(st: &mut State, dex: u32, level: u32) -> bool {
+    let new = st.caught.insert(dex);
+    if new {
+        st.catch_n += 1;
+        st.catch_lv[dex as usize] = level.min(255) as u8;
+        st.catch_seq[dex as usize] = st.catch_n;
+        st.bodies[dex as usize] = st.bodies[dex as usize].saturating_add(1);
+        st.src[dex as usize] = st.cur_src;
+    }
+    new
+}
+
+/// The party holds six: whatever was obtained after that is in the box and has to be withdrawn before
+/// it can evolve or be traded (`Params::pc_frames`, charged once per anchor).
+fn pc_visit(ctx: &Ctx, st: &mut State, dexes: &[u32], anchor: &str) {
+    if ctx.p.pc_frames == 0 || !dexes.iter().any(|&d| st.catch_seq[d as usize] > 6) {
+        return;
+    }
+    let h = hash_str(anchor);
+    if st.pc_paid != h {
+        st.pc_paid = h;
+        bump(st, ctx.p.pc_frames as f64 * ctx.p.text_factor);
     }
 }
 
@@ -520,14 +592,6 @@ fn isqrt(n: u32) -> u32 {
     (n as f64).sqrt() as u32
 }
 
-fn ball_mult(p: &Params) -> u32 {
-    match p.ball.as_str() {
-        "great" => 15,
-        "ultra" => 20,
-        _ => 10,
-    }
-}
-
 /// The four shake checks of `Cmd_handleballthrow`
 /// (`decompiled/src/battle_script_commands.c:9549-9640`), on the game's own stream.
 fn shakes_catch(g: &mut GameRng, odds: u32) -> bool {
@@ -620,16 +684,39 @@ const BALL_MULT: [u32; 3] = [10, 15, 20];
 /// Walking into a mart, buying, walking out. guess.
 const MART: u32 = 900;
 
-/// The ball for the next throw under the money model: the best type the plan allows and a
-/// mart on the route has sold so far, bought in batches of `ball_batch` as money allows, else a
-/// cheaper one. `None` when not even a Poké Ball is affordable.
-fn take_ball(ctx: &Ctx, st: &mut State) -> Option<u32> {
-    let mut t = match ctx.p.ball.as_str() {
+/// The plan's single ball as a tier (0 Poke, 1 Great, 2 Ultra).
+fn plan_tier(p: &Params) -> usize {
+    match p.ball.as_str() {
         "great" => 1,
         "ultra" => 2,
         _ => 0,
     }
-    .min(st.max_tier);
+}
+
+/// The ball tier thrown at a species of this catch rate (`species_info.h` `catchRate`): the plan's
+/// ball rule (`poke_from`, `ultra_below`) or its single `ball`. A Poke Ball is as good as a Great Ball
+/// on a rate-255 mon and costs a third (`items.json`: 200 / 600 / 1200).
+fn ball_tier(ctx: &Ctx, catch_rate: u32) -> usize {
+    let p = ctx.p;
+    if p.poke_from > 0 && catch_rate >= p.poke_from {
+        0
+    } else if p.ultra_below > 0 && catch_rate < p.ultra_below {
+        2
+    } else if p.poke_from > 0 || p.ultra_below > 0 {
+        1
+    } else {
+        plan_tier(p)
+    }
+}
+
+/// The ball for the next throw under the money model: the best type the plan allows and a
+/// mart on the route has sold so far, bought in batches of `ball_batch` as money allows, else a
+/// cheaper one. `None` when not even a Poké Ball is affordable.
+fn take_ball(ctx: &Ctx, st: &mut State) -> Option<u32> {
+    let mut t = st
+        .ball_tier
+        .unwrap_or_else(|| plan_tier(ctx.p))
+        .min(st.max_tier);
     loop {
         if st.balls[t] > 0 {
             st.balls[t] -= 1;
@@ -716,7 +803,7 @@ fn encounter(
         want_catch && sp.dex != 0 && !st.caught.has(sp.dex) && !skip.contains(&slot.species);
     if wanted && safari {
         if safari_catch(ctx, st, rng, sp) {
-            st.caught.insert(sp.dex);
+            got(st, sp.dex, level);
         }
     } else if wanted {
         let mut hp = 1.0;
@@ -728,9 +815,13 @@ fn encounter(
             }
             hp = ctx.k("weaken_hp", 0.3);
         }
-        let ball = (!ctx.p.money_model).then(|| ball_mult(ctx.p));
-        if throw_balls(ctx, st, rng, sp.catch_rate, hp, Status1::None, ball, 8) {
-            st.caught.insert(sp.dex);
+        let tier = ball_tier(ctx, sp.catch_rate);
+        st.ball_tier = Some(tier);
+        let ball = (!ctx.p.money_model).then(|| BALL_MULT[tier]);
+        let ok = throw_balls(ctx, st, rng, sp.catch_rate, hp, Status1::None, ball, 8);
+        st.ball_tier = None;
+        if ok {
+            got(st, sp.dex, level);
         }
     } else if (ctx.p.fight_wild || st.carry < ctx.p.fight_until_level) && ctx.p.battle_sim {
         let foe = wild_mon(ctx, st, slot.species, level);
@@ -864,6 +955,11 @@ struct EncArgs<'a> {
     stop_when_done: bool,
     /// A Repel is active: encounters below the lead's level never start.
     repel: bool,
+    /// Stop after this many new species were caught in this call (0 = no limit).
+    stop_new: u32,
+    /// A passing encounter may be caught (`catch_on_pass`); false on segments the plan lists in
+    /// `pass_off`.
+    pass_catch: bool,
 }
 
 fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 {
@@ -875,7 +971,10 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
         skip,
         stop_when_done,
         repel,
+        stop_new,
+        pass_catch,
     } = *a;
+    let c0 = st.caught.count();
     let Some((rate, slots, weights)) = ctx.dex.area(site, area, ctx.p.version == "LG", &ctx.p.rod)
     else {
         return 0;
@@ -954,10 +1053,14 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
             level,
             skip,
             stop_when_done
-                || (ctx.p.catch_on_pass
+                || (pass_catch
+                    && ctx.p.catch_on_pass
                     && ctx.dex.species[slot.species].catch_rate >= ctx.p.pass_min_catch),
             ctx.p.safari_model && site.starts_with("MAP_SAFARI_ZONE"),
         );
+        if stop_new > 0 && st.caught.count() - c0 >= stop_new {
+            break;
+        }
         if stop_when_done && left == 0 {
             break;
         }
@@ -1513,6 +1616,113 @@ fn group_battle(
     true
 }
 
+/// Scene frames of an evolution event (guess: menu to the party screen, the item or the lead swap,
+/// the evolution animation and the dex page) by kind.
+const EVO_STONE: u32 = 1100;
+const EVO_CANDY: u32 = 700;
+const EVO_CANDY_EACH: u32 = 300;
+const EVO_LEVEL: u32 = 2000;
+/// Walking into the Celadon 4F shop and buying one stone (guess).
+const EVO_STONE_SHOP: u32 = 800;
+
+/// One `Evolve` event (see `params::Evolve`). Skipped for free when the evolved form is already in
+/// the dex, the pre-evolution is not, or the stone / candies / money are not there.
+fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
+    let t = ctx.dex.id(&evo.species);
+    let tdex = ctx.dex.species[t].dex;
+    if tdex == 0 || st.caught.has(tdex) {
+        return;
+    }
+    // The pre-evolution and the way it evolves: the species whose `evo` list reaches `t`.
+    let item = (!evo.item.is_empty()).then(|| format!("ITEM_{}_STONE", evo.item));
+    let found = ctx.dex.species.iter().find_map(|sp| {
+        if sp.dex == 0 || st.bodies[sp.dex as usize] == 0 {
+            return None;
+        }
+        sp.evo.iter().find_map(|(k, param, target)| {
+            let ok = *target == t
+                && match evo.via.as_str() {
+                    "stone" => k == "EVO_ITEM" && item.as_deref().is_none_or(|i| i == param),
+                    _ => k == "EVO_LEVEL",
+                };
+            ok.then(|| (sp.dex, param.clone()))
+        })
+    });
+    let Some((pre, param)) = found else { return };
+    let lv = st.catch_lv[pre as usize] as u32;
+    let mut frames = evo.frames;
+    match evo.via.as_str() {
+        "stone" => {
+            if frames == 0 {
+                frames = EVO_STONE;
+            }
+            let have = stone_ix(&evo.item).filter(|&ix| st.stones[ix] > 0);
+            if let Some(ix) = have {
+                st.stones[ix] -= 1;
+            } else if !evo.buy {
+                return;
+            } else {
+                let price = item
+                    .as_ref()
+                    .and_then(|i| ctx.dex.item_prices.get(i))
+                    .copied()
+                    .unwrap_or(2100);
+                if ctx.p.money_model {
+                    if st.money < price {
+                        return;
+                    }
+                    st.money -= price;
+                }
+                frames += EVO_STONE_SHOP;
+            }
+        }
+        "candy" => {
+            let need = if evo.candies > 0 {
+                evo.candies
+            } else {
+                let at: u32 = param.parse().unwrap_or(1);
+                if lv >= at {
+                    1
+                } else {
+                    (at - lv).max(1)
+                }
+            };
+            if st.candies < need {
+                return;
+            }
+            st.candies -= need;
+            if frames == 0 {
+                frames = EVO_CANDY + EVO_CANDY_EACH * need;
+            }
+        }
+        _ => {
+            let at: u32 = param.parse().unwrap_or(1);
+            if lv + ctx.p.level_gap < at {
+                return;
+            }
+            if frames == 0 {
+                frames = EVO_LEVEL;
+            }
+        }
+    }
+    pc_visit(ctx, st, &[pre], &evo.after);
+    st.bodies[pre as usize] -= 1;
+    bump(st, frames as f64 * ctx.p.text_factor);
+    bump(st, jitter(ctx, rng, seg.inputs) as f64);
+    let at_lv = if evo.via == "stone" {
+        lv
+    } else {
+        lv.max(param.parse().unwrap_or(lv))
+    };
+    st.cur_src = match evo.via.as_str() {
+        "stone" => 4,
+        "candy" => 5,
+        _ => 6,
+    };
+    got(st, tdex, at_lv);
+    st.cur_src = 0;
+}
+
 fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
     let area = match h.area.as_str() {
         "water" => Area::Water,
@@ -1527,6 +1737,20 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
         );
     }
     let safari = ctx.p.safari_model && h.site.starts_with("MAP_SAFARI_ZONE");
+    if safari && h.on_route && st.safari_done {
+        // The plan's `safari_stop` was reached: the zone was left for good.
+        return;
+    }
+    let c_before = st.caught.count();
+    let mut stop_new = h.stop_after;
+    if safari && ctx.p.safari_stop > 0 {
+        let left = ctx.p.safari_stop.saturating_sub(st.safari_new);
+        stop_new = if stop_new == 0 {
+            left
+        } else {
+            stop_new.min(left)
+        };
+    }
     let mut steps = h.steps;
     if !safari {
         st.safari_open = false;
@@ -1610,14 +1834,22 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
         skip: &skip,
         stop_when_done: true,
         repel: false,
+        stop_new,
+        pass_catch: true,
     };
     let used = run_encounters(ctx, st, rng, &args);
     bump(st, used as f64 * per_step);
     if safari {
+        st.safari_new += st.caught.count() - c_before;
         if area == Area::Land {
             st.safari_steps = st.safari_steps.saturating_sub(used);
         }
-        if st.safari_steps == 0 || st.safari_balls == 0 {
+        let stop = ctx.p.safari_stop > 0 && st.safari_new >= ctx.p.safari_stop;
+        if stop {
+            st.safari_done = true;
+        }
+        if stop || st.safari_steps == 0 || st.safari_balls == 0 {
+            st.safari_new = 0;
             bump(st, SAFARI_EXIT as f64 * ctx.p.text_factor);
             st.safari_open = false;
         }
@@ -1806,6 +2038,17 @@ pub fn attempt(
         fight_log: vec![],
         seg_i: 0,
         poison_acc: 0.0,
+        catch_lv: [0; 152],
+        catch_seq: [0; 152],
+        bodies: [0; 152],
+        src: [0; 152],
+        cur_src: 0,
+        stones: [0; 5],
+        ball_tier: None,
+        catch_n: 0,
+        pc_paid: 0,
+        safari_new: 0,
+        safari_done: false,
         whiteouts: 0,
         game: GameRng::from_u32(0),
         slots: vec![],
@@ -1837,7 +2080,7 @@ pub fn attempt(
             st.quiet_window = ctx.p.manip.quiet_window.min(60) as f64;
         }
     }
-    st.caught.insert(ctx.dex.species[ctx.starter_line[0]].dex);
+    got(&mut st, ctx.dex.species[ctx.starter_line[0]].dex, 5);
     // The starter's level-5 moves (`level_up_learnsets.h`).
     for &(l, m) in &ctx.dex.species[ctx.starter_line[0]].learnset {
         if l <= 5 && !st.slots.contains(&m) {
@@ -1882,6 +2125,8 @@ pub fn attempt(
                             skip: &[],
                             stop_when_done: false,
                             repel,
+                            stop_new: 0,
+                            pass_catch: !ctx.p.pass_off.contains(&seg.name),
                         };
                         run_encounters(ctx, &mut st, &mut rng, &args);
                     }
@@ -1899,6 +2144,8 @@ pub fn attempt(
                         skip: &[],
                         stop_when_done: false,
                         repel,
+                        stop_new: 0,
+                        pass_catch: !ctx.p.pass_off.contains(&seg.name),
                     };
                     run_encounters(ctx, &mut st, &mut rng, &args);
                 }
@@ -2088,7 +2335,8 @@ pub fn attempt(
                             {
                                 let t = ctx.dex.species[*target].dex;
                                 if !st.caught.has(t) {
-                                    st.caught.insert(t);
+                                    let lv = st.catch_lv[sp.dex as usize] as u32;
+                                    got(&mut st, t, lv);
                                     bump(&mut st, 700.0 * ctx.p.text_factor);
                                     break 'found;
                                 }
@@ -2100,7 +2348,7 @@ pub fn attempt(
             Kind::Special { special }
                 if special.requires.iter().any(|r| {
                     let d = ctx.dex.species[ctx.dex.id(r)].dex;
-                    !st.caught.has(d)
+                    st.bodies[d as usize] == 0
                 }) => {}
             Kind::Special { special }
                 if special.kind == "buy"
@@ -2113,13 +2361,30 @@ pub fn attempt(
                 if special.kind == "buy" && ctx.p.money_model {
                     st.money -= special.cost;
                 }
+                if special.kind == "trade" {
+                    let req: Vec<u32> = special
+                        .requires
+                        .iter()
+                        .map(|r| ctx.dex.species[ctx.dex.id(r)].dex)
+                        .collect();
+                    pc_visit(ctx, &mut st, &req, &special.after);
+                    for &d in &req {
+                        st.bodies[d as usize] -= 1;
+                    }
+                }
                 bump(&mut st, special.frames as f64 * ctx.p.text_factor);
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 for n in &special.species {
                     let id = ctx.dex.id(n);
                     let sp = &ctx.dex.species[id];
                     if special.kind == "gift" || special.kind == "trade" || special.kind == "buy" {
-                        st.caught.insert(sp.dex);
+                        st.cur_src = match special.kind.as_str() {
+                            "trade" => 2,
+                            "buy" => 3,
+                            _ => 1,
+                        };
+                        got(&mut st, sp.dex, special.level);
+                        st.cur_src = 0;
                     } else {
                         bump(&mut st, ctx.enc_intro() + react(ctx, &mut rng) as f64);
                         let turns = (((1.0 - special.hp_frac) / 0.25).ceil() as u32).max(1);
@@ -2142,7 +2407,7 @@ pub fn attempt(
                             Some(ball),
                             special.max_throws,
                         ) {
-                            st.caught.insert(sp.dex);
+                            got(&mut st, sp.dex, special.level);
                             if sp.dex != 0
                                 && (special.level as f64 * ctx.p.power_bonus) > st.power
                                 && special.level >= 60
@@ -2152,6 +2417,9 @@ pub fn attempt(
                         }
                     }
                 }
+            }
+            Kind::Evolve { evo } => {
+                evolve(ctx, &mut st, &mut rng, evo, seg);
             }
             Kind::Mart { mart } => {
                 bump(&mut st, MART as f64 * ctx.p.text_factor);
@@ -2180,7 +2448,7 @@ pub fn attempt(
             Kind::Mewtwo => {
                 bump(&mut st, 1500.0 * ctx.p.text_factor);
                 bump(&mut st, ctx.throw_cost() + ctx.catch_end());
-                st.caught.insert(150);
+                got(&mut st, 150, 70);
                 st.power = 70.0 * ctx.p.power_bonus;
                 // Roll its IVs and nature like any wild mon (`pokemon.c`, `CreateBoxMon`:
                 // personality then two IV words); its default level-70 moves are
@@ -2280,6 +2548,7 @@ pub fn attempt(
                         );
                     }
                     "candy" => st.candies += 1,
+                    k if stone_ix(k).is_some() => st.stones[stone_ix(k).unwrap_or(0)] += 1,
                     _ => st.elixirs += 1,
                 }
             }
@@ -2546,6 +2815,25 @@ pub fn attempt(
             sc[i] = st.clock;
         }
         if let Some(pr) = probe.as_deref_mut() {
+            if pr.snap_at == Some(i) {
+                pr.snap = Some(Snapshot {
+                    mons: (1..=151u32)
+                        .filter(|&d| st.caught.has(d))
+                        .map(|d| {
+                            (
+                                d,
+                                st.catch_lv[d as usize] as u32,
+                                st.catch_seq[d as usize] as u32,
+                                st.src[d as usize],
+                            )
+                        })
+                        .collect(),
+                    candies: st.candies,
+                    money: st.money,
+                    clock: st.clock,
+                    carry: st.carry,
+                });
+            }
             pr.fights.append(&mut st.fight_log);
             if pr.caught_at.len() <= i {
                 pr.caught_at.resize(i + 1, 0);

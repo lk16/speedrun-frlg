@@ -35,6 +35,11 @@ only = opt('--only', '').split(',') if '--only' in args else None
 cap = opt('--cap', 400000)
 POINTER = opt('--pointer', 'CURRENT')
 ONLY_FIGHTS = opt('--fights', '').split(',') if '--fights' in args else None
+# --set dex: candidates over the WR-order dex economy (dexknobs.py) instead of the older list;
+# --set all: both. --kinds a,b: keep only those candidate kinds of the chosen set.
+SET = opt('--set', 'old')
+KINDS = opt('--kinds', '').split(',') if '--kinds' in args else None
+SKIP_FIRST = opt('--skip', 0)
 FIXED_RUNG = opt('--rung', '')
 os.environ['FRLG_POINTER'] = POINTER
 
@@ -389,14 +394,35 @@ def try_it(parent, label, patch, name, seed):
     return (lines[0] if lines else 'error: ' + r.stdout[-200:] + r.stderr[-200:])
 
 
+def gen(p):
+    if SET in ('dex', 'all'):
+        sys.path.insert(0, HERE)
+        import dexknobs
+        cands = dexknobs.candidates(p) + (candidates(p) if SET == 'all' else [])
+    else:
+        cands = candidates(p)
+    if KINDS:
+        cands = [c for c in cands if c[0] in KINDS]
+    return cands
+
+
 accepts = 0
 for ps in range(max_passes):
     changed = False
     cur = current()
     p = load(cur)
-    cands = candidates(p)
+    cands = gen(p)
+    if ps == 0 and SKIP_FIRST:
+        cands = cands[SKIP_FIRST:]
+    tried = set()
     print(f'pass {ps}: {len(cands)} candidates from {cur}', flush=True)
-    for ci, (kind, label, patch) in enumerate(cands):
+    ci = -1
+    while ci + 1 < len(cands):
+        ci += 1
+        kind, label, patch = cands[ci]
+        if (kind, label) in tried:
+            continue
+        tried.add((kind, label))
         cur = current()
         p = load(cur)
         # skip candidates that no longer differ from the current plan
@@ -430,6 +456,10 @@ for ps in range(max_passes):
         break  # regenerate candidates from the promoted plan (patches replace whole dicts)
         if accepts >= max_accepts:
             break
+        # Candidate patches replace whole list knobs: rebuild them from the new plan so an accepted
+        # change is never overwritten by a stale list; the ones already tried are skipped.
+        cands = gen(load(current()))
+        ci = -1
     if not changed or accepts >= max_accepts:
         break
 print('done; accepted', accepts)

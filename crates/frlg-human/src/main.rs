@@ -274,6 +274,28 @@ fn main() {
                     line.join(" ")
                 );
             }
+            if miss_n > 0 {
+                // The same data the other way round: what is in the bag when the fill starts.
+                let mut name: Vec<String> = vec![String::new(); 152];
+                for sp in &ctx.dex.species {
+                    if sp.dex != 0 && name[sp.dex as usize].is_empty() {
+                        name[sp.dex as usize] =
+                            sp.name.trim_start_matches("SPECIES_").to_lowercase();
+                    }
+                }
+                let line: Vec<String> = (1..=151usize)
+                    .filter(|&d| oak_miss[d] < miss_n)
+                    .map(|d| {
+                        format!(
+                            "{}:{}:{:.0}%",
+                            d,
+                            name[d],
+                            (miss_n - oak_miss[d]) as f64 / miss_n as f64 * 100.0
+                        )
+                    })
+                    .collect();
+                println!("in the bag when the fill starts: {}", line.join(" "));
+            }
             if gave_up > 0 {
                 let mut m: Vec<(u64, usize)> = (1..=151).map(|d| (missing[d], d)).collect();
                 m.sort_by(|a, b| b.cmp(a));
@@ -477,6 +499,75 @@ fn main() {
             let r: u64 = arg(&args, "--R", 4_000);
             let all = args.iter().any(|a| a == "--all");
             frlg_human::wrsplits::print_table(&plan, &ctx, seed, r, all);
+        }
+        Some("bag") => {
+            // What is in the bag after a segment (no resets): per species the share of attempts holding
+            // it and its mean catch level, plus candies and money. Used to pick evolution events.
+            let plan = load(&args[1]);
+            let ctx = plan.ctx();
+            let after: String = arg(&args, "--after", String::new());
+            let idx = plan
+                .segs
+                .iter()
+                .position(|s| s.name == after)
+                .unwrap_or_else(|| panic!("--after {after:?} matches no segment"));
+            let r: u64 = arg(&args, "--R", 20_000);
+            let (mut n, mut cand, mut money, mut carry) = (0u64, 0.0, 0.0, 0.0);
+            let mut cnt = [0u64; 152];
+            let mut lv = [0f64; 152];
+            let mut seq = [0f64; 152];
+            let mut by_src = [0f64; 7];
+            for i in 0..r {
+                let mut pr = Probe {
+                    snap_at: Some(idx),
+                    ..Default::default()
+                };
+                attempt(&ctx, seed, i, None, None, None, Some(&mut pr));
+                let Some(sn) = pr.snap else { continue };
+                n += 1;
+                cand += sn.candies as f64;
+                money += sn.money as f64;
+                carry += sn.carry as f64;
+                for (d, l, q, sr) in sn.mons {
+                    by_src[sr as usize % 7] += 1.0;
+                    cnt[d as usize] += 1;
+                    lv[d as usize] += l as f64;
+                    seq[d as usize] += q as f64;
+                }
+            }
+            let mut name: Vec<String> = vec![String::new(); 152];
+            for sp in &ctx.dex.species {
+                if sp.dex != 0 && name[sp.dex as usize].is_empty() {
+                    name[sp.dex as usize] = sp.name.trim_start_matches("SPECIES_").to_string();
+                }
+            }
+            println!(
+                "after {after}: {n} of {r} attempts reached it; candies {:.2} money {:.0} carry Lv{:.1}",
+                cand / n.max(1) as f64,
+                money / n.max(1) as f64,
+                carry / n.max(1) as f64
+            );
+            let mut tot = 0.0;
+            for d in 1..=151usize {
+                if cnt[d] > 0 {
+                    let share = cnt[d] as f64 / n.max(1) as f64;
+                    tot += share;
+                    println!(
+                        "  {d:3} {:<12} {:>5.1}%  lv {:>4.1}  #{:>4.1}",
+                        name[d],
+                        share * 100.0,
+                        lv[d] / cnt[d] as f64,
+                        seq[d] / cnt[d] as f64
+                    );
+                }
+            }
+            println!("expected species {tot:.2}");
+            let parts: Vec<String> = frlg_human::sim::SRC_NAMES
+                .iter()
+                .zip(by_src)
+                .map(|(nm, c)| format!("{nm} {:.1}", c / n.max(1) as f64))
+                .collect();
+            println!("entries by source: {}", parts.join(", "));
         }
         Some("names") => {
             let plan = load(&args[1]);
