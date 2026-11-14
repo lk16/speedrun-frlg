@@ -459,13 +459,12 @@ for ps in range(max_passes):
         print(f'  ==> promoted {pname}', flush=True)
         accepts += 1
         changed = True
-        break  # regenerate candidates from the promoted plan (patches replace whole dicts)
         if accepts >= max_accepts:
             break
-        # Candidate patches replace whole list knobs: rebuild them from the new plan so an accepted
-        # change is never overwritten by a stale list; the ones already tried are skipped.
+        # patches replace whole list knobs: rebuild the candidates from the promoted plan and carry on
+        # from the same position (the next pass revisits what was tried before the accept).
         cands = gen(load(current()))
-        ci = -1
+        ci = min(ci, len(cands) - 1) - 1
     if not changed or accepts >= max_accepts:
         break
 print('done; accepted', accepts)
