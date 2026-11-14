@@ -391,6 +391,11 @@ pub struct Params {
     /// window minus the WR's fight duration (`wr-3.25.25-main97.md`, `wrsplits.rs`). `route_style = "wr"`
     /// only; 0 = off.
     pub league_transit: bool,
+    /// Frames taken off every `league_transit` segment: the constants were the WR split window minus
+    /// the WR fight duration (intro to the defeated box), but the model charges the defeat text
+    /// (`outro`, 240 frames) after each trainer fight on top, so the room-to-room walk was counted
+    /// with it twice (R2 chain model windows +14 s each). 240 = one outro. 0 = off.
+    pub transit_outro: u32,
     /// Same audit: extra death probability per named segment (trainer fights and groups), for the
     /// losses the fight engine's tidy human does not have: the runner's deaths list of the
     /// 2026-11-12 stream (brock x5, sammy x2, liam, rival 1, rival 2 in 12 attempts past the
@@ -407,6 +412,17 @@ pub struct Params {
     /// difference between the WR's Champ 1 -> Rocket Warehouse splits (18:58) and the model's
     /// (13:15), spread over the scenes the WR scene log places there.
     pub postgame_calib: bool,
+    /// R2 fidelity (journal 2026-11-15): the post-game chain's events from the decomp instead of
+    /// text lumps: the Mt. Ember cave door's two Rocket grunts (GRUNT_43 / 44), Kindle Road and the
+    /// Ruby Path at their `frlg-mapgraph` tile counts, the Icefall Cave and Five Island walks at their
+    /// tile counts, and the Meadow's forced grunt (GRUNT_50). With `postgame_calib` the text lumps
+    /// `mt-ember-ruby-climb` and `five-island-resort` shrink to `ruby_text` / `resort_text` frames so
+    /// the Icefall and Warehouse split windows keep the WR's times.
+    pub postgame_events: bool,
+    /// `postgame_events` + `postgame_calib`: frames of the Ruby-at-Celio text lump left after the events.
+    pub ruby_text: u32,
+    /// Same for the Five Island lump.
+    pub resort_text: u32,
     /// Same audit: Persim Berry (Misty), Black Glasses swaps (Lavender rival, Lorelei) and the
     /// Mark-guy / potion shopping menus (`STRATEGY.md` sections 4, 6): bag trips in frames.
     pub item_swaps: bool,
@@ -437,6 +453,24 @@ pub struct Params {
     /// the model's own Icefall, Warehouse and Bike windows are near-deterministic (1-4%).
     /// 0 = off.
     pub win_cv: f64,
+    /// R2 fidelity (journal 2026-11-15): frames Mewtwo's fights wait for its own HP bar per full bar of
+    /// HP moved (damage taken plus items healed). The bar slides 1/384 of its length per frame
+    /// (`decompiled/src/battle_interface.c:1844-1845,1955-2012`, one `MoveBattleBar` call per frame,
+    /// `battle_controller_player.c:999-1013`): 384 reproduces the game. Applied to the lone-Mewtwo
+    /// R2 fights only (the fitted `turn` already averages the carry's bar in the others). 0 = off.
+    pub mewtwo_hp_bar: f64,
+    /// R2 fidelity: extra frames for each in-fight heal item turn (Hyper Potion / Full Restore) of a
+    /// Mewtwo fight, on top of `turn`: the bag has to be scrolled to the item and the party screen
+    /// opened. Fitted to one observation: Champion 2's Arcanine window runs 32 s for two actions with a
+    /// heal turn against ~22 s for two plain actions (`video-analysis/data/calib/v4-e4r2.md`, 4 s
+    /// sampling, so +-4 s). 0 = off.
+    pub mewtwo_heal_extra: f64,
+    /// R2 fidelity: Mewtwo gains exp from every R2 foe (Slow growth, `GROWTH_SLOW`
+    /// `decompiled/src/data/pokemon/species_info.h:4381`, `EXP_SLOW(n) = 5 n^3 / 4`
+    /// `experience_tables.h:4`), so it levels 70 -> 73 across the round as in the video
+    /// (`human-run/video-analysis/data/calib/v4-e4r2.md`): each level-up costs `level_up()` frames and
+    /// its stats follow the level.
+    pub mewtwo_levels: bool,
     /// Which rod the fish hunts use: `mixed` (the old model: all ten slots), `old`, `good` or
     /// `super`. A real rod costs a trip: Old Rod Vermilion, Good Rod Fuchsia, Super Rod Route 12
     /// south of the Snorlax (`decompiled/data/maps/*House*/scripts.inc`).
@@ -692,15 +726,22 @@ impl Default for Params {
             calib_battle: false,
             calib_wr: false,
             league_transit: false,
+            transit_outro: 0,
             hazard: Default::default(),
             trainer_fit: 0.0,
             postgame_calib: false,
+            postgame_events: false,
+            ruby_text: 4800,
+            resort_text: 6000,
             item_swaps: false,
             menu_slip: 0.0,
             fatal: Default::default(),
             slow: vec![],
             slow_scale: 1.0,
             win_cv: 0.0,
+            mewtwo_hp_bar: 0.0,
+            mewtwo_heal_extra: 0.0,
+            mewtwo_levels: false,
             rod: "mixed".into(),
             repel_on: vec![],
             ball_batch: 10,

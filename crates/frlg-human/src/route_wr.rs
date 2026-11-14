@@ -117,14 +117,18 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     // (Lorelei 173-148, Bruno 125-104, Agatha 110-88, Lance 166-120; the Champion's window is
     // covered by `hall-of-fame-1`). `league_transit` only.
     for (nm, id, transit) in [
-        ("lorelei", "TRAINER_ELITE_FOUR_LORELEI".to_string(), 1500),
+        ("lorelei", "TRAINER_ELITE_FOUR_LORELEI".to_string(), 1500u32),
         ("bruno", "TRAINER_ELITE_FOUR_BRUNO".to_string(), 1260),
         ("agatha", "TRAINER_ELITE_FOUR_AGATHA".to_string(), 1320),
         ("lance", "TRAINER_ELITE_FOUR_LANCE".to_string(), 2760),
         ("champion", tn("TRAINER_CHAMPION_FIRST"), 0),
     ] {
         if p.league_transit && transit > 0 {
-            b.text(&format!("e4-transit-{nm}"), transit, Src::Guess);
+            b.text(
+                &format!("e4-transit-{nm}"),
+                transit.saturating_sub(p.transit_outro),
+                Src::Guess,
+            );
         }
         b.trainer(nm, &id, 900);
     }
@@ -138,27 +142,54 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.text("oak-national-dex", 2500, Src::Guess);
     b.text("to-one-island", 3000, Src::Guess);
     b.text("celio-ruby-request", 1500, Src::Guess);
-    b.walk("mt-ember", 300, Era::Run, None, Src::Guess);
-    if p.audited_forced {
-        b.forced(
-            "mt-ember-trainers",
-            &["MtEmber_Exterior_EventScript_Logan"],
-            &[],
-        );
+    if p.postgame_events {
+        // The Ruby chain as the decomp lays it out (`postgame_events`). Kindle Road is a surf route:
+        // 159 tiles from the One Island fly spot to the Mt. Ember exterior plus 21 to the cave door
+        // (`bin/frlg-mapgraph` model with Surf and Cut; `tools/forced.py` finds no forced fight on it).
+        // The cave door at (42, 39) is guarded by two Rocket grunts standing on (41, 40) and (42, 40);
+        // once Celio has asked for the Ruby both must be beaten to get in
+        // (`decompiled/data/maps/MtEmber_Exterior/scripts.inc` `Grunt1` / `Grunt2`, GRUNT_43 / 44).
+        // The Ruby lies on B5F (`MtEmber_RubyPath_B5F_EventScript_Ruby`): 138 tiles each way through
+        // five floors. Logan stands on the way to the summit, not to the Ruby, so he is not here.
+        b.walk("kindle-road-in", 180, Era::Surf, None, Src::Tiles);
+        b.trainer("mt-ember-grunt-1", "TRAINER_TEAM_ROCKET_GRUNT_43", 500);
+        b.trainer("mt-ember-grunt-2", "TRAINER_TEAM_ROCKET_GRUNT_44", 500);
+        b.walk("ruby-path", 276, Era::Run, None, Src::Tiles);
+        b.walk("kindle-road-out", 180, Era::Surf, None, Src::Tiles);
     } else {
-        b.group("mt-ember-trainers", 3, 3, 38, 75);
+        b.walk("mt-ember", 300, Era::Run, None, Src::Guess);
+        if p.audited_forced {
+            b.forced(
+                "mt-ember-trainers",
+                &["MtEmber_Exterior_EventScript_Logan"],
+                &[],
+            );
+        } else {
+            b.group("mt-ember-trainers", 3, 3, 38, 75);
+        }
+        b.walk("mt-ember-back", 150, Era::Run, None, Src::Guess);
     }
-    b.walk("mt-ember-back", 150, Era::Run, None, Src::Guess);
     if p.postgame_calib {
         // Ruby at Celio at video 2:55 (5:35 after Champ 1) against the model's 3:37: the climb and
-        // the Ruby Path. `wr-3.25.25-main97.md` scene log; 80 s.
-        b.text("mt-ember-ruby-climb", 4800, Src::Guess);
+        // the Ruby Path. `wr-3.25.25-main97.md` scene log; 80 s (`postgame_events`: what the
+        // events above leave of it, `ruby_text`).
+        b.text(
+            "mt-ember-ruby-climb",
+            if p.postgame_events { p.ruby_text } else { 4800 },
+            Src::Guess,
+        );
     }
     b.text("celio-rainbow-pass", 2800, Src::Guess);
     // Four Island's Icefall Cave: the Lorelei scene and one forced grunt
     // (`decompiled/data/maps/FourIsland_IcefallCave_Back/scripts.inc`, `LoreleiRocketsScene`).
     b.text("sail-to-four", 900, Src::Guess);
-    b.walk("icefall-cave-walk", 250, Era::Run, None, Src::Guess);
+    if p.postgame_events {
+        // Four Island harbor door to the Back room 94 tiles, and 86 back to the harbor
+        // (`frlg-mapgraph` model; ice tiles count as floor, the sliding is `icefall-ice-slides`).
+        b.walk("icefall-cave-walk", 94, Era::Run, None, Src::Tiles);
+    } else {
+        b.walk("icefall-cave-walk", 250, Era::Run, None, Src::Guess);
+    }
     b.trainer("icefall-grunt", "TRAINER_TEAM_ROCKET_GRUNT_45", 500);
     if p.postgame_calib {
         // The WR's Champ 1 -> Icefall split is 9:34 against the model's 7:31 (minus the 80 s above):
@@ -166,11 +197,27 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         b.text("icefall-ice-slides", 2580, Src::Guess);
     }
     b.text("icefall-cave", 1500, Src::Guess);
-    b.walk("five-island-approach", 250, Era::Run, None, Src::Guess);
+    if p.postgame_events {
+        b.walk("icefall-cave-out", 86, Era::Run, None, Src::Tiles);
+        // Five Island harbor to the Meadow's Warehouse door: 82 tiles with one forced Rocket grunt
+        // (`FiveIsland_Meadow_EventScript_Rocket2`, GRUNT_50, `forced.py`).
+        b.walk("five-island-approach", 82, Era::Run, None, Src::Tiles);
+        b.trainer("meadow-grunt", "TRAINER_TEAM_ROCKET_GRUNT_50", 500);
+    } else {
+        b.walk("five-island-approach", 250, Era::Run, None, Src::Guess);
+    }
     if p.postgame_calib {
         // Icefall split 2:58:24 -> Warehouse entry at ~3:00:25 (scene log "Rocket Warehouse
         // 3:01-3:06" at video time = run + 35 s): ~2:00 against the model's 0:37, 100 s of it here.
-        b.text("five-island-resort", 6000, Src::Guess);
+        b.text(
+            "five-island-resort",
+            if p.postgame_events {
+                p.resort_text
+            } else {
+                6000
+            },
+            Src::Guess,
+        );
     }
     b.trainer("warehouse-grunt-1", "TRAINER_TEAM_ROCKET_GRUNT_47", 500);
     b.trainer("warehouse-admin-1", "TRAINER_TEAM_ROCKET_ADMIN", 700);

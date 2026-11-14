@@ -1054,7 +1054,7 @@ pub(crate) fn leg_e4_2(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         if p.league_transit {
             // Seconds between rooms from the WR's split windows minus its fight durations
             // (Bruno-2 124-92, Agatha-2 113-98, Lance-2 154-110, Champion-2 222-196).
-            let t = match nm {
+            let t: u32 = match nm {
                 "bruno-2" => 1920,
                 "agatha-2" => 900,
                 "lance-2" => 2640,
@@ -1062,7 +1062,11 @@ pub(crate) fn leg_e4_2(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
                 _ => 0,
             };
             if t > 0 {
-                b.text(&format!("e4-transit-{nm}"), t, Src::Guess);
+                b.text(
+                    &format!("e4-transit-{nm}"),
+                    t.saturating_sub(p.transit_outro),
+                    Src::Guess,
+                );
             }
         }
         b.trainer(nm, &id, 900);

@@ -823,6 +823,13 @@ pub enum XItem {
 #[derive(Default, Debug)]
 pub struct Outcome {
     pub won: bool,
+    /// HP the fighter regained from items this fight (running total).
+    pub hp_up: i32,
+    /// The fighter's own HP bar movement, in fractions of its max HP: damage taken plus HP healed.
+    /// The bar moves 1/384 of its length per frame, one `MoveBattleBar` call per frame
+    /// (`decompiled/src/battle_interface.c:1844-1845,1955-2012` `CalcNewBarValue`, 48 px x 8;
+    /// `battle_controller_player.c:999-1013`), so a fraction costs 384 frames of waiting.
+    pub hp_bar: f64,
     /// Player turns (moves and item uses) and how many were item uses.
     pub turns: u32,
     pub item_turns: u32,
@@ -2827,6 +2834,7 @@ fn run(
         while e.hp > 0 && me.hp > 0 && guard < 120 {
             guard += 1;
             out.turns += 1;
+            let (hp_turn0, up_turn0) = (me.hp, out.hp_up);
 
             // --- player action.
             let (mut my_action, read) =
@@ -2971,11 +2979,14 @@ fn run(
                     Action::Heal => {
                         out.item_turns += 1;
                         out.heals_used += 1;
+                        let before = me.hp;
                         me.hp = (me.hp + tac.heal).min(me.max_hp);
+                        out.hp_up += me.hp - before;
                     }
                     Action::FullRestore => {
                         out.item_turns += 1;
                         out.full_restores_used += 1;
+                        out.hp_up += me.max_hp - me.hp.max(0);
                         me.hp = me.max_hp;
                         me.status = Status1::None;
                         me.confusion = 0;
@@ -3131,6 +3142,11 @@ fn run(
 
             end_of_turn(me, &mut e, &mut fs.my_side, &mut out, true, rng);
             end_of_turn(&mut e, me, &mut fs.en_side, &mut out, false, rng);
+            {
+                let healed = out.hp_up - up_turn0;
+                let lost = (hp_turn0 + healed - me.hp.max(0)).max(0);
+                out.hp_bar += (healed + lost) as f64 / me.max_hp.max(1) as f64;
+            }
             for sd in [&mut fs.my_side, &mut fs.en_side] {
                 if sd.weather_turns != 0 && sd.weather_turns != W_FOREVER {
                     sd.weather_turns -= 1;
