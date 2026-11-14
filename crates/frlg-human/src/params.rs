@@ -587,6 +587,10 @@ pub struct Params {
     /// Fight Erika after the Pokémon Tower leg (fly-celadon lands beside the gym): the
     /// carry is ~2 levels higher and usually evolved.
     pub erika_after_tower: bool,
+    /// Structural route-order variants of the WR order (`route_wr.rs`), by name: `warden_early`,
+    /// `erika_cycling`, `erika_pre_silph`, `surge_early`, `safari_after_koga`, ... Empty = the WR
+    /// run's own order.
+    pub route_variants: Vec<String>,
     /// Reset unless the carry's stats at its first evolution reach these minima
     /// (HP, Atk, Def, Spe, SpA, SpD; 0 = no check). A later check resolves IVs far finer
     /// than level 5 can: Wartortle at 16 has SpA 25-30 across IVs, so "SpA >= 30" is a
@@ -782,6 +786,7 @@ impl Default for Params {
             early_dig: false,
             no_dig: false,
             erika_after_tower: false,
+            route_variants: vec![],
             evo_min_stats: [0; 6],
             extra_heals: vec![],
             extra_heal_frames: 700,
@@ -824,6 +829,11 @@ impl Default for Params {
 }
 
 impl Params {
+    /// Is the structural route variant `name` on?
+    pub fn variant(&self, name: &str) -> bool {
+        self.route_variants.iter().any(|v| v == name)
+    }
+
     /// Reads the first ```json fenced block of a plan file.
     pub fn from_plan_text(text: &str) -> Result<Params, String> {
         let start = text.find("```json").ok_or("plan has no ```json block")? + "```json".len();

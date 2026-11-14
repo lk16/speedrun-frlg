@@ -696,7 +696,7 @@ pub(crate) fn leg_cycling(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let e = b.era;
     // 8. Cycling Road to Fuchsia, Safari, HM03 and HM04, Koga.
     b.text("fly-celadon", 700, Src::Guess);
-    if p.erika_after_tower && p.route_style != "wr" {
+    if (p.erika_after_tower && p.route_style != "wr") || p.variant("erika_cycling") {
         // Erika postponed past the tower: the carry is two levels up and usually a
         // Blastoise by now, and the fly lands in Celadon anyway (walk re-used; Guess).
         let e = b.era;
@@ -767,6 +767,14 @@ pub(crate) fn leg_silph(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let e = b.era;
     // 9. Silph Co. and Sabrina.
     b.text("fly-celadon-2", 700, Src::Guess);
+    leg_silph_walk(b, p, h);
+}
+
+/// Silph and Sabrina from Celadon (the fly is the caller's).
+#[allow(unused_variables)]
+pub(crate) fn leg_silph_walk(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
+    let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
+    let e = b.era;
     b.walk("silph-walk", 479, e, None, Src::Guess);
     b.trainer("rival-silph", &tn("TRAINER_RIVAL_SILPH"), 700);
     b.group("silph-grunts", 4, 2, 32, 70);

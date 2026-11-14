@@ -33,6 +33,11 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.split(); // "Bill"
     leg_bill_return(b, p, h);
     leg_ssanne(b, p, h);
+    if p.variant("surge_early") {
+        // Variant: Surge right after the S.S. Anne (Cut is in the bag: `captain-hm01`), in the town
+        // the ship leaves from, instead of a Fly back to Vermilion after the tower.
+        leg_surge(b, p, h);
+    }
     // Back to Cerulean's bike shop with the voucher; the Bike split is the redeemed bicycle.
     leg_vermilion_return(b, p, h);
     leg_bike(b, p, h);
@@ -52,14 +57,26 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     }
     leg_tower(b, p, h);
     // Surge is folded into this leg: fly to Vermilion, the gym, then to Celadon for Snorlax.
-    b.text("fly-vermilion", 700, Src::Guess);
-    leg_surge(b, p, h);
+    if !p.variant("surge_early") {
+        b.text("fly-vermilion", 700, Src::Guess);
+        leg_surge(b, p, h);
+    }
     leg_cycling(b, p, h);
     b.split(); // "Snorlax"
 
     // Safari, Koga.
-    leg_safari(b, p, h);
-    leg_koga(b, p, h);
+    if p.variant("safari_after_koga") {
+        leg_koga(b, p, h);
+        leg_safari(b, p, h);
+    } else {
+        leg_safari(b, p, h);
+        leg_koga(b, p, h);
+    }
+    if p.variant("warden_early") {
+        // Variant: the Gold Teeth (Safari West, with the Secret House: `SafariZone_West/map.json`)
+        // go to the Warden while still in Fuchsia, instead of a Fly back after Erika.
+        leg_warden(b, p, h);
+    }
 
     // Power Plant: fly to Lavender, surf to the plant (Route 10), catch, fly back out.
     if !p.skip_powerplant {
@@ -80,12 +97,24 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.push("stones", Src::Guess, 0, Kind::Stones);
 
     // Silph, Sabrina, then Erika (Celadon is a fly away), the Warden, Viridian.
-    leg_silph(b, p, h);
-    b.text("fly-celadon-3", 700, Src::Guess);
-    let e = b.era;
-    erika_leg(b, p, e);
-    b.text("fly-fuchsia", 700, Src::Guess);
-    leg_warden(b, p, h);
+    if p.variant("erika_pre_silph") {
+        // Variant: one Fly to Celadon serves Erika and the walk on to Saffron.
+        b.text("fly-celadon-2", 700, Src::Guess);
+        let e = b.era;
+        erika_leg(b, p, e);
+        leg_silph_walk(b, p, h);
+    } else {
+        leg_silph(b, p, h);
+        if !p.variant("erika_cycling") {
+            b.text("fly-celadon-3", 700, Src::Guess);
+            let e = b.era;
+            erika_leg(b, p, e);
+        }
+    }
+    if !p.variant("warden_early") {
+        b.text("fly-fuchsia", 700, Src::Guess);
+        leg_warden(b, p, h);
+    }
     leg_viridian(b, p, h);
 
     // Route 22, Victory Road, and the dex complete before the League.
@@ -136,6 +165,7 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.split();
 
     // Post-game. Stones were used on the way (the plan lists them where they evolve).
+    let e = b.era;
     b.text("fly-pallet-2", 700, Src::Guess);
     b.walk("pallet-to-oak", 30, e, None, Src::Tiles);
     // All 60 were caught before the League; Oak only confirms it.
