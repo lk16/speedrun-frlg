@@ -407,7 +407,11 @@ def try_it(parent, label, patch, name, seed, r0=0):
 
 
 def gen(p):
-    if SET == 'recalib':
+    if SET == 'early':
+        sys.path.insert(0, HERE)
+        import earlyknobs, manipknobs
+        cands = earlyknobs.candidates(p) + manipknobs.candidates(p)
+    elif SET == 'recalib':
         sys.path.insert(0, HERE)
         import dexknobs, honestknobs, manipknobs
         cands = manipknobs.candidates(p) + honestknobs.candidates(p) + candidates(p) + dexknobs.candidates(p)

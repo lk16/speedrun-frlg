@@ -754,6 +754,11 @@ pub struct Params {
     pub risk_potions: u32,
     /// Extra per-fight loss probability in the risk lane, by segment name (documented guesses).
     pub risk_noise: std::collections::HashMap<String, f64>,
+    /// Risk lane potions are paid for out of the purse (money model; Potion 300, Super 700, Hyper 1200) and
+    /// each use costs a bag turn; a fight can still spend at most its own cap. false = free and instant.
+    pub risk_pay: bool,
+    /// The mons caught so far are the early fights' sacrifices (`FightTactic::sacs`).
+    pub early_helpers: bool,
 }
 
 impl Default for Params {
@@ -907,6 +912,8 @@ impl Default for Params {
             risk_foe: 1.0,
             risk_potions: 3,
             risk_noise: Default::default(),
+            risk_pay: false,
+            early_helpers: false,
         }
     }
 }

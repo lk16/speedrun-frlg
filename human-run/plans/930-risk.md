@@ -1,6 +1,6 @@
 # Plan 930-risk
 
-Parent: `922-aggr785`. Change: MODEL CHANGE: the early deaths are the engine's own (risk lane), see journal 2026-11-17-risk-lane
+Parent: `922-aggr785`. Change: MODEL CHANGE: the early deaths come from the engine's own honest fights (risk lane), see journal 2026-11-17-08-00-risk-lane
 
 The step-by-step description, citations and branch rules in `001-crude.md` still apply except
 where the parameters below differ; `frlg-human` reads only the block below. Every segment cost
@@ -518,8 +518,7 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
   },
   "rival-ss-anne": {
    "x": [],
-   "risk_power": 2.0,
-   "risk_foe": 1.0
+   "risk_power": 2.0
   },
   "rival-silph": {
    "x": [
@@ -574,15 +573,15 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
   },
   "rival-cerulean": {
    "x": [],
-   "risk_power": 2.0,
-   "risk_foe": 1.0
+   "risk_power": 2.0
   },
   "brock": {
    "entry": true,
    "potions": 0
   },
   "misty": {
-   "power": 1.0
+   "power": 1.0,
+   "risk_power": 2.0
   },
   "rival-tower": {
    "x": [
@@ -986,12 +985,13 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
  "mewtwo_evs": true,
  "black_glasses": true,
  "risk_until": "rival-ss-anne",
- "risk_foe": 1.3,
- "risk_potions": 3
+ "risk_foe": 1.0,
+ "risk_potions": 3,
+ "risk_pay": true
 }
 ```
 
 ## Score
 
-- rung **WR+2m**, EHT 137.4935 h at R=1000000, 95% CI of the paired difference to the parent [23.3831, 37.9638] (negative is better), parent EHT 106.8543
+- rung **WR+2m**, EHT 144.5686 h at R=1000000, 95% CI of the paired difference to the parent [30.3867, 45.9401] (negative is better), parent EHT 106.8543
 - evaluation line: `human-run/scores.jsonl`, plan `930-risk`; ledger of everything tried is in that file.

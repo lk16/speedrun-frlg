@@ -242,6 +242,8 @@ struct State {
     /// the end of the last fight (a rise since then, a heal or a rest, is applied to the risk lane).
     risk_hp: f64,
     risk_real: f64,
+    /// Early helpers that fainted (`Params::early_helpers`).
+    helpers_dead: u32,
     badges: u8,
     league_items: bool,
     /// Heal items left for the League round in progress (bought at its first fight).
@@ -1306,6 +1308,17 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         st.fodder += 1;
         bump(st, 450.0 * ctx.p.text_factor);
     }
+    // Early helpers (`Params::early_helpers`): the mons caught so far (the forest bug, a Pidgey) are the
+    // sacrifices of the early fights; each one that faints stays fainted.
+    if ctx.p.early_helpers && !a.league && ctx.risk_end.is_some_and(|e| st.seg_i <= e) {
+        let alive: u32 = st
+            .bodies
+            .iter()
+            .map(|&b| b as u32)
+            .sum::<u32>()
+            .saturating_sub(1);
+        st.fodder = alive.saturating_sub(st.helpers_dead);
+    }
     let sacs = sacs.min(st.fodder);
     // League round start: the heal items come out of the purse (Indigo Plateau mart, 600
     // frames of menus; guess).
@@ -1431,13 +1444,17 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 let per = heal_amount(me.level, st.league_items);
                 let uses = (lo - cur + per - 1) / per;
                 bump(st, uses as f64 * ctx.turn());
+                let before = st.hp_frac;
                 st.hp_frac = ((cur + uses * per) as f64 / me.max_hp as f64).min(1.0);
+                // The timing lane's potions are free; the risk lane does not inherit them.
+                st.risk_real += st.hp_frac - before;
             }
         } else if st.hp_frac < ctx.p.preheal_below && !mewtwo_now && !torrent {
             let uses = (((0.85 - st.hp_frac) * me.max_hp as f64)
                 / heal_amount(me.level, st.league_items) as f64)
                 .ceil();
             bump(st, uses * ctx.turn());
+            st.risk_real += 0.85 - st.hp_frac;
             st.hp_frac = 0.85;
         }
         // Between League fights: one item when the fighter is low (Mewtwo carries its damage
@@ -1532,6 +1549,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         // A sacrifice costs its faint animation and the send-outs both ways. guess.
         bump(st, out.sacs_used as f64 * 900.0);
         st.fodder = st.fodder.saturating_sub(out.sacs_used);
+        if ctx.p.early_helpers && !a.league {
+            st.helpers_dead += out.sacs_used;
+        }
         if a.league {
             st.heal_items = st
                 .heal_items
@@ -1720,6 +1740,18 @@ fn risk_fight(
     } else {
         ctx.p.risk_potions
     };
+    // Potions are paid for (Potion 300, Super Potion 700, Hyper Potion 1200 at the heal tier of the level:
+    // `items.json`) out of the purse and each use is a bag turn: no free lunch in healing.
+    let per = heal_amount(st.carry, st.league_items);
+    let price = match per {
+        20 => 300,
+        50 => 700,
+        _ => 1200,
+    };
+    let pay = ctx.p.risk_pay && ctx.p.money_model;
+    if pay {
+        potions = potions.min(st.money / price);
+    }
     // The entry heal of the Torrent phase, as in the timing lane but paid from the potion budget.
     if (cfg.entry || in_torrent) && potions > 0 {
         let hits = if cfg.entry { 1.0 } else { ctx.p.torrent_hits };
@@ -1729,6 +1761,11 @@ fn risk_fight(
             let per = heal_amount(me.level, st.league_items);
             let uses = (((lo - cur + per - 1) / per).max(1) as u32).min(potions);
             potions -= uses;
+            if pay {
+                st.money -= uses * price;
+                bump(st, uses as f64 * ctx.turn());
+                potions = potions.min(st.money / price);
+            }
             st.risk_hp = ((cur + uses as i32 * per) as f64 / me.max_hp as f64).min(1.0);
         }
     }
@@ -1738,6 +1775,11 @@ fn risk_fight(
     t2.rollouts = 0;
     let mut g = crate::rng::GameRng::from_u32(rng.next_u64() as u32);
     let out = fight(dex, &mut me, &t2, &foes, a.ai, a.heals, a.wild, &mut g);
+    if pay {
+        let n = out.heals_used.min(potions);
+        st.money -= n * price;
+        bump(st, n as f64 * ctx.turn());
+    }
     let fled = a.wild && !out.won && out.hp_frac > 0.0;
     let mut lost = !out.won && !fled;
     if std::env::var_os("FRLG_RISK_TRACE").is_some() {
@@ -2308,6 +2350,7 @@ pub fn attempt(
         hp_frac: 1.0,
         risk_hp: 1.0,
         risk_real: 1.0,
+        helpers_dead: 0,
         badges: 0,
         league_items: false,
         heal_items: 0,
