@@ -31,7 +31,9 @@ MODEL = {
     'misty-rocktunnel': ('rival-cerulean', 'rock-tunnel-trainers', {'nugget-bridge-trainers': 1, 'rival-ss-anne': 3, 'rock-tunnel-trainers': 1}),
     'rt-snorlax': ('rock-tunnel-trainers', 'snorlax', {'hideout-giovanni': 1, 'rival-tower': 2, 'surge': 1}),
     'snorlax-koga': ('snorlax', 'koga-badge', {'koga': 4, 'fuchsia-gym-trainers': 1}),
-    'koga-sevii': ('koga-badge', 'blaine-badge-and-sevii-scene', {'mansion-trainers': 1, 'blaine': 3, 'three-island-paxton': 1}),
+    # `mansion-trainers` is a skippable group (`skip_groups`): a hazard on it would be removed by skipping it (the descent
+    # did exactly that, plan 487), so the window's hazard sits on fights the route cannot skip.
+    'koga-sevii': ('koga-badge', 'blaine-badge-and-sevii-scene', {'blaine': 3, 'three-island-paxton': 1}),
     'sevii-gio3': ('blaine-badge-and-sevii-scene', 'giovanni-badge', {'rival-silph': 2, 'sabrina': 3, 'erika': 3, 'giovanni': 2}),
     'gio3-door': ('giovanni-badge', 'indigo-heal', {'rival-route22': 3, 'victory-road': 1}),
 }
@@ -83,7 +85,15 @@ def main():
     byw = {t['window']: t for t in table}
     late = [t for t in table if t['window'] not in ('forest-brock', 'brock-misty')]
     q_pool = sum(t['deaths'] for t in late) / max(1, sum(t['at_risk'] for t in late))
-    r = reach(plan, 'WR+160m', R, seed)
+    # The engine's own survival: the plan with `fatal` (and the old `hazard`) cleared.
+    params = json.loads(open(plan).read().split('```json')[1].split('```')[0])
+    params['fatal'] = {}
+    params['hazard'] = {}
+    scratch = os.environ.get('FRLG_SCRATCH', '/tmp/frlg-human-scratch')
+    os.makedirs(scratch, exist_ok=True)
+    stripped = os.path.join(scratch, '_fit_hazards_plan.md')
+    open(stripped, 'w').write('```json\n' + json.dumps(params) + '\n```\n')
+    r = reach(stripped, 'WR+160m', R, seed)
     fatal = {}
     print(f'pooled late death share per window {q_pool:.3f} (k = {k})')
     print(f'{"window":<18}{"runner q":>9}{"model q":>9}{"need":>8}  fatal')
