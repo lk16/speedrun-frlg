@@ -387,6 +387,8 @@ fn main() {
                     "speed" => XItem::Speed,
                     "special" => XItem::Special,
                     "dire" => XItem::DireHit,
+                    "accuracy" => XItem::Accuracy,
+                    "guard" => XItem::GuardSpec,
                     o => panic!("unknown x item {o}"),
                 })
                 .collect();

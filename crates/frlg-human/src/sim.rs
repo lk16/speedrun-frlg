@@ -182,7 +182,7 @@ struct State {
     /// Status that outlived the last battle (cured by item or Pokémon Center).
     carry_status: Status1,
     /// X items in the bag: Attack, Defend, Speed, Special, Dire Hit.
-    x_stock: [u32; 5],
+    x_stock: [u32; 7],
     /// Mewtwo once caught (battle_sim): its rolled IVs and nature, and its move slots.
     mewtwo: Option<([u32; 6], u8)>,
     mewtwo_moves: Vec<usize>,
@@ -220,6 +220,15 @@ struct State {
     quiet_rolls: f64,
     quiet_window: f64,
     evs: [u32; 6],
+    /// Effort values actually earned (`Params::ev_lag`: `evs` is what the cached stats were last
+    /// computed from), and Mewtwo's pair.
+    evs_real: [u32; 6],
+    mewtwo_evs: [u32; 6],
+    mewtwo_evs_real: [u32; 6],
+    /// Black Glasses equipped (`Params::black_glasses`).
+    glasses: bool,
+    /// Mystic Water bought and held (`Params::mystic_after`).
+    mystic: bool,
     hp_frac: f64,
     badges: u8,
     league_items: bool,
@@ -581,6 +590,24 @@ fn mewtwo_level(ctx: &Ctx, st: &State) -> u32 {
     l
 }
 
+/// `MonGainEVs` (`decompiled/src/pokemon.c:5512-5595`): stats in the order HP, Atk, Def, Spe, SpA, SpD;
+/// 255 per stat, and with `Params::ev_cap` 510 in total.
+fn add_evs(ctx: &Ctx, real: &mut [u32; 6], y: [u32; 6]) {
+    let mut total: u32 = real.iter().sum();
+    for (e, y) in real.iter_mut().zip(y) {
+        let mut inc = y;
+        if ctx.p.ev_cap {
+            if total >= 510 {
+                break;
+            }
+            inc = inc.min(510 - total);
+        }
+        inc = inc.min(255u32.saturating_sub(*e));
+        *e += inc;
+        total += inc;
+    }
+}
+
 fn add_exp(ctx: &Ctx, st: &mut State, e: u32) -> u32 {
     st.exp = st.exp.saturating_add(e);
     let new = level_from_exp(Growth::MediumSlow, st.exp) as u32;
@@ -595,6 +622,8 @@ fn add_exp(ctx: &Ctx, st: &mut State, e: u32) -> u32 {
     }
     if gained > 0 {
         learn_moves(ctx, st);
+        // `CalculateMonStats` runs on a level-up: the cached stats pick up the EVs.
+        st.evs = st.evs_real;
     }
     gained
 }
@@ -1333,7 +1362,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 dex.id("SPECIES_MEWTWO"),
                 mewtwo_level(ctx, st),
                 ivs,
-                [0; 6],
+                st.mewtwo_evs,
                 nature,
                 st.badges,
             );
@@ -1356,6 +1385,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             m.moves = st.slots.clone();
             m.pp = st.slot_pp.clone();
             m.status = st.carry_status;
+            if st.mystic {
+                m.boost = Some((11, 10));
+            } else if ctx.p.black_glasses && st.glasses {
+                m.boost = Some((17, 10));
+            }
             if a.league && std::env::var_os("FRLG_HACK_PP").is_some() {
                 m.pp = vec![50; m.moves.len()];
             }
@@ -1398,7 +1432,17 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         // from fight to fight like the carry does).
         if a.league && st.heal_items > 0 {
             let cur = if mewtwo_now { st.mewtwo_hp } else { st.hp_frac };
-            if cur < ctx.p.league_preheal {
+            // `league_torrent`: a carry that already sits in the Torrent window (<= 1/3 HP) and above
+            // the foes' best opening hit stays there (the WR carries Lorelei's 28/153 into Bruno).
+            let in_window = ctx.p.league_torrent && !mewtwo_now && {
+                let hp = (me.max_hp as f64 * cur).round() as i32;
+                let lo = crate::battle::entry_floor(dex, &me, a.foes) + 1;
+                hp * 3 <= me.max_hp && hp >= lo
+            };
+            if in_window && std::env::var_os("FRLG_SIM_TRACE").is_some() {
+                eprintln!("league-torrent: {} keeps hp {:.2}", a.name, cur);
+            }
+            if cur < ctx.p.league_preheal && !in_window {
                 st.heal_items -= 1;
                 bump(st, ctx.turn());
                 if mewtwo_now {
@@ -1431,7 +1475,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             heal: heal_amount(me.level, st.league_items),
             full_restore: st.league_items,
             sacs,
-            torrent: torrent && !mewtwo_now,
+            torrent: (torrent || (a.league && ctx.p.league_torrent)) && !mewtwo_now,
             torrent_stall: ctx.p.torrent_stall,
             others_alive: st.fodder,
             heal_stock: if a.league { st.heal_items } else { u32::MAX },
@@ -1448,10 +1492,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
             eprintln!(
-                "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {} kos {} heals {} frs {} stats {:?}/{}",
+                "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {} kos {} heals {} frs {} end_hp {:.2} stats {:?}/{}",
                 a.name, me.level, st.hp_frac, stock, sacs, me.pp,
                 me.moves.iter().map(|&m| dex.moves[m].name.trim_start_matches("MOVE_").to_string()).collect::<Vec<_>>(),
-                out.won, out.turns, out.x_used, out.sacs_used, out.kos.len(), out.heals_used, out.full_restores_used, me.stat, me.max_hp
+                out.won, out.turns, out.x_used, out.sacs_used, out.kos.len(), out.heals_used, out.full_restores_used, out.hp_frac, me.stat, me.max_hp
             );
         }
         for x in xs.iter().take(out.x_used as usize) {
@@ -1500,20 +1544,37 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             }
             for &(sp, lvl) in &out.kos {
                 let yld = a.yield_.unwrap_or(dex.species[sp].exp_yield);
+                // `Cmd_getexp` gives the EVs first, then the exp: a level-up in the same KO already
+                // recomputes the stats with them.
+                if mewtwo_now && ctx.p.mewtwo_evs {
+                    let mut real = st.mewtwo_evs_real;
+                    add_evs(ctx, &mut real, dex.species[sp].ev_yield);
+                    st.mewtwo_evs_real = real;
+                    if !ctx.p.ev_lag {
+                        st.mewtwo_evs = real;
+                    }
+                }
                 if mewtwo_now && ctx.p.mewtwo_levels {
                     let before = mewtwo_level(ctx, st);
                     st.mewtwo_exp += exp_gain(yld as u8, lvl as u8, a.trainer);
                     let gained = mewtwo_level(ctx, st).saturating_sub(before);
                     bump(st, gained as f64 * ctx.level_up());
+                    if gained > 0 {
+                        st.mewtwo_evs = st.mewtwo_evs_real;
+                    }
                 }
                 if !mewtwo_now {
+                    let mut real = st.evs_real;
+                    add_evs(ctx, &mut real, dex.species[sp].ev_yield);
+                    st.evs_real = real;
+                    // Without `ev_lag` the stats follow the EVs at once (the old model); with it
+                    // `add_exp` copies them in on a level-up.
+                    if !ctx.p.ev_lag {
+                        st.evs = real;
+                    }
                     let e = exp_gain(yld as u8, lvl as u8, a.trainer);
                     let g = add_exp(ctx, st, e);
                     bump(st, g as f64 * ctx.level_up());
-                    let ev = dex.species[sp].ev_yield;
-                    for (e, y) in st.evs.iter_mut().zip(ev) {
-                        *e = (*e + y).min(255);
-                    }
                 }
             }
             if a.trainer {
@@ -1617,6 +1678,8 @@ fn x_index(x: XItem) -> usize {
         XItem::Speed => 2,
         XItem::Special => 3,
         XItem::DireHit => 4,
+        XItem::Accuracy => 5,
+        XItem::GuardSpec => 6,
     }
 }
 
@@ -2119,6 +2182,11 @@ pub fn attempt(
         quiet_rolls: 0.0,
         quiet_window: 0.0,
         evs: [0; 6],
+        evs_real: [0; 6],
+        mewtwo_evs: [0; 6],
+        mewtwo_evs_real: [0; 6],
+        glasses: false,
+        mystic: false,
         hp_frac: 1.0,
         badges: 0,
         league_items: false,
@@ -2147,7 +2215,7 @@ pub fn attempt(
         slot_pp: vec![],
         learned_to: 5,
         carry_status: Status1::None,
-        x_stock: [0; 5],
+        x_stock: [0; 7],
         mewtwo: None,
         mewtwo_moves: vec![],
         evo_checked: false,
@@ -2646,10 +2714,18 @@ pub fn attempt(
                         } else {
                             // Psychic and Recover stay; the weakest other slot goes
                             // (Safeguard, then Swift, then an earlier teach).
-                            let keep = [
-                                ctx.dex.move_id("MOVE_PSYCHIC"),
-                                ctx.dex.move_id("MOVE_RECOVER"),
-                            ];
+                            let keep: Vec<usize> = if ctx.p.mewtwo_keep.is_empty() {
+                                vec![
+                                    ctx.dex.move_id("MOVE_PSYCHIC"),
+                                    ctx.dex.move_id("MOVE_RECOVER"),
+                                ]
+                            } else {
+                                ctx.p
+                                    .mewtwo_keep
+                                    .iter()
+                                    .map(|m| ctx.dex.move_id(m))
+                                    .collect()
+                            };
                             if let Some(i) = st
                                 .mewtwo_moves
                                 .iter()
@@ -2736,6 +2812,8 @@ pub fn attempt(
                     (0, xbuy.attack, 500),
                     (1, xbuy.defend, 550),
                     (4, xbuy.dire, 650),
+                    (5, xbuy.accuracy, 950),
+                    (6, xbuy.guard, 700),
                 ] {
                     let qty = if ctx.p.money_model {
                         want.min(st.money / price)
@@ -2781,7 +2859,19 @@ pub fn attempt(
         }
         // Marts that sell better balls: Lavender (Great), Fuchsia (Ultra)
         // (`decompiled/data/maps/LavenderTown_Mart/scripts.inc:29`, `FuchsiaCity_Mart/scripts.inc:25`).
+        if !ctx.p.mystic_after.is_empty()
+            && seg.name == ctx.p.mystic_after
+            && !st.mystic
+            && (!ctx.p.money_model || st.money >= ctx.p.mystic_cost)
+        {
+            if ctx.p.money_model {
+                st.money -= ctx.p.mystic_cost;
+            }
+            st.mystic = true;
+            bump(&mut st, ctx.p.mystic_frames as f64 * ctx.p.text_factor);
+        }
         match seg.name.as_str() {
+            "black-glasses-swap" => st.glasses = true,
             "brock" => {
                 st.repel_ok = true;
                 st.badges |= 1;
