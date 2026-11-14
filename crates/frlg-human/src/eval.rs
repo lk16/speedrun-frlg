@@ -588,6 +588,32 @@ mod tests {
     }
 
     #[test]
+    fn fatal_hazards_end_attempts_and_slow_events_cost_time() {
+        let dex = DEX.get_or_init(Dex::load);
+        let run = |extra: &str| {
+            let text = PLAN.replace("\"name\":\"t\"", &format!("\"name\":\"t\"{extra}"));
+            let plan = Plan::load(dex, &text).unwrap();
+            let ctx = plan.ctx();
+            totals(&evaluate_blocks(&ctx, 9, 300, rung_frames(8)), 300)
+        };
+        let base = run("");
+        // Every attempt dies at Brock: none finishes and the same seeds reproduce the totals.
+        let dead = run(",\"fatal\":{\"brock\":1.0}");
+        assert_eq!(dead.finishes, 0);
+        assert_eq!(
+            dead.wall_frames,
+            run(",\"fatal\":{\"brock\":1.0}").wall_frames
+        );
+        // A certain one-minute event at the start of the route adds about a minute to a finish.
+        let slow = run(",\"slow\":[{\"seg\":\"to-lab\",\"p\":1.0,\"mean_s\":60}]");
+        assert!(slow.wall_frames > base.wall_frames);
+        // The scale knob switches the events off.
+        let off =
+            run(",\"slow\":[{\"seg\":\"to-lab\",\"p\":1.0,\"mean_s\":60}],\"slow_scale\":0.0");
+        assert_eq!(off.wall_frames, base.wall_frames);
+    }
+
+    #[test]
     fn plan_without_json_block_is_an_error() {
         let dex = DEX.get_or_init(Dex::load);
         assert!(Plan::load(dex, "no block here").is_err());

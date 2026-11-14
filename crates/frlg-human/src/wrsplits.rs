@@ -83,6 +83,18 @@ pub fn split_indices(plan: &Plan) -> Vec<Option<usize>> {
         .collect()
 }
 
+/// Segment indices that end a WR split window (the same matching as `split_indices`).
+pub fn window_ends(segs: &[crate::route::Seg]) -> Vec<usize> {
+    WR_SPLITS
+        .iter()
+        .filter_map(|(_, _, _, _, cands)| {
+            cands
+                .iter()
+                .find_map(|c| segs.iter().position(|s| s.name == *c))
+        })
+        .collect()
+}
+
 type Row = (
     Vec<u64>,
     Vec<u32>,
@@ -226,6 +238,30 @@ pub fn print_table(plan: &Plan, ctx: &Ctx, seed: u64, r: u64, all: bool) {
             lvl_at(i),
             dex_at(i)
         ));
+    }
+    // Fidelity fit 2026-11-14: spread of each WR window (the no-reset time between two splits),
+    // to set against the runner's window-to-window deviations (`tools/fit_attempts.py`).
+    println!("\nwindow sd (no-reset, seconds): window  mean  sd  cv%");
+    let mut prev_i: Option<usize> = None;
+    for (k, ix) in split_indices(plan).into_iter().enumerate() {
+        let Some(i) = ix else { continue };
+        let v: Vec<f64> = rows
+            .iter()
+            .filter(|(sc, ..)| sc[i] != u64::MAX && prev_i.is_none_or(|p| sc[p] != u64::MAX))
+            .map(|(sc, ..)| (sc[i] - prev_i.map_or(0, |p| sc[p])) as f64 / FPS)
+            .collect();
+        if v.len() > 1 {
+            let m = v.iter().sum::<f64>() / v.len() as f64;
+            let sd = (v.iter().map(|x| (x - m) * (x - m)).sum::<f64>() / v.len() as f64).sqrt();
+            println!(
+                "  WINDOW {:<18}{:>8.0}{:>7.1}{:>6.1}",
+                WR_SPLITS[k].0,
+                m,
+                sd,
+                sd / m * 100.0
+            );
+        }
+        prev_i = Some(i);
     }
     // Where the time goes between WR splits: fights (trainers), walking and wild encounters
     // (walks, hunts, grinds), everything else (text, menus, tutors, shops).

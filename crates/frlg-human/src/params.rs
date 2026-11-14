@@ -2,6 +2,17 @@
 
 use serde::Deserialize;
 
+/// One execution-loss event (`Params::slow`).
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct SlowEvent {
+    /// Segment name; a trailing `*` matches every segment with that prefix.
+    pub seg: String,
+    pub p: f64,
+    /// Mean of the exponential cost, seconds.
+    pub mean_s: f64,
+}
+
 #[derive(Deserialize, Clone, Debug)]
 #[serde(default)]
 pub struct Hunt {
@@ -404,6 +415,28 @@ pub struct Params {
     /// acts as usual. guess; `STRATEGY.md` section 4 (T10 2:49:21 "kick-select input errors nearly
     /// killed runs"), section 1.3 (late-day errors, T03/T10). 0 = off.
     pub menu_slip: f64,
+    /// Fidelity fit 2026-11-14 (`human-run/journal/2026-11-14-22-00-fidelity-fit.md`): per segment
+    /// probability that the attempt ends there for good (a death the human does not salvage:
+    /// a whiteout in the League sends him back to the first room, one in a mid-game fight loses
+    /// the pace and the items). Fitted to the runner's observed attempts
+    /// (`video-analysis/data/accepted-runs.json`, `tools/fit_attempts.py`); applies only in
+    /// evaluation runs (a rung is set), not in the no-reset pilot or `splits`/`dist`.
+    /// Segments absent from the map have none. Empty = off.
+    pub fatal: std::collections::HashMap<String, f64>,
+    /// Same fit: execution-loss events (a run of missed Mega Kicks and the special-move fallback,
+    /// a bad Safari, Power Plant duplicates, extra cave encounters, ...) that cost `Exp(mean_s)`
+    /// seconds with probability `p` when the named segment completes. Costs from the runner's own
+    /// quotes (`STRATEGY.md` section 8), probabilities mostly guesses (each entry says which).
+    pub slow: Vec<SlowEvent>,
+    /// Multiplier on every `slow` probability (sensitivity knob, 1 = the plan's values).
+    pub slow_scale: f64,
+    /// Same fit: extra execution noise on every WR split window (the stretch between two LiveSplit
+    /// splits, `wrsplits::WR_SPLITS`): the window's elapsed time is scaled by a mean-preserving
+    /// lognormal with this sigma, on top of whatever the window's own events draw. The runner's
+    /// windows vary 7.3% rms (deep run against the LG PB, 13 windows) against the model's 6.5%;
+    /// the model's own Icefall, Warehouse and Bike windows are near-deterministic (1-4%).
+    /// 0 = off.
+    pub win_cv: f64,
     /// Which rod the fish hunts use: `mixed` (the old model: all ten slots), `old`, `good` or
     /// `super`. A real rod costs a trip: Old Rod Vermilion, Good Rod Fuchsia, Super Rod Route 12
     /// south of the Snorlax (`decompiled/data/maps/*House*/scripts.inc`).
@@ -664,6 +697,10 @@ impl Default for Params {
             postgame_calib: false,
             item_swaps: false,
             menu_slip: 0.0,
+            fatal: Default::default(),
+            slow: vec![],
+            slow_scale: 1.0,
+            win_cv: 0.0,
             rod: "mixed".into(),
             repel_on: vec![],
             ball_batch: 10,

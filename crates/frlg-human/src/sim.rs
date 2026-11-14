@@ -2145,6 +2145,29 @@ pub fn attempt(
             st.slot_pp.push(ctx.dex.moves[m].pp as i32);
         }
     }
+    // Fidelity fit: the speed factor of every WR split window this attempt (`Params::win_cv`),
+    // one mean-preserving lognormal draw per window, applied to each segment in it.
+    let win_f: Vec<f64> = if ctx.p.win_cv > 0.0 {
+        let mut ends = crate::wrsplits::window_ends(ctx.segs);
+        ends.sort_unstable();
+        let sigma = ctx.p.win_cv;
+        let mut f = vec![1.0; ctx.segs.len()];
+        let mut start = 0;
+        for &e in &ends {
+            let mut r = Rng::new(seed, idx, hash_str(&ctx.segs[e].name) ^ 0x31D0_C0DE);
+            // Box-Muller.
+            let (u1, u2) = (1.0 - r.f64(), r.f64());
+            let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
+            let fac = (sigma * z - sigma * sigma / 2.0).exp();
+            for x in &mut f[start..=e] {
+                *x = fac;
+            }
+            start = e + 1;
+        }
+        f
+    } else {
+        vec![]
+    };
     for (i, seg) in ctx.segs.iter().enumerate() {
         let mut rng = Rng::new(seed, idx, hash_str(&seg.name));
         // The game's stream, re-keyed per segment (see `GameRng`).
@@ -2158,6 +2181,20 @@ pub fn attempt(
         // The Torrent phase walks past the Pokémon Centers it would have stopped at.
         let skip_heal =
             seg.name.starts_with("center-heal@") && ctx.torrent_end.is_some_and(|e| i <= e);
+        // Fidelity fit: an unsalvaged death in this segment (evaluation runs only).
+        if target.is_some() && !ctx.p.fatal.is_empty() {
+            if let Some(&p) = ctx.p.fatal.get(&seg.name) {
+                if Rng::new(seed, idx, hash_str(&seg.name) ^ 0xFA7A_1D1E).chance(p) {
+                    st.abandoned = true;
+                    st.whiteouts += 1;
+                    if let Some(r) = rec.as_deref_mut() {
+                        r[i].abandons += 1;
+                        r[i].whiteouts += 1;
+                    }
+                    break;
+                }
+            }
+        }
         match &seg.kind {
             Kind::Text { frames } => {
                 if !skip_heal {
@@ -2682,6 +2719,29 @@ pub fn attempt(
                 r[i].whiteouts += (st.whiteouts - wo_before) as u64;
             }
             break;
+        }
+        // Fidelity fit: execution-loss events when the segment completes (`Params::slow`).
+        if !ctx.p.slow.is_empty() {
+            for (k, ev) in ctx.p.slow.iter().enumerate() {
+                let hit = match ev.seg.strip_suffix('*') {
+                    Some(pre) => seg.name.starts_with(pre),
+                    None => seg.name == ev.seg,
+                };
+                if !hit {
+                    continue;
+                }
+                let mut r = Rng::new(seed, idx, hash_str(&seg.name) ^ (0x510E_0000 + k as u64));
+                if r.chance((ev.p * ctx.p.slow_scale).min(1.0)) {
+                    let u = r.f64();
+                    bump(&mut st, -(1.0 - u).ln() * ev.mean_s * FPS);
+                }
+            }
+        }
+        // Fidelity fit: execution noise on the WR split windows (`Params::win_cv`).
+        if !win_f.is_empty() && !seg.off_timer {
+            let d = st.clock.saturating_sub(before) as f64;
+            let delta = (d * (win_f[i] - 1.0)).round() as i64;
+            st.clock = (st.clock as i64 + delta).max(before as i64) as u64;
         }
         // Marts that sell better balls: Lavender (Great), Fuchsia (Ultra)
         // (`decompiled/data/maps/LavenderTown_Mart/scripts.inc:29`, `FuchsiaCity_Mart/scripts.inc:25`).
