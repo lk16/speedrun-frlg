@@ -401,7 +401,11 @@ def try_it(parent, label, patch, name, seed, r0=0):
 
 
 def gen(p):
-    if SET in ('dex', 'all'):
+    if SET == 'honest':
+        sys.path.insert(0, HERE)
+        import dexknobs, honestknobs
+        cands = honestknobs.candidates(p) + candidates(p) + dexknobs.candidates(p)
+    elif SET in ('dex', 'all'):
         sys.path.insert(0, HERE)
         import dexknobs
         cands = dexknobs.candidates(p) + (candidates(p) if SET == 'all' else [])
