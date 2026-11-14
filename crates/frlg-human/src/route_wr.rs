@@ -21,6 +21,11 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
 
     // Brock is already built (prologue). Pewter -> Cerulean -> Misty first,
     leg_pewter_cerulean(b, p, h);
+    if p.item_swaps {
+        // Persim Berry for Misty's confusion every run, and the Mark-guy / potion menus
+        // (`STRATEGY.md` 4, 6: T07 1:23:20, T06 2:55:15, 3:33:25). Frames: guesses (bag trips).
+        b.text("persim-and-potions", 810, Src::Guess);
+    }
     leg_misty(b, p, h);
     // then Nugget Bridge and Bill (the rival at Cerulean, `CeruleanCity/scripts.inc`, stands on the
     // bridge road, so it is fought on this leg), back through Cerulean, and Vermilion's S.S. Anne.
@@ -40,6 +45,11 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.split(); // "Giovanni 1"
                // Cut tree, the Route 16 house's Fly, Pokemon Tower and the flute.
     leg_hm02(b, p, h);
+    if p.item_swaps {
+        // "take off the Persim and equip the black glasses in the teleport menu before Lavender
+        // rival" (T06 3:05:09-3:07:09).
+        b.text("black-glasses-swap", 400, Src::Guess);
+    }
     leg_tower(b, p, h);
     // Surge is folded into this leg: fly to Vermilion, the gym, then to Celadon for Snorlax.
     b.text("fly-vermilion", 700, Src::Guess);
@@ -103,13 +113,19 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
 
     // First Elite Four. The Hall of Fame's ~50 s (dialogue, save, cards) is calibrated against the
     // WR video's Champion 1 split (walk in 12:18 -> save 13:08 in the E4R1 window).
-    for (nm, id) in [
-        ("lorelei", "TRAINER_ELITE_FOUR_LORELEI".to_string()),
-        ("bruno", "TRAINER_ELITE_FOUR_BRUNO".to_string()),
-        ("agatha", "TRAINER_ELITE_FOUR_AGATHA".to_string()),
-        ("lance", "TRAINER_ELITE_FOUR_LANCE".to_string()),
-        ("champion", tn("TRAINER_CHAMPION_FIRST")),
+    // Seconds between rooms: the WR split window minus the WR's measured fight duration
+    // (Lorelei 173-148, Bruno 125-104, Agatha 110-88, Lance 166-120; the Champion's window is
+    // covered by `hall-of-fame-1`). `league_transit` only.
+    for (nm, id, transit) in [
+        ("lorelei", "TRAINER_ELITE_FOUR_LORELEI".to_string(), 1500),
+        ("bruno", "TRAINER_ELITE_FOUR_BRUNO".to_string(), 1260),
+        ("agatha", "TRAINER_ELITE_FOUR_AGATHA".to_string(), 1320),
+        ("lance", "TRAINER_ELITE_FOUR_LANCE".to_string(), 2760),
+        ("champion", tn("TRAINER_CHAMPION_FIRST"), 0),
     ] {
+        if p.league_transit && transit > 0 {
+            b.text(&format!("e4-transit-{nm}"), transit, Src::Guess);
+        }
         b.trainer(nm, &id, 900);
     }
     b.text("hall-of-fame-1", 3000, Src::Guess);
@@ -133,17 +149,37 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         b.group("mt-ember-trainers", 3, 3, 38, 75);
     }
     b.walk("mt-ember-back", 150, Era::Run, None, Src::Guess);
+    if p.postgame_calib {
+        // Ruby at Celio at video 2:55 (5:35 after Champ 1) against the model's 3:37: the climb and
+        // the Ruby Path. `wr-3.25.25-main97.md` scene log; 80 s.
+        b.text("mt-ember-ruby-climb", 4800, Src::Guess);
+    }
     b.text("celio-rainbow-pass", 2800, Src::Guess);
     // Four Island's Icefall Cave: the Lorelei scene and one forced grunt
     // (`decompiled/data/maps/FourIsland_IcefallCave_Back/scripts.inc`, `LoreleiRocketsScene`).
     b.text("sail-to-four", 900, Src::Guess);
     b.walk("icefall-cave-walk", 250, Era::Run, None, Src::Guess);
     b.trainer("icefall-grunt", "TRAINER_TEAM_ROCKET_GRUNT_45", 500);
+    if p.postgame_calib {
+        // The WR's Champ 1 -> Icefall split is 9:34 against the model's 7:31 (minus the 80 s above):
+        // the ice-sliding rooms. 43 s.
+        b.text("icefall-ice-slides", 2580, Src::Guess);
+    }
     b.text("icefall-cave", 1500, Src::Guess);
     b.walk("five-island-approach", 250, Era::Run, None, Src::Guess);
+    if p.postgame_calib {
+        // Icefall split 2:58:24 -> Warehouse entry at ~3:00:25 (scene log "Rocket Warehouse
+        // 3:01-3:06" at video time = run + 35 s): ~2:00 against the model's 0:37, 100 s of it here.
+        b.text("five-island-resort", 6000, Src::Guess);
+    }
     b.trainer("warehouse-grunt-1", "TRAINER_TEAM_ROCKET_GRUNT_47", 500);
     b.trainer("warehouse-admin-1", "TRAINER_TEAM_ROCKET_ADMIN", 700);
     b.trainer("warehouse-admin-2", "TRAINER_TEAM_ROCKET_ADMIN_2", 700);
+    if p.postgame_calib {
+        // The remainder of the 9:24 Icefall -> Warehouse split (the model's split ends at Gideon):
+        // interior walking between the trainers. 120 s.
+        b.text("warehouse-interior", 7200, Src::Guess);
+    }
     b.trainer("warehouse-gideon", "TRAINER_SCIENTIST_GIDEON", 700);
     b.text("sapphire-and-sail-back", 3200, Src::Guess);
     b.text("celio-network-machine", 2400, Src::Guess);

@@ -786,6 +786,9 @@ pub struct Tactics {
     /// An X item is used only against a foe the fighter's best attack needs this many hits to
     /// drop (1 = always set up; see `turns_to_kill`).
     pub setup_min: u32,
+    /// Probability that one chosen move is a menu slip: another usable move of the set is used
+    /// instead (`Params::menu_slip`).
+    pub menu_slip: f64,
 }
 
 impl Default for Tactics {
@@ -802,6 +805,7 @@ impl Default for Tactics {
             heal_stock: u32::MAX,
             rollouts: 0,
             setup_min: 1,
+            menu_slip: 0.0,
         }
     }
 }
@@ -2856,6 +2860,26 @@ fn run(
                 );
                 stalled = false;
             }
+            if tac.menu_slip > 0.0
+                && depth == 0
+                && me.moves.len() > 1
+                && !fs.must_switch
+                && !(me.recharging || me.charging.is_some() || me.rampage > 0)
+            {
+                if let Action::Move(mv) = my_action {
+                    // The slip draw comes from the game stream (a mistimed press moves it anyway).
+                    if (rng.roll() as f64) < tac.menu_slip * 65536.0 {
+                        let k = rng.modn(me.moves.len() as u32) as usize;
+                        let alt = me.moves[k];
+                        let usable = me.pp.get(k).is_none_or(|&p| p > 0);
+                        if alt != mv && usable {
+                            my_action = Action::Move(alt);
+                            stalled = false;
+                            out.events += 1;
+                        }
+                    }
+                }
+            }
             if stalled {
                 fs.stalls += 1;
             }
@@ -3404,6 +3428,7 @@ mod tests {
                 heal_stock: u32::MAX,
                 rollouts: 0,
                 setup_min: 1,
+                menu_slip: 0.0,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
