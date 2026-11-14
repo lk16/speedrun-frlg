@@ -497,6 +497,44 @@ mod tests {
     }
 
     #[test]
+    fn postgame_events_replace_the_ember_and_island_guesses_only_when_on() {
+        let dex = DEX.get_or_init(Dex::load);
+        let base = "\"name\":\"t\",\"route_style\":\"wr\",\"audited_forced\":true,\"calib_wr\":true,\"stones\":[\"MOON\"],\"league_transit\":true,\"postgame_calib\":true";
+        let off = Plan::load(dex, &PLAN.replace("\"name\":\"t\"", base)).unwrap();
+        let on_text = PLAN.replace(
+            "\"name\":\"t\"",
+            &format!("{base},\"postgame_events\":true,\"ruby_text\":420,\"resort_text\":5280,\"transit_outro\":240"),
+        );
+        let on = Plan::load(dex, &on_text).unwrap();
+        let has = |p: &Plan, n: &str| p.segs.iter().any(|s| s.name == n);
+        for n in [
+            "kindle-road-in",
+            "mt-ember-grunt-1",
+            "mt-ember-grunt-2",
+            "ruby-path",
+            "kindle-road-out",
+            "icefall-cave-out",
+            "meadow-grunt",
+        ] {
+            assert!(has(&on, n), "{n} missing with postgame_events on");
+            assert!(!has(&off, n), "{n} present with postgame_events off");
+        }
+        assert!(!has(&on, "mt-ember"));
+        assert!(has(&off, "mt-ember"));
+        // The transit text shrinks by one outro, the lumps by their new frame counts.
+        let frames = |p: &Plan, n: &str| {
+            p.segs.iter().find(|s| s.name == n).map(|s| match &s.kind {
+                crate::route::Kind::Text { frames } => *frames,
+                _ => panic!("{n} is not text"),
+            })
+        };
+        assert_eq!(frames(&off, "e4-transit-bruno-2"), Some(1920));
+        assert_eq!(frames(&on, "e4-transit-bruno-2"), Some(1680));
+        assert_eq!(frames(&on, "mt-ember-ruby-climb"), Some(420));
+        assert_eq!(frames(&off, "mt-ember-ruby-climb"), Some(4800));
+    }
+
+    #[test]
     fn wr_route_style_orders_the_run_like_the_wr_splits() {
         let dex = DEX.get_or_init(Dex::load);
         let text = PLAN.replace(

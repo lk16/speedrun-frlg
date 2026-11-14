@@ -227,6 +227,8 @@ struct State {
     heal_items: u32,
     /// Mewtwo's HP fraction carried between R2 fights.
     mewtwo_hp: f64,
+    /// Mewtwo's exp (Slow growth); its level follows (`Params::mewtwo_levels`).
+    mewtwo_exp: u32,
     /// Record each trainer fight (see `Probe::fights`).
     log_fights: bool,
     /// Rare Candies eaten on the spot so far (`candy_early_n` caps it).
@@ -560,6 +562,23 @@ fn learn_moves(ctx: &Ctx, st: &mut State) {
             offer_move(ctx, st, m, false);
         }
     }
+}
+
+/// `EXP_SLOW(n)` (`decompiled/src/data/pokemon/experience_tables.h:4`), Mewtwo's growth rate.
+fn slow_exp(n: u32) -> u32 {
+    5 * n * n * n / 4
+}
+
+/// Mewtwo's level: 70 as caught, then from its exp when `Params::mewtwo_levels` is on.
+fn mewtwo_level(ctx: &Ctx, st: &State) -> u32 {
+    if !ctx.p.mewtwo_levels || st.mewtwo_exp == 0 {
+        return 70;
+    }
+    let mut l = 70;
+    while l < 100 && st.mewtwo_exp >= slow_exp(l + 1) {
+        l += 1;
+    }
+    l
 }
 
 fn add_exp(ctx: &Ctx, st: &mut State, e: u32) -> u32 {
@@ -1312,7 +1331,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             let mut m = make_mon(
                 dex,
                 dex.id("SPECIES_MEWTWO"),
-                70,
+                mewtwo_level(ctx, st),
                 ivs,
                 [0; 6],
                 nature,
@@ -1439,6 +1458,15 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             st.x_stock[x_index(*x)] -= 1;
         }
         bump(st, out.turns as f64 * ctx.turn());
+        if mewtwo_now && ctx.p.mewtwo_hp_bar > 0.0 {
+            bump(st, out.hp_bar * ctx.p.mewtwo_hp_bar);
+        }
+        if mewtwo_now && ctx.p.mewtwo_heal_extra > 0.0 {
+            bump(
+                st,
+                (out.heals_used + out.full_restores_used) as f64 * ctx.p.mewtwo_heal_extra,
+            );
+        }
         bump(st, out.kos.len() as f64 * ctx.mon_overhead() * fit);
         // A sacrifice costs its faint animation and the send-outs both ways. guess.
         bump(st, out.sacs_used as f64 * 900.0);
@@ -1472,6 +1500,12 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             }
             for &(sp, lvl) in &out.kos {
                 let yld = a.yield_.unwrap_or(dex.species[sp].exp_yield);
+                if mewtwo_now && ctx.p.mewtwo_levels {
+                    let before = mewtwo_level(ctx, st);
+                    st.mewtwo_exp += exp_gain(yld as u8, lvl as u8, a.trainer);
+                    let gained = mewtwo_level(ctx, st).saturating_sub(before);
+                    bump(st, gained as f64 * ctx.level_up());
+                }
                 if !mewtwo_now {
                     let e = exp_gain(yld as u8, lvl as u8, a.trainer);
                     let g = add_exp(ctx, st, e);
@@ -2090,6 +2124,7 @@ pub fn attempt(
         league_items: false,
         heal_items: 0,
         mewtwo_hp: 1.0,
+        mewtwo_exp: 0,
         log_fights: probe.is_some(),
         candies_eaten: 0,
         fight_log: vec![],
@@ -2568,6 +2603,7 @@ pub fn attempt(
                     (iv2 >> 10) & 0x1F,
                 ];
                 st.mewtwo = Some((ivs, (pid % 25) as u8));
+                st.mewtwo_exp = slow_exp(70);
                 if st.mewtwo_moves.is_empty() {
                     st.mewtwo_moves = ctx.dex.default_moves(ctx.dex.id("SPECIES_MEWTWO"), 70);
                 }
