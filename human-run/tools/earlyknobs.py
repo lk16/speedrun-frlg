@@ -24,6 +24,8 @@ def candidates(p):
     for f in EARLY:
         t = ft.get(f, {})
         for v in (0, 1, 2, 3, 5, 9):
+            if f == 'brock':
+                continue  # stipulation: the runner never heals in Brock (STRATEGY s4); heal-before-Brock is an upside note only
             if t.get('potions', -1) != v:
                 out.append(('epot', f'{f} potions {t.get("potions", -1)}->{v}', {'fight_tactics': _ft(ft, f, potions=v)}))
         for d in (1, 2):
