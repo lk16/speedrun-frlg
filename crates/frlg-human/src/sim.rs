@@ -94,6 +94,8 @@ pub struct Ctx<'a> {
     pub power_early_end: Option<usize>,
     /// Last segment of the risk lane (`Params::risk_until`).
     pub risk_end: Option<usize>,
+    /// Per segment: the extended lane's (power, foe) factors (0 = the global ones), `Params::risk_windows`.
+    pub risk_win: Vec<(f64, f64, Option<u32>)>,
     pub no_salvage_end: Option<usize>,
     /// Salvage check aggressiveness per segment (negative = none), `Params::salvage_at`.
     pub salvage: Vec<f64>,
@@ -242,6 +244,9 @@ struct State {
     /// the end of the last fight (a rise since then, a heal or a rest, is applied to the risk lane).
     risk_hp: f64,
     risk_real: f64,
+    /// A risk-lane heal took the carry out of the Torrent window (`Params::risk_adopt`): the Torrent
+    /// phase (Center skips, the Torrent tactic) pauses until damage brings it back to <= 1/3 HP.
+    torrent_lost: bool,
     /// Early helpers that fainted (`Params::early_helpers`).
     helpers_dead: u32,
     badges: u8,
@@ -1299,7 +1304,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     }
     let cfg = ctx.tactics.get(a.name).cloned().unwrap_or_default();
     let (x_plan, heal_override, sacs) = (cfg.x.clone(), cfg.heal_below, cfg.sacs);
-    let in_torrent = ctx.torrent_end.is_some_and(|e| st.seg_i <= e);
+    let in_torrent = ctx.torrent_end.is_some_and(|e| st.seg_i <= e) && !st.torrent_lost;
     let torrent = cfg.torrent || in_torrent;
     // Sacrifices burn real party members; the budget spans a Centre-less chain, with
     // Revives (bag trip each) bringing fodder back between fights.
@@ -1310,7 +1315,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     }
     // Early helpers (`Params::early_helpers`): the mons caught so far (the forest bug, a Pidgey) are the
     // sacrifices of the early fights; each one that faints stays fainted.
-    if ctx.p.early_helpers && !a.league && ctx.risk_end.is_some_and(|e| st.seg_i <= e) {
+    let helper_end = ctx.no_salvage_end.or(ctx.risk_end);
+    if ctx.p.early_helpers && !a.league && helper_end.is_some_and(|e| st.seg_i <= e) {
         let alive: u32 = st
             .bodies
             .iter()
@@ -1506,6 +1512,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             sacs,
             torrent: (torrent || (a.league && ctx.p.league_torrent)) && !mewtwo_now,
             torrent_stall: ctx.p.torrent_stall,
+            torrent_early: ctx.p.torrent_early,
             others_alive: st.fodder,
             heal_stock: if a.league { st.heal_items } else { u32::MAX },
             rollouts: if a.league { ctx.p.league_rollouts } else { 0 },
@@ -1513,10 +1520,13 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             menu_slip: ctx.p.menu_slip,
         };
         // Risk lane: the honest copy of this fight decides whether the attempt survives it.
-        let risk_lost = !mewtwo_now
-            && !a.league
-            && ctx.risk_end.is_some_and(|e| st.seg_i <= e)
-            && risk_fight(ctx, st, rng, a, &tac, &cfg, in_torrent);
+        let mut risk_healed = false;
+        let risk_lost =
+            !mewtwo_now && !a.league && ctx.risk_end.is_some_and(|e| st.seg_i <= e) && {
+                let (lost, healed) = risk_fight(ctx, st, rng, a, &tac, &cfg, in_torrent);
+                risk_healed = healed;
+                lost
+            };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
@@ -1566,11 +1576,26 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 l.3 = (st.clock - t0) as f64;
             }
         }
+        if !out.won && std::env::var_os("FRLG_RISK_TRACE").is_some() {
+            eprintln!(
+                "timing-loss {} L{} risk_lost {}",
+                a.name, st.carry, risk_lost
+            );
+        }
         if out.won && !risk_lost {
             if mewtwo_now {
                 st.mewtwo_hp = out.hp_frac;
             } else {
                 st.hp_frac = out.hp_frac;
+                // `risk_adopt`: the lane's potions were drunk for real, so the carry leaves the fight
+                // as healthy as the lane did and the Torrent window (<= 1/3 HP) is gone with them.
+                if ctx.p.risk_adopt && risk_healed {
+                    st.hp_frac = st.hp_frac.max(st.risk_hp);
+                    st.torrent_lost = ctx.p.risk_torrent_lost && st.hp_frac * 3.0 > 1.0;
+                } else if st.hp_frac * 3.0 <= 1.0 {
+                    // Back inside the window by damage: the Torrent phase resumes.
+                    st.torrent_lost = false;
+                }
             }
             if !mewtwo_now {
                 st.carry_status = out.end_status;
@@ -1629,6 +1654,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             return true;
         }
         st.whiteouts += 1;
+        if risk_lost && ctx.p.risk_abandon && !a.league {
+            st.abandoned = true;
+            return false;
+        }
         let rule = ctx.salvage.get(st.seg_i).copied().unwrap_or(-1.0);
         // The runner does not salvage an early death: he resets.
         if rule < 0.0 && ctx.no_salvage_end.is_some_and(|e| st.seg_i <= e) {
@@ -1687,7 +1716,7 @@ fn risk_fight(
     tac: &crate::battle::Tactics,
     cfg: &TacCfg,
     in_torrent: bool,
-) -> bool {
+) -> (bool, bool) {
     use crate::battle::{entry_floor, fight, heal_amount, make_mon};
     let dex = ctx.dex;
     let mut me = make_mon(
@@ -1707,8 +1736,15 @@ fn risk_fight(
     } else if ctx.p.black_glasses && st.glasses {
         me.boost = Some((17, 10));
     }
+    let win = ctx
+        .risk_win
+        .get(st.seg_i)
+        .copied()
+        .unwrap_or((0.0, 0.0, None));
     let rp = if cfg.risk_power > 0.0 {
         cfg.risk_power
+    } else if win.0 > 0.0 {
+        win.0
     } else {
         ctx.p.risk_power
     };
@@ -1718,6 +1754,8 @@ fn risk_fight(
     }
     let rf = if cfg.risk_foe > 0.0 {
         cfg.risk_foe
+    } else if win.1 > 0.0 {
+        win.1
     } else {
         ctx.p.risk_foe
     };
@@ -1738,7 +1776,7 @@ fn risk_fight(
     let mut potions = if cfg.potions >= 0 {
         cfg.potions as u32
     } else {
-        ctx.p.risk_potions
+        win.2.unwrap_or(ctx.p.risk_potions)
     };
     // Potions are paid for (Potion 300, Super Potion 700, Hyper Potion 1200 at the heal tier of the level:
     // `items.json`) out of the purse and each use is a bag turn: no free lunch in healing.
@@ -1752,6 +1790,7 @@ fn risk_fight(
     if pay {
         potions = potions.min(st.money / price);
     }
+    let mut healed = false;
     // The entry heal of the Torrent phase, as in the timing lane but paid from the potion budget.
     if (cfg.entry || in_torrent) && potions > 0 {
         let hits = if cfg.entry { 1.0 } else { ctx.p.torrent_hits };
@@ -1761,6 +1800,7 @@ fn risk_fight(
             let per = heal_amount(me.level, st.league_items);
             let uses = (((lo - cur + per - 1) / per).max(1) as u32).min(potions);
             potions -= uses;
+            healed = true;
             if pay {
                 st.money -= uses * price;
                 bump(st, uses as f64 * ctx.turn());
@@ -1775,6 +1815,7 @@ fn risk_fight(
     t2.rollouts = 0;
     let mut g = crate::rng::GameRng::from_u32(rng.next_u64() as u32);
     let out = fight(dex, &mut me, &t2, &foes, a.ai, a.heals, a.wild, &mut g);
+    healed |= out.heals_used > 0;
     if pay {
         let n = out.heals_used.min(potions);
         st.money -= n * price;
@@ -1794,7 +1835,7 @@ fn risk_fight(
             lost = rng.chance(p);
         }
     }
-    lost
+    (lost, healed)
 }
 
 /// Field poison (`field_control_avatar.c:710-733`, `field_poison.c:92-119`: 1 HP per 5 steps, a
@@ -2350,6 +2391,7 @@ pub fn attempt(
         hp_frac: 1.0,
         risk_hp: 1.0,
         risk_real: 1.0,
+        torrent_lost: false,
         helpers_dead: 0,
         badges: 0,
         league_items: false,
@@ -2445,8 +2487,9 @@ pub fn attempt(
             st.league_t0 = st.clock;
         }
         // The Torrent phase walks past the Pokémon Centers it would have stopped at.
-        let skip_heal =
-            seg.name.starts_with("center-heal@") && ctx.torrent_end.is_some_and(|e| i <= e);
+        let skip_heal = seg.name.starts_with("center-heal@")
+            && ctx.torrent_end.is_some_and(|e| i <= e)
+            && !st.torrent_lost;
         // Fidelity fit: an unsalvaged death in this segment (evaluation runs only).
         if target.is_some() && !ctx.p.fatal.is_empty() {
             if let Some(&p) = ctx.p.fatal.get(&seg.name) {

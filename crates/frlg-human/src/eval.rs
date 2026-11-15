@@ -135,6 +135,25 @@ impl Plan {
                 .collect(),
             power_early_end: seg_index(&self.segs, &self.params.power_early_until),
             risk_end: seg_index(&self.segs, &self.params.risk_until),
+            risk_win: {
+                let mut v = vec![(0.0, 0.0, None); n];
+                let mut from = self
+                    .params
+                    .no_salvage_until
+                    .is_empty()
+                    .then_some(0)
+                    .or_else(|| seg_index(&self.segs, &self.params.no_salvage_until).map(|i| i + 1))
+                    .unwrap_or(0);
+                for w in &self.params.risk_windows {
+                    if let Some(e) = seg_index(&self.segs, &w.until) {
+                        for x in v.iter_mut().take(e + 1).skip(from) {
+                            *x = (w.power, w.foe, w.potions);
+                        }
+                        from = e + 1;
+                    }
+                }
+                v
+            },
             torrent_end: seg_index(&self.segs, &self.params.torrent_until),
             no_salvage_end: seg_index(&self.segs, &self.params.no_salvage_until),
             salvage: self
@@ -727,6 +746,47 @@ mod tests {
         assert!(on(0, 1.5) < none, "stronger foes kill more");
         // Same seed, same deaths.
         assert_eq!(none, on(0, 1.0));
+    }
+
+    #[test]
+    fn risk_windows_scale_the_lane_and_abandon_replaces_the_flat_hazard() {
+        let dex = DEX.get_or_init(Dex::load);
+        // Attempts that get through the Rocket Hideout (a lane loss there ends the attempt).
+        let through = |extra: &str| {
+            let text = PLAN.replace(
+                "\"name\":\"t\"",
+                &format!(
+                    "\"name\":\"t\",\"route_style\":\"wr\",\"audited_forced\":true,\"calib_wr\":true,\
+                     \"version\":\"LG\",\"battle_sim\":true,\"torrent_until\":\"hall-of-fame-1\",\
+                     \"risk_until\":\"hideout-giovanni\",\"risk_abandon\":true,{extra}"
+                ),
+            );
+            let plan = Plan::load(dex, &text).unwrap();
+            let ctx = plan.ctx();
+            let at = plan
+                .segs
+                .iter()
+                .position(|s| s.name == "scope-and-dig")
+                .unwrap();
+            let mut rec = vec![SegStats::default(); plan.segs.len()];
+            for i in 0..800 {
+                attempt(&ctx, 5, i, Some(rung_frames(8)), Some(&mut rec), None, None);
+            }
+            rec[at].n
+        };
+        let win = |power: f64| {
+            through(&format!(
+                "\"risk_windows\":[{{\"until\":\"hideout-giovanni\",\"power\":{power}}}]"
+            ))
+        };
+        let (weak, strong) = (win(0.7), win(4.0));
+        assert!(
+            weak < strong,
+            "survivors: weak carry {weak}, strong {strong}"
+        );
+        assert_eq!(weak, win(0.7), "same seed, same survivors");
+        // A certain flat hazard ends everything, whatever the power.
+        assert_eq!(through("\"fatal\":{\"hideout-giovanni\":1.0}"), 0);
     }
 
     #[test]

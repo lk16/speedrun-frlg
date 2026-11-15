@@ -436,6 +436,7 @@ fn main() {
                     sacs: arg(&args, "--sacs", 0u32),
                     torrent: args.iter().any(|a| a == "--torrent"),
                     torrent_stall: true,
+                    torrent_early: args.iter().any(|a| a == "--early"),
                     others_alive: arg(&args, "--others", 0u32),
                     heal_stock: arg(&args, "--heals", u32::MAX),
                     rollouts: arg(&args, "--rollouts", 0u32),

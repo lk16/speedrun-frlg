@@ -786,6 +786,10 @@ pub struct Tactics {
     pub torrent: bool,
     /// With `torrent`: allow the stall turns (Withdraw is always allowed).
     pub torrent_stall: bool,
+    /// With `torrent`: Withdraw also against a foe that moves first (its hit this turn lands before the
+    /// Defense stage does) when the stage buys the carry another survivable hit of the foe's best move
+    /// and the foe would otherwise need at most two of them (Onix's Rock Tomb at 10 HP; not the Geodude).
+    pub torrent_early: bool,
     /// Living teammates besides the fighter (they take Roar/Whirlwind's drag-in).
     pub others_alive: u32,
     /// Heal items (Full Restore / potion uses) the fighter can still spend in this fight;
@@ -812,6 +816,7 @@ impl Default for Tactics {
             sacs: 0,
             torrent: false,
             torrent_stall: true,
+            torrent_early: false,
             others_alive: 0,
             heal_stock: u32::MAX,
             rollouts: 0,
@@ -932,6 +937,7 @@ fn player_score(dex: &Dex, att: &Mon, def: &Mon, mv: usize, side: &Side) -> f64 
 /// `STRATEGY.md` 4). `stall = true`: while above 1/3 HP, no kill on the table and one max-roll hit
 /// survivable, spend the turn on the best non-Water attack (Tackle) so the foe's hit puts the carry
 /// inside the Torrent boost for the Water move after it.
+#[allow(clippy::too_many_arguments)]
 fn torrent_action(
     dex: &Dex,
     me: &Mon,
@@ -940,6 +946,7 @@ fn torrent_action(
     danger: i32,
     sure_kill: bool,
     stall: bool,
+    early: bool,
 ) -> Option<Action> {
     if me.ability != Ability::Torrent || sure_kill {
         return None;
@@ -948,7 +955,11 @@ fn torrent_action(
         me.has_pp(mv) && me.disabled.is_none_or(|(d, _)| d != mv) && dex.moves[mv].mtype != 11
     };
     if !stall {
-        if danger < me.hp || me.stages[1] >= 6 || speed(me) <= speed(e) {
+        let slower = speed(me) <= speed(e);
+        if me.stages[1] >= 6 || (slower && !(early && me.stages[1] == 0)) {
+            return None;
+        }
+        if !slower && danger < me.hp {
             return None;
         }
         let mut m2 = me.clone();
@@ -961,6 +972,14 @@ fn torrent_action(
             .unwrap_or(0);
         if d2 >= me.hp {
             return None;
+        }
+        if slower {
+            // The foe moves first: worth a turn only when it buys another hit and the foe is close.
+            let hits = |d: i32| if d <= 0 { 99 } else { (me.hp + d - 1) / d };
+            let (n0, n1) = (hits(danger), hits(d2));
+            if n1 <= n0 || n0 > 2 {
+                return None;
+            }
         }
         return me
             .moves
@@ -2602,10 +2621,32 @@ fn greedy_action(
     // the heal (the engine's old Lance loop: 11 Full Restores against Outrage).
     let heal_ok = !fs.last_heal;
     let t_withdraw = (tac.torrent && !forced)
-        .then(|| torrent_action(dex, me, e, &fs.my_side, danger, sure_kill, false))
+        .then(|| {
+            torrent_action(
+                dex,
+                me,
+                e,
+                &fs.my_side,
+                danger,
+                sure_kill,
+                false,
+                tac.torrent_early,
+            )
+        })
         .flatten();
     let t_stall = (tac.torrent && tac.torrent_stall && !forced && fs.stalls < 2)
-        .then(|| torrent_action(dex, me, e, &fs.my_side, danger, sure_kill, true))
+        .then(|| {
+            torrent_action(
+                dex,
+                me,
+                e,
+                &fs.my_side,
+                danger,
+                sure_kill,
+                true,
+                tac.torrent_early,
+            )
+        })
         .flatten();
     let mut read = Read {
         danger,
@@ -3463,6 +3504,7 @@ mod tests {
                 sacs: 0,
                 torrent: false,
                 torrent_stall: true,
+                torrent_early: false,
                 others_alive: 0,
                 heal_stock: u32::MAX,
                 rollouts: 0,

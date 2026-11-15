@@ -407,7 +407,15 @@ def try_it(parent, label, patch, name, seed, r0=0):
 
 
 def gen(p):
-    if SET == 'early':
+    if SET == 'mid':
+        sys.path.insert(0, HERE)
+        import midknobs
+        cands = midknobs.candidates(p)
+    elif SET == 'earlymid':
+        sys.path.insert(0, HERE)
+        import earlyknobs, manipknobs, midknobs
+        cands = earlyknobs.candidates(p) + manipknobs.candidates(p) + midknobs.candidates(p)
+    elif SET == 'early':
         sys.path.insert(0, HERE)
         import earlyknobs, manipknobs
         cands = earlyknobs.candidates(p) + manipknobs.candidates(p)

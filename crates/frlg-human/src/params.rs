@@ -241,6 +241,19 @@ pub struct ExtraFight {
     pub scripts: Vec<String>,
 }
 
+/// One window of the extended risk lane (`Params::risk_windows`): the lane fights after the previous
+/// window's `until` segment, up to and including this one, use `power` as the carry's Atk/SpA factor
+/// and `foe` for the foes' (0 = the global value). Fitted to the runner's windowed pass rate.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct RiskWindow {
+    pub until: String,
+    pub power: f64,
+    pub foe: f64,
+    /// Potions per fight in the window (None = `risk_potions`); a trainer group is one fight.
+    pub potions: Option<u32>,
+}
+
 /// Per-fight battle tactics, keyed by segment name in `Params::fight_tactics`.
 #[derive(Deserialize, Clone, Debug)]
 #[serde(default)]
@@ -729,6 +742,8 @@ pub struct Params {
     pub torrent_hits: f64,
     /// Stall turns in the Torrent tactic (Withdraw is always allowed).
     pub torrent_stall: bool,
+    /// Withdraw against a foe that moves first too (`Tactics::torrent_early`).
+    pub torrent_early: bool,
     /// In-battle heal threshold of the Torrent phase (0 = only when a hit could KO).
     pub torrent_heal_below: f64,
     /// `carry_power` up to and including the segment `power_early_until`: the early fights (Brock,
@@ -757,6 +772,17 @@ pub struct Params {
     /// Risk lane potions are paid for out of the purse (money model; Potion 300, Super 700, Hyper 1200) and
     /// each use costs a bag turn; a fight can still spend at most its own cap. false = free and instant.
     pub risk_pay: bool,
+    /// The carry leaves a risk-lane fight with the lane's HP when the lane drank potions in it
+    /// (the heal was real: the timing lane loses the Torrent window it would have kept).
+    pub risk_adopt: bool,
+    /// Lane windows past `no_salvage_until` (plan 940+), in route order; see [`RiskWindow`].
+    pub risk_windows: Vec<RiskWindow>,
+    /// A lane loss ends the attempt wherever it happens (the flat `fatal` hazards it replaces were
+    /// unsalvaged deaths); without it a loss after `no_salvage_until` is an ordinary whiteout.
+    pub risk_abandon: bool,
+    /// With `risk_adopt`: a lane heal that leaves the carry above 1/3 HP also pauses the Torrent phase
+    /// (no Center skips, no Torrent tactic) until damage brings it back inside the window.
+    pub risk_torrent_lost: bool,
     /// The mons caught so far are the early fights' sacrifices (`FightTactic::sacs`).
     pub early_helpers: bool,
 }
@@ -903,6 +929,7 @@ impl Default for Params {
             poison_floor: 3,
             torrent_hits: 2.0,
             torrent_stall: true,
+            torrent_early: false,
             torrent_heal_below: 0.0,
             carry_power_early: 1.0,
             power_early_until: String::new(),
@@ -913,6 +940,10 @@ impl Default for Params {
             risk_potions: 3,
             risk_noise: Default::default(),
             risk_pay: false,
+            risk_adopt: false,
+            risk_windows: vec![],
+            risk_abandon: false,
+            risk_torrent_lost: false,
             early_helpers: false,
         }
     }
