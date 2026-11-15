@@ -6,7 +6,7 @@ stages, status conditions, move effects, the ported trainer AI (CHECK_BAD_MOVE /
 CHECK_VIABILITY / TRY_TO_FAINT, ties broken by `Random() % n`), trainer Full Restores, the
 player's X items, potions/Full Restores, sacrificial switches and 4-move-slot movesets, all
 rolled on the game's own LCG (`rng.rs::GameRng`). The module doc of `battle.rs` lists every
-source line and every remaining approximation (no PP, no enemy switching, genderless
+source line and every remaining approximation (no PP, no Natural Cure / Perish Song switching, genderless
 Attract, no-op Future Sight/Roar, weather trimmed to damage/accuracy effects).
 
 `frlg-human battle <TRAINER_ID> <level> [--species S] [--moves A,B,..] [--add M] [--x

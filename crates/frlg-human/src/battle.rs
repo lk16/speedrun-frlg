@@ -30,12 +30,15 @@
 //!   effects route trainers carry are ported from `data/battle_ai_scripts.s`; the AI's
 //!   damage estimate uses its own rolled variance per move
 //!   (`battle_ai_script_commands.c:310,980-1026`); trainers use a Full Restore below 1/4 HP
-//!   (`ShouldUseItem`, `battle_ai_switch_items.c`);
+//!   (`ShouldUseItem`, `battle_ai_switch_items.c`); `if_can_faint` counts every move of power 2+ (a finishing
+//!   Hyper Beam earns TRY_TO_FAINT's +4, `Cmd_if_can_faint`); a trainer sends out its next mon by
+//!   `GetMostSuitableMonToSwitchInto` (`most_suitable`, which reproduces the orders of the WR video) and may
+//!   switch mid-fight by `ShouldSwitch` (`ai_should_switch`);
 //! * X items raise one stage, Dire Hit is Focus Energy
 //!   (`src/data/pokemon/item_effects.h:235-260`).
 //!
 //! Approximations, all listed: no PP (enemies rarely run out before the fight decides; the
-//! player's healing policy keeps fights short), no enemy switching (the game's party order),
+//! player's healing policy keeps fights short), no switching by Natural Cure / Perish Song / Wonder Guard,
 //! Attract ignores gender, Roar/Whirlwind/Teleport are no-ops in trainer battles (Teleport
 //! ends a wild one), Future Sight / Spikes / Rapid Spin side effects / Foresight / Encore /
 //! Nightmare are no-ops, Bide and Counter hold only the last turn's physical damage, weather
