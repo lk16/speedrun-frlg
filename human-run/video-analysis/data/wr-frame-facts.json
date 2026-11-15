@@ -525,6 +525,24 @@
   },
   {
    "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11536,
+   "hms": "3:12:16",
+   "kind": "x-queue",
+   "what": "lorelei-2",
+   "value": {},
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11652,
+   "hms": "3:14:12",
+   "kind": "x-queue",
+   "what": "bruno-2",
+   "value": {},
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
    "t": 11904,
    "hms": "3:18:24",
    "kind": "x-queue",
@@ -679,6 +697,17 @@
     "max_hp": 241
    },
    "note": "engine: HP IV 5, no HP EVs (journal 2026-11-21)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11542,
+   "hms": "3:12:22",
+   "kind": "hit",
+   "what": "R2 Lorelei Dewgong L64: two Psychics, no item (Mewtwo stage 0)",
+   "value": {
+    "psychic_hits": 2
+   },
+   "note": "engine SpA IV 31: 127-150 of 209 = 61-72%, two hits"
   },
   {
    "video": "frlgr2-wr-3.25.25-main97.mp4",

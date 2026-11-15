@@ -76,6 +76,8 @@ for fight, x, t0 in [
     ('agatha', {'special': 1, 'speed': 1}, 9659),
     ('lance', {'accuracy': 1, 'special': 1}, 9803),
     ('champion', {'guard': 1, 'speed': 1, 'special': 3}, 9983),
+    ('lorelei-2', {}, 11536),
+    ('bruno-2', {}, 11652),
     ('lance-2', {'special': 2}, 11904),
     ('champion-2', {}, 12048),
 ]:
@@ -96,6 +98,7 @@ for t, what, val, note in [
 # ---- Mewtwo -------------------------------------------------------------------------------------------
 for t, lv, hp in [(11580, 70, 231), (11724, 71, 235), (11970, 72, 238), (12120, 73, 241)]:
     r(t, 'mewtwo-hp', 'Mewtwo Lv%d max HP' % lv, {'level': lv, 'max_hp': hp}, 'engine: HP IV 5, no HP EVs (journal 2026-11-21)')
+r(11542, 'hit', 'R2 Lorelei Dewgong L64: two Psychics, no item (Mewtwo stage 0)', {'psychic_hits': 2}, 'engine SpA IV 31: 127-150 of 209 = 61-72%, two hits')
 r(11580, 'mewtwo-item', 'Mewtwo held item', None, 'not seen: no summary / party-detail screen of Mewtwo appears in R2 (3 s sheets of 11580..12400); the HP-bar width never shows an item')
 
 doc = {
