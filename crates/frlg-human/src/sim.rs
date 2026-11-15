@@ -107,10 +107,17 @@ pub struct Ctx<'a> {
     pub fill_slope: f64,
     pub gain_after: Vec<f64>,
     pub mean_nofill_after: Vec<f64>,
+    /// The WR's cumulative seconds at the segment when it ends a WR split (`wrsplits::WR_SPLITS`), else -1.
+    pub wr_at: Vec<f64>,
+    /// Per segment: skipped when the attempt is more than this many seconds behind the WR at the last
+    /// split it passed (`Params::cond_skips`); infinity = never.
+    pub cond_skip: Vec<f64>,
 }
 
 #[derive(Default, Clone)]
 pub struct SegStats {
+    /// Attempts that skipped the segment (`Params::cond_skips`).
+    pub skips: u64,
     pub n: u64,
     pub sum: f64,
     pub sumsq: f64,
@@ -2481,6 +2488,8 @@ pub fn attempt(
     } else {
         vec![]
     };
+    // Seconds behind the WR at the last WR split passed: the pace gate of the skip lever (`Params::cond_skips`).
+    let mut behind = 0.0f64;
     for (i, seg) in ctx.segs.iter().enumerate() {
         let mut rng = Rng::new(seed, idx, hash_str(&seg.name));
         // The game's stream, re-keyed per segment (see `GameRng`).
@@ -2509,7 +2518,14 @@ pub fn attempt(
                 }
             }
         }
+        let skipped = behind > ctx.cond_skip[i];
+        if skipped {
+            if let Some(r) = rec.as_deref_mut() {
+                r[i].skips += 1;
+            }
+        }
         match &seg.kind {
+            _ if skipped => {}
             Kind::Text { frames } => {
                 if !skip_heal {
                     bump(&mut st, *frames as f64 * ctx.p.text_factor);
@@ -3273,6 +3289,9 @@ pub fn attempt(
         }
         if let Some(sc) = split_clock.as_deref_mut() {
             sc[i] = st.clock;
+        }
+        if ctx.wr_at[i] >= 0.0 {
+            behind = st.clock as f64 / FPS - ctx.wr_at[i];
         }
         if let Some(pr) = probe.as_deref_mut() {
             if pr.snap_at == Some(i) {

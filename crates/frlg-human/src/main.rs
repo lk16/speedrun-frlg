@@ -180,6 +180,17 @@ fn main() {
                     s.balls_sum / s.n as f64
                 );
             }
+            for (seg, s) in plan.segs.iter().zip(&rep.segs) {
+                if s.skips > 0 {
+                    println!(
+                        "skipped {}: {} of {} attempts that reached it ({:.1}%)",
+                        seg.name,
+                        s.skips,
+                        s.n,
+                        s.skips as f64 / s.n.max(1) as f64 * 100.0
+                    );
+                }
+            }
             println!(
                 "mean run clock per attempt (resets truncate): {}",
                 hms(total_runs)

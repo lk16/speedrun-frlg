@@ -30,8 +30,10 @@ R = int(opt('--R', '200000'))
 seeds = [int(s) for s in opt('--seeds', '3,4').split(',')]
 lps = [float(x) for x in opt('--lp', '1.6,1.8,2.0,2.2,2.4,2.6').split(',') if x]
 mps = [float(x) for x in opt('--mp', '1.0,1.2,1.4,1.6,1.8,2.0').split(',') if x]
+cps = [float(x) for x in opt('--cp', '').split(',') if x]  # carry_power over the mid-game gym/rival fights
 patch = json.loads(opt('--patch', '{}'))
 R1 = ['lorelei', 'bruno', 'agatha', 'lance', 'champion']
+RM = ['misty', 'rival-ss-anne', 'koga', 'blaine', 'sabrina', 'giovanni', 'rival-route22']
 R2 = ['bruno-2', 'agatha-2', 'lance-2', 'champion-2']
 plan = a[0]
 base = json.loads(open(plan).read().split('```json')[1].split('```')[0])
@@ -90,6 +92,8 @@ def grid(key, vals, names):
     print(f'best {key} = {best[1]} (sum {best[0]:.3f})' if best else 'no fit')
 
 
+if cps:
+    grid('carry_power', cps, RM)
 if lps:
     grid('league_power', lps, R1)
 if mps:

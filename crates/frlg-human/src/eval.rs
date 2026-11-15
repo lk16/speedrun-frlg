@@ -122,6 +122,29 @@ impl Plan {
             fill_slope: 0.0,
             gain_after: vec![0.0; n],
             mean_nofill_after: vec![0.0; n],
+            wr_at: {
+                let mut v = vec![-1.0; n];
+                for (_, secs, _, _, cands) in crate::wrsplits::WR_SPLITS {
+                    if let Some(i) = cands
+                        .iter()
+                        .find_map(|c| self.segs.iter().position(|s| s.name == *c))
+                    {
+                        v[i] = *secs;
+                    }
+                }
+                v
+            },
+            cond_skip: {
+                let mut v = vec![f64::INFINITY; n];
+                for c in &self.params.cond_skips {
+                    for name in &c.segs {
+                        if let Some(i) = self.segs.iter().position(|s| s.name == *name) {
+                            v[i] = v[i].min(c.behind);
+                        }
+                    }
+                }
+                v
+            },
             aggr: self
                 .segs
                 .iter()
@@ -390,6 +413,7 @@ pub fn report(ctx: &Ctx, seed: u64, attempts: u64, target: u64) -> Report {
             || vec![SegStats::default(); n],
             |mut x, y| {
                 for i in 0..n {
+                    x[i].skips += y[i].skips;
                     x[i].n += y[i].n;
                     x[i].sum += y[i].sum;
                     x[i].sumsq += y[i].sumsq;
@@ -452,6 +476,37 @@ mod tests {
         assert_eq!(a.wall_frames, b.wall_frames);
         let c = totals(&evaluate_blocks(&ctx, 8, 400, rung_frames(8)), 400);
         assert_ne!(a.wall_frames, c.wall_frames);
+    }
+
+    #[test]
+    fn cond_skips_skip_only_when_behind_the_wr() {
+        let dex = DEX.get_or_init(Dex::load);
+        let base =
+            "\"name\":\"t\",\"route_style\":\"wr\",\"audited_forced\":true,\"calib_wr\":true";
+        let with = |extra: &str| PLAN.replace("\"name\":\"t\"", &format!("{base}{extra}"));
+        let seg = "[\"fly-lavender-2\",\"powerplant-walk\",\"powerplant-out\",\"no-such-segment\"]";
+        let skips = |behind: i64| {
+            let text = with(&format!(
+                ",\"cond_skips\":[{{\"segs\":{seg},\"behind\":{behind}}}]"
+            ));
+            let plan = Plan::load(dex, &text).unwrap();
+            let ctx = plan.ctx();
+            let rep = report(&ctx, 3, 300, rung_frames(8));
+            let i = ctx
+                .segs
+                .iter()
+                .position(|s| s.name == "powerplant-walk")
+                .unwrap();
+            (rep.segs[i].skips, rep.segs[i].n, ctx.segs.len())
+        };
+        // Never behind by a million seconds: no skip, and the same attempts as without the field.
+        let (s0, n0, _) = skips(1_000_000);
+        assert_eq!(s0, 0);
+        assert!(n0 > 0);
+        // Always behind by more than -a million seconds: every attempt that reaches it skips it.
+        let (s1, n1, _) = skips(-1_000_000);
+        assert_eq!(s1, n1);
+        assert!(n1 > 0);
     }
 
     #[test]

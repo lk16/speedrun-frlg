@@ -445,6 +445,10 @@ def gen(p):
         sys.path.insert(0, HERE)
         import midknobs
         cands = midknobs.candidates(p)
+    elif SET == 'skips':
+        sys.path.insert(0, HERE)
+        import skipknobs
+        cands = skipknobs.candidates(p)
     elif SET == 'earlymid':
         sys.path.insert(0, HERE)
         import earlyknobs, manipknobs, midknobs

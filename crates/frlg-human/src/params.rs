@@ -241,6 +241,18 @@ pub struct ExtraFight {
     pub scripts: Vec<String>,
 }
 
+/// A conditional skip (`Params::cond_skips`): when the attempt reaches one of `segs` and its clock at the
+/// most recent WR split it has passed (`wrsplits::WR_SPLITS`) is more than `behind` seconds past the WR's
+/// time at that split, the segments are not played (no frames, no catches, no items). The human's
+/// emergency lever when behind pace (`STRATEGY.md` 5.3, "skip Plants and Pewter"; T09 4:53:31); a segment
+/// name the route does not contain is ignored.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct CondSkip {
+    pub segs: Vec<String>,
+    pub behind: f64,
+}
+
 /// One window of the extended risk lane (`Params::risk_windows`): the lane fights after the previous
 /// window's `until` segment, up to and including this one, use `power` as the carry's Atk/SpA factor
 /// and `foe` for the foes' (0 = the global value). Fitted to the runner's windowed pass rate.
@@ -780,6 +792,8 @@ pub struct Params {
     pub ablate_torrent: bool,
     /// Lane windows past `no_salvage_until` (plan 940+), in route order; see [`RiskWindow`].
     pub risk_windows: Vec<RiskWindow>,
+    /// Segments skipped at run time when the attempt is behind the WR's pace; see [`CondSkip`].
+    pub cond_skips: Vec<CondSkip>,
     /// A lane loss ends the attempt wherever it happens (the flat `fatal` hazards it replaces were
     /// unsalvaged deaths); without it a loss after `no_salvage_until` is an ordinary whiteout.
     pub risk_abandon: bool,
@@ -957,6 +971,7 @@ impl Default for Params {
             risk_adopt: false,
             ablate_torrent: false,
             risk_windows: vec![],
+            cond_skips: vec![],
             risk_abandon: false,
             risk_torrent_lost: false,
             early_helpers: false,
