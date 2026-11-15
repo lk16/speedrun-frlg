@@ -423,6 +423,10 @@ def evidence_ok(p, patch):
         return False
     if patch.get('candy_early_n', 0) > 2:
         return False
+    # ball_batch below 20 leaves money for Brock-side potions: forest-brock window .589 outside the runner's [.29, .53]
+    # (journal 2026-11-19-22-00, again with the refit windows 2026-11-20); no stream shows fewer early balls.
+    if patch.get('ball_batch', 20) < 20:
+        return False
     # Rare Candy sources (journal 2026-11-19-14-00): only the item balls the runner's route walks past (Mt. Moon 1F,
     # Rocket Hideout B3F, Pokemon Tower 6F, Silph 10F, Victory Road 1F, the Warden's house) are real; the six hidden
     # candies (Cerulean, Routes 6/9/12/17, Mansion 3F) are not in any stream, and 4-5 candies per run is his count.
