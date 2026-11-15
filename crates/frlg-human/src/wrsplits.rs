@@ -132,7 +132,7 @@ fn is_league(n: &str) -> bool {
     )
 }
 
-pub fn print_table(plan: &Plan, ctx: &Ctx, seed: u64, r: u64, all: bool) {
+pub fn print_table(plan: &Plan, ctx: &Ctx, seed: u64, r: u64, all: bool, within: Option<f64>) {
     let n = plan.segs.len();
     let rows: Vec<Row> = (0..r)
         .into_par_iter()
@@ -291,11 +291,29 @@ pub fn print_table(plan: &Plan, ctx: &Ctx, seed: u64, r: u64, all: bool) {
             WR_SPLITS[k].0, acc[0], acc[1], acc[2]
         );
     }
-    println!("\nfight length: model player actions (win rate) vs the WR video's:");
+    match within {
+        Some(t) => println!(
+            "\nfight length: model player actions (win rate) vs the WR video's, attempts finishing within {}:",
+            hms(t)
+        ),
+        None => println!("\nfight length: model player actions (win rate) vs the WR video's:"),
+    }
     let mut fit = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
     for (name, wt, ws) in WR_FIGHTS {
+        // `within`: only attempts that finished in that many seconds (the WR video is one successful run, so
+        // its fights are conditioned on success: luck in the fights is part of why it finished).
         let v: Vec<&(String, u32, bool, f64)> = rows
             .iter()
+            .filter(|r| {
+                within.is_none_or(|t| {
+                    r.3 && r
+                        .0
+                        .iter()
+                        .filter(|&&x| x != u64::MAX)
+                        .max()
+                        .is_some_and(|&x| x as f64 / FPS <= t)
+                })
+            })
             .flat_map(|r| r.4.iter())
             .filter(|f| f.0 == *name)
             .collect();

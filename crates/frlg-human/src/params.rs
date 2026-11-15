@@ -295,6 +295,10 @@ pub struct FightTactic {
     /// lane's `carry_power` stands in for; their risk lane runs at that same stand-in.
     pub risk_power: f64,
     pub risk_foe: f64,
+    /// The carry's Torrent boost is on for the whole fight (timing lane only): the WR enters these fights at
+    /// or under a third of its HP (Koga 33/120, Sabrina 43/135, Giovanni 35/143, Bruno 48/156, Agatha 51/159:
+    /// `human-run/video-analysis/data/calib/v2-mid-fights.md`, `v3-e4r1.md`), the model's carry at full HP.
+    pub free_torrent: bool,
 }
 
 impl Default for FightTactic {
@@ -309,6 +313,7 @@ impl Default for FightTactic {
             potions: -1,
             risk_power: 0.0,
             risk_foe: 0.0,
+            free_torrent: false,
         }
     }
 }

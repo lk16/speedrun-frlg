@@ -49,6 +49,7 @@ pub struct TacCfg {
     pub potions: i32,
     pub risk_power: f64,
     pub risk_foe: f64,
+    pub free_torrent: bool,
 }
 
 impl Default for TacCfg {
@@ -63,6 +64,7 @@ impl Default for TacCfg {
             potions: -1,
             risk_power: 0.0,
             risk_foe: 0.0,
+            free_torrent: false,
         }
     }
 }
@@ -1426,6 +1428,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             if ctx.p.ablate_torrent {
                 m.ability = crate::data::Ability::None;
             }
+            m.force_torrent = cfg.free_torrent;
             if st.mystic {
                 m.boost = Some((11, 10));
             } else if ctx.p.black_glasses && st.glasses {

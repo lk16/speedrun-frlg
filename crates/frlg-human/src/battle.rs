@@ -379,6 +379,10 @@ pub struct Mon {
     /// Physical damage taken this turn (Counter).
     pub counter_dmg: i32,
     pub yawned: bool,
+    /// The starter ability's 1/3-HP boost applies whatever the HP (`FightTactic::free_torrent`): the WR carry
+    /// walks into most gym and League fights at or under a third of its HP (`v2-mid-fights.md`), which the
+    /// timing lane's own HP does not reproduce.
+    pub force_torrent: bool,
 }
 
 /// Side state that outlives one enemy mon (screens guard the trainer's whole party).
@@ -469,6 +473,7 @@ pub fn make_mon(
         badge: [bb(0), bb(4), bb(2), bb(6), bb(6)],
         counter_dmg: 0,
         yawned: false,
+        force_torrent: false,
     }
 }
 
@@ -544,6 +549,11 @@ fn speed(m: &Mon) -> u32 {
     s
 }
 
+fn legacy_types() -> bool {
+    static L: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *L.get_or_init(|| std::env::var_os("FRLG_LEGACY_TYPE").is_some())
+}
+
 /// `CalculateBaseDamage` + crit + STAB + type chart; `random` applies the 85-100 roll.
 #[allow(clippy::too_many_arguments)]
 fn calc_damage(
@@ -570,9 +580,10 @@ fn calc_damage(
         Ability::Torrent => m.mtype == 11,
         Ability::Blaze => m.mtype == 10,
         Ability::Overgrow => m.mtype == 12,
+        Ability::Swarm => m.mtype == 6,
         _ => false,
     };
-    if boosted && att.hp * 3 <= att.max_hp {
+    if boosted && (att.hp * 3 <= att.max_hp || att.force_torrent) {
         power = power * 150 / 100;
     }
     let phys = is_physical(m.mtype);
@@ -595,6 +606,12 @@ fn calc_damage(
             def.stages[4],
         )
     };
+    // Huge Power / Pure Power double the raw Attack before the badge (`CalculateBaseDamage`).
+    let a_raw = if phys && att.ability == Ability::HugePower {
+        a_raw * 2
+    } else {
+        a_raw
+    };
     let mut a = a_raw * a_badge / 100;
     let mut d = d_raw * d_badge / 100;
     // Held type booster, after the badge and before the ability halvings (`CalculateBaseDamage`).
@@ -606,6 +623,17 @@ fn calc_damage(
     // Thick Fat halves Fire/Ice special attack (`CalculateBaseDamage`).
     if def.ability == Ability::ThickFat && (m.mtype == 10 || m.mtype == 15) {
         a /= 2;
+    }
+    // Hustle and Guts: x1.5 Attack (a status of any kind for Guts); Marvel Scale: x1.5 Defense while statused
+    // (`CalculateBaseDamage`, in this order after Thick Fat).
+    if phys && att.ability == Ability::Hustle {
+        a = a * 150 / 100;
+    }
+    if phys && att.ability == Ability::Guts && att.status.any() {
+        a = a * 150 / 100;
+    }
+    if phys && def.ability == Ability::MarvelScale && def.status.any() {
+        d = d * 150 / 100;
     }
     // Explosion halves defense.
     if effect_from(&m.effect) == Effect::Explosion {
@@ -671,7 +699,11 @@ fn calc_damage(
         dmg = dmg * 15 / 10;
     }
     let eff = dex.eff(m.mtype, def.types);
-    dmg = (dmg as f64 * eff) as i32;
+    dmg = if legacy_types() {
+        (dmg as f64 * eff) as i32
+    } else {
+        dex.modulate(dmg, m.mtype, def.types)
+    };
     if let Some(rng) = rng {
         // `ApplyRandomDmgMultiplier` (`battle_script_commands.c:1557-1570`).
         let pct = 100 - rng.modn(16) as i32;
@@ -686,6 +718,14 @@ fn calc_damage(
         dmg = 1;
     }
     dmg
+}
+
+/// The damage a move does without a crit: `(min roll, max roll)` (`ApplyRandomDmgMultiplier` is 85..=100%),
+/// for the probes and `frlg-human dmg`.
+pub fn damage_range(dex: &Dex, att: &Mon, def: &Mon, mv: usize) -> (i32, i32) {
+    let hi = calc_damage(dex, att, def, mv, 0, false, &Side::default(), None);
+    let lo = if hi == 0 { 0 } else { (hi * 85 / 100).max(1) };
+    (lo, hi)
 }
 
 /// `Some(heals)` when the defender's ability swallows a move of this type.
@@ -716,7 +756,7 @@ fn effectiveness(dex: &Dex, mtype: u8, def: &Mon) -> f64 {
 }
 
 /// `Cmd_accuracycheck`: stage-adjusted accuracy, `Random() % 100 + 1 > calc` misses.
-fn accuracy_check(att: &Mon, def: &Mon, move_acc: u32, rng: &mut GameRng) -> bool {
+fn accuracy_check(att: &Mon, def: &Mon, move_acc: u32, mtype: u8, rng: &mut GameRng) -> bool {
     if move_acc == 0 {
         return true; // Swift, Vital Throw, Feint Attack class.
     }
@@ -725,6 +765,10 @@ fn accuracy_check(att: &Mon, def: &Mon, move_acc: u32, rng: &mut GameRng) -> boo
     let mut calc = move_acc * n / d;
     if att.ability == Ability::CompoundEyes {
         calc = calc * 130 / 100;
+    }
+    // Hustle costs a fifth of the accuracy of physical moves (`Cmd_accuracycheck`).
+    if att.ability == Ability::Hustle && is_physical(mtype) {
+        calc = calc * 80 / 100;
     }
     (rng.modn(100) + 1) <= calc
 }
@@ -2034,7 +2078,7 @@ fn do_move(
         if m.name == "MOVE_THUNDER_WAVE" && effectiveness(dex, m.mtype, def) == 0.0 {
             return false;
         }
-        if !accuracy_check(att, def, m.acc, rng) {
+        if !accuracy_check(att, def, m.acc, m.mtype, rng) {
             if att_is_player {
                 out.events += 1;
             }
@@ -2213,7 +2257,7 @@ fn do_move(
         }
         return false;
     }
-    if !matches!(fx, Effect::AlwaysHit) && !accuracy_check(att, def, m.acc, rng) {
+    if !matches!(fx, Effect::AlwaysHit) && !accuracy_check(att, def, m.acc, m.mtype, rng) {
         if att_is_player {
             out.events += 1;
         }
@@ -3637,5 +3681,503 @@ mod tests {
         // pushes it well past that — the optimiser's call). Exact trainer natures
         // (`CreateNPCTrainerParty`) took this from ~50% to ~39%.
         assert!(won > 120, "won {won}/400");
+    }
+
+    /// The WR's Mewtwo (`v4-e4r2.md`): 231 HP at Lv70, 235 / 238 / 241 after the level-ups to 71 / 72 / 73. The
+    /// stat formula (`pokemon.c:2093-2170`) gives exactly that for an HP IV of 5 and no HP EVs at every one of
+    /// the four levels, so the level scaling is right and the WR's Mewtwo has a middling HP roll.
+    #[test]
+    fn wr_mewtwo_hp_matches_the_video() {
+        let dex = Dex::load();
+        let ivs = [5, 14, 14, 14, 14, 14];
+        for (lv, hp) in [(70, 231), (71, 235), (72, 238), (73, 241)] {
+            let m = make_mon(&dex, dex.id("SPECIES_MEWTWO"), lv, ivs, [0; 6], 0, 0);
+            assert_eq!(m.max_hp, hp, "Mewtwo L{lv}");
+        }
+    }
+
+    /// The WR's mid-game fights (`v2-mid-fights.md`) need no power multiplier: with the carry's real level, HP
+    /// (inside the Torrent window at Koga 33/120 and Sabrina 43/135), Rash nature, 30-IV SpA, badges and
+    /// plain Surf / Water Pulse, the engine's hits-to-kill are the video's. This is what `carry_power` ~1.7-2.0
+    /// is made of: Torrent x1.5, times the model carry being 3 levels short at Koga (x1.19 on Surf).
+    #[test]
+    fn mid_game_hits_to_kill_match_the_video_without_a_power_stand_in() {
+        let dex = Dex::load();
+        let rash = crate::manip::nature_index("Rash").unwrap();
+        let ivs = [15, 26, 9, 29, 30, 20];
+        let carry = |lv: u32, badges: u8, hp: i32, max: i32| {
+            let mut m = make_mon(
+                &dex,
+                dex.id("SPECIES_BLASTOISE"),
+                lv,
+                ivs,
+                [0; 6],
+                rash,
+                badges,
+            );
+            m.hp = hp;
+            m.max_hp = max;
+            m
+        };
+        let hits = |me: &Mon, trainer: &str, foe: &str, mv: &str| {
+            let f = dex.fight(trainer);
+            let p = f.full.iter().find(|p| p.species == dex.id(foe)).unwrap();
+            let e = enemy_mon(&dex, p);
+            let (lo, hi) = damage_range(&dex, me, &e, dex.move_id(mv));
+            let n = |d: i32| (e.max_hp + d - 1) / d;
+            (n(hi), n(lo))
+        };
+        // Koga: Lv40 at 33/120 (Torrent), Boulder + Thunder badges. Koffing falls to one Surf, Muk takes two
+        // ("Surf x2 turns"), Weezing two or three turns.
+        let me = carry(40, 0b101, 33, 120);
+        assert_eq!(
+            hits(&me, "TRAINER_LEADER_KOGA", "SPECIES_KOFFING", "MOVE_SURF"),
+            (1, 1)
+        );
+        assert_eq!(
+            hits(&me, "TRAINER_LEADER_KOGA", "SPECIES_MUK", "MOVE_SURF"),
+            (2, 2)
+        );
+        assert_eq!(
+            hits(&me, "TRAINER_LEADER_KOGA", "SPECIES_WEEZING", "MOVE_SURF"),
+            (1, 2)
+        );
+        // The same carry three levels lower (the model's, 37) at the same fraction of HP: Muk needs 3.
+        let low = carry(37, 0b101, 37, 111);
+        assert_eq!(
+            hits(&low, "TRAINER_LEADER_KOGA", "SPECIES_MUK", "MOVE_SURF"),
+            (2, 3)
+        );
+        // ... and out of the window (full HP) Surf is a third weaker: four hits for Muk.
+        let full = carry(40, 0b101, 120, 120);
+        assert_eq!(
+            hits(&full, "TRAINER_LEADER_KOGA", "SPECIES_MUK", "MOVE_SURF"),
+            (3, 3)
+        );
+        // Sabrina: Lv45 at 43/135 (Torrent), four badges. Water Pulse one-shots Kadabra, takes Mr. Mime two
+        // ("Water Pulse ... Surf KOs Mr. Mime"), Surf one-shots Venomoth and Alakazam.
+        let me = carry(45, 0b101_0101, 43, 135);
+        assert_eq!(
+            hits(
+                &me,
+                "TRAINER_LEADER_SABRINA",
+                "SPECIES_KADABRA",
+                "MOVE_WATER_PULSE"
+            ),
+            (1, 1)
+        );
+        assert_eq!(
+            hits(
+                &me,
+                "TRAINER_LEADER_SABRINA",
+                "SPECIES_MR_MIME",
+                "MOVE_WATER_PULSE"
+            ),
+            (2, 2)
+        );
+        assert_eq!(
+            hits(
+                &me,
+                "TRAINER_LEADER_SABRINA",
+                "SPECIES_MR_MIME",
+                "MOVE_SURF"
+            ),
+            (1, 1)
+        );
+        assert_eq!(
+            hits(
+                &me,
+                "TRAINER_LEADER_SABRINA",
+                "SPECIES_ALAKAZAM",
+                "MOVE_SURF"
+            ),
+            (1, 1)
+        );
+        // `force_torrent` is that window without the HP.
+        let mut free = carry(40, 0b101, 120, 120);
+        free.force_torrent = true;
+        assert_eq!(
+            hits(&free, "TRAINER_LEADER_KOGA", "SPECIES_MUK", "MOVE_SURF"),
+            (2, 2)
+        );
+    }
+
+    /// Every modifier of `CalculateBaseDamage` / `Cmd_damagecalc` / `Cmd_typecalc` on hand cases (`pokemon.c:2385-2666`,
+    /// `battle_script_commands.c:1209-1330`): badge boosts (player side only, Boulder Atk, Soul Def, Volcano
+    /// SpA and SpD), held type booster, Guts / Hustle / Swarm / Marvel Scale / Huge Power, the Torrent threshold
+    /// (`hp <= maxHP / 3`), burn, crit (x2, drops and gains ignored), STAB, stat stages.
+    #[test]
+    fn damage_modifiers_follow_the_decomp() {
+        let dex = Dex::load();
+        let side = Side::default();
+        let mk = |sp: &str, lv: u32, badges: u8| {
+            let mut m = make_mon(&dex, dex.id(sp), lv, [0; 6], [0; 6], 0, badges);
+            m.stat = [100; 5];
+            m.types = (9, 9); // typeless: no STAB, no resistances
+            m.ability = Ability::None;
+            m
+        };
+        // Reference: L50, A 100, D 100, power 40 physical (Pound) = (100*40*22/100/50) + 2 = 19.
+        let pound = dex.move_id("MOVE_POUND");
+        let surf = dex.move_id("MOVE_SURF"); // 95 special
+        let bite = dex.move_id("MOVE_BITE"); // 60 special (Dark)
+        let calc = |a: &Mon, d: &Mon, mv: usize, crit: bool| {
+            calc_damage(&dex, a, d, mv, 0, crit, &side, None)
+        };
+        let (a0, d0) = (mk("SPECIES_RATTATA", 50, 0), mk("SPECIES_RATTATA", 50, 0));
+        assert_eq!(calc(&a0, &d0, pound, false), 19);
+        // Badges: Boulder +10% Attack of the badge holder's mon, Soul +10% Defense of the holder's mon; the
+        // trainer side never gets any (`ShouldGetStatBadgeBoost`: `GetBattlerSide == B_SIDE_PLAYER`).
+        let boulder = mk("SPECIES_RATTATA", 50, 1);
+        assert_eq!(
+            calc(&boulder, &d0, pound, false),
+            100 * 110 / 100 * 40 * 22 / 100 / 50 + 2
+        );
+        let soul = mk("SPECIES_RATTATA", 50, 1 << 4);
+        assert_eq!(
+            calc(&a0, &soul, pound, false),
+            100 * 40 * 22 / (100 * 110 / 100) / 50 + 2
+        );
+        assert_eq!(
+            calc(&soul, &d0, pound, false),
+            19,
+            "Soul boosts Defense, not Attack"
+        );
+        let volcano = mk("SPECIES_RATTATA", 50, 1 << 6);
+        assert_eq!(
+            calc(&volcano, &d0, surf, false),
+            110 * 95 * 22 / 100 / 50 + 2
+        );
+        assert_eq!(
+            calc(&a0, &volcano, surf, false),
+            100 * 95 * 22 / 110 / 50 + 2
+        );
+        assert_eq!(
+            calc(&volcano, &d0, pound, false),
+            19,
+            "Volcano boosts the special stats only"
+        );
+        // Held type booster: +10% after the badge, only for its type.
+        let mut glasses = mk("SPECIES_RATTATA", 50, 0);
+        glasses.boost = Some((17, 10));
+        assert_eq!(
+            calc(&glasses, &d0, bite, false),
+            110 * 60 * 22 / 100 / 50 + 2
+        );
+        assert_eq!(
+            calc(&glasses, &d0, surf, false),
+            100 * 95 * 22 / 100 / 50 + 2
+        );
+        // Torrent: power x1.5 when hp <= maxHP / 3 (integer division), Water only.
+        let mut torrent = mk("SPECIES_RATTATA", 50, 0);
+        torrent.ability = Ability::Torrent;
+        for (max, hp, on) in [
+            (100, 33, true),
+            (100, 34, false),
+            (101, 33, true),
+            (101, 34, false),
+            (102, 34, true),
+            (102, 35, false),
+        ] {
+            torrent.max_hp = max;
+            torrent.hp = hp;
+            let want = if on {
+                100 * (95 * 150 / 100) * 22 / 100 / 50 + 2
+            } else {
+                100 * 95 * 22 / 100 / 50 + 2
+            };
+            assert_eq!(calc(&torrent, &d0, surf, false), want, "max {max} hp {hp}");
+        }
+        assert_eq!(
+            calc(&torrent, &d0, bite, false),
+            100 * 60 * 22 / 100 / 50 + 2,
+            "Torrent is Water only"
+        );
+        let mut swarm = mk("SPECIES_RATTATA", 50, 0);
+        swarm.ability = Ability::Swarm;
+        swarm.max_hp = 99;
+        swarm.hp = 33;
+        let megahorn = dex.move_id("MOVE_MEGAHORN"); // Bug
+        assert_eq!(
+            calc(&swarm, &d0, megahorn, false),
+            100 * (120 * 150 / 100) * 22 / 100 / 50 + 2
+        );
+        // Guts / Hustle / Marvel Scale / Huge Power.
+        let mut guts = mk("SPECIES_RATTATA", 50, 0);
+        guts.ability = Ability::Guts;
+        assert_eq!(calc(&guts, &d0, pound, false), 19);
+        guts.status = Status1::Poison;
+        assert_eq!(calc(&guts, &d0, pound, false), 150 * 40 * 22 / 100 / 50 + 2);
+        guts.status = Status1::Burn; // burn's halving is waived for Guts
+        assert_eq!(calc(&guts, &d0, pound, false), 150 * 40 * 22 / 100 / 50 + 2);
+        let mut hustle = mk("SPECIES_RATTATA", 50, 0);
+        hustle.ability = Ability::Hustle;
+        assert_eq!(
+            calc(&hustle, &d0, pound, false),
+            150 * 40 * 22 / 100 / 50 + 2
+        );
+        assert_eq!(
+            calc(&hustle, &d0, surf, false),
+            100 * 95 * 22 / 100 / 50 + 2,
+            "Hustle is physical only"
+        );
+        let mut scale = mk("SPECIES_RATTATA", 50, 0);
+        scale.ability = Ability::MarvelScale;
+        scale.status = Status1::Paralysis;
+        assert_eq!(
+            calc(&a0, &scale, pound, false),
+            100 * 40 * 22 / 150 / 50 + 2
+        );
+        let mut huge = mk("SPECIES_RATTATA", 50, 0);
+        huge.ability = Ability::HugePower;
+        assert_eq!(calc(&huge, &d0, pound, false), 200 * 40 * 22 / 100 / 50 + 2);
+        // Burn halves physical damage before the +2; special is untouched.
+        let mut burnt = mk("SPECIES_RATTATA", 50, 0);
+        burnt.status = Status1::Burn;
+        assert_eq!(
+            calc(&burnt, &d0, pound, false),
+            100 * 40 * 22 / 100 / 50 / 2 + 2
+        );
+        assert_eq!(calc(&burnt, &d0, surf, false), 100 * 95 * 22 / 100 / 50 + 2);
+        // Crit: (base + 2) x 2, ignoring the attacker's drops and the defender's gains, keeping the rest.
+        let mut dropped = mk("SPECIES_RATTATA", 50, 0);
+        dropped.stages[0] = -2;
+        assert_eq!(
+            calc(&dropped, &d0, pound, false),
+            50 * 40 * 22 / 100 / 50 + 2
+        );
+        assert_eq!(calc(&dropped, &d0, pound, true), 19 * 2);
+        let mut walled = mk("SPECIES_RATTATA", 50, 0);
+        walled.stages[1] = 2;
+        assert_eq!(
+            calc(&a0, &walled, pound, false),
+            100 * 40 * 22 / 200 / 50 + 2
+        );
+        assert_eq!(calc(&a0, &walled, pound, true), 19 * 2);
+        let mut boosted = mk("SPECIES_RATTATA", 50, 0);
+        boosted.stages[0] = 2;
+        assert_eq!(
+            calc(&boosted, &d0, pound, true),
+            (200 * 40 * 22 / 100 / 50 + 2) * 2,
+            "gains and defender drops count"
+        );
+        // STAB x1.5 after the crit doubling.
+        let mut stab = mk("SPECIES_RATTATA", 50, 0);
+        stab.types = (0, 0);
+        assert_eq!(calc(&stab, &d0, pound, false), 19 * 15 / 10);
+        assert_eq!(calc(&stab, &d0, pound, true), 19 * 2 * 15 / 10);
+    }
+
+    /// The WR video's R1 one-shots (`v3-e4r1.md`): the SpA stage the engine's Blastoise (WR IVs, Rash,
+    /// 0 EVs, Black Glasses, all badges) needs to one-shot each foe with the observed move at the observed
+    /// HP (Torrent when HP <= 1/3), at the maximum and at the minimum damage roll.
+    #[test]
+    #[ignore]
+    fn probe_r1_implied_stage() {
+        let dex = Dex::load();
+        let rash = crate::manip::nature_index("Rash").unwrap();
+        let ivs = [15, 26, 9, 29, 30, 20];
+        let obs: [(&str, u32, i32, i32, &str, &str, usize); 14] = [
+            (
+                "TRAINER_ELITE_FOUR_LORELEI",
+                50,
+                25,
+                150,
+                "MOVE_BITE",
+                "SPECIES_CLOYSTER",
+                1,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_LORELEI",
+                51,
+                28,
+                153,
+                "MOVE_BITE",
+                "SPECIES_SLOWBRO",
+                2,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_LORELEI",
+                51,
+                28,
+                153,
+                "MOVE_SURF",
+                "SPECIES_JYNX",
+                3,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_BRUNO",
+                52,
+                48,
+                156,
+                "MOVE_SURF",
+                "SPECIES_HITMONCHAN",
+                1,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_BRUNO",
+                52,
+                48,
+                156,
+                "MOVE_SURF",
+                "SPECIES_HITMONLEE",
+                2,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_BRUNO",
+                52,
+                48,
+                156,
+                "MOVE_SURF",
+                "SPECIES_MACHAMP",
+                3,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_AGATHA",
+                53,
+                51,
+                159,
+                "MOVE_SURF",
+                "SPECIES_GENGAR",
+                0,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_AGATHA",
+                53,
+                51,
+                159,
+                "MOVE_SURF",
+                "SPECIES_GOLBAT",
+                1,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_AGATHA",
+                53,
+                51,
+                159,
+                "MOVE_SURF",
+                "SPECIES_ARBOK",
+                3,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_AGATHA",
+                54,
+                54,
+                162,
+                "MOVE_SURF",
+                "SPECIES_GENGAR",
+                4,
+            ),
+            (
+                "TRAINER_ELITE_FOUR_AGATHA",
+                54,
+                54,
+                162,
+                "MOVE_SURF",
+                "SPECIES_HAUNTER",
+                2,
+            ),
+            (
+                "TRAINER_CHAMPION_FIRST_BULBASAUR",
+                56,
+                131,
+                167,
+                "MOVE_SURF",
+                "SPECIES_ALAKAZAM",
+                2,
+            ),
+            (
+                "TRAINER_CHAMPION_FIRST_BULBASAUR",
+                56,
+                131,
+                167,
+                "MOVE_SURF",
+                "SPECIES_RHYDON",
+                3,
+            ),
+            (
+                "TRAINER_CHAMPION_FIRST_BULBASAUR",
+                55,
+                165,
+                165,
+                "MOVE_SURF",
+                "SPECIES_PIDGEOT",
+                0,
+            ),
+        ];
+        for (tr, lv, hp, mhp, mv, sp, _slot) in obs {
+            let f = dex.fight(tr);
+            let sid = dex.id(sp);
+            let Some(p) = f.full.iter().find(|p| p.species == sid) else {
+                eprintln!("{tr} {sp}: not in party");
+                continue;
+            };
+            let foe = enemy_mon(&dex, p);
+            let mut me = make_mon(
+                &dex,
+                dex.id("SPECIES_BLASTOISE"),
+                lv,
+                ivs,
+                [0; 6],
+                rash,
+                0xff,
+            );
+            me.boost = Some((17, 10));
+            me.hp = hp;
+            me.max_hp = mhp;
+            let mvi = dex.move_id(mv);
+            let side = Side::default();
+            let mut need = [99i8; 2];
+            for st in 0..=6i8 {
+                me.stages[3] = st;
+                let hi = calc_damage(&dex, &me, &foe, mvi, 0, false, &side, None);
+                let lo = hi * 85 / 100;
+                if need[0] == 99 && hi >= foe.hp {
+                    need[0] = st;
+                }
+                if need[1] == 99 && lo >= foe.hp {
+                    need[1] = st;
+                }
+            }
+            me.stages[3] = 0;
+            let d0 = calc_damage(&dex, &me, &foe, mvi, 0, false, &side, None);
+            eprintln!(
+                "{:>34} {:>12} L{} foe hp {:>3} dmg@+0 {:>3} ({:>3}%): stage for max-roll KO +{}, min-roll KO +{}  (me SpA {})",
+                tr.trim_start_matches("TRAINER_"), sp.trim_start_matches("SPECIES_"), foe.level, foe.max_hp, d0,
+                d0 * 100 / foe.max_hp, need[0], need[1], me.stat[3]
+            );
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn probe_oneshots() {
+        let dex = Dex::load();
+        let mut mt = make_mon(&dex, dex.id("SPECIES_MEWTWO"), 70, [31; 6], [0; 6], 0, 0xff);
+        mt.stat[3] = 230;
+        eprintln!("mewtwo stats {:?} hp {}", mt.stat, mt.max_hp);
+        let psy = dex.move_id("MOVE_PSYCHIC");
+        for id in [
+            "TRAINER_ELITE_FOUR_LORELEI_2",
+            "TRAINER_ELITE_FOUR_LANCE_2",
+            "TRAINER_ELITE_FOUR_BRUNO_2",
+            "TRAINER_ELITE_FOUR_AGATHA_2",
+        ] {
+            let f = dex.fight(id);
+            for p in &f.full {
+                let e = enemy_mon(&dex, p);
+                let side = Side::default();
+                let lo = calc_damage(&dex, &mt, &e, psy, 0, false, &side, None);
+                eprintln!(
+                    "{id} {} L{} hp {} spd {} psychic nominal {} ({:.0}%)",
+                    dex.species[e.species].name,
+                    e.level,
+                    e.max_hp,
+                    e.stat[4],
+                    lo,
+                    lo as f64 * 100.0 / e.max_hp as f64
+                );
+            }
+        }
     }
 }

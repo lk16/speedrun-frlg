@@ -101,6 +101,7 @@ impl Plan {
                         potions: t.potions,
                         risk_power: t.risk_power,
                         risk_foe: t.risk_foe,
+                        free_torrent: t.free_torrent,
                     },
                 )
             })

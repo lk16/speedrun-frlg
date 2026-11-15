@@ -343,6 +343,75 @@ fn main() {
                 hms(WR_SECONDS * FPS)
             );
         }
+        Some("dmg") => {
+            // dmg <TRAINER_ID> <level> [--species S] [--moves A,B] [--ivs h,a,d,s,sa,sd] [--evs ...] [--nature N]
+            //   [--badges mask] [--boost TYPE,PCT] [--stage n] [--hp cur,max]
+            // Per foe of the trainer's party: HP, speed, and each move's damage range (85..100% roll) with the
+            // hits needed (`ceil(hp / max)`, `ceil(hp / min)`), at a given special/attack stage and HP (Torrent).
+            use frlg_human::battle::{damage_range, enemy_mon, make_mon};
+            let dexr = dex();
+            let level: u32 = args[2].parse().unwrap();
+            let species = dexr.id(&arg(&args, "--species", "SPECIES_BLASTOISE".to_string()));
+            let movearg: String = arg(&args, "--moves", "MOVE_SURF".to_string());
+            let moves: Vec<usize> = movearg.split(',').map(|m| dexr.move_id(m)).collect();
+            let list = |flag: &str, def: [u32; 6]| -> [u32; 6] {
+                let s: String = arg(&args, flag, String::new());
+                if s.is_empty() {
+                    return def;
+                }
+                let v: Vec<u32> = s.split(',').map(|x| x.parse().unwrap()).collect();
+                [v[0], v[1], v[2], v[3], v[4], v[5]]
+            };
+            let mut me = make_mon(
+                dexr,
+                species,
+                level,
+                list("--ivs", [15, 26, 9, 29, 30, 20]),
+                list("--evs", [0; 6]),
+                arg(&args, "--nature", 19u8),
+                arg(&args, "--badges", 255u32) as u8,
+            );
+            let boost: String = arg(&args, "--boost", String::new());
+            if let Some((t, p)) = boost.split_once(',') {
+                me.boost = Some((t.parse().unwrap(), p.parse().unwrap()));
+            }
+            let stage: i8 = arg(&args, "--stage", 0i8);
+            me.stages[0] = stage;
+            me.stages[3] = stage;
+            let hp: String = arg(&args, "--hp", String::new());
+            if let Some((c, m)) = hp.split_once(',') {
+                me.hp = c.parse().unwrap();
+                me.max_hp = m.parse().unwrap();
+            }
+            println!(
+                "{} L{level} stats(Atk,Def,Spe,SpA,SpD) {:?} hp {}/{} stage {stage}",
+                dexr.species[species].name, me.stat, me.hp, me.max_hp
+            );
+            let f = dexr.fight(&args[1]);
+            for p in &f.full {
+                let e = enemy_mon(dexr, p);
+                print!(
+                    "  {:<22} L{:<3} hp {:>3} def/spd {:>3}/{:>3} spe {:>3}:",
+                    dexr.species[e.species].name.trim_start_matches("SPECIES_"),
+                    e.level,
+                    e.max_hp,
+                    e.stat[1],
+                    e.stat[4],
+                    e.stat[2]
+                );
+                for &mv in &moves {
+                    let (lo, hi) = damage_range(dexr, &me, &e, mv);
+                    let n = |d: i32| if d <= 0 { 99 } else { (e.max_hp + d - 1) / d };
+                    print!(
+                        "  {} {lo}-{hi} ({}..{} hits)",
+                        dexr.moves[mv].name.trim_start_matches("MOVE_"),
+                        n(hi),
+                        n(lo)
+                    );
+                }
+                println!();
+            }
+        }
         Some("battle") => {
             // battle <TRAINER_ID> <carry level> [--n 2000] [--iv 20] [--badges mask]
             //   [--species SPECIES_X] [--moves MOVE_A,MOVE_B] [--add MOVE_C,...]
@@ -421,15 +490,33 @@ fn main() {
                     iv,
                 ];
                 let evall: u32 = arg(&args, "--ev", 0u32);
+                // `--ivs h,atk,def,spe,spa,spd` / `--evs ...` (the sim's stat order) override the
+                // uniform `--iv` / `--ev`; `--boost TYPE,PCT` is a held type booster.
+                let list = |flag: &str, def: [u32; 6]| -> [u32; 6] {
+                    let s: String = arg(&args, flag, String::new());
+                    if s.is_empty() {
+                        return def;
+                    }
+                    let v: Vec<u32> = s.split(',').map(|x| x.parse().unwrap()).collect();
+                    [v[0], v[1], v[2], v[3], v[4], v[5]]
+                };
+                let ivs = list("--ivs", ivs);
                 let mut me = make_mon(
                     dexr,
                     species,
                     level,
                     ivs,
-                    [evall; 6],
+                    list("--evs", [evall; 6]),
                     arg(&args, "--nature", 0u8),
                     badges as u8,
                 );
+                let boost: String = arg(&args, "--boost", String::new());
+                if let Some((t, p)) = boost.split_once(',') {
+                    me.boost = Some((t.parse().unwrap(), p.parse().unwrap()));
+                }
+                if args.iter().any(|a| a == "--print-stats") && i == 0 {
+                    println!("stats {:?} hp {}", me.stat, me.max_hp);
+                }
                 let power: f64 = arg(&args, "--power", 1.0);
                 if power != 1.0 {
                     me.stat[0] = (me.stat[0] as f64 * power) as i32;
@@ -520,7 +607,15 @@ fn main() {
             let ctx = plan.ctx();
             let r: u64 = arg(&args, "--R", 4_000);
             let all = args.iter().any(|a| a == "--all");
-            frlg_human::wrsplits::print_table(&plan, &ctx, seed, r, all);
+            let within: f64 = arg(&args, "--within", 0.0);
+            frlg_human::wrsplits::print_table(
+                &plan,
+                &ctx,
+                seed,
+                r,
+                all,
+                (within > 0.0).then_some(within),
+            );
         }
         Some("bag") => {
             // What is in the bag after a segment (no resets): per species the share of attempts holding

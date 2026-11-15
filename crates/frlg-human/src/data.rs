@@ -180,6 +180,11 @@ pub enum Ability {
     InnerFocus,
     /// Sand Stream: a permanent sandstorm on switch-in (`battle_util.c`).
     SandStream,
+    /// Swarm: x1.5 Bug power at or below 1/3 HP (`CalculateBaseDamage`; the Champion's Heracross).
+    Swarm,
+    /// Marvel Scale: x1.5 Defense while statused. Huge Power / Pure Power: x2 Attack (`CalculateBaseDamage`).
+    MarvelScale,
+    HugePower,
     /// Synchronize, Pressure, and the rest that the model ignores map to None.
     Other,
 }
@@ -215,6 +220,9 @@ pub fn ability_from(name: &str) -> Ability {
         "ABILITY_SHIELD_DUST" => Ability::ShieldDust,
         "ABILITY_INNER_FOCUS" => Ability::InnerFocus,
         "ABILITY_SAND_STREAM" => Ability::SandStream,
+        "ABILITY_SWARM" => Ability::Swarm,
+        "ABILITY_MARVEL_SCALE" => Ability::MarvelScale,
+        "ABILITY_HUGE_POWER" | "ABILITY_PURE_POWER" => Ability::HugePower,
         "ABILITY_NONE" => Ability::None,
         _ => Ability::Other,
     }
@@ -319,6 +327,9 @@ pub struct Dex {
     /// Damage multiplier of attacking type (row) on defending type (column),
     /// `decompiled/src/battle_main.c:312` `gTypeEffectiveness`.
     chart: [[f64; 18]; 18],
+    /// The same table in the decomp's own order, per attacking type: `(defending type, multiplier in
+    /// tenths)`. `Cmd_typecalc` walks it once and floors the damage after every matching entry.
+    chart_ord: Vec<Vec<(u8, u32)>>,
     pub moves: Vec<MoveData>,
     move_by_name: HashMap<String, usize>,
     trainer_full: HashMap<String, Vec<PartyMon>>,
@@ -329,6 +340,23 @@ impl Dex {
     /// Tiles to walk from the nearest Fly point to the site's first encounter tile.
     pub fn fly_tiles(&self, site: &str, area: &str) -> Option<u32> {
         self.fly_tiles.get(&format!("{site}|{area}")).copied()
+    }
+
+    /// `Cmd_typecalc`'s type loop (`battle_script_commands.c:1274-1330`, `ModulateDmgByType`): the damage is
+    /// multiplied by each matching table entry in the table's order, in integer tenths, and floored (but never
+    /// to 0 unless the multiplier is 0) after every one. A 2x then 0.5x pair keeps the damage, 0.5x then 2x
+    /// loses one point on an odd value, which a combined float multiplier cannot reproduce.
+    pub fn modulate(&self, mut dmg: i32, att: u8, def: (u8, u8)) -> i32 {
+        for &(d, m) in &self.chart_ord[att as usize] {
+            let hit = d == def.0 || (d == def.1 && def.0 != def.1);
+            if hit {
+                dmg = dmg * m as i32 / 10;
+                if dmg == 0 && m != 0 {
+                    dmg = 1;
+                }
+            }
+        }
+        dmg
     }
 
     /// Multiplier of a move of type `att` on a defender with the given types.
@@ -434,8 +462,10 @@ impl Dex {
             })
             .collect();
         let mut chart = [[1.0; 18]; 18];
+        let mut chart_ord: Vec<Vec<(u8, u32)>> = vec![vec![]; 18];
         for (a, d, m) in &raw.type_chart {
             chart[type_num(a) as usize][type_num(d) as usize] = *m as f64 / 10.0;
+            chart_ord[type_num(a) as usize].push((type_num(d), *m));
         }
         let money = raw
             .trainers
@@ -482,6 +512,7 @@ impl Dex {
             trainer_ai,
             item_prices: raw.item_prices,
             chart,
+            chart_ord,
             species,
             by_name,
             sites: raw.sites,
@@ -713,6 +744,30 @@ mod tests {
             ),
             0.5
         );
+    }
+
+    /// `ModulateDmgByType` floors after every table entry, in table order (`battle_script_commands.c:1220`,
+    /// `battle_main.c:312`): Fire's row lists Water (0.5x) before Ice (2x), so 33 damage on a Water/Ice mon
+    /// (Dewgong, Cloyster, Lapras) is 33*5/10 = 16 then 16*20/10 = 32, not the 33 of a combined 1x.
+    #[test]
+    fn type_modulation_floors_per_entry_in_table_order() {
+        let d = Dex::load();
+        let (fire, water, ice) = (
+            type_num("TYPE_FIRE"),
+            type_num("TYPE_WATER"),
+            type_num("TYPE_ICE"),
+        );
+        assert_eq!(d.eff(fire, (water, ice)), 1.0);
+        assert_eq!(d.modulate(33, fire, (water, ice)), 32);
+        assert_eq!(d.modulate(33, fire, (ice, water)), 32);
+        assert_eq!(d.modulate(34, fire, (water, ice)), 34);
+        // Never floored to 0 by a non-zero multiplier (`ModulateDmgByType`), immunities still give 0.
+        assert_eq!(d.modulate(1, fire, (water, water)), 1);
+        let ghost = type_num("TYPE_GHOST");
+        assert_eq!(d.modulate(50, type_num("TYPE_NORMAL"), (ghost, ghost)), 0);
+        // 4x and 0.25x are exact in either order.
+        let onix = d.species[d.id("SPECIES_ONIX")].types;
+        assert_eq!(d.modulate(31, water, onix), 124);
     }
 
     #[test]
