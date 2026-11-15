@@ -34,9 +34,10 @@ seed = int(opt('--seed', '3'))
 ft = [x for x in opt('--free-torrent', '').split(',') if x]
 plan, key, names, vals = a[0], a[1], a[2].split(','), [float(x) for x in a[3].split(',')]
 # `wrsplits.rs` WR_FIGHTS: the video's player actions per fight.
+# The League counts were recounted from bag counts / bar steps (journal 2026-11-22-10-00): the 4 s estimates were 11 / 7 / 6 / 8 / 10 / 7.5.
 WR = {'misty': 6.5, 'rival-ss-anne': 6, 'koga': 8, 'blaine': 6, 'sabrina': 9, 'giovanni': 6, 'rival-route22': 12,
-      'lorelei': 11, 'bruno': 7, 'agatha': 6, 'lance': 8, 'champion': 10, 'bruno-2': 5, 'agatha-2': 6.5,
-      'lance-2': 7.5, 'champion-2': 11.5}
+      'lorelei': 13, 'bruno': 9, 'agatha': 7, 'lance': 10, 'champion': 12, 'bruno-2': 5, 'agatha-2': 6.5,
+      'lance-2': 9, 'champion-2': 11.5}
 base = json.loads(open(plan).read().split('```json')[1].split('```')[0])
 for n in ft:
     base.setdefault('fight_tactics', {}).setdefault(n, {})['free_torrent'] = True

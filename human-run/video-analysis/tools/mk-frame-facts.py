@@ -101,6 +101,10 @@ for t, lv, hp in [(11580, 70, 231), (11724, 71, 235), (11970, 72, 238), (12120, 
 r(11542, 'hit', 'R2 Lorelei Dewgong L64: two Psychics, no item (Mewtwo stage 0)', {'psychic_hits': 2}, 'engine SpA IV 31: 127-150 of 209 = 61-72%, two hits')
 r(11580, 'mewtwo-item', 'Mewtwo held item', None, 'not seen: no summary / party-detail screen of Mewtwo appears in R2 (3 s sheets of 11580..12400); the HP-bar width never shows an item')
 
+r(9536, 'stat-gain', 'carry level-up gain box Lv51 -> 52', {'hp': 3, 'atk': 2, 'def': 3, 'spa': 2, 'spd': 2, 'spe': 2}, 'second box (new totals) is mashed past in every level-up; only the first, the gains, is ever on screen for a frame')
+r(11972, 'stat-gain', 'Mewtwo level-up gain box Lv71 -> 72', {'hp': 3, 'atk': 4, 'def': 2, 'spa': 4, 'spd': 3, 'spe': 3}, '0.5 s sheet at 11968+4.5')
+r(12123, 'stat-gain', 'Mewtwo level-up gain box Lv72 -> 73', {'hp': 3, 'atk': 4, 'def': 2, 'spa': 4, 'spd': 2, 'spe': 3}, '0.5 s sheet at 12118+5.0; two +4 SpA steps in a row: the mean SpA gain per level is (308 + IV + EV/4)/100 before the nature (3.4 at IV 31, EV 0), so this is a high-SpA-IV Mewtwo (guess: not pinned by two gains)')
+
 doc = {
     'video': V,
     'video_note': 'WR run, Main97 3:25:25.3, 2026-08-18; run time = video time - 0:35; 1920x1080, game window crop 365,30,1190x795',

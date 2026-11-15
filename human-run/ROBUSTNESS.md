@@ -103,3 +103,8 @@ carry_power 1.7 / 1.8 / 1.9 / **2.0** / 2.2 / 2.4 = 545 / 384 / 242 / **172** / 
 mewtwo_power 1.0 / 1.2 / **1.4** / 1.6 = 586 / 221 / **172** / 156 h. Likelihood intervals of the fits (`tools/fit_lik.py`): league_power 2.0-2.4 (best 2.2), mewtwo_power 1.2-1.6 (best 1.2), carry_power 1.2-1.8 (best 1.4; the plan's 2.0 is 2.8 log units worse):
 the model's 95% range at WR+2m is about 150-550 h. The mid-game `carry_power` is Torrent x1.5 times a 1.0-1.2 level gap (the WR walks into the gyms at <= 1/3 HP and 3 levels higher); `mewtwo_power` is about one X Special stage;
 `league_power` has no mechanism yet. The grids above predate this and the ranking statements of section 6 were not re-run on the new engine.
+
+## 8. Update 2026-11-22: frame facts and the recounted WR League actions (journal `journal/2026-11-22-10-00-frame-facts.md`)
+
+The WR's League action counts were 1-3 item turns too low (11 / 7 / 6 / 8 / 10 -> 13 / 9 / 7 / 10 / 12; Lance 2 7.5 -> 9). Refit on the recounted values, with the WR's real X queues and Torrent windows (plan `1017-wrfacts`): league_power 1.4 [1.0, 1.6],
+mewtwo_power 1.2 [1.0, 1.4] (were 2.2 / 1.4). EHT at WR+2m (R 1.6M seed 11) at the optimum 921 h, over the intervals about 540 h to 14 000 h; 1016's 171.8 h belonged to the old stand-ins. The ranking statements of sections 6-7 were made at 2.2 / 1.4 and are not re-run.

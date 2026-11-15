@@ -105,6 +105,9 @@ type Row = (
 
 /// Real fight lengths read off the WR video (`human-run/video-analysis/data/calib/v1..v4`):
 /// (segment name, player actions ("turns"), duration in seconds from intro to the defeated box).
+/// The League actions of Lorelei / Bruno / Agatha / Lance / Champion / Lance 2 were recounted from the bag counts and
+/// HP-bar steps at 1-3 s (journal 2026-11-22-10-00; the 4 s estimates had missed 1-3 item turns per fight):
+/// 11 -> 13, 7 -> 9, 6 -> 7, 8 -> 10, 10 -> 12, 7.5 -> 9. Durations are unchanged.
 pub const WR_FIGHTS: &[(&str, f64, f64)] = &[
     ("brock", 2.0, 31.0),
     ("misty", 6.5, 54.0),
@@ -114,14 +117,14 @@ pub const WR_FIGHTS: &[(&str, f64, f64)] = &[
     ("sabrina", 9.0, 80.0),
     ("giovanni", 6.0, 78.0),
     ("rival-route22", 12.0, 125.0),
-    ("lorelei", 11.0, 148.0),
-    ("bruno", 7.0, 104.0),
-    ("agatha", 6.0, 88.0),
-    ("lance", 8.0, 120.0),
-    ("champion", 10.0, 154.0),
+    ("lorelei", 13.0, 148.0),
+    ("bruno", 9.0, 104.0),
+    ("agatha", 7.0, 88.0),
+    ("lance", 10.0, 120.0),
+    ("champion", 12.0, 154.0),
     ("bruno-2", 5.0, 92.0),
     ("agatha-2", 6.5, 98.0),
-    ("lance-2", 7.5, 110.0),
+    ("lance-2", 9.0, 110.0),
     ("champion-2", 11.5, 196.0),
 ];
 

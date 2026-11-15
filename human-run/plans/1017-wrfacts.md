@@ -2,7 +2,7 @@
 
 Parent: `1016-manip131`. MODEL CHANGE (journal 2026-11-22-10-00): the WR frame facts as hard inputs. League X queues = the WR's bag counts (Lorelei 4 specials; Bruno 2 + speed; Agatha 1 + speed;
 Champion speed + 3 specials; Lorelei 2 / Champion 2 none; Lance 2 two; X Speed bought 5), `free_torrent` on Koga / Sabrina / Giovanni 3 (carry_power effectively 2.0 x .667 = 1.33 there) and on Bruno / Agatha
-(the WR is at 33/120, 43/135, 35/143, 48/156 and 51/159 HP in those fights), league_power 2.2 -> 2.4 and mewtwo_power 1.4 -> 1.8 (refit on the measured core seconds).
+(the WR is at 33/120, 43/135, 35/143, 48/156 and 51/159 HP in those fights), league_power 2.2 -> 1.4 and mewtwo_power 1.4 -> 1.2 (likelihood refit with the League action counts recounted from the frames: 13 / 9 / 7 / 10 / 12, Lance 2 9).
 
 The step-by-step description, citations and branch rules in `001-crude.md` still apply except
 where the parameters below differ; `frlg-human` reads only the block below. Every segment cost
@@ -703,7 +703,7 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
  "no_dig": true,
  "candy_early": true,
  "carry_power": 2.0,
- "mewtwo_power": 1.8,
+ "mewtwo_power": 1.2,
  "candy_early_n": 1,
  "starter_model": "manip",
  "manip": {
@@ -723,7 +723,7 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
   "min_spd": 14
  },
  "league_heals": 14,
- "league_power": 2.4,
+ "league_power": 1.4,
  "setup_min_turns": 2,
  "extra_fights": [
   {
