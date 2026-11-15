@@ -1,0 +1,693 @@
+{
+ "video": "frlgr2-wr-3.25.25-main97.mp4",
+ "video_note": "WR run, Main97 3:25:25.3, 2026-08-18; run time = video time - 0:35; 1920x1080, game window crop 365,30,1190x795",
+ "method": [
+  "ffmpeg 3 s keyframe sheets of the game window (12 cells of 420 px per image, timestamp burned in), read by eye: tools in the session scratchpad (sheet.sh, batch.sh), the commands are in journal 2026-11-22-10-00-frame-facts.md",
+  "bag counts and HP numbers are read directly; foe HP bars are measured with a 1 s raw-RGB decode (row y=68 of the 480x320 game crop, saturated pixels in x 103..198 = 48 native px, so +-1 px = +-2%)",
+  "a t is video seconds of the first frame that shows the value; the neighbouring 3 s cells bound it"
+ ],
+ "derived": {
+  "carry": "Blastoise A: Lv50 at E4R1 with Black Glasses (not Mystic Water), HP 150/153/156/159/162/165 at Lv50..55 (EV0 engine 146 at Lv50: about 8 HP EV/4 -> 32 EVs); Lv46 stats 138/96/106/110/100/97 (EV/4 about 3 HP, 3 Atk, 5 Def, 3 SpA, 0 SpD, 7 Spe, i.e. ~12-30 SpA EVs)",
+  "torrent": "the WR enters Koga (33/120), Sabrina (43/135) and Giovanni 3 (35/143) inside the 1/3-HP Torrent window; Blaine 109/123 and Route 22 147/147 outside it",
+  "x_items": "League X Special use: Lorelei 4, Bruno 2 (+1 X Speed), Agatha 1 (+1 X Speed), Lance 1 (+1 X Accuracy), Champion 3 (+1 X Speed, +1 Guard Spec); R22 2; R2: Lance 2 two, Champion 2 none, Bruno 2 + Agatha 2 one together; X Attack never",
+  "damage": "the engine reproduces every non-lethal bar reading with EV0 within the roll range (Koga Muk/Weezing, R2 Lapras) or within ~7% (Dewgong at +4): no hidden damage multiplier in the carry or in Mewtwo"
+ },
+ "readings": [
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9333,
+   "hms": "2:35:33",
+   "kind": "item",
+   "what": "carry held item",
+   "value": "BLACKGLASSES",
+   "note": "PC party pane \"A / BLASTOISE Lv50 BLACKGLASSES\"; 2:35:33, just before E4R1"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 5435,
+   "hms": "1:30:35",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv40 HP",
+   "value": {
+    "level": 40,
+    "hp": 33,
+    "max_hp": 120
+   },
+   "note": "Koga start, Torrent window (<= 120/3)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 5496,
+   "hms": "1:31:36",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv41 HP",
+   "value": {
+    "level": 41,
+    "hp": 4,
+    "max_hp": 123
+   },
+   "note": "Koga end"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 6130,
+   "hms": "1:42:10",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv41 HP",
+   "value": {
+    "level": 41,
+    "hp": 109,
+    "max_hp": 123
+   },
+   "note": "Blaine start (full-ish, outside Torrent)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 7848,
+   "hms": "2:10:48",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv45 HP",
+   "value": {
+    "level": 45,
+    "hp": 43,
+    "max_hp": 135
+   },
+   "note": "Sabrina start (Kadabra out), Torrent window (<= 45)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 8559,
+   "hms": "2:22:39",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv48 HP",
+   "value": {
+    "level": 48,
+    "hp": 35,
+    "max_hp": 143
+   },
+   "note": "Giovanni 3 start, Torrent window (<= 47.67)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 8700,
+   "hms": "2:25:00",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv49 HP",
+   "value": {
+    "level": 49,
+    "hp": 147,
+    "max_hp": 147
+   },
+   "note": "Route 22 rival start, full HP"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9395,
+   "hms": "2:36:35",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv50 HP",
+   "value": {
+    "level": 50,
+    "hp": 150,
+    "max_hp": 150
+   },
+   "note": "Lorelei start"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9455,
+   "hms": "2:37:35",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv51 HP",
+   "value": {
+    "level": 51,
+    "hp": 28,
+    "max_hp": 153
+   },
+   "note": "after Dewgong"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9540,
+   "hms": "2:39:00",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv52 HP",
+   "value": {
+    "level": 52,
+    "hp": 20,
+    "max_hp": 156
+   },
+   "note": "after Lapras"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9659,
+   "hms": "2:40:59",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv53 HP",
+   "value": {
+    "level": 53,
+    "hp": 51,
+    "max_hp": 159
+   },
+   "note": "after Bruno"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9731,
+   "hms": "2:42:11",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv54 HP",
+   "value": {
+    "level": 54,
+    "hp": 54,
+    "max_hp": 162
+   },
+   "note": "after Agatha"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9911,
+   "hms": "2:45:11",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv55 HP",
+   "value": {
+    "level": 55,
+    "hp": 85,
+    "max_hp": 165
+   },
+   "note": "after Lance Dragonite"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11658,
+   "hms": "3:14:18",
+   "kind": "carry-hp",
+   "what": "carry Blastoise Lv59 HP",
+   "value": {
+    "level": 59,
+    "hp": 109,
+    "max_hp": 178
+   },
+   "note": "R2 party screen: Blastoise A Lv59 109/178 (benched)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 7857,
+   "hms": "2:10:57",
+   "kind": "stats",
+   "what": "carry level-up stat box Lv46 (the only stat box the runner leaves on screen long enough)",
+   "value": {
+    "level": 46,
+    "hp": 138,
+    "atk": 96,
+    "def": 106,
+    "spa": 110,
+    "spd": 100,
+    "spe": 97
+   },
+   "note": "sheet 3 s step at 7830+27; engine EV0 with IV 15/26/9/29/30/20 Rash: hp 135 atk 93 def 101 spa 106 spd 99 spe 90 -> EV/4 about 3 HP, 3 Atk, 5 Def, 3 SpA, 0 SpD, 7 Spe"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 8703,
+   "hms": "2:25:03",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 20,
+   "note": "Route 22 rival, before the first item (list shows x20 under the cursor on X Accuracy)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 8709,
+   "hms": "2:25:09",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 19,
+   "note": "Route 22 rival, second item turn (X Speed 4, X Attack 3, X Accuracy 2, Guard Spec 2)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9402,
+   "hms": "2:36:42",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 17,
+   "note": "Lorelei turn 2 (X Speed 4, X Accuracy 2, Guard Spec 2, X Attack 3); T1 was already an X Special (18 -> 17)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9425,
+   "hms": "2:37:05",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 15,
+   "note": "Lorelei turn 4"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9581,
+   "hms": "2:39:41",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 14,
+   "note": "Bruno turn 2 (after the Full Restore of turn 1); Lorelei therefore used 4 (18 -> 14)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9590,
+   "hms": "2:39:50",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 13,
+   "note": "Bruno turn 3"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9596,
+   "hms": "2:39:56",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 12,
+   "note": "Bruno turn 4, cursor on X Speed (4)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9695,
+   "hms": "2:41:35",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 12,
+   "note": "Agatha turn 1, cursor on X Speed (3)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9830,
+   "hms": "2:43:50",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 11,
+   "note": "Lance turn 1 (X Speed 2, X Accuracy 2 -> 1 here)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9983,
+   "hms": "2:46:23",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 10,
+   "note": "Champion, cursor on X Speed (2); Guard Spec 2 -> 1 and Mist on turn 1"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9998,
+   "hms": "2:46:38",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 10,
+   "note": "Champion, X Special selected"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 10010,
+   "hms": "2:46:50",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 9,
+   "note": "Champion"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 10016,
+   "hms": "2:46:56",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 8,
+   "note": "Champion"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 10037,
+   "hms": "2:47:17",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 7,
+   "note": "Champion, Venusaur out (cursor on X Accuracy; the next action is Blizzard, no 4th X Special is visible)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11662,
+   "hms": "3:14:22",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 6,
+   "note": "R2 between Lorelei 2 and Bruno 2 (journal v4-e4r2)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11882,
+   "hms": "3:18:02",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 5,
+   "note": "R2 before Lance 2 (journal v4-e4r2)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11947,
+   "hms": "3:19:07",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 5,
+   "note": "Lance 2 turn 2 (Safeguard was turn 1)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11954,
+   "hms": "3:19:14",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 4,
+   "note": "Lance 2 turn 3"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 12084,
+   "hms": "3:21:24",
+   "kind": "bag",
+   "what": "bag X Special",
+   "value": 3,
+   "note": "Champion 2 (no X item used: 3 -> 3)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 8709,
+   "hms": "2:25:09",
+   "kind": "bag",
+   "what": "bag X Speed",
+   "value": 4,
+   "note": "X Speed 5 at 2:11 (Celadon stop), 4 here"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9402,
+   "hms": "2:36:42",
+   "kind": "bag",
+   "what": "bag X Speed",
+   "value": 4,
+   "note": "Lorelei"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9596,
+   "hms": "2:39:56",
+   "kind": "bag",
+   "what": "bag X Speed",
+   "value": 4,
+   "note": "Bruno turn 4: used here (3 at the Agatha bag)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9695,
+   "hms": "2:41:35",
+   "kind": "bag",
+   "what": "bag X Speed",
+   "value": 3,
+   "note": "Agatha turn 1: used here (2 at Lance)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9830,
+   "hms": "2:43:50",
+   "kind": "bag",
+   "what": "bag X Speed",
+   "value": 2,
+   "note": "Lance; 1 left after Champion turn 2 (\"A's SPEED rose!\" at 9998)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9830,
+   "hms": "2:43:50",
+   "kind": "bag",
+   "what": "bag X Accuracy",
+   "value": 2,
+   "note": "Lance turn 1 uses one (-> 1 at 9836)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9998,
+   "hms": "2:46:38",
+   "kind": "bag",
+   "what": "bag Guard Spec",
+   "value": 2,
+   "note": "Champion turn 1: Guard Spec, Mist (-> 1)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 8709,
+   "hms": "2:25:09",
+   "kind": "bag",
+   "what": "bag X Attack",
+   "value": 3,
+   "note": "never used: still 3 at Lorelei, Lance, Champion, R2 Lance 2 and Champion 2"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 8685,
+   "hms": "2:24:45",
+   "kind": "x-queue",
+   "what": "rival-route22",
+   "value": {
+    "special": 2,
+    "accuracy": 1
+   },
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9384,
+   "hms": "2:36:24",
+   "kind": "x-queue",
+   "what": "lorelei",
+   "value": {
+    "special": 4
+   },
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9551,
+   "hms": "2:39:11",
+   "kind": "x-queue",
+   "what": "bruno",
+   "value": {
+    "special": 2,
+    "speed": 1
+   },
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9659,
+   "hms": "2:40:59",
+   "kind": "x-queue",
+   "what": "agatha",
+   "value": {
+    "special": 1,
+    "speed": 1
+   },
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9803,
+   "hms": "2:43:23",
+   "kind": "x-queue",
+   "what": "lance",
+   "value": {
+    "accuracy": 1,
+    "special": 1
+   },
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9983,
+   "hms": "2:46:23",
+   "kind": "x-queue",
+   "what": "champion",
+   "value": {
+    "guard": 1,
+    "speed": 1,
+    "special": 3
+   },
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11904,
+   "hms": "3:18:24",
+   "kind": "x-queue",
+   "what": "lance-2",
+   "value": {
+    "special": 2
+   },
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 12048,
+   "hms": "3:20:48",
+   "kind": "x-queue",
+   "what": "champion-2",
+   "value": {},
+   "note": "items used in the fight, from the bag counts above"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 5450,
+   "hms": "1:30:50",
+   "kind": "hit",
+   "what": "Koga Muk L39: Surf #1 (Torrent, 33/120, stage 0)",
+   "value": {
+    "bar_px": 32,
+    "of": 47,
+    "pct": 68
+   },
+   "note": "engine EV0 74-88 of 130 = 57-68%: top of the roll range"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 5478,
+   "hms": "1:31:18",
+   "kind": "hit",
+   "what": "Koga Weezing L43: Surf #1 (Torrent)",
+   "value": {
+    "bar_px": 45,
+    "of": 47,
+    "pct": 96
+   },
+   "note": "engine EV0 95-112 of 108 = 88-104%"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 5491,
+   "hms": "1:31:31",
+   "kind": "hit",
+   "what": "Koga Weezing L43: Bite (1/120 HP, Black Glasses)",
+   "value": {
+    "bar_px": 13,
+    "of": 47,
+    "pct": 28
+   },
+   "note": "engine EV0 + glasses 29-35 of 108 = 27-32%"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 9440,
+   "hms": "2:37:20",
+   "kind": "hit",
+   "what": "Lorelei Dewgong L52: Bite #1 at SpA +4 (4 X Specials), Black Glasses (Bite is Dark = special in gen 3)",
+   "value": {
+    "bar_px": 28,
+    "of": 47,
+    "pct": 60
+   },
+   "note": "engine EV0 79-93 of 171 = 46-54%; the +3% SpA EV and the pixel rounding cover most of the gap"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11623,
+   "hms": "3:13:43",
+   "kind": "hit",
+   "what": "R2 Lorelei Lapras L66: Mewtwo Psychic #1 (stage 0)",
+   "value": {
+    "bar_px": 27,
+    "of": 47,
+    "pct": 57
+   },
+   "note": "engine, SpA IV 31: 137-162 of 268 = 51-60%; IV 14: 130-154 = 49-57%"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11691,
+   "hms": "3:14:51",
+   "kind": "hit",
+   "what": "R2 Bruno Steelix L65: Fire Blast",
+   "value": {
+    "bar_px": 47,
+    "of": 47,
+    "pct": 100
+   },
+   "note": "one-shot (engine 300-354 vs HP 192)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11976,
+   "hms": "3:19:36",
+   "kind": "hit",
+   "what": "R2 Lance Kingdra L66 / Dragonite L66 / Aerodactyl: one Psychic each at SpA +2",
+   "value": {
+    "one_shot": true
+   },
+   "note": "engine stage 0 gives 62-65% of Dragonite; +2 (two X Specials) is x2.0"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11580,
+   "hms": "3:13:00",
+   "kind": "mewtwo-hp",
+   "what": "Mewtwo Lv70 max HP",
+   "value": {
+    "level": 70,
+    "max_hp": 231
+   },
+   "note": "engine: HP IV 5, no HP EVs (journal 2026-11-21)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11724,
+   "hms": "3:15:24",
+   "kind": "mewtwo-hp",
+   "what": "Mewtwo Lv71 max HP",
+   "value": {
+    "level": 71,
+    "max_hp": 235
+   },
+   "note": "engine: HP IV 5, no HP EVs (journal 2026-11-21)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11970,
+   "hms": "3:19:30",
+   "kind": "mewtwo-hp",
+   "what": "Mewtwo Lv72 max HP",
+   "value": {
+    "level": 72,
+    "max_hp": 238
+   },
+   "note": "engine: HP IV 5, no HP EVs (journal 2026-11-21)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 12120,
+   "hms": "3:22:00",
+   "kind": "mewtwo-hp",
+   "what": "Mewtwo Lv73 max HP",
+   "value": {
+    "level": 73,
+    "max_hp": 241
+   },
+   "note": "engine: HP IV 5, no HP EVs (journal 2026-11-21)"
+  },
+  {
+   "video": "frlgr2-wr-3.25.25-main97.mp4",
+   "t": 11580,
+   "hms": "3:13:00",
+   "kind": "mewtwo-item",
+   "what": "Mewtwo held item",
+   "value": null,
+   "note": "not seen: no summary / party-detail screen of Mewtwo appears in R2 (3 s sheets of 11580..12400); the HP-bar width never shows an item"
+  }
+ ]
+}
