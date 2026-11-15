@@ -415,17 +415,28 @@ LEAGUE_FIGHTS = {'lorelei', 'bruno', 'agatha', 'lance', 'champion', 'lorelei-2',
                  'champion-2'}
 
 
+HIDDEN_CANDY_ANCHORS = {'super-rod', 'cycling-road', 'mansion', 'cerulean-heal', 'route6-encounters', 'route9'}
+
+
 def evidence_ok(p, patch):
     if patch.get('torrent_hits', 0) > 1.5 or patch.get('torrent_stall', True) is False:
         return False
-    if patch.get('candy_early_n', 0) > 3:
+    if patch.get('candy_early_n', 0) > 2:
+        return False
+    # Rare Candy sources (journal 2026-11-19-14-00): only the item balls the runner's route walks past (Mt. Moon 1F,
+    # Rocket Hideout B3F, Pokemon Tower 6F, Silph 10F, Victory Road 1F, the Warden's house) are real; the six hidden
+    # candies (Cerulean, Routes 6/9/12/17, Mansion 3F) are not in any stream, and 4-5 candies per run is his count.
+    for e in patch.get('elixirs', []):
+        if e.get('kind') == 'candy' and e.get('after') in HIDDEN_CANDY_ANCHORS:
+            return False
+    if sum(e.get('kind') == 'candy' for e in patch.get('elixirs', [])) > 6:
         return False
     if 'manip' in patch and patch['manip'].get('min_spe') != p.get('manip', {}).get('min_spe'):
         return False
     old = p.get('fight_tactics', {})
     for f, t in patch.get('fight_tactics', {}).items():
-        if f not in LEAGUE_FIGHTS and t.get('sacs', 0) > old.get(f, {}).get('sacs', 0):
-            return False
+        if t.get('sacs', 0) > old.get(f, {}).get('sacs', 0) and (f not in LEAGUE_FIGHTS or p.get('sac_honest_league')):
+            return False  # the WR solos both League rounds (calib/v3-e4r1.md, v4-e4r2.md): no sacrifice seen
     return True
 
 

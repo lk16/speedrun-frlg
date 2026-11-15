@@ -435,6 +435,7 @@ fn main() {
                     full_restore: league,
                     sacs: arg(&args, "--sacs", 0u32),
                     sac_free: !args.iter().any(|a| a == "--sac-honest"),
+                    helper_hp: arg(&args, "--helper-hp", 0i32),
                     torrent: args.iter().any(|a| a == "--torrent"),
                     torrent_stall: true,
                     torrent_early: args.iter().any(|a| a == "--early"),

@@ -1513,7 +1513,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             heal: heal_amount(me.level, st.league_items),
             full_restore: st.league_items,
             sacs,
-            sac_free: !(ctx.p.sac_honest && !a.league),
+            sac_free: !(ctx.p.sac_honest && (!a.league || ctx.p.sac_honest_league)),
+            helper_hp: ctx.p.helper_hp,
             torrent: (torrent || (a.league && ctx.p.league_torrent)) && !mewtwo_now,
             torrent_stall: ctx.p.torrent_stall,
             torrent_early: ctx.p.torrent_early,
@@ -1561,7 +1562,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         bump(st, out.kos.len() as f64 * ctx.mon_overhead() * fit);
         // A sacrifice costs its faint animation and the send-outs both ways. guess.
-        bump(st, out.sacs_used as f64 * 900.0);
+        bump(st, (out.sacs_used + out.sacs_survived) as f64 * 900.0);
         st.fodder = st.fodder.saturating_sub(out.sacs_used);
         if ctx.p.early_helpers && !a.league {
             st.helpers_dead += out.sacs_used;

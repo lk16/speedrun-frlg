@@ -785,6 +785,11 @@ pub struct Tactics {
     /// turn (items and moves act on the active mon; after the helper faints the fighter's send-out is free
     /// but takes no action). `true` is the older model (fighter acts from behind the sacrifice).
     pub sac_free: bool,
+    /// HP of the typical helper (`Params::helper_hp`). A sacrifice whose foe `danger` stays below it leaves the
+    /// helper alive: the foe's move did not faint it, so the fighter has to be switched back in on the next
+    /// turn, and the foe's move lands on the fighter then (the helper absorbed nothing that mattered).
+    /// 0 = every helper faints (older plans).
+    pub helper_hp: i32,
     /// Torrent tactic (the WR runner keeps the starter at <= 1/3 HP): Withdraw when the foe's max
     /// roll would KO and one Defense stage saves the carry, and a stall turn (Tackle) while above
     /// 1/3 HP when one hit is survivable and lands the carry in the boost.
@@ -820,6 +825,7 @@ impl Default for Tactics {
             full_restore: false,
             sacs: 0,
             sac_free: true,
+            helper_hp: 0,
             torrent: false,
             torrent_stall: true,
             torrent_early: false,
@@ -871,6 +877,8 @@ pub struct Outcome {
     pub full_restores_used: u32,
     /// Sacrificial faints spent (each costs a faint animation and a send-out).
     pub sacs_used: u32,
+    /// Sacrifices whose helper survived the hit (see `Tactics::helper_hp`): two switch turns, no faint.
+    pub sacs_survived: u32,
     /// Healthy party mons besides the fighter (Roar/Whirlwind needs one to drag in;
     /// `AI_CBM_Roar` counts them, `data/battle_ai_scripts.s`).
     pub others_alive: u32,
@@ -2954,6 +2962,14 @@ fn run(
                 fs.stalls += 1;
             }
             commit(fs, my_action, &mut out);
+            // A helper that the foe's hit cannot faint stays on the field: the fighter must be switched back
+            // in next turn (`must_switch`: a turn in which the foe's move lands on the fighter).
+            let helper_lives = matches!(my_action, Action::Sac(_)) && tac.helper_hp > danger;
+            if helper_lives {
+                fs.others_alive += 1;
+                out.others_alive = fs.others_alive;
+                fs.must_switch = true;
+            }
 
             // --- enemy action.
             let en_forced = e.recharging || e.charging.is_some() || e.rampage > 0;
@@ -3058,7 +3074,11 @@ fn run(
                         me.confusion = 0;
                     }
                     Action::Sac(x) => {
-                        out.sacs_used += 1;
+                        if helper_lives {
+                            out.sacs_survived += 1;
+                        } else {
+                            out.sacs_used += 1;
+                        }
                         match x {
                             Some(x) => {
                                 out.x_used += 1;
@@ -3447,6 +3467,51 @@ mod tests {
         assert!(honest < 0.8, "honest {honest}");
     }
 
+    /// A helper that the foe's hit cannot faint stays on the field and the fighter eats the next hit on the
+    /// switch back: against Brock's hits a 24-HP helper makes sacrifices strictly worse than none.
+    #[test]
+    fn surviving_helper_costs_a_turn_and_a_hit() {
+        let dex = Dex::load();
+        let rash = crate::manip::nature_index("Rash").unwrap();
+        let f = dex.fight("TRAINER_LEADER_BROCK");
+        let foes: Vec<Mon> = f.full.iter().map(|m| enemy_mon(&dex, m)).collect();
+        let rate = |helper_hp: i32| {
+            let (mut won, mut surv, n) = (0u32, 0u32, 1500u32);
+            for i in 0..n {
+                let mut me = make_mon(
+                    &dex,
+                    dex.id("SPECIES_SQUIRTLE"),
+                    11,
+                    [15, 26, 9, 29, 30, 20],
+                    [0; 6],
+                    rash,
+                    0,
+                );
+                me.moves = vec![dex.move_id("MOVE_TACKLE"), dex.move_id("MOVE_BUBBLE")];
+                me.hp = 10;
+                let tac = Tactics {
+                    torrent: true,
+                    sacs: 2,
+                    others_alive: 2,
+                    heal_stock: 0,
+                    sac_free: false,
+                    helper_hp,
+                    ..Default::default()
+                };
+                let mut g = rng(i + 51000);
+                let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
+                won += o.won as u32;
+                surv += o.sacs_survived;
+            }
+            (won as f64 / n as f64, surv)
+        };
+        let (dies, none_survive) = rate(0);
+        let (lives, survived) = rate(24);
+        assert_eq!(none_survive, 0);
+        assert!(survived > 0);
+        assert!(lives < dies, "lives {lives} dies {dies}");
+    }
+
     /// The Torrent tactic at the WR's Brock state (Lv11, 10/32 HP, Tackle/Bubble/Withdraw): the engine wins
     /// ~97% with about 2 player actions per foe (the video shows 2 for the whole fight).
     #[test]
@@ -3553,6 +3618,7 @@ mod tests {
                 full_restore: false,
                 sacs: 0,
                 sac_free: true,
+                helper_hp: 0,
                 torrent: false,
                 torrent_stall: true,
                 torrent_early: false,

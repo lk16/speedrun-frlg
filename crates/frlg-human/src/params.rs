@@ -791,6 +791,14 @@ pub struct Params {
     /// Outside the League a sacrifice turn is the hit absorbed and nothing else (`Tactics::sac_free`
     /// false): no attack and no X item from behind the helper. Default off keeps older plans' numbers.
     pub sac_honest: bool,
+    /// With `sac_honest`, the League's sacrifices are honest too (default off keeps plan 372's calibration
+    /// rule there). The WR runner carries four low-level mons through both rounds and never switches
+    /// (`data/calib/v3-e4r1.md`, `v4-e4r2.md`: no sacrifices seen).
+    pub sac_honest_league: bool,
+    /// HP of the typical sacrificial helper (a Lv5-9 mon: ~20-30 HP; a guess). A sacrifice against a foe whose
+    /// damage stays under it does not faint the helper and the fighter takes the hit on the switch back
+    /// (`Tactics::helper_hp`). 0 = every helper faints.
+    pub helper_hp: i32,
 }
 
 impl Default for Params {
@@ -953,6 +961,8 @@ impl Default for Params {
             risk_torrent_lost: false,
             early_helpers: false,
             sac_honest: false,
+            sac_honest_league: false,
+            helper_hp: 0,
         }
     }
 }
