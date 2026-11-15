@@ -128,7 +128,7 @@ def main():
         path = os.path.join(scratch, 'fitlane-%d.md' % os.getpid())
         open(path, 'w').write('```json\n' + json.dumps(params) + '\n```\n')
         r = reach(path, rung, R, seed)
-        return {w: (r[ends[w]] / r[prev[w]] if r.get(prev[w]) else float('nan')) for w in LANE_WINDOWS}
+        return {w: (r.get(ends[w], 0.0) / r[prev[w]] if r.get(prev[w]) else float('nan')) for w in LANE_WINDOWS}
 
     for g in grid:
         m = run({w: g for w in LANE_WINDOWS})
