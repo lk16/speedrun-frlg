@@ -1551,8 +1551,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
             eprintln!(
-                "fight {} L{} hp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {} kos {} heals {} frs {} end_hp {:.2} stats {:?}/{}",
-                a.name, me.level, st.hp_frac, stock, sacs, me.pp,
+                "fight {} L{} hp{:.2} hi{} mhp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {} kos {} heals {} frs {} end_hp {:.2} stats {:?}/{}",
+                a.name, me.level, st.hp_frac, st.heal_items, st.mewtwo_hp, stock, sacs, me.pp,
                 me.moves.iter().map(|&m| dex.moves[m].name.trim_start_matches("MOVE_").to_string()).collect::<Vec<_>>(),
                 out.won, out.turns, out.x_used, out.sacs_used, out.kos.len(), out.heals_used, out.full_restores_used, out.hp_frac, me.stat, me.max_hp
             );

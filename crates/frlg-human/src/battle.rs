@@ -1722,7 +1722,11 @@ fn ai_choose(
                 if on_self && user.stages[stat as usize] >= 6 {
                     score[i] -= 10;
                 }
-                if !on_self && (target.stages[stat as usize] <= -6 || target_side.mist > 0) {
+                // `AI_CBM_AttackDown` & co. test the target's stage (0 = -6) and its ability only: the AI
+                // does not look at Mist, so a trainer keeps trying Sand Attack / Feather Dance into the
+                // WR's Guard Spec ("A is protected by MIST!" three times in the Champion's first turns,
+                // 2:46:23-2:46:40 of the VOD) instead of switching to its attack.
+                if !on_self && target.stages[stat as usize] <= -6 {
                     score[i] -= 10;
                 }
             }
@@ -1766,9 +1770,10 @@ fn ai_choose(
                     score[i] -= 10;
                 }
             }
+            // `AI_CBM_Mist`: Score_Minus8 when its own side already has Mist up.
             Effect::Mist => {
                 if user_side.mist > 0 {
-                    score[i] -= 10;
+                    score[i] -= 8;
                 }
             }
             Effect::Safeguard => {
@@ -4254,6 +4259,43 @@ mod tests {
         assert_eq!(
             picks, 40,
             "a Hyper Beam that finishes the target is always the pick"
+        );
+    }
+
+    /// The AI never reads Mist (`AI_CBM_*` of the stat-drop scripts test the target's stage and ability only): the
+    /// Champion's Pidgeot keeps using Sand Attack / Feather Dance into the carry's Guard Spec, as the WR's first
+    /// Champion turns show (`Sand-Attack`, `A is protected by MIST!` x2), so its Aerial Ace is not the only pick.
+    #[test]
+    fn trainer_ai_ignores_mist() {
+        let dex = Dex::load();
+        let f = dex.fight("TRAINER_CHAMPION_FIRST_BULBASAUR");
+        let pidgeot = enemy_mon(&dex, &f.full[0]);
+        let me = make_mon(
+            &dex,
+            dex.id("SPECIES_BLASTOISE"),
+            55,
+            [15, 26, 9, 29, 30, 20],
+            [0; 6],
+            0,
+            0xff,
+        );
+        let plain = Side::default();
+        let misted = Side {
+            mist: 5,
+            ..Side::default()
+        };
+        let sa = dex.move_id("MOVE_SAND_ATTACK");
+        let (mut with_mist, mut without) = (0, 0);
+        for k in 0..400 {
+            let c = ai_choose(&dex, &pidgeot, &me, 7, &plain, &misted, 1, 5, &mut rng(k)).unwrap();
+            with_mist += (pidgeot.moves[c] == sa) as u32;
+            let c = ai_choose(&dex, &pidgeot, &me, 7, &plain, &plain, 1, 5, &mut rng(k)).unwrap();
+            without += (pidgeot.moves[c] == sa) as u32;
+        }
+        assert_eq!(with_mist, without);
+        assert!(
+            with_mist > 100,
+            "Sand Attack ties with Aerial Ace: {with_mist}/400"
         );
     }
 
