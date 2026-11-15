@@ -27,6 +27,14 @@ LEVELS = [
     ('quiet', [0]),                             # quiet-seed table off; primary on
     ('wall', [1.3]),                            # off-timer starter wall costs x; primary 1.0
     ('prefatal', [0.5, 1.5]),                   # pre-door death hazards, log-survival x; primary 1.0
+    # Honest-model stand-ins (journal 2026-11-19; the 608-era grid had none of them). `lane`: the risk-lane windows'
+    # carry power x (the pre-door hazards of the lane plans live there, `fatal` only holds the League);
+    # `lp` league_power, `mp` mewtwo_power, `cp` carry_power, `gap` level_gap (guess, plans use 8).
+    ('lane', [0.85, 1.15]),
+    ('lp', [1.8, 2.6]),
+    ('mp', [1.2, 1.8]),
+    ('cp', [1.7, 2.3]),
+    ('gap', [0, 12]),
 ]
 
 
@@ -86,6 +94,17 @@ def patch(p, knob, val):
         m['s_reset'] = m.get('s_reset', 100.0) * val
     elif knob == 'prefatal':
         q['fatal'] = {k: (v if k in POST else min(0.999, 1 - (1 - v) ** val)) for k, v in q.get('fatal', {}).items()}
+    elif knob == 'lane':
+        for w in q.get('risk_windows', []):
+            w['power'] = round(w['power'] * val, 4)
+    elif knob == 'lp':
+        q['league_power'] = val
+    elif knob == 'mp':
+        q['mewtwo_power'] = val
+    elif knob == 'cp':
+        q['carry_power'] = val
+    elif knob == 'gap':
+        q['level_gap'] = val
     elif knob == 'none':
         pass
     else:
@@ -146,7 +165,8 @@ def cmd_tf():
 
 
 def cmd_grid(out, rung, R, seed, plans):
-    cur = load_plan('608-evo581-habit')
+    # SENS_BASE: the plan whose model keys an older plan inherits for every key it lacks (default: the 608-era base).
+    cur = load_plan(os.environ.get('SENS_BASE', '608-evo581-habit'))
     jobs = []
     for name in plans:
         base = rebase(load_plan(name), cur)

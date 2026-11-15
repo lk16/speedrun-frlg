@@ -477,6 +477,17 @@ def gen(p):
         cands = [c for c in cands if c[0] not in opt('--notkinds', '').split(',')]
     if KINDS:
         cands = [c for c in cands if c[0] in KINDS]
+    if '--untried' in args:
+        # Only candidates whose label has never been scored (any parent): the tail a stopped descent left, plus the
+        # labels the promotions created.
+        done = set()
+        for line in open(os.path.join(ROOT, 'human-run', 'scores.jsonl')):
+            try:
+                idea = json.loads(line).get('idea', '')
+            except ValueError:
+                continue
+            done.add(idea.replace(' (confirm seed 2)', ''))
+        cands = [c for c in cands if f'[{c[0]}] {c[1]}' not in done]
     return cands
 
 
