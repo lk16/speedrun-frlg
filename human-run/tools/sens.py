@@ -190,8 +190,8 @@ def cmd_grid(out, rung, R, seed, plans):
         json.dump(res, open(out, 'w'))
 
 
-SCEN = [('none', 0), ('S', 0.10), ('S', 1.0), ('trainer_fit', 0.76), ('trainer_fit', 0.86), ('mistake', 0.0), ('mistake', 1.0),
-        ('slow', 2.4), ('prefatal', 0.5), ('prefatal', 1.5), ('p_hit', 0.55)]
+SCEN = [('none', 0), ('S', 0.10), ('S', 1.0), ('trainer_fit', 0.76), ('trainer_fit', 0.86), ('trainer_fit', 0.91), ('mistake', 0.0),
+        ('mistake', 1.0), ('slow', 2.4), ('p_hit', 0.55), ('lane', 0.85), ('cp', 1.7), ('lp', 1.8)]
 
 
 def shifted(p, d, skip=('oak-national-dex', 'brock')):
@@ -201,7 +201,7 @@ def shifted(p, d, skip=('oak-national-dex', 'brock')):
 
 
 def cmd_cands(out, rung, R, seed, plan, shifts):
-    cur = load_plan('608-evo581-habit')
+    cur = load_plan(os.environ.get('SENS_BASE', '608-evo581-habit'))
     base = rebase(load_plan(plan), cur)
     res = []
     for d in shifts:

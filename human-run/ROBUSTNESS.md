@@ -90,3 +90,7 @@ Journal `journal/2026-11-15-18-00-post-door-evidence.md`; data `video-analysis/d
 * The ranking of section 2 survives: 607 < 700 < 608 < 801 < 800 < 600 < 492 in six post-door models (S .06 .. .5) and two seeds. 801 spans 48 h (S .5) to 387 h (S .06).
 * Slow events: Safari 3/12 bad, Power Plant 1/8, cave 1 run: inside the model's values, left unchanged; slow off is -14%, Safari p .5 +7%.
 * `reset_aggr_at` past the door: no retune (best -0.8%, under the 1% bar; raising it costs up to +3%).
+
+## 6. Update 2026-11-20: the honest-model grid (journal `journal/2026-11-20-10-00-refit-skips-robustness.md`)
+
+CURRENT is `1012-notmdup` (the sections above describe the 608-era model). `data/robust-grid-honest-wr2m.json`, `data/robust-thresholds-honest-wr2m.json`; `sens.py grid` with `SENS_BASE=1012-notmdup`, R 500k, seed 1, WR+2m: 1012 / 983-epot43 / 976-lp22 over 30 scenarios (the old ones plus lane power x.85/1.15, league_power 1.8/2.6, mewtwo_power 1.2/1.8, carry_power 1.7/2.3, level_gap 0/12). Ranking 1012 < 983 < 976 in 27/30; it inverts at trainer_fit .91, mistake 1.0 and carry_power 1.7. Primary 151 / 196 / 285 h; 1012 spans 32 h (S 1.0) to 309 h (S 0.1), outliers up to 748 h (cp 1.7). 1009-heal658 is the more robust variant (cp 1.7 517 h, mistake 1.0 521 h, primary +9.8 h).
