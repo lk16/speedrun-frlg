@@ -1090,30 +1090,41 @@ pub fn entry_floor(dex: &Dex, me: &Mon, foes: &[Mon]) -> i32 {
 }
 
 /// The AI's damage estimate for one move: real calc, no crit, its own rolled variance
-/// (`battle_ai_script_commands.c:980-1026`; `simulatedRNG` at `:310`).
-fn ai_damage(dex: &Dex, att: &Mon, def: &Mon, mv: usize, side: &Side, rng: &mut GameRng) -> i32 {
+/// (`battle_ai_script_commands.c:980-1026`; `simulatedRNG` at `:310`). Returns the estimate and whether the
+/// move is on `sDiscouragedPowerfulMoveEffects` (`battle_ai_script_commands.c:245`: two-turn, recharge,
+/// self-KO, Overheat, Dream Eater): such a move is never "the most powerful" (`get_how_powerful_move_is`),
+/// but `if_can_faint` counts its damage like any other move's (`Cmd_if_can_faint`, `:1475`: only
+/// `power < 2` is excluded), so a Hyper Beam or Solar Beam that would finish the target earns TRY_TO_FAINT's
+/// +4. Moves of power 0 or 1 (Dragon Rage, Sonic Boom, status moves) estimate 0 either way.
+fn ai_damage(
+    dex: &Dex,
+    att: &Mon,
+    def: &Mon,
+    mv: usize,
+    side: &Side,
+    rng: &mut GameRng,
+) -> (i32, bool) {
     let m = &dex.moves[mv];
     if m.power <= 1 {
-        return 0;
+        return (0, false);
     }
     let fx = effect_from(&m.effect);
-    // `sDiscouragedPowerfulMoveEffects` (`battle_ai_script_commands.c:245`): two-turn,
-    // recharge, self-KO and Overheat are never "most powerful"; Dig/Fly are not on the list.
-    if matches!(
+    let discouraged = matches!(
         fx,
         Effect::Explosion
             | Effect::Charge
             | Effect::Recharge
             | Effect::DreamEater
             | Effect::Overheat
-    ) {
-        return 0;
-    }
+    );
     let sim = 100 - rng.modn(16) as i32;
     let d = calc_damage(dex, att, def, mv, 0, false, side, None);
     let eff = effectiveness(dex, m.mtype, def);
     let d = (d as f64 * if eff > 0.0 { 1.0 } else { 0.0 }) as i32;
-    (d * sim / 100).max(if eff > 0.0 { 1 } else { 0 })
+    (
+        (d * sim / 100).max(if eff > 0.0 { 1 } else { 0 }),
+        discouraged,
+    )
 }
 
 /// Everything the viability scripts read about the two mons.
@@ -1634,6 +1645,7 @@ fn ai_choose(
     let n = user.moves.len();
     let mut score = vec![100i32; n];
     let mut dmg = vec![0i32; n];
+    let mut faint_dmg = vec![0i32; n];
     let user_hp = user.hp * 100 / user.max_hp.max(1);
     let target_hp = target.hp * 100 / target.max_hp.max(1);
     let target_faster = speed(target) > speed(user);
@@ -1651,7 +1663,9 @@ fn ai_choose(
         }
         let m = &dex.moves[mv];
         let fx = effect_from(&m.effect);
-        dmg[i] = ai_damage(dex, user, target, mv, target_side, rng);
+        let (raw, discouraged) = ai_damage(dex, user, target, mv, target_side, rng);
+        faint_dmg[i] = raw;
+        dmg[i] = if discouraged { 0 } else { raw };
         let eff = effectiveness(dex, m.mtype, target);
 
         // AI_CheckBadMove (always on: every trainer has the flag).
@@ -1798,7 +1812,12 @@ fn ai_choose(
         }
 
         // AI_TryToFaint.
-        if ai_flags & 4 != 0 && dmg[i] > 0 && dmg[i] >= target.hp {
+        // `AI_TryToFaint_TryToEncourageQuickAttack`: an Explosion that would finish the target is skipped.
+        if ai_flags & 4 != 0
+            && faint_dmg[i] > 0
+            && faint_dmg[i] >= target.hp
+            && !matches!(fx, Effect::Explosion)
+        {
             score[i] += if matches!(fx, Effect::QuickAttack) {
                 6
             } else {
@@ -3681,6 +3700,54 @@ mod tests {
         // pushes it well past that — the optimiser's call). Exact trainer natures
         // (`CreateNPCTrainerParty`) took this from ~50% to ~39%.
         assert!(won > 120, "won {won}/400");
+    }
+
+    /// `if_can_faint` counts a recharge / two-turn / self-KO move's damage (`Cmd_if_can_faint` excludes only
+    /// `power < 2`), so Lance's Hyper Beam earns TRY_TO_FAINT's +4 whenever it would finish the target, however
+    /// the "most powerful" test treats it. The old estimate returned 0 for such moves and the AI never chose a
+    /// finishing Hyper Beam over its other moves.
+    #[test]
+    fn hyper_beam_that_can_faint_is_chosen() {
+        let dex = Dex::load();
+        let f = dex.fight("TRAINER_ELITE_FOUR_LANCE");
+        let g = enemy_mon(&dex, &f.full[0]); // Gyarados L56: Hyper Beam, Dragon Rage, Twister, Bite
+        let rash = crate::manip::nature_index("Rash").unwrap();
+        let mut me = make_mon(
+            &dex,
+            dex.id("SPECIES_BLASTOISE"),
+            54,
+            [15, 26, 9, 29, 30, 20],
+            [0; 6],
+            rash,
+            0xff,
+        );
+        let side = Side::default();
+        let hb = dex.move_id("MOVE_HYPER_BEAM");
+        let others: i32 = g
+            .moves
+            .iter()
+            .filter(|&&m| m != hb)
+            .map(|&m| calc_damage(&dex, &g, &me, m, 0, false, &side, None))
+            .max()
+            .unwrap();
+        let hb_max = calc_damage(&dex, &g, &me, hb, 0, false, &side, None);
+        // HP above every other move's best hit, at or below Hyper Beam's worst roll.
+        me.hp = others + 1;
+        assert!(
+            hb_max * 85 / 100 >= me.hp,
+            "hyper beam {hb_max} vs hp {}",
+            me.hp
+        );
+        let mut picks = 0;
+        for k in 0..40 {
+            let mut r = rng(k);
+            let c = ai_choose(&dex, &g, &me, 7, &side, &side, 1, 1, &mut r).unwrap();
+            picks += (g.moves[c] == hb) as u32;
+        }
+        assert_eq!(
+            picks, 40,
+            "a Hyper Beam that finishes the target is always the pick"
+        );
     }
 
     /// The WR's Mewtwo (`v4-e4r2.md`): 231 HP at Lv70, 235 / 238 / 241 after the level-ups to 71 / 72 / 73. The
