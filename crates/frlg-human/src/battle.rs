@@ -780,6 +780,11 @@ pub struct Tactics {
     /// maximum HP, one is sent out to take the hit while the fighter uses its next X item
     /// from the back (the universal speedrun sacrifice; each costs a faint + send-out).
     pub sacs: u32,
+    /// With `false` (honest sacrifice, `Params::sac_honest`) the sacrifice turn is only the hit absorbed: the
+    /// switch to the helper is the player's action, so the fighter neither attacks nor uses an X item that
+    /// turn (items and moves act on the active mon; after the helper faints the fighter's send-out is free
+    /// but takes no action). `true` is the older model (fighter acts from behind the sacrifice).
+    pub sac_free: bool,
     /// Torrent tactic (the WR runner keeps the starter at <= 1/3 HP): Withdraw when the foe's max
     /// roll would KO and one Defense stage saves the carry, and a stall turn (Tackle) while above
     /// 1/3 HP when one hit is survivable and lands the carry in the boost.
@@ -814,6 +819,7 @@ impl Default for Tactics {
             heal: 50,
             full_restore: false,
             sacs: 0,
+            sac_free: true,
             torrent: false,
             torrent_stall: true,
             torrent_early: false,
@@ -2661,7 +2667,7 @@ fn greedy_action(
     } else if danger >= me.hp && fs.sacs_left > 0 && (speed(e) > speed(me) || !sure_kill) {
         // A hit would (or could) faint the fighter: a teammate eats it. The free
         // action goes to the next X item, else to the attack itself.
-        Action::Sac(next_x)
+        Action::Sac(if tac.sac_free { next_x } else { None })
     } else if let Some(a) = t_withdraw {
         a
     } else if tac.full_restore
@@ -3076,6 +3082,7 @@ fn run(
                                     XItem::GuardSpec => my_side.mist = 5,
                                 }
                             }
+                            None if !tac.sac_free => {}
                             None => {
                                 // Attack from behind the sacrifice.
                                 let mut best: Option<(usize, f64)> = None;
@@ -3294,7 +3301,10 @@ fn choose_by_rollouts(
         add(Action::XItem(x), &mut cands);
     }
     if fs.sacs_left > 0 && fs.others_alive > 0 {
-        add(Action::Sac(next_x), &mut cands);
+        add(
+            Action::Sac(if tac.sac_free { next_x } else { None }),
+            &mut cands,
+        );
     }
     if cands.len() < 2 {
         return greedy;
@@ -3395,6 +3405,46 @@ mod tests {
         // Rash: +SpA, -SpD.
         let neutral = make_mon(&dex, dex.id("SPECIES_WARTORTLE"), 20, ivs, [0; 6], 0, 0);
         assert!(wt.stat[3] > neutral.stat[3] && wt.stat[4] < neutral.stat[4]);
+    }
+
+    /// A sacrifice is a hit absorbed, not a free action: at 10/32 HP and no potions, two helpers lift Brock to
+    /// ~100% only when the fighter may also act from behind them (the older model); honest, they buy little.
+    #[test]
+    fn honest_sacrifices_give_no_free_action() {
+        let dex = Dex::load();
+        let rash = crate::manip::nature_index("Rash").unwrap();
+        let f = dex.fight("TRAINER_LEADER_BROCK");
+        let foes: Vec<Mon> = f.full.iter().map(|m| enemy_mon(&dex, m)).collect();
+        let rate = |free: bool| {
+            let (mut won, n) = (0u32, 1500u32);
+            for i in 0..n {
+                let mut me = make_mon(
+                    &dex,
+                    dex.id("SPECIES_SQUIRTLE"),
+                    11,
+                    [15, 26, 9, 29, 30, 20],
+                    [0; 6],
+                    rash,
+                    0,
+                );
+                me.moves = vec![dex.move_id("MOVE_TACKLE"), dex.move_id("MOVE_BUBBLE")];
+                me.hp = 10;
+                let tac = Tactics {
+                    torrent: true,
+                    sacs: 2,
+                    others_alive: 2,
+                    heal_stock: 0,
+                    sac_free: free,
+                    ..Default::default()
+                };
+                let mut g = rng(i + 41000);
+                won += fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g).won as u32;
+            }
+            won as f64 / n as f64
+        };
+        let (free, honest) = (rate(true), rate(false));
+        assert!(free > 0.9, "free {free}");
+        assert!(honest < 0.8, "honest {honest}");
     }
 
     /// The Torrent tactic at the WR's Brock state (Lv11, 10/32 HP, Tackle/Bubble/Withdraw): the engine wins
@@ -3502,6 +3552,7 @@ mod tests {
                 heal: 50,
                 full_restore: false,
                 sacs: 0,
+                sac_free: true,
                 torrent: false,
                 torrent_stall: true,
                 torrent_early: false,

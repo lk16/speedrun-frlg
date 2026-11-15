@@ -1513,6 +1513,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             heal: heal_amount(me.level, st.league_items),
             full_restore: st.league_items,
             sacs,
+            sac_free: !(ctx.p.sac_honest && !a.league),
             torrent: (torrent || (a.league && ctx.p.league_torrent)) && !mewtwo_now,
             torrent_stall: ctx.p.torrent_stall,
             torrent_early: ctx.p.torrent_early,

@@ -406,6 +406,29 @@ def try_it(parent, label, patch, name, seed, r0=0):
     return (lines[0] if lines else 'error: ' + r.stdout[-200:] + r.stderr[-200:])
 
 
+# Evidence guard (journal 2026-11-19): candidates the stream or the decomp does not support are not searched.
+# Sacrifices outside the League are a hit absorbed with no free action (sac_honest) and need helpers the runner is
+# not seen using; torrent_hits above 1.5 (his thresholds are 1-1.5 foe hits: 5/7/9 HP vs Rock Tomb 5-7), torrent_stall
+# off (he stalls "six times for Torrent" and the Brock window leaves the runner's CI), candy_early_n above 3
+# (2-3 spare candies per run, STRATEGY s5.2) and the starter's min_spe (no Speed gate in any stream) stay fixed.
+LEAGUE_FIGHTS = {'lorelei', 'bruno', 'agatha', 'lance', 'champion', 'lorelei-2', 'bruno-2', 'agatha-2', 'lance-2',
+                 'champion-2'}
+
+
+def evidence_ok(p, patch):
+    if patch.get('torrent_hits', 0) > 1.5 or patch.get('torrent_stall', True) is False:
+        return False
+    if patch.get('candy_early_n', 0) > 3:
+        return False
+    if 'manip' in patch and patch['manip'].get('min_spe') != p.get('manip', {}).get('min_spe'):
+        return False
+    old = p.get('fight_tactics', {})
+    for f, t in patch.get('fight_tactics', {}).items():
+        if f not in LEAGUE_FIGHTS and t.get('sacs', 0) > old.get(f, {}).get('sacs', 0):
+            return False
+    return True
+
+
 def gen(p):
     if SET == 'mid':
         sys.path.insert(0, HERE)
@@ -433,6 +456,8 @@ def gen(p):
         cands = dexknobs.candidates(p) + (candidates(p) if SET == 'all' else [])
     else:
         cands = candidates(p)
+    if p.get('sac_honest'):
+        cands = [c for c in cands if evidence_ok(p, c[2])]
     if '--notkinds' in args:
         cands = [c for c in cands if c[0] not in opt('--notkinds', '').split(',')]
     if KINDS:

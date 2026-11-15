@@ -434,6 +434,7 @@ fn main() {
                     heal: heal_amount(level, league),
                     full_restore: league,
                     sacs: arg(&args, "--sacs", 0u32),
+                    sac_free: !args.iter().any(|a| a == "--sac-honest"),
                     torrent: args.iter().any(|a| a == "--torrent"),
                     torrent_stall: true,
                     torrent_early: args.iter().any(|a| a == "--early"),

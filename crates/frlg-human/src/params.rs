@@ -788,6 +788,9 @@ pub struct Params {
     pub risk_torrent_lost: bool,
     /// The mons caught so far are the early fights' sacrifices (`FightTactic::sacs`).
     pub early_helpers: bool,
+    /// Outside the League a sacrifice turn is the hit absorbed and nothing else (`Tactics::sac_free`
+    /// false): no attack and no X item from behind the helper. Default off keeps older plans' numbers.
+    pub sac_honest: bool,
 }
 
 impl Default for Params {
@@ -949,6 +952,7 @@ impl Default for Params {
             risk_abandon: false,
             risk_torrent_lost: false,
             early_helpers: false,
+            sac_honest: false,
         }
     }
 }
