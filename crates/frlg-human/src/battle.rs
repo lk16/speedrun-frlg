@@ -383,6 +383,11 @@ pub struct Mon {
     /// walks into most gym and League fights at or under a third of its HP (`v2-mid-fights.md`), which the
     /// timing lane's own HP does not reproduce.
     pub force_torrent: bool,
+    /// Party slot of a trainer's mon (`fight` numbers them): a mon the AI switches out goes back in its place.
+    pub slot: usize,
+    /// The last move that landed on this mon (`gLastLandedMoves`, `MOVEEND_UPDATE_LAST_MOVES`): the AI's
+    /// switching reads it; 0 (None) after a miss, an immunity, or on switch-in.
+    pub last_landed: Option<usize>,
 }
 
 /// Side state that outlives one enemy mon (screens guard the trainer's whole party).
@@ -474,6 +479,8 @@ pub fn make_mon(
         counter_dmg: 0,
         yawned: false,
         force_torrent: false,
+        slot: 0,
+        last_landed: None,
     }
 }
 
@@ -1841,6 +1848,231 @@ fn ai_choose(
     Some(tied[rng.modn(tied.len() as u32) as usize])
 }
 
+/// `ModulateByTypeEffectiveness` (`battle_ai_switch_items.c:405`): a `u8` multiplied by every matching
+/// table entry in table order, `*var = *var * mult / 10`.
+fn modulate_u8(dex: &Dex, atk: u8, def: (u8, u8), var: &mut u8) {
+    for &(d, m) in &dex.chart_ord[atk as usize] {
+        if d == def.0 {
+            *var = (*var as u32 * m / 10) as u8;
+        }
+        if d == def.1 && def.0 != def.1 {
+            *var = (*var as u32 * m / 10) as u8;
+        }
+    }
+}
+
+/// Does `mv` carry the super-effective flag against `def` (`TypeCalc` / `ModulateDmgByType2`,
+/// `battle_script_commands.c:1421-1511`)? Moves without power never do; a 2x and a 0.5x entry cancel.
+fn super_effective_flag(dex: &Dex, mv: usize, def: &Mon) -> bool {
+    let m = &dex.moves[mv];
+    if m.power == 0 {
+        return false;
+    }
+    if def.ability == Ability::Levitate && m.mtype == 4 {
+        return false;
+    }
+    let (mut se, mut nve, mut none) = (false, false, false);
+    for &(d, mult) in &dex.chart_ord[m.mtype as usize] {
+        let hit1 = d == def.types.0;
+        let hit2 = d == def.types.1 && def.types.0 != def.types.1;
+        for _ in 0..(hit1 as u32 + hit2 as u32) {
+            match mult {
+                0 => {
+                    none = true;
+                    nve = false;
+                    se = false;
+                }
+                5 if !none => {
+                    if se {
+                        se = false;
+                    } else {
+                        nve = true;
+                    }
+                }
+                20 if !none => {
+                    if nve {
+                        nve = false;
+                    } else {
+                        se = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    se
+}
+
+/// `GetMostSuitableMonToSwitchInto` (`battle_ai_switch_items.c:428`), which the trainer runs whenever a mon
+/// faints (`OpponentHandleChoosePokemon`, `battle_controller_opponent.c:1411`): the party order is **not** the
+/// order the mons come out in. Pass one: the bench mon whose typing the player's two types (the single type
+/// twice for a mono-type mon) hit hardest (`bestDmg < typeDmg`: the first of equals), taken only if it has a move
+/// that is super effective on the player, else it is struck off and the next best is looked at. Pass two, when
+/// no mon qualified: the highest `bestDmg` (a `u8`, so values past 255 wrap) over every bench mon's moves
+/// (power other than 1) of `AI_CalcDmg(fainted mon, player)` with the **last move used in the battle**
+/// (`gCurrentMove`, not the candidate's move) then `TypeCalc(candidate's move)`: the fainted mon's STAB on the
+/// candidate's move type and the move's effectiveness on the player. Ties keep the lowest party slot. The WR
+/// video's orders follow from this (Agatha: Gengar, Golbat, Arbok, Gengar, Haunter; Bruno 2: Steelix, Steelix,
+/// Hitmonlee, Hitmonchan, Machamp). Returns an index into `bench` (the party order of what is left).
+fn most_suitable(
+    dex: &Dex,
+    me: &Mon,
+    fainted: &Mon,
+    last_move: Option<usize>,
+    my_side: &Side,
+    bench: &[Mon],
+) -> usize {
+    if bench.len() <= 1 {
+        return 0;
+    }
+    let mut invalid = vec![false; bench.len()];
+    loop {
+        let mut best = 0u8;
+        let mut best_id: Option<usize> = None;
+        for (i, c) in bench.iter().enumerate() {
+            if invalid[i] {
+                continue;
+            }
+            let mut type_dmg = 10u8;
+            modulate_u8(dex, me.types.0, c.types, &mut type_dmg);
+            modulate_u8(dex, me.types.1, c.types, &mut type_dmg);
+            if best < type_dmg {
+                best = type_dmg;
+                best_id = Some(i);
+            }
+        }
+        match best_id {
+            Some(i) => {
+                if bench[i]
+                    .moves
+                    .iter()
+                    .any(|&mv| super_effective_flag(dex, mv, me))
+                {
+                    return i;
+                }
+                invalid[i] = true;
+            }
+            None => break,
+        }
+    }
+    let d0 = last_move.map_or(0, |mv| base_damage(dex, fainted, me, mv, my_side));
+    let mut best = 0u8;
+    let mut best_id = 0usize;
+    for (i, c) in bench.iter().enumerate() {
+        for &mv in &c.moves {
+            let m = &dex.moves[mv];
+            let mut dmg = 0i32;
+            if m.power != 1 {
+                dmg = d0;
+                if fainted.types.0 == m.mtype || fainted.types.1 == m.mtype {
+                    dmg = dmg * 15 / 10;
+                }
+                if !(me.ability == Ability::Levitate && m.mtype == 4) {
+                    dmg = dex.modulate(dmg, m.mtype, me.types);
+                }
+            }
+            if (best as i32) < dmg {
+                best = dmg as u8;
+                best_id = i;
+            }
+        }
+    }
+    best_id
+}
+
+/// The trainer's turn-start switching (`ShouldSwitch`, `battle_ai_switch_items.c:296-355`, run for every trainer
+/// by `AI_TrySwitchOrUseItem` before it looks at items or moves). Returns the bench slot to switch to.
+/// In order: a bench mon whose ability absorbs the type of the move that last landed (Lapras and Water Absorb
+/// against Surf, Arcanine and Flash Fire against Fire Blast; skipped 2 times in 3 when the active mon has a
+/// super-effective move, then a coin flip per candidate); nothing at all while the active mon has a
+/// super-effective move (a 10% blind spot per move) or has raised its stats by more than 3 stages; otherwise a
+/// bench mon that the last landed move cannot hurt (immune, 1 in 2) or only weakly (1 in 3) and that has a
+/// super-effective move on the player. Natural Cure, Perish Song and Wonder Guard (`ShouldSwitchIf*`) are not
+/// on any route trainer's or the player's mon. Nothing happens while the active mon is trapped.
+fn ai_should_switch(
+    dex: &Dex,
+    e: &Mon,
+    me: &Mon,
+    bench: &[Mon],
+    rng: &mut GameRng,
+) -> Option<usize> {
+    if bench.is_empty() || e.trap > 0 {
+        return None;
+    }
+    let has_se = |rng: &mut GameRng, no_rng: bool| -> bool {
+        for &mv in &e.moves {
+            if super_effective_flag(dex, mv, me) && (no_rng || rng.modn(10) != 0) {
+                return true;
+            }
+        }
+        false
+    };
+    // FindMonThatAbsorbsOpponentsMove.
+    if let Some(lm) = e.last_landed {
+        let m = &dex.moves[lm];
+        let blocked = has_se(rng, true) && rng.modn(3) != 0;
+        if !blocked && m.power != 0 {
+            let want = match m.mtype {
+                10 => Some(Ability::FlashFire),
+                11 => Some(Ability::WaterAbsorb),
+                13 => Some(Ability::VoltAbsorb),
+                _ => None,
+            };
+            if let Some(w) = want {
+                if e.ability != w {
+                    for (i, c) in bench.iter().enumerate() {
+                        if c.ability == w && rng.roll() & 1 == 1 {
+                            return Some(i);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let raised: i32 = e.stages.iter().map(|&s| (s as i32).max(0)).sum();
+    if has_se(rng, false) || raised > 3 {
+        return None;
+    }
+    // FindMonWithFlagsAndSuperEffective(DOESNT_AFFECT_FOE, 2) then (NOT_VERY_EFFECTIVE, 3).
+    let lm = e.last_landed?;
+    if dex.moves[lm].power == 0 {
+        return None;
+    }
+    for (flag_none, modulo) in [(true, 2u32), (false, 3u32)] {
+        for (i, c) in bench.iter().enumerate() {
+            let eff = if c.ability == Ability::Levitate && dex.moves[lm].mtype == 4 {
+                0.0
+            } else {
+                dex.eff(dex.moves[lm].mtype, c.types)
+            };
+            let hit = if flag_none {
+                eff == 0.0
+            } else {
+                eff > 0.0 && eff < 1.0
+            };
+            if hit {
+                for &mv in &c.moves {
+                    if super_effective_flag(dex, mv, me) && rng.modn(modulo) == 0 {
+                        return Some(i);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Entry abilities (`battle_util.c` `ABILITYEFFECT_ON_SWITCHIN`): Intimidate lowers the fighter's Attack,
+/// Sand Stream raises a permanent sandstorm.
+fn enter_effects(e: &Mon, me: &mut Mon, fs: &mut Fs) {
+    if e.ability == Ability::Intimidate && me.ability != Ability::HyperCutter {
+        apply_stat_change(me, 0, -1, false);
+    }
+    if e.ability == Ability::SandStream && fs.my_side.weather != W_SAND {
+        set_weather(&mut fs.my_side, &mut fs.en_side, W_SAND, W_FOREVER);
+    }
+}
+
 struct Exec<'a> {
     dex: &'a Dex,
     wild: bool,
@@ -2036,7 +2268,8 @@ fn do_move(
         _ => {}
     }
 
-    // --- targeted moves from here.
+    // --- targeted moves from here. `gLastLandedMoves[target]` is 0 until the move connects.
+    def.last_landed = None;
     if def.protected {
         return false;
     }
@@ -2103,6 +2336,7 @@ fn do_move(
             }
             return false;
         }
+        def.last_landed = Some(mv);
         if def_side.safeguard > 0
             && matches!(
                 fx,
@@ -2282,6 +2516,7 @@ fn do_move(
         }
         return false;
     }
+    def.last_landed = Some(mv);
 
     let hits = match fx {
         // 2-5 with the real distribution (`Cmd_setmultihitcounter`).
@@ -2584,6 +2819,8 @@ struct Fs {
     others_alive: u32,
     /// Torrent stall turns used so far (max 2 per fight).
     stalls: u32,
+    /// The last move either side used (`gCurrentMove`), which the trainer's choice of its next mon reads.
+    last_move: Option<usize>,
 }
 
 /// What the human saw when choosing: the foe's best-move damage and whether a sure kill exists.
@@ -2625,9 +2862,19 @@ pub fn fight(
         ai_heals,
         others_alive: tac.others_alive,
         stalls: 0,
+        last_move: None,
     };
+    // Party slots, so that a mon the AI switches out returns to its place on the bench.
+    let numbered: Vec<Mon> = foes
+        .iter()
+        .enumerate()
+        .map(|(i, m)| Mon {
+            slot: i,
+            ..m.clone()
+        })
+        .collect();
     run(
-        dex, me, tac, foes, ai_flags, ai_heals, wild, rng, &mut fs, None, None, 0,
+        dex, me, tac, &numbered, ai_flags, ai_heals, wild, rng, &mut fs, None, None, 0,
     )
 }
 
@@ -2947,7 +3194,18 @@ fn run(
     let mut out = Outcome::default();
     let ex = Exec { dex, wild };
     out.others_alive = fs.others_alive;
-    for (foe_idx, foe) in foes.iter().enumerate() {
+    // The party is not fought in its own order: after the first mon, every faint lets the trainer pick the
+    // next one (`most_suitable`). `bench` holds the mons not yet sent out, in party order; with `resume` the
+    // first entry is the foe already on the field (a rollout continues from it).
+    let mut bench: Vec<Mon> = foes.to_vec();
+    let mut foe_idx = 0usize;
+    let mut last_fainted: Option<Mon> = None;
+    while !bench.is_empty() {
+        let pick = match (&last_fainted, foe_idx) {
+            (Some(f), i) if i > 0 => most_suitable(dex, me, f, fs.last_move, &fs.my_side, &bench),
+            _ => 0,
+        };
+        let foe = bench.remove(pick);
         let resumed = foe_idx == 0 && resume.is_some();
         let mut e = match resume.take() {
             Some(m) if foe_idx == 0 => m,
@@ -2957,21 +3215,18 @@ fn run(
         // Entry abilities (`battle_util.c` `ABILITYEFFECT_ON_SWITCHIN`): Intimidate lowers
         // the fighter's Attack, Sand Stream raises a permanent sandstorm.
         if !resumed {
-            if e.ability == Ability::Intimidate && me.ability != Ability::HyperCutter {
-                apply_stat_change(me, 0, -1, false);
-            }
-            if e.ability == Ability::SandStream && fs.my_side.weather != W_SAND {
-                set_weather(&mut fs.my_side, &mut fs.en_side, W_SAND, W_FOREVER);
-            }
+            enter_effects(&e, me, fs);
         }
         while e.hp > 0 && me.hp > 0 && guard < 120 {
             guard += 1;
             out.turns += 1;
             let (hp_turn0, up_turn0) = (me.hp, out.hp_up);
 
-            // --- player action.
+            // --- player action. The human knows the lineup, hence the next mon the trainer will pick.
+            let next_foe = (!bench.is_empty())
+                .then(|| &bench[most_suitable(dex, me, &e, fs.last_move, &fs.my_side, &bench)]);
             let (mut my_action, read) =
-                greedy_action(dex, me, &e, tac, fs, wild, foes.get(foe_idx + 1), &mut out);
+                greedy_action(dex, me, &e, tac, fs, wild, next_foe, &mut out);
             let danger = read.danger;
             let sure_kill = read.sure_kill;
             let mut stalled = read.stalled;
@@ -2985,14 +3240,16 @@ fn run(
                 && !(me.recharging || me.charging.is_some() || me.rampage > 0)
                 && (me.hp as f64 <= 1.6 * danger as f64 || me.hp * 2 < me.max_hp)
             {
+                let rest: Vec<Mon> = std::iter::once(e.clone())
+                    .chain(bench.iter().cloned())
+                    .collect();
                 my_action = choose_by_rollouts(
                     dex,
                     me,
                     &e,
                     tac,
                     fs,
-                    foes,
-                    foe_idx,
+                    &rest,
                     ai_flags,
                     ai_items_total,
                     wild,
@@ -3034,10 +3291,37 @@ fn run(
                 fs.must_switch = true;
             }
 
-            // --- enemy action.
+            // --- enemy action. `AI_TrySwitchOrUseItem` first asks `ShouldSwitch`; a forced move (recharge,
+            // two-turn, rampage) never reaches the controller.
             let en_forced = e.recharging || e.charging.is_some() || e.rampage > 0;
-            let valid = (foes.len() - foe_idx) as u32;
-            let en_move = if en_forced {
+            let mut enemy_switched = false;
+            if !wild && !en_forced {
+                if let Some(bi) = ai_should_switch(dex, &e, me, &bench, rng) {
+                    let mut old = e.clone();
+                    // `SwitchInClearSetData`: the volatile state does not follow the mon to the bench.
+                    old.stages = [0; 7];
+                    old.confusion = 0;
+                    old.seeded = false;
+                    old.focus_energy = false;
+                    old.flinch = false;
+                    old.infatuated = false;
+                    old.disabled = None;
+                    old.protected = false;
+                    old.last_landed = None;
+                    let mut new_e = bench.remove(bi);
+                    new_e.last_landed = None;
+                    bench.push(old);
+                    bench.sort_by_key(|m| m.slot);
+                    e = new_e;
+                    enter_effects(&e, me, fs);
+                    enemy_switched = true;
+                    out.events += 1;
+                }
+            }
+            let valid = (bench.len() + 1) as u32;
+            let en_move = if enemy_switched {
+                None
+            } else if en_forced {
                 // A recharge or locked turn still "uses" its move: `do_move` clears the
                 // recharge flag (the old code skipped it and the flag never cleared, so a
                 // Hyper Beam silenced the mon for the rest of its life).
@@ -3060,6 +3344,7 @@ fn run(
                 .map(|i| e.moves[i])
             };
             let enemy_heals_now = !en_forced
+                && !enemy_switched
                 && en_move.is_none()
                 && ai_wants_item(ai_items_total, fs.ai_heals, valid, &e);
 
@@ -3068,7 +3353,7 @@ fn run(
                 Action::Move(mv) => dex.moves[mv].prio,
                 _ => 6, // item use happens before moves
             };
-            let en_prio = if enemy_heals_now {
+            let en_prio = if enemy_heals_now || enemy_switched {
                 6
             } else {
                 en_move.map_or(0, |mv| dex.moves[mv].prio)
@@ -3286,6 +3571,26 @@ fn run(
                 f
             };
             fs.ai_heals = ai_heals_left;
+            // `gCurrentMove` after the turn: the second actor's move when it got to act, else the first's.
+            {
+                let pm = match my_action {
+                    Action::Move(mv) => Some(mv),
+                    _ => None,
+                };
+                let em = if enemy_heals_now { None } else { en_move };
+                let (first_m, second_m, second_acted) = if me_first {
+                    (pm, em, e.hp > 0)
+                } else {
+                    (em, pm, me.hp > 0)
+                };
+                if let Some(mv) = if second_acted {
+                    second_m.or(first_m)
+                } else {
+                    first_m
+                } {
+                    fs.last_move = Some(mv);
+                }
+            }
             if fled {
                 // A wild Teleport: the battle just ends (no catch).
                 out.won = false;
@@ -3331,7 +3636,9 @@ fn run(
             out.end_status = me.status;
             return out;
         }
-        out.kos.push((foe.species, foe.level));
+        out.kos.push((e.species, e.level));
+        last_fainted = Some(e.clone());
+        foe_idx += 1;
         // The next enemy mon enters fresh; the enemy side's screens persist.
         me.flinch = false;
         me.counter_dmg = 0;
@@ -3353,7 +3660,6 @@ fn choose_by_rollouts(
     tac: &Tactics,
     fs: &Fs,
     foes: &[Mon],
-    foe_idx: usize,
     ai_flags: u32,
     ai_items_total: u32,
     wild: bool,
@@ -3406,7 +3712,7 @@ fn choose_by_rollouts(
                 dex,
                 &mut me2,
                 tac,
-                &foes[foe_idx..],
+                foes,
                 ai_flags,
                 ai_items_total,
                 wild,
@@ -3700,6 +4006,204 @@ mod tests {
         // pushes it well past that — the optimiser's call). Exact trainer natures
         // (`CreateNPCTrainerParty`) took this from ~50% to ~39%.
         assert!(won > 120, "won {won}/400");
+    }
+
+    /// `ShouldSwitch`: Dewgong has no super-effective move on Blastoise and has just been hit by Surf, so Lapras
+    /// (Water Absorb) comes in on a coin flip each turn; with nothing landed yet (`gLastLandedMoves` is 0
+    /// after a switch-in) nobody ever switches; a mon that holds a super-effective move (Thunder on Blastoise)
+    /// keeps the field in all but a few turns (the 10% blind spot of the SE scan).
+    #[test]
+    fn trainer_switches_to_an_absorber_after_a_landed_water_move() {
+        let dex = Dex::load();
+        let rash = crate::manip::nature_index("Rash").unwrap();
+        let me = make_mon(
+            &dex,
+            dex.id("SPECIES_BLASTOISE"),
+            52,
+            [15, 26, 9, 29, 30, 20],
+            [0; 6],
+            rash,
+            0xff,
+        );
+        let f = dex.fight("TRAINER_ELITE_FOUR_LORELEI");
+        let mut dewgong = enemy_mon(&dex, &f.full[0]);
+        let lapras = enemy_mon(&dex, &f.full[4]);
+        assert_eq!(lapras.ability, Ability::WaterAbsorb);
+        let surf = dex.move_id("MOVE_SURF");
+        let mut hits = 0;
+        for k in 0..400 {
+            let mut r = rng(k);
+            dewgong.last_landed = None;
+            assert_eq!(
+                ai_should_switch(&dex, &dewgong, &me, std::slice::from_ref(&lapras), &mut r),
+                None
+            );
+            dewgong.last_landed = Some(surf);
+            if ai_should_switch(&dex, &dewgong, &me, std::slice::from_ref(&lapras), &mut r)
+                == Some(0)
+            {
+                hits += 1;
+            }
+        }
+        assert!((140..260).contains(&hits), "{hits}/400");
+        // Lapras itself carries Thunder (super effective on Blastoise) and keeps the field.
+        let mut sw = 0;
+        let mut l2 = lapras.clone();
+        l2.last_landed = Some(surf);
+        let others = [enemy_mon(&dex, &f.full[1])];
+        for k in 0..400 {
+            let mut r = rng(k);
+            sw += ai_should_switch(&dex, &l2, &me, &others, &mut r).is_some() as u32;
+        }
+        assert!(sw < 40, "{sw}/400");
+    }
+
+    /// The order in which the trainer sends out its mons, replayed from the decomp's own choice
+    /// (`most_suitable`: `GetMostSuitableMonToSwitchInto`) against the orders the WR video shows
+    /// (`v3-e4r1.md`, `v4-e4r2.md`: they differ from the party order in five of the eight fights seen).
+    #[test]
+    fn trainer_send_out_order_follows_the_decomp_and_the_video() {
+        let dex = Dex::load();
+        let rash = crate::manip::nature_index("Rash").unwrap();
+        let blastoise = |lv: u32| {
+            make_mon(
+                &dex,
+                dex.id("SPECIES_BLASTOISE"),
+                lv,
+                [15, 26, 9, 29, 30, 20],
+                [0; 6],
+                rash,
+                0xff,
+            )
+        };
+        let mewtwo = make_mon(
+            &dex,
+            dex.id("SPECIES_MEWTWO"),
+            70,
+            [5, 31, 14, 14, 14, 14],
+            [0; 6],
+            0,
+            0xff,
+        );
+        let order = |trainer: &str, me: &Mon, last: &str| -> Vec<String> {
+            let mut bench: Vec<Mon> = dex
+                .fight(trainer)
+                .full
+                .iter()
+                .map(|p| enemy_mon(&dex, p))
+                .collect();
+            let mut out = vec![];
+            let mut cur = bench.remove(0);
+            loop {
+                out.push(format!(
+                    "{}{}",
+                    dex.species[cur.species].name.trim_start_matches("SPECIES_"),
+                    cur.level
+                ));
+                if bench.is_empty() {
+                    break;
+                }
+                cur.hp = 0;
+                let i = most_suitable(
+                    &dex,
+                    me,
+                    &cur,
+                    Some(dex.move_id(last)),
+                    &Side::default(),
+                    &bench,
+                );
+                cur = bench.remove(i);
+            }
+            out
+        };
+        let b = blastoise(52);
+        // Round 1 (Blastoise, killing move Surf).
+        assert_eq!(
+            order("TRAINER_ELITE_FOUR_AGATHA", &b, "MOVE_SURF"),
+            ["GENGAR54", "GOLBAT54", "ARBOK56", "GENGAR58", "HAUNTER53"]
+        );
+        assert_eq!(
+            order("TRAINER_ELITE_FOUR_BRUNO", &b, "MOVE_SURF"),
+            [
+                "ONIX51",
+                "HITMONCHAN53",
+                "HITMONLEE53",
+                "MACHAMP56",
+                "ONIX54"
+            ]
+        );
+        assert_eq!(
+            order("TRAINER_ELITE_FOUR_LANCE", &b, "MOVE_BLIZZARD"),
+            [
+                "GYARADOS56",
+                "DRAGONAIR54",
+                "DRAGONAIR54",
+                "DRAGONITE60",
+                "AERODACTYL58"
+            ]
+        );
+        // Round 2 (Mewtwo, Psychic).
+        assert_eq!(
+            order("TRAINER_ELITE_FOUR_BRUNO_2", &mewtwo, "MOVE_PSYCHIC"),
+            [
+                "STEELIX65",
+                "STEELIX66",
+                "HITMONLEE65",
+                "HITMONCHAN65",
+                "MACHAMP68"
+            ]
+        );
+        assert_eq!(
+            order("TRAINER_ELITE_FOUR_AGATHA_2", &mewtwo, "MOVE_PSYCHIC"),
+            [
+                "GENGAR66",
+                "CROBAT66",
+                "GENGAR70",
+                "MISDREAVUS65",
+                "ARBOK68"
+            ]
+        );
+        assert_eq!(
+            order("TRAINER_ELITE_FOUR_LANCE_2", &mewtwo, "MOVE_PSYCHIC"),
+            [
+                "GYARADOS68",
+                "KINGDRA66",
+                "DRAGONITE66",
+                "AERODACTYL70",
+                "DRAGONITE72"
+            ]
+        );
+        // The orders that did not change are reproduced too.
+        assert_eq!(
+            order("TRAINER_ELITE_FOUR_LORELEI", &b, "MOVE_SURF"),
+            ["DEWGONG52", "CLOYSTER51", "SLOWBRO52", "JYNX54", "LAPRAS54"]
+        );
+        assert_eq!(
+            order("TRAINER_CHAMPION_FIRST_BULBASAUR", &b, "MOVE_SURF"),
+            [
+                "PIDGEOT59",
+                "VENUSAUR63",
+                "ALAKAZAM57",
+                "RHYDON59",
+                "GYARADOS59",
+                "ARCANINE61"
+            ]
+        );
+        assert_eq!(
+            order(
+                "TRAINER_CHAMPION_REMATCH_BULBASAUR",
+                &mewtwo,
+                "MOVE_PSYCHIC"
+            ),
+            [
+                "HERACROSS72",
+                "ALAKAZAM73",
+                "TYRANITAR72",
+                "GYARADOS73",
+                "ARCANINE73",
+                "VENUSAUR75"
+            ]
+        );
     }
 
     /// `if_can_faint` counts a recharge / two-turn / self-KO move's damage (`Cmd_if_can_faint` excludes only

@@ -329,7 +329,7 @@ pub struct Dex {
     chart: [[f64; 18]; 18],
     /// The same table in the decomp's own order, per attacking type: `(defending type, multiplier in
     /// tenths)`. `Cmd_typecalc` walks it once and floors the damage after every matching entry.
-    chart_ord: Vec<Vec<(u8, u32)>>,
+    pub chart_ord: Vec<Vec<(u8, u32)>>,
     pub moves: Vec<MoveData>,
     move_by_name: HashMap<String, usize>,
     trainer_full: HashMap<String, Vec<PartyMon>>,
