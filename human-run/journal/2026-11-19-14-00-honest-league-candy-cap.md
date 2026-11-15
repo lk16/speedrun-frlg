@@ -1,0 +1,20 @@
+# 2026-11-19: honest League, candy cap, helper cost; re-descent (plans 969-983)
+
+Result: the validated 968 (99.5 h at WR+2m) was not a real number either. Under the honest model the best plan is **983-epot43: WR+2m 193.3 h (1008 finishes, R = 800k), WR 231.6 h (1676 finishes, R = 1.6M), fresh seed 7**. Not comparable to 968's number (different model); 968's policy priced in the honest model is 770.6 h (seed 5). Descent stopped by the coordinator, not by convergence (earlymid pass 1 was at ~270 of 313 candidates).
+
+## 1. League sacrifices (decided from the WR video)
+`data/calib/v3-e4r1.md`, `v4-e4r2.md`: the WR carries Ch'ding/Clefable/Omanyte/Abra (Lv 5-9) through both rounds and **never switches**: Blastoise solos round 1, Mewtwo solos round 2; no sacrifice, X items and Full Restores only. Switching to the helper is the player's action in the game, so the old free-action rule had no counterpart. New `sac_honest_league` (plan 969 on), League sacs 0, descent guard forbids League sacs when it is set.
+Cost of honesty (WR+2m, seed 1): honest League with the old sacs kept +50.1 h [41.9, 62.8]; honest and sacs 0 +34.0 [28.8, 39.7] (R 400k). Refit (`tools/fit_league.py`): league_power stayed 2.0 on the honest/0-sac plan (sum |log| actions+seconds .156), mewtwo_power surface flat 1.4-1.8 (.26/.22). After the League tactics were re-descended league_power fits 2.2-2.4 (.224/.212): **976-lp22 uses 2.2** (-108 h at the same policy: the model is that sensitive to this stand-in), mewtwo_power kept at 1.4. mewtwo_power 1.8 with the old X queue was +71 h worse (Champion-2 lost 54% vs 34%: queue special,special,attack is blind to Tyranitar), so powers are only refit after tactics.
+Honest League chain: champion 1 lost 17% and champion 2 34% under the old tactics; the descent (xbuys special 8->16, heals 0->4, champion +X Speed, league_heals 14) took 770 -> 370 h.
+
+## 2. Candy sources
+`item_ball_scripts.inc` + map.json: item balls Mt Moon 1F, Rocket Hideout B3F, Pokemon Tower 6F, Silph 10F, Victory Road 1F, Warden's house (Lost Cave on Five Island is not on the route); hidden: Cerulean, Routes 6/9/12/17, Mansion 3F (the model had 12 pickups, not 11). No mart sells Rare Candy. The runner: "five candies, one on Blastoise" with Warden candy skipped (T09 7:51:20) = the five balls; Warden is the optional sixth. Hidden candies appear in no stream. Plan 969 keeps the six balls, drops the six hidden ones, candy_early_n 3 -> 1 (one candy on Blastoise); the guard forbids hidden-candy pickups, > 6 candies and candy_early_n > 2. Effect: 640 h / 20-65 finishes before recalibration (dex currency and the two early levels vanish); Brock-Misty window .396 -> .43 with rival-cerulean risk_power 3.5 (stand-in) and `risk_windows` refit (`fit_lane.py`). Window check of 983 (seed 2, R 800k): .513/.543/.755/.892/.911/.700/.732/.823 vs runner .40/.64/.71/1.0/.89/.63/.60/.67, all inside the runner's CIs; survival to the door .072 vs .040.
+
+## 3. Helper survival
+`Tactics::helper_hp` / `Params::helper_hp` (24, a guess for a Lv 5-9 mon): a foe hit below it leaves the helper alive; the fighter is switched back next turn and takes the next hit; 900 frames still charged. Test `surviving_helper_costs_a_turn_and_a_hit`. Only matters if a plan sacrifices; none does now.
+
+## 4. Descent (CURRENT-RISK, WR+2m, paired seeds 1/2, R 1.6M both: at 400k the base had ~100 finishes and CIs of +-100 h)
+League stage (`--set all --kinds tactic,xbuy,heal`, League fights): 970-975 (xbuys, champion X Speed, league_heals 14): 770 -> 370 h. Then 976-lp22 (refit). `--set earlymid`: 977-983 (wild-fight level cutoff 15->18, early potions/manip knobs, Brock-side heal; 262 -> 190 h). Rejected by confirmation: early Mt Moon/nugget heal changes, min_hp/min_def gates, Blaine potions; many tactic/potion knobs refuted. `--set all` for the non-League set was **not run** (stopped).
+
+## 5. Next
+Run `--set all` outside the League; refit mewtwo_power/league_power again after the descent; check the model's honest Champion 1/2 loss rate against any runner League death data; a source for the stand-ins (EVs, items) instead of 2.2.
