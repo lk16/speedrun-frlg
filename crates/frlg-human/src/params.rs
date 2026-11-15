@@ -775,6 +775,9 @@ pub struct Params {
     /// The carry leaves a risk-lane fight with the lane's HP when the lane drank potions in it
     /// (the heal was real: the timing lane loses the Torrent window it would have kept).
     pub risk_adopt: bool,
+    /// Diagnostic: the timing lane's carry has no Torrent (no x1.5, no Torrent tactic); the risk lane keeps it.
+    /// Measures what the Torrent state is worth downstream in the model.
+    pub ablate_torrent: bool,
     /// Lane windows past `no_salvage_until` (plan 940+), in route order; see [`RiskWindow`].
     pub risk_windows: Vec<RiskWindow>,
     /// A lane loss ends the attempt wherever it happens (the flat `fatal` hazards it replaces were
@@ -941,6 +944,7 @@ impl Default for Params {
             risk_noise: Default::default(),
             risk_pay: false,
             risk_adopt: false,
+            ablate_torrent: false,
             risk_windows: vec![],
             risk_abandon: false,
             risk_torrent_lost: false,

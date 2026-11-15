@@ -1416,6 +1416,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             m.moves = st.slots.clone();
             m.pp = st.slot_pp.clone();
             m.status = st.carry_status;
+            if ctx.p.ablate_torrent {
+                m.ability = crate::data::Ability::None;
+            }
             if st.mystic {
                 m.boost = Some((11, 10));
             } else if ctx.p.black_glasses && st.glasses {
