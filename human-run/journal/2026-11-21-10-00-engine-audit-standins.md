@@ -13,8 +13,9 @@ not a missing damage mechanic. The bugs were in the **trainer AI**, and they all
 3. `ShouldSwitch` (absorb abilities, resisting bench mons with a super-effective move) was missing: 541.3 -> 536.0 h.
 4. Small damage-engine gaps (type-table flooring, Guts / Hustle / Swarm / Marvel Scale / Huge Power never applied): no EHT effect.
 
-After the refit of the risk windows (`fit_lane.py`, they are fitted to the runner's survival, so the engine's extra deadliness is partly absorbed there) CURRENT is
-**1013-ai-order: WR+2m 179.4 h (1096 fin, R 800k seed 11), WR 215.8 h (1771 fin, R 1.6M)**, against 1012's 155.6 / 185.0 on the old engine. [descent result: see section 7]
+After the refit of the risk windows (`fit_lane.py`: they are fitted to the runner's survival, so the engine's extra deadliness is partly absorbed there) and a three-stage descent,
+**CURRENT = 1016-manip131: WR+2m 171.8 h (2312 fin), WR 205.7 h (1875 fin), R 1.6M seed 11**, against the pre-audit 1012's 155.8 / 185.0 on the old engine: the honest cost of the AI fixes is about +10%
+(1013-ai-order, the refit before the descent, 178.7 / 215.8 h).
 The stand-ins decompose: `carry_power` 1.7-2.0 is Torrent x1.5 times a level gap of 1.0-1.2 times ~1.1; `mewtwo_power` 1.4 is about one X Special stage (x1.33)
 times ~1.1; `league_power` 2.2 is **not explained** by Torrent, X Special stacking, X Speed, Black Glasses, EVs or levels. The fits did not move with the AI changes.
 
@@ -104,7 +105,21 @@ carry_power 1.7 745 h (366 fin), 1.8 302, 1.9 199, **2.0 156**, 2.2 148, 2.4 134
 mewtwo_power 1.0 474, 1.2 194, 1.3 174, **1.4 156**, 1.5 140, 1.6 144, 1.8 301 (the queue 'special' is blind to Tyranitar above 1.6, journal 2026-11-19). The fitted ranges (cp 1.7-2.0, lp 2.0-2.5, mp 1.1-1.5) span
 126 h to 745 h: the absolute EHT is not identified, the ranking is.
 
-## 7. After the AI changes (to be filled)
+## 7. After the AI changes: refit, descent, sensitivity on the final engine
+
+* 1012 on the new engine with its old windows: **536.0 h** (WR+2m, R 800k seed 11, 351 fin). `fit_lane.py` (R 800k seed 1) refit the six windows to **.985 / 3.104 / 1.451 / .846 / 1.917 / 2.390** (1012: 1.367 / 2.755 / 1.443 / .819 / 1.427 / 1.098):
+  the late windows (Sabrina / Erika / Giovanni 3 / Route 22) take most of the new deadliness. Window survival vs the runner's: .724 / .936 / .909 / .765 / .799 / .718 against targets .714 / .925 / .853 / .700 / .709 / .756.
+  **1013-ai-order = 1012 + those windows: WR+2m 179.4 h (1096 fin, R 800k) / 178.7 h (R 1.6M), WR 215.8 h (1771 fin).** The fight-table fit did not move (league_power 2.2 sum .136, mewtwo_power 1.4 .225).
+* Descent on the new engine (`descend.py --pointer CURRENT-AI`, WR+2m, R 1.6M seeds 1/2, confirm on accept): League tactics / xbuys / heal knobs 96 candidates, **0 accepted**; mid-fight tactics (Surge to Route 22) 50 candidates,
+  **1014 rival-tower -x special -4.9 h [-7.9, -2.2], seed 2 -5.1**; early + manip knobs 133 candidates: 1015 rival-cerulean potions -1 -> 1 (-0.004 h, noise), **1016 manip.min_spd 8 -> 14 -4.2 h [-6.7, -1.5], seed 2 -3.3**
+  (a guess knob: no stream threshold; the WR's own SpD IV is 20). **CURRENT = 1016-manip131: WR+2m 171.8 h (2312 fin), WR 205.7 h (1875 fin)** (R 1.6M seed 11; 1014 176.3, 1013 178.7).
+  The League stage moving nothing means the old League tactics (heals, X queues, `league_heals`, `league_preheal`) are still the optimum when the foes choose their mons the way the game does.
+* `fit_lane.py` on 1016 itself does not converge (sevii-gio3 saturates at its .60 lower bound with model survival .393 against the .709 target, because the window survival is not monotone in the power once the order is real); those windows would give
+  352 h. Not used: the 1013 windows stand for 1014-1016. It is the one step of this pipeline that needs a robust bisection.
+* Stand-in sensitivity on the final plan (windows fixed at 1013's, R 1.6M seed 11, WR+2m): carry_power 1.7 545 h (648 fin), 1.8 384, 1.9 242, **2.0 172**, 2.2 163, 2.4 160; league_power 1.8 296, 2.0 250, **2.2 172**, 2.4 151, 2.6 148;
+  mewtwo_power 1.0 586, 1.2 221, **1.4 172**, 1.6 156. With the windows refit at the changed carry_power (fit_lane at cp 1.7 / 2.4): 345 h / 163 h, i.e. the fixed-window grid exaggerates the low side by about 1.6x. League and Mewtwo powers act after the last window.
+* Likelihood intervals (section 4, final engine; best, within two log units): league_power 2.2 [2.0, 2.4]; mewtwo_power 1.2 [1.2, 1.6]; carry_power (mid fights) 1.4 [1.2, 1.8] (the plan's 2.0 is 2.8 log units below the best, Sabrina's 9 actions pull it down).
+  Put through the EHT table: inside the 95% fit intervals CURRENT is **between about 150 h and 550 h at WR+2m** (cp 1.8 alone 384 h; lp 2.0 250 h; mp 1.2 221 h); the point 172 h sits at the optimistic end of cp and lp.
 
 ## Next
 

@@ -94,3 +94,12 @@ Journal `journal/2026-11-15-18-00-post-door-evidence.md`; data `video-analysis/d
 ## 6. Update 2026-11-20: the honest-model grid (journal `journal/2026-11-20-10-00-refit-skips-robustness.md`)
 
 CURRENT is `1012-notmdup` (the sections above describe the 608-era model). `data/robust-grid-honest-wr2m.json`, `data/robust-thresholds-honest-wr2m.json`; `sens.py grid` with `SENS_BASE=1012-notmdup`, R 500k, seed 1, WR+2m: 1012 / 983-epot43 / 976-lp22 over 30 scenarios (the old ones plus lane power x.85/1.15, league_power 1.8/2.6, mewtwo_power 1.2/1.8, carry_power 1.7/2.3, level_gap 0/12). Ranking 1012 < 983 < 976 in 27/30; it inverts at trainer_fit .91, mistake 1.0 and carry_power 1.7. Primary 151 / 196 / 285 h; 1012 spans 32 h (S 1.0) to 309 h (S 0.1), outliers up to 748 h (cp 1.7). 1009-heal658 is the more robust variant (cp 1.7 517 h, mistake 1.0 521 h, primary +9.8 h).
+
+## 7. Update 2026-11-21: the stand-ins on the AI-faithful engine (journal `journal/2026-11-21-10-00-engine-audit-standins.md`)
+
+The trainer AI was too gentle in three ways (TRY_TO_FAINT ignored Hyper Beam damage, mons came out in party order instead of `GetMostSuitableMonToSwitchInto`, no `ShouldSwitch`); CURRENT moved from 1012
+(155.8 h on the old engine) to **1016-manip131: WR+2m 171.8 h, WR 205.7 h** after a window refit and a descent. EHT against the three stand-ins on 1016 (windows fixed, R 1.6M seed 11, WR+2m):
+carry_power 1.7 / 1.8 / 1.9 / **2.0** / 2.2 / 2.4 = 545 / 384 / 242 / **172** / 163 / 160 h (345 h at 1.7 with the windows refit there); league_power 1.8 / 2.0 / **2.2** / 2.4 / 2.6 = 296 / 250 / **172** / 151 / 148 h;
+mewtwo_power 1.0 / 1.2 / **1.4** / 1.6 = 586 / 221 / **172** / 156 h. Likelihood intervals of the fits (`tools/fit_lik.py`): league_power 2.0-2.4 (best 2.2), mewtwo_power 1.2-1.6 (best 1.2), carry_power 1.2-1.8 (best 1.4; the plan's 2.0 is 2.8 log units worse):
+the model's 95% range at WR+2m is about 150-550 h. The mid-game `carry_power` is Torrent x1.5 times a 1.0-1.2 level gap (the WR walks into the gyms at <= 1/3 HP and 3 levels higher); `mewtwo_power` is about one X Special stage;
+`league_power` has no mechanism yet. The grids above predate this and the ranking statements of section 6 were not re-run on the new engine.
