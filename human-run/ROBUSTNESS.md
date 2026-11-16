@@ -112,3 +112,7 @@ mewtwo_power 1.2 [1.0, 1.4] (were 2.2 / 1.4). EHT at WR+2m (R 1.6M seed 11) at t
 ## 9. Update 2026-11-23: League retune (journal `journal/2026-11-23-14-00-league-retune-result.md`)
 
 The trainer AI no longer avoids stat-drop moves into Mist (decomp: it never looked), which makes the WR Champion Guard Spec useful in the engine. With the League queues retuned (plan `1019-guard-mew2x`): WR+2m 375-404 h and WR 616 h (1045 finishes) at R 3.2M, fresh seeds 31/32 (1017: 913 h and 5047 h). Stand-ins unchanged (league_power 1.4, mewtwo_power 1.2); sections 6-8 ranking statements not re-run.
+
+## 10. Update 2026-11-24: `--set all` pass 0 and the window refit (journal `journal/2026-11-24-08-00-all-descent-refit.md`)
+
+Nine promotions on 1019 (evolutions, ball rule, Route 10 hunt, xbuys) gave 1028-xbuy587: WR+2m 256 h, WR 411-419 h (R 3.2M, seeds 51/52). The risk windows refit on 1028 (`fit_lane.py`) keep every window inside the runner CIs (model survival .044 vs runner .040) and cost +180 h: **CURRENT 1029-refit-lane, WR+2m 419.5 / 407.4 h, WR 595.2 / 582.3 h** (R 3.2M, seeds 51/52). On equal windows 1019 is 850 h, so the descent is about 2x. Grid (R 1.6M, seed 11, `data/robust-grid-1029-wr2m.json`): 1029 449 h primary, 86 h (S 1.0) to 948 h (S 0.1), outliers 2600 h (carry_power 1.7) and no finishes at trainer_fit .91; 1028 and 1019 listed in the journal. The two borderline League accepts (Lorelei heal_below 0, Lorelei-2 special) hold at R 6.4M on two seeds (+10.8..+17.3 h if reverted).
