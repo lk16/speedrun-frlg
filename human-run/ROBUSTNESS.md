@@ -108,3 +108,7 @@ the model's 95% range at WR+2m is about 150-550 h. The mid-game `carry_power` is
 
 The WR's League action counts were 1-3 item turns too low (11 / 7 / 6 / 8 / 10 -> 13 / 9 / 7 / 10 / 12; Lance 2 7.5 -> 9). Refit on the recounted values, with the WR's real X queues and Torrent windows (plan `1017-wrfacts`): league_power 1.4 [1.0, 1.6],
 mewtwo_power 1.2 [1.0, 1.4] (were 2.2 / 1.4). EHT at WR+2m (R 1.6M seed 11) at the optimum 921 h, over the intervals about 540 h to 14 000 h; 1016's 171.8 h belonged to the old stand-ins. The ranking statements of sections 6-7 were made at 2.2 / 1.4 and are not re-run.
+
+## 9. Update 2026-11-23: League retune (journal `journal/2026-11-23-14-00-league-retune-result.md`)
+
+The trainer AI no longer avoids stat-drop moves into Mist (decomp: it never looked), which makes the WR Champion Guard Spec useful in the engine. With the League queues retuned (plan `1019-guard-mew2x`): WR+2m 375-404 h and WR 616 h (1045 finishes) at R 3.2M, fresh seeds 31/32 (1017: 913 h and 5047 h). Stand-ins unchanged (league_power 1.4, mewtwo_power 1.2); sections 6-8 ranking statements not re-run.
