@@ -23,7 +23,9 @@ for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\n    \},', si, re.
                          growth=g('growthRate').group(1), evo=[],
                          abilities=[ab.group(1), ab.group(2)] if ab else ['ABILITY_NONE', 'ABILITY_NONE'])
 ev = open(os.path.join(root, 'pokemon', 'evolution.h')).read()
-for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(.*?)\},\n', ev, re.S):
+# The table body ends at `}},` / `}}` (a species with several evolutions spans lines; the old `},\n` end lost
+# Eevee, Gloom, Poliwhirl and Slowpoke's evolutions).
+for m in re.finditer(r'\[(SPECIES_[A-Z0-9_]+)\]\s*=\s*\{(\{.*?\})\},?\n', ev, re.S):
     name, body = m.groups()
     for e in re.finditer(r'\{(EVO_[A-Z_]+),\s*([A-Z0-9_]+|\d+),\s*(SPECIES_[A-Z0-9_]+)\}', body):
         if name in species:
