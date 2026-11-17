@@ -3486,7 +3486,9 @@ fn run(
                                         apply_stat_change(me, 5, 1, false);
                                     }
                                     XItem::GuardSpec => my_side.mist = 5,
-                                    XItem::CalmMind | XItem::Move(_) => unreachable!("handled above"),
+                                    XItem::CalmMind | XItem::Move(_) => {
+                                        unreachable!("handled above")
+                                    }
                                 }
                             }
                             None if !tac.sac_free => {}

@@ -225,6 +225,12 @@ struct State {
     mewtwo_moves: Vec<usize>,
     /// PP left per Mewtwo slot (parallel to `mewtwo_moves`; `Params::mewtwo_pp`).
     mewtwo_pp: Vec<i32>,
+    /// PP Ups applied per Mewtwo slot (0..=3; each is +20% of base PP, `CalculatePPWithBonus`,
+    /// `decompiled/src/pokemon.c:3898`), PP Ups held in the bag, and Ether / Max Ether in the bag.
+    mewtwo_bonus: Vec<i32>,
+    pp_ups: u32,
+    ethers: u32,
+    max_ethers: u32,
     /// The first-evolution stat gate was already checked.
     evo_checked: bool,
     /// Living expendable teammates (sacrifices burn them; a Centre revives them).
@@ -623,11 +629,73 @@ fn learn_moves(ctx: &Ctx, st: &mut State) {
 
 /// Mewtwo's PP back to full for every slot (Pokémon Centre, whiteout, the catch itself).
 fn restore_mewtwo_pp(ctx: &Ctx, st: &mut State) {
-    st.mewtwo_pp = st
-        .mewtwo_moves
-        .iter()
-        .map(|&m| ctx.dex.moves[m].pp as i32)
+    st.mewtwo_bonus.resize(st.mewtwo_moves.len(), 0);
+    st.mewtwo_pp = (0..st.mewtwo_moves.len())
+        .map(|k| mewtwo_full_pp(ctx, st, k))
         .collect();
+}
+
+/// PP of Mewtwo's slot `k` when full: base PP plus 20% per PP Up (`CalculatePPWithBonus`).
+fn mewtwo_full_pp(ctx: &Ctx, st: &State, k: usize) -> i32 {
+    let base = ctx.dex.moves[st.mewtwo_moves[k]].pp as i32;
+    base + base * 20 * st.mewtwo_bonus.get(k).copied().unwrap_or(0) / 100
+}
+
+/// Drink an Ether / Max Ether on Mewtwo's emptiest slot (relative to its full PP): Ether +10
+/// (`item_effects.h:116`), Max Ether to full (`:121`). Max Ether goes first when the slot is
+/// more than 10 short. Returns whether one was used.
+fn use_ether(ctx: &Ctx, st: &mut State) -> bool {
+    if st.mewtwo_pp.is_empty() || (st.max_ethers == 0 && st.ethers == 0) {
+        return false;
+    }
+    let k = (0..st.mewtwo_pp.len())
+        .min_by(|&a, &b| {
+            let ra = st.mewtwo_pp[a] as f64 / mewtwo_full_pp(ctx, st, a) as f64;
+            let rb = st.mewtwo_pp[b] as f64 / mewtwo_full_pp(ctx, st, b) as f64;
+            ra.total_cmp(&rb)
+        })
+        .unwrap_or(0);
+    let full = mewtwo_full_pp(ctx, st, k);
+    if st.max_ethers > 0 && (st.ethers == 0 || full - st.mewtwo_pp[k] > 10) {
+        st.max_ethers -= 1;
+        st.mewtwo_pp[k] = full;
+    } else {
+        st.ethers -= 1;
+        st.mewtwo_pp[k] = (st.mewtwo_pp[k] + 10).min(full);
+    }
+    bump(st, 450.0 * ctx.p.text_factor);
+    true
+}
+
+/// Use the PP Ups in the bag on Mewtwo: Psychic first, then Fire Blast, up to 3 each
+/// (`decompiled/src/pokemon.c:4207`: at most 3 per move); a PP Up also adds the PP it grants.
+fn apply_pp_ups(ctx: &Ctx, st: &mut State) -> f64 {
+    let mut frames = 0.0;
+    if !ctx.p.mewtwo_pp || st.mewtwo.is_none() {
+        return frames;
+    }
+    st.mewtwo_bonus.resize(st.mewtwo_moves.len(), 0);
+    let order = [
+        ctx.dex.move_id("MOVE_PSYCHIC"),
+        ctx.dex.move_id("MOVE_FIRE_BLAST"),
+        ctx.dex.move_id("MOVE_EARTHQUAKE"),
+    ];
+    while st.pp_ups > 0 {
+        let slot = order.iter().find_map(|&m| {
+            st.mewtwo_moves
+                .iter()
+                .position(|&x| x == m)
+                .filter(|&k| st.mewtwo_bonus[k] < 3)
+        });
+        let Some(k) = slot else { break };
+        let before = mewtwo_full_pp(ctx, st, k);
+        st.mewtwo_bonus[k] += 1;
+        let after = mewtwo_full_pp(ctx, st, k);
+        st.mewtwo_pp[k] += after - before;
+        st.pp_ups -= 1;
+        frames += 350.0 * ctx.p.text_factor;
+    }
+    frames
 }
 
 /// `EXP_SLOW(n)` (`decompiled/src/data/pokemon/experience_tables.h:4`), Mewtwo's growth rate.
@@ -1419,15 +1487,24 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         } else {
             ctx.p.league_max_reserve
         };
-        if st.max_elixirs > reserve {
+        let low_slots = if mw_pp {
+            (0..pp_moves.len())
+                .filter(|&k| pp_vals[k] * 2 < mewtwo_full_pp(ctx, st, k))
+                .count()
+        } else {
+            0
+        };
+        let ether_first = mw_pp && low_slots <= 1 && (st.max_ethers > 0 || st.ethers > 0);
+        if ether_first && use_ether(ctx, st) {
+            // one slot topped up with an Ether / Max Ether (bag trip ~450f)
+        } else if st.max_elixirs > reserve {
             st.max_elixirs -= 1;
             bump(st, 500.0 * ctx.p.text_factor);
             for (k, &m) in pp_moves.iter().enumerate() {
-                let full = ctx.dex.moves[m].pp as i32;
                 if mw_pp {
-                    st.mewtwo_pp[k] = full;
+                    st.mewtwo_pp[k] = mewtwo_full_pp(ctx, st, k);
                 } else {
-                    st.slot_pp[k] = full;
+                    st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
                 }
             }
         } else if st.elixirs
@@ -1440,7 +1517,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             st.elixirs -= 1;
             bump(st, 500.0 * ctx.p.text_factor);
             for (k, &m) in pp_moves.iter().enumerate() {
-                let full = ctx.dex.moves[m].pp as i32;
+                let full = if mw_pp {
+                    mewtwo_full_pp(ctx, st, k)
+                } else {
+                    ctx.dex.moves[m].pp as i32
+                };
                 let v = if mw_pp {
                     &mut st.mewtwo_pp[k]
                 } else {
@@ -1448,6 +1529,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 };
                 *v = (*v + 10).min(full);
             }
+        } else if mw_pp && (st.max_ethers > 0 || st.ethers > 0) {
+            use_ether(ctx, st);
         }
     }
     let heal_below = if heal_override >= 0.0 {
@@ -2561,6 +2644,10 @@ pub fn attempt(
         mewtwo: None,
         mewtwo_moves: vec![],
         mewtwo_pp: vec![],
+        mewtwo_bonus: vec![],
+        pp_ups: 0,
+        ethers: 0,
+        max_ethers: 0,
         evo_checked: false,
         fodder: 0,
         taught_once: vec![],
@@ -3042,6 +3129,8 @@ pub fn attempt(
                     st.mewtwo_moves = ctx.dex.default_moves(ctx.dex.id("SPECIES_MEWTWO"), 70);
                 }
                 restore_mewtwo_pp(ctx, &mut st);
+                let f = apply_pp_ups(ctx, &mut st);
+                bump(&mut st, f);
             }
             Kind::Teach { teach } => {
                 let mv = ctx.dex.move_id(&teach.mv);
@@ -3079,6 +3168,8 @@ pub fn attempt(
                         if st.mewtwo_moves.len() < 4 {
                             st.mewtwo_moves.push(mv);
                             st.mewtwo_pp.push(ctx.dex.moves[mv].pp as i32);
+                            st.mewtwo_bonus.resize(st.mewtwo_moves.len() - 1, 0);
+                            st.mewtwo_bonus.push(0);
                         } else {
                             // Psychic and Recover stay; the weakest other slot goes
                             // (Safeguard, then Swift, then an earlier teach).
@@ -3104,6 +3195,8 @@ pub fn attempt(
                             {
                                 st.mewtwo_moves[i] = mv;
                                 st.mewtwo_pp[i] = ctx.dex.moves[mv].pp as i32;
+                                st.mewtwo_bonus.resize(st.mewtwo_moves.len(), 0);
+                                st.mewtwo_bonus[i] = 0;
                             }
                         }
                     } else {
@@ -3116,6 +3209,13 @@ pub fn attempt(
                 bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 match pickup.kind.as_str() {
                     "max" => st.max_elixirs += 1,
+                    "ether" => st.ethers += 1,
+                    "maxether" => st.max_ethers += 1,
+                    "ppup" | "ppmax" => {
+                        st.pp_ups += if pickup.kind == "ppmax" { 3 } else { 1 };
+                        let f = apply_pp_ups(ctx, &mut st);
+                        bump(&mut st, f);
+                    }
                     "candy" if ctx.p.candy_early && st.candies_eaten < ctx.p.candy_early_n => {
                         st.candies_eaten += 1;
                         // Eaten on the spot: a level now (400 frames), through the normal exp path
