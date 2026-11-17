@@ -34,6 +34,9 @@ pub struct Hunt {
     /// Leave after this many new species were caught on this visit (0 = stay until the site is
     /// complete or the step budget is spent).
     pub stop_after: u32,
+    /// Lead-level Repel (0 = none): the first healthy party mon is a Lv N mon and a Repel is
+    /// active, so land encounters below N never start (`wild_encounter.c:601`).
+    pub repel_level: u32,
 }
 
 impl Default for Hunt {
@@ -47,6 +50,7 @@ impl Default for Hunt {
             detour_tiles: 0,
             on_route: false,
             stop_after: 0,
+            repel_level: 0,
         }
     }
 }

@@ -1048,6 +1048,8 @@ struct EncArgs<'a> {
     stop_when_done: bool,
     /// A Repel is active: encounters below the lead's level never start.
     repel: bool,
+    /// Lead level the Repel compares against (0 = the carry's level).
+    repel_lvl: u32,
     /// Stop after this many new species were caught in this call (0 = no limit).
     stop_new: u32,
     /// A passing encounter may be caught (`catch_on_pass`); false on segments the plan lists in
@@ -1064,6 +1066,7 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
         skip,
         stop_when_done,
         repel,
+        repel_lvl,
         stop_new,
         pass_catch,
     } = *a;
@@ -1119,7 +1122,7 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
         cooldown = cd_steps;
         let slot = &slots[pick_slot(rng, &weights)];
         let level = rng.range(slot.min, slot.max);
-        if repel && level < st.carry {
+        if repel && level < if repel_lvl > 0 { repel_lvl } else { st.carry } {
             continue;
         }
         let want_catch = stop_when_done
@@ -2206,19 +2209,60 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
         // Casting and waiting for a bite. guess.
         180.0
     };
-    let args = EncArgs {
-        site: &h.site,
-        area,
-        steps,
-        era,
-        skip: &skip,
-        stop_when_done: true,
-        repel: false,
-        stop_new,
-        pass_catch: true,
-    };
-    let used = run_encounters(ctx, st, rng, &args);
-    bump(st, used as f64 * per_step);
+    // Repel hunt: a Lv `repel_level` lead plus a Repel blocks every land encounter below that
+    // level (`decompiled/src/wild_encounter.c:286,601-622`; fishing is not checked, :301-307).
+    // Repels are bought and used as the steps run out; the lead swap is a party-menu trip. guess.
+    let mut covered = 0u32;
+    if h.repel_level > 0 && area == Area::Land && st.repel_ok {
+        bump(st, 300.0 * ctx.p.text_factor);
+        let mut left = steps;
+        while left > 0 {
+            if st.repel_left == 0 {
+                let (dur, price) = match st.max_tier {
+                    0 => (100, 350),
+                    1 => (200, 500),
+                    _ => (250, 700),
+                };
+                if ctx.p.money_model {
+                    if st.money < price {
+                        break;
+                    }
+                    st.money -= price;
+                }
+                bump(st, REPEL_USE * ctx.p.text_factor);
+                st.repel_left = dur;
+            }
+            let take = left.min(st.repel_left);
+            st.repel_left -= take;
+            left -= take;
+            covered += take;
+        }
+    }
+    let covered = covered.min(steps);
+    let mut used = 0;
+    for (n, repel) in [(covered, true), (steps - covered, false)] {
+        if n == 0 {
+            continue;
+        }
+        let args = EncArgs {
+            site: &h.site,
+            area,
+            steps: n,
+            era,
+            skip: &skip,
+            stop_when_done: true,
+            repel,
+            repel_lvl: h.repel_level,
+            stop_new,
+            pass_catch: true,
+        };
+        let u = run_encounters(ctx, st, rng, &args);
+        used += u;
+        bump(st, u as f64 * per_step);
+        if u < n {
+            break;
+        }
+    }
     if safari {
         st.safari_new += st.caught.count() - c_before;
         if area == Area::Land {
@@ -2575,6 +2619,7 @@ pub fn attempt(
                             skip: &[],
                             stop_when_done: false,
                             repel,
+                            repel_lvl: 0,
                             stop_new: 0,
                             pass_catch: !ctx.p.pass_off.contains(&seg.name),
                         };
@@ -2594,6 +2639,7 @@ pub fn attempt(
                         skip: &[],
                         stop_when_done: false,
                         repel,
+                        repel_lvl: 0,
                         stop_new: 0,
                         pass_catch: !ctx.p.pass_off.contains(&seg.name),
                     };
