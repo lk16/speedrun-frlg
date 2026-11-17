@@ -374,6 +374,9 @@ pub struct Mon {
     pub last_move: Option<usize>,
     /// Holds a Sitrus Berry (`HOLD_EFFECT_RESTORE_HP`, 30 HP at <= 1/2, `battle_util.c:2562`).
     pub sitrus: bool,
+    /// Holds Leftovers (`HOLD_EFFECT_LEFTOVERS`, `battle_util.c:2626-2639`): max HP / 16 (at least 1) at the
+    /// end of every turn while below max HP.
+    pub leftovers: bool,
     /// Held type booster (`sHoldEffectToType`, `decompiled/src/pokemon.c:1461-1480`): moves of this type
     /// use `stat * (100 + pct) / 100` (Black Glasses = Dark, +10: `items.json` `holdEffectParam`).
     pub boost: Option<(u8, i32)>,
@@ -477,6 +480,7 @@ pub fn make_mon(
         lock_move: None,
         last_move: None,
         sitrus: false,
+        leftovers: false,
         boost: None,
         badge: [bb(0), bb(4), bb(2), bb(6), bb(6)],
         counter_dmg: 0,
@@ -2815,6 +2819,9 @@ fn end_of_turn(
     side.light_screen = side.light_screen.saturating_sub(1);
     side.mist = side.mist.saturating_sub(1);
     side.safeguard = side.safeguard.saturating_sub(1);
+    if m.leftovers && m.hp > 0 && m.hp < m.max_hp {
+        m.hp = (m.hp + (m.max_hp / 16).max(1)).min(m.max_hp);
+    }
 }
 
 /// `ShouldUseItem` for a Full Restore: below a quarter of max HP (integer division), and
@@ -4911,5 +4918,26 @@ mod tests {
                 );
             }
         }
+    }
+    /// Leftovers (`battle_util.c:2626-2639`): 1/16 of max HP at the end of a turn while below max HP, never
+    /// above max HP, nothing without the item.
+    #[test]
+    fn leftovers_heal_a_sixteenth_per_turn() {
+        let dex = Dex::load();
+        let mut me = make_mon(&dex, dex.id("SPECIES_BLASTOISE"), 50, [20; 6], [0; 6], 0, 0);
+        let mut foe = make_mon(&dex, dex.id("SPECIES_RATTATA"), 5, [0; 6], [0; 6], 0, 0);
+        let mut g = rng(1);
+        me.hp = me.max_hp / 2;
+        let half = me.hp;
+        let mut side = Side::default();
+        let mut out = Outcome::default();
+        end_of_turn(&mut me, &mut foe, &mut side, &mut out, true, &mut g);
+        assert_eq!(me.hp, half, "no item, no heal");
+        me.leftovers = true;
+        end_of_turn(&mut me, &mut foe, &mut side, &mut out, true, &mut g);
+        assert_eq!(me.hp, half + me.max_hp / 16);
+        me.hp = me.max_hp - 1;
+        end_of_turn(&mut me, &mut foe, &mut side, &mut out, true, &mut g);
+        assert_eq!(me.hp, me.max_hp);
     }
 }
