@@ -217,6 +217,8 @@ struct State {
     /// Mewtwo once caught (battle_sim): its rolled IVs and nature, and its move slots.
     mewtwo: Option<([u32; 6], u8)>,
     mewtwo_moves: Vec<usize>,
+    /// PP left per Mewtwo slot (parallel to `mewtwo_moves`; `Params::mewtwo_pp`).
+    mewtwo_pp: Vec<i32>,
     /// The first-evolution stat gate was already checked.
     evo_checked: bool,
     /// Living expendable teammates (sacrifices burn them; a Centre revives them).
@@ -611,6 +613,15 @@ fn learn_moves(ctx: &Ctx, st: &mut State) {
             offer_move(ctx, st, m, false);
         }
     }
+}
+
+/// Mewtwo's PP back to full for every slot (Pokémon Centre, whiteout, the catch itself).
+fn restore_mewtwo_pp(ctx: &Ctx, st: &mut State) {
+    st.mewtwo_pp = st
+        .mewtwo_moves
+        .iter()
+        .map(|&m| ctx.dex.moves[m].pp as i32)
+        .collect();
 }
 
 /// `EXP_SLOW(n)` (`decompiled/src/data/pokemon/experience_tables.h:4`), Mewtwo's growth rate.
@@ -1369,13 +1380,29 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     // A scarce slot (base PP <= 5: Blizzard, Fire Blast) below 3 PP counts as empty before a
     // League fight: the human tops up with the Max Elixir he kept for exactly this
     // ("Max Elixir between E4 fights", `STRATEGY.md` section 4).
-    let scarce_low = st
-        .slots
+    // With `mewtwo_pp` the fighter after the catch is Mewtwo: its own slots and PP are checked.
+    let mw_pp = ctx.p.mewtwo_pp && ctx.p.mewtwo && st.mewtwo.is_some() && !a.wild;
+    let (pp_moves, pp_vals): (Vec<usize>, Vec<i32>) = if mw_pp {
+        (st.mewtwo_moves.clone(), st.mewtwo_pp.clone())
+    } else {
+        (st.slots.clone(), st.slot_pp.clone())
+    };
+    let scarce_low = pp_moves
         .iter()
-        .zip(&st.slot_pp)
+        .zip(&pp_vals)
         .any(|(&m, &p)| ctx.dex.moves[m].pp <= 5 && ctx.dex.moves[m].power > 0 && p < 3);
-    let pp_low = st.slot_pp.iter().sum::<i32>() < 12
-        || (a.league && (st.slot_pp.contains(&0) || scarce_low));
+    // `mewtwo_pp_floor`: before a League fight the human tops Mewtwo up when its Psychic PP is
+    // below this (a fight spends about 3-6 of them).
+    let psychic_low = mw_pp
+        && a.league
+        && ctx.p.mewtwo_pp_floor > 0
+        && pp_moves
+            .iter()
+            .zip(&pp_vals)
+            .any(|(&m, &p)| m == ctx.dex.move_id("MOVE_PSYCHIC") && p < ctx.p.mewtwo_pp_floor);
+    let pp_low = pp_vals.iter().sum::<i32>() < 12
+        || psychic_low
+        || (a.league && (pp_vals.contains(&0) || scarce_low));
     if a.trainer && pp_low {
         // Outside the League the last `league_max_reserve` Max Elixirs stay in the bag.
         let reserve = if a.league {
@@ -1386,14 +1413,31 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         if st.max_elixirs > reserve {
             st.max_elixirs -= 1;
             bump(st, 500.0 * ctx.p.text_factor);
-            for (k, &m) in st.slots.clone().iter().enumerate() {
-                st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
+            for (k, &m) in pp_moves.iter().enumerate() {
+                let full = ctx.dex.moves[m].pp as i32;
+                if mw_pp {
+                    st.mewtwo_pp[k] = full;
+                } else {
+                    st.slot_pp[k] = full;
+                }
             }
-        } else if st.elixirs > 0 {
+        } else if st.elixirs
+            > if a.league {
+                0
+            } else {
+                ctx.p.league_elixir_reserve
+            }
+        {
             st.elixirs -= 1;
             bump(st, 500.0 * ctx.p.text_factor);
-            for (k, &m) in st.slots.clone().iter().enumerate() {
-                st.slot_pp[k] = (st.slot_pp[k] + 10).min(ctx.dex.moves[m].pp as i32);
+            for (k, &m) in pp_moves.iter().enumerate() {
+                let full = ctx.dex.moves[m].pp as i32;
+                let v = if mw_pp {
+                    &mut st.mewtwo_pp[k]
+                } else {
+                    &mut st.slot_pp[k]
+                };
+                *v = (*v + 10).min(full);
             }
         }
     }
@@ -1419,6 +1463,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 st.badges,
             );
             m.moves = st.mewtwo_moves.clone();
+            if ctx.p.mewtwo_pp {
+                m.pp = st.mewtwo_pp.clone();
+            }
             if ctx.p.mewtwo_power != 1.0 {
                 m.stat[0] = (m.stat[0] as f64 * ctx.p.mewtwo_power) as i32;
                 m.stat[3] = (m.stat[3] as f64 * ctx.p.mewtwo_power) as i32;
@@ -1620,6 +1667,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         if out.won && !risk_lost {
             if mewtwo_now {
                 st.mewtwo_hp = out.hp_frac;
+                if ctx.p.mewtwo_pp {
+                    st.mewtwo_pp = me.pp.clone();
+                }
             } else {
                 st.hp_frac = out.hp_frac;
                 // `risk_adopt`: the lane's potions were drunk for real, so the carry leaves the fight
@@ -1726,6 +1776,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         for (k, &m) in st.slots.clone().iter().enumerate() {
             st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
         }
+        restore_mewtwo_pp(ctx, st);
         tries += 1;
         if a.wild {
             // The wild mon is gone; the run continues.
@@ -2459,6 +2510,7 @@ pub fn attempt(
         x_stock: [0; 7],
         mewtwo: None,
         mewtwo_moves: vec![],
+        mewtwo_pp: vec![],
         evo_checked: false,
         fodder: 0,
         taught_once: vec![],
@@ -2934,6 +2986,7 @@ pub fn attempt(
                 if st.mewtwo_moves.is_empty() {
                     st.mewtwo_moves = ctx.dex.default_moves(ctx.dex.id("SPECIES_MEWTWO"), 70);
                 }
+                restore_mewtwo_pp(ctx, &mut st);
             }
             Kind::Teach { teach } => {
                 let mv = ctx.dex.move_id(&teach.mv);
@@ -2970,6 +3023,7 @@ pub fn attempt(
                     if teach.mewtwo {
                         if st.mewtwo_moves.len() < 4 {
                             st.mewtwo_moves.push(mv);
+                            st.mewtwo_pp.push(ctx.dex.moves[mv].pp as i32);
                         } else {
                             // Psychic and Recover stay; the weakest other slot goes
                             // (Safeguard, then Swift, then an earlier teach).
@@ -2994,6 +3048,7 @@ pub fn attempt(
                                 .map(|(i, _)| i)
                             {
                                 st.mewtwo_moves[i] = mv;
+                                st.mewtwo_pp[i] = ctx.dex.moves[mv].pp as i32;
                             }
                         }
                     } else {
@@ -3198,6 +3253,7 @@ pub fn attempt(
             for (k, &m) in st.slots.clone().iter().enumerate() {
                 st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
             }
+            restore_mewtwo_pp(ctx, &mut st);
         }
         if seg.off_timer {
             let d = st.clock - before;
