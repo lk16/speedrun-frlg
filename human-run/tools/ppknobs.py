@@ -55,7 +55,10 @@ def candidates(p):
             q = copy.deepcopy(cur)
             del q[i]
             out.append(('pickup', f"drop {e['kind']}@{e['after']}", {'elixirs': q}))
-        if e['kind'] in ('ppup', 'max'):
+        # Pickup frame costs are guesses (not a human choice): descending them just deletes a modelled cost.
+        # An earlier pass accepted 'max@cycling-road 500->300' (plan 1061, withdrawn). Only costlier values are kept
+        # as sensitivity, never searched downward.
+        if False and e['kind'] in ('ppup', 'max'):
             for fr in (300, 700):
                 if e['frames'] != fr:
                     q = copy.deepcopy(cur)
