@@ -277,6 +277,11 @@ struct State {
     ice: bool,
     /// Leftovers held (pickup kind `leftovers`): 1/16 HP per turn, instead of the glasses.
     leftovers: bool,
+    /// Itemfinder in the bag (pickup kind `itemfinder`: the Route 11 east-gate aide, which hands it over only
+    /// at 30 Kanto species caught). The six `underfoot` hidden items (`HIDDEN_ITEM_UNDERFOOT`,
+    /// `field_control_avatar.c:497-500`: pressing A skips them) can only be dug up with it
+    /// (`itemfinder.c:241-246`); the pickup kinds `leftovers` and `ppmax` need it.
+    itemfinder: bool,
     /// Mystic Water bought and held (`Params::mystic_after`).
     mystic: bool,
     hp_frac: f64,
@@ -2656,6 +2661,7 @@ pub fn attempt(
         glasses: false,
         ice: false,
         leftovers: false,
+        itemfinder: false,
         mystic: false,
         hp_frac: 1.0,
         risk_hp: 1.0,
@@ -3303,6 +3309,19 @@ pub fn attempt(
                         "max" => st.max_elixirs += 1,
                         "ether" => st.ethers += 1,
                         "maxether" => st.max_ethers += 1,
+                        // Route 11 east gate, 2F aide (`Route11_EastEntrance_2F/scripts.inc:56-73`): the
+                        // Itemfinder only at 30 caught Kanto species (`GetPokedexCount` -> `GetKantoPokedexCount`,
+                        // `prof_pc.c:23-29`, `pokedex.c:75-93`, `REQUIRED_CAUGHT_MONS 30`); below that the
+                        // trip is wasted. `frames` is the whole trip (extra Fly, walks, dialogue).
+                        "itemfinder" => {
+                            if st.caught.count() >= 30 {
+                                st.itemfinder = true;
+                            }
+                        }
+                        // The two underfoot items on the route (Cape Brink PP Max, Route 16 Leftovers) are
+                        // found only by using the Itemfinder on the tile (`itemfinder.c:241-246`).
+                        "ppmax" if !st.itemfinder => {}
+                        "leftovers" if !st.itemfinder => {}
                         "ppup" | "ppmax" => {
                             st.pp_ups += if pickup.kind == "ppmax" { 3 } else { 1 };
                             let f = apply_pp_ups(ctx, &mut st);
