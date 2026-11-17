@@ -469,6 +469,10 @@ def gen(p):
         sys.path.insert(0, HERE)
         import dexknobs, honestknobs
         cands = honestknobs.candidates(p) + candidates(p) + dexknobs.candidates(p)
+    elif SET == 'pp':
+        sys.path.insert(0, HERE)
+        import dexknobs, ppknobs
+        cands = ppknobs.candidates(p) + dexknobs.candidates(p) + candidates(p)
     elif SET in ('dex', 'all'):
         sys.path.insert(0, HERE)
         import dexknobs
