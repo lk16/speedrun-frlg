@@ -17,4 +17,10 @@ WR+2m EHT optstop vs 1029 formula, h:
 The cliff is gone: EHT is smooth in trainer_fit. At the plan constants the hand-tuned thresholds were already within 0.4% of the optimum. At WR (tf .81): 565.1 vs 582.2 (-17.2, CI -26.9..-8.2) mr .3; 481.6 vs 506.3 mr .16.
 The fitted table is almost independent of trainer_fit (Brock 1057-1063 s at tf .81 and .86), while the formula's Brock cutoff moves 1067 -> 758 s: the formula, not the optimum, is what is fragile.
 
-(Rest of the grid, table, plan 1040 and the second seed follow below when finished.)
+## Final
+Tables (reset if the run clock at the split is above, seconds; fitted at tf .81 / mistake .3; `reset_table` in plan 1040):
+see `human-run/plans/1040-optstop.md` (WR+2m and WR). WR+2m: brock 1057, misty 1915, bill-cottage 2586, bike-redeem 2926, scope-and-dig 4103, surge 4842, super-rod 4970, koga 5726, blaine 6504, blaine+sevii 7464, sabrina 8402, erika 8614, giovanni 8873, indigo-heal 9445, HoF-1 10327, celio-network 11533 (first seven were still censored, i.e. lower bounds).
+WR grid (table refit per cell vs formula): .76 398.3/402.6, .81 565.1/582.2, .85 852/5576, .86 975/no finish; mistake .16 .76 363/367, .81 482/506, .85 689/4755, .86 772/no finish.
+Fixed table (fitted at .81) at .85 / .86, WR+2m: 548.4 / 583.7 h (formula 595 / 51 059); WR .85 853.8 (5576), .86 977.7 (no finish).
+Plan 1040 vs 1029 at the plan constants, R 3.2M, fresh seeds: WR+2m -1.39 (92) -0.69 (93) h, WR -14.2 / -18.2 h (CIs exclude 0 at WR). Accepted as CURRENT on the WR rung.
+Caveats: eval-seed scatter of the iteration EHT is about +-3%; the early-split cutoffs were censored at the training ceiling (cutoff+600 s slack) and may be higher at the optimum (a longer run would loosen them; at the plan constants the gain is already within 1%). The decision uses elapsed time only. Next: iterate to uncensored early cutoffs, condition on a second state variable (dex count / level) for a 2-number rule, re-fit the table whenever the window refit changes the model.
