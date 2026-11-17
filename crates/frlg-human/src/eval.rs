@@ -114,6 +114,21 @@ impl Plan {
             tactics,
             floor_after: vec![0; n],
             mean_after: vec![0.0; n],
+            cut_tables: self
+                .params
+                .reset_table
+                .iter()
+                .filter_map(|(rung, tab)| {
+                    let r = (0..LADDER_MINUTES.len()).find(|&r| rung_name(r) == *rung)?;
+                    let mut v = vec![f64::NAN; n];
+                    for (name, secs) in tab {
+                        if let Some(i) = self.segs.iter().position(|s| s.name == *name) {
+                            v[i] = secs * FPS;
+                        }
+                    }
+                    Some((rung_frames(r), v))
+                })
+                .collect(),
             oak_idx: self
                 .segs
                 .iter()

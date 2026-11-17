@@ -79,7 +79,7 @@ fn main() {
                 None => println!("{{\"plan\":\"{}\",\"rung\":null,\"note\":\"fewer than 50 finishes even at WR+160m\"}}", plan.params.name),
             }
         }
-        Some("eval") => {
+        Some("eval") | Some("ev") => {
             let plan = load(&args[1]);
             let ctx = plan.ctx();
             let rung = rung_arg(&args);
@@ -211,6 +211,41 @@ fn main() {
             let ctx = plan.ctx();
             let r: u64 = arg(&args, "--R", 20_000);
             println!("{}", phase_report(&ctx, seed, r).text());
+        }
+        Some("optstop") => {
+            let plan = load(&args[1]);
+            let mut ctx = plan.ctx();
+            let rung = rung_arg(&args);
+            let cfg = frlg_human::optstop::Cfg {
+                target: rung_frames(rung),
+                train: arg(&args, "--R", 200_000),
+                eval: arg(&args, "--Reval", 400_000),
+                iters: arg(&args, "--iters", 4),
+                slack_s: arg(&args, "--slack", 240.0),
+                seed,
+            };
+            let rn = rung_name(rung);
+            let res = frlg_human::optstop::run(&mut ctx, &cfg, |it| {
+                eprintln!("iter: EHT {:.2} h ({} finishes)", it.lambda_h, it.finishes);
+            });
+            if let Some(last) = res.last() {
+                let body: Vec<String> = last
+                    .table
+                    .iter()
+                    .map(|(n, c, _, _)| format!("\"{n}\":{c:.0}"))
+                    .collect();
+                println!(
+                    "{{\"rung\":\"{rn}\",\"eht_h\":{:.3},\"table\":{{{}}}}}",
+                    last.lambda_h,
+                    body.join(",")
+                );
+                for (n, c, np, cens) in &last.table {
+                    eprintln!(
+                        "  {n:40} {c:8.0} s  n={np} {}",
+                        if *cens { "CENSORED" } else { "" }
+                    );
+                }
+            }
         }
         Some("dist") => {
             let plan = load(&args[1]);

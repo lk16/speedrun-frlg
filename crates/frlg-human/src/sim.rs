@@ -77,6 +77,9 @@ pub struct Ctx<'a> {
     pub floor_after: Vec<u64>,
     /// Mean frames remaining after segment i, from a no-reset pilot (for `reset_aggr`).
     pub mean_after: Vec<f64>,
+    /// Optimal-stopping cutoffs: for a target in frames, the elapsed frames per segment above which
+    /// the human resets at that split (NaN = no table entry, use the `reset_aggr` formula).
+    pub cut_tables: Vec<(u64, Vec<f64>)>,
     /// The starter and its two evolutions.
     pub starter_line: [usize; 3],
     /// Levels at which the starter evolves (`decompiled/src/data/pokemon/evolution.h:3-8`).
@@ -158,6 +161,9 @@ pub struct Probe {
     /// caught with the level each was caught at, the Rare Candies in stock, the money and the clock.
     pub snap_at: Option<usize>,
     pub snap: Option<Snapshot>,
+    /// Every split reached: (segment index, run clock, wall clock) just before the reset check
+    /// (`optstop.rs` trains on these).
+    pub split_log: Vec<(u32, u64, u64)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -2493,6 +2499,12 @@ pub fn attempt(
     };
     // Seconds behind the WR at the last WR split passed: the pace gate of the skip lever (`Params::cond_skips`).
     let mut behind = 0.0f64;
+    let cut_table: Option<&Vec<f64>> = target.and_then(|t| {
+        ctx.cut_tables
+            .iter()
+            .find(|(tt, _)| *tt == t)
+            .map(|(_, v)| v)
+    });
     for (i, seg) in ctx.segs.iter().enumerate() {
         let mut rng = Rng::new(seed, idx, hash_str(&seg.name));
         // The game's stream, re-keyed per segment (see `GameRng`).
@@ -3327,7 +3339,11 @@ pub fn attempt(
             pr.level_at[i] = st.carry;
         }
         if seg.split {
+            if let Some(pr) = probe.as_deref_mut() {
+                pr.split_log.push((i as u32, st.clock, st.clock + st.off));
+            }
             if let Some(t) = target {
+                let cut = cut_table.map(|c| c[i]).filter(|c| !c.is_nan());
                 let mean = if ctx.p.dex_resets && i < ctx.oak_idx {
                     // The fill still to come depends on how many species are in the bag by then.
                     let dex_proj = st.caught.count() as f64 + ctx.gain_after[i];
@@ -3338,8 +3354,12 @@ pub fn attempt(
                     ctx.mean_after[i]
                 };
                 let remaining = ctx.floor_after[i] as f64
-                    + ctx.aggr[i] * (mean - ctx.floor_after[i] as f64).max(0.0);
-                if st.clock as f64 + remaining > t as f64 {
+                    + match cut {
+                        Some(_) => 0.0,
+                        None => ctx.aggr[i] * (mean - ctx.floor_after[i] as f64).max(0.0),
+                    };
+                let over_cut = cut.is_some_and(|c| st.clock as f64 > c);
+                if over_cut || st.clock as f64 + remaining > t as f64 {
                     if let Some(r) = rec.as_deref_mut() {
                         r[i].resets += 1;
                     }

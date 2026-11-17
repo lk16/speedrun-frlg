@@ -369,6 +369,10 @@ pub struct Params {
     pub reset_aggr: f64,
     /// Per-split override of `reset_aggr`, by segment name.
     pub reset_aggr_at: std::collections::HashMap<String, f64>,
+    /// Optimal-stopping reset table (`optstop.rs`): per rung name, per split, the run-clock seconds
+    /// above which the human resets at that split. A split without an entry keeps the
+    /// `reset_aggr` formula; the best-case floor test always applies.
+    pub reset_table: std::collections::HashMap<String, std::collections::HashMap<String, f64>>,
     /// More segments after which the human checks the reset rule (the badge splits, the Hall of
     /// Fame and Oak's check are always splits).
     pub extra_splits: Vec<String>,
@@ -840,6 +844,7 @@ impl Default for Params {
             teleport_abra: false,
             reset_aggr: 0.0,
             reset_aggr_at: Default::default(),
+            reset_table: Default::default(),
             extra_splits: vec![],
             dex_resets: false,
             battle_sim: false,
