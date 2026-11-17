@@ -1519,6 +1519,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         let xs: Vec<XItem> = x_plan
             .iter()
             .filter(|&&x| {
+                if x == XItem::CalmMind {
+                    // A move, not stock: queued only for a fighter that knows it.
+                    return me.moves.contains(&dex.move_id("MOVE_CALM_MIND"));
+                }
                 let i = x_index(x);
                 if stock[i] > 0 {
                     stock[i] -= 1;
@@ -1569,7 +1573,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 out.won, out.turns, out.x_used, out.sacs_used, out.kos.len(), out.heals_used, out.full_restores_used, out.hp_frac, me.stat, me.max_hp
             );
         }
-        for x in xs.iter().take(out.x_used as usize) {
+        for x in xs
+            .iter()
+            .filter(|&&x| x != XItem::CalmMind)
+            .take(out.x_used as usize)
+        {
             st.x_stock[x_index(*x)] -= 1;
         }
         bump(st, out.turns as f64 * ctx.turn());
@@ -1908,6 +1916,7 @@ fn x_index(x: XItem) -> usize {
         XItem::DireHit => 4,
         XItem::Accuracy => 5,
         XItem::GuardSpec => 6,
+        XItem::CalmMind => unreachable!("Calm Mind is a move, not stock"),
     }
 }
 
