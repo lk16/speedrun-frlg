@@ -34,14 +34,18 @@ PRIORS = {
         'ppup_f': ('ln', 450.0, 0.35, 150.0, 1200.0),
         'hid': ('ln', 1.0, 0.30, 0.4, 2.5),
         'museum': ('ln', 1.0, 0.25, 0.5, 2.0),
+        'pk': ('ln', 1.0, 0.5, 0.4, 4.0),     # the 1058 pickups as the plan guesses them (300-450 f), x/÷ 1.65 at 1 sd
     },
 }
 # after the video measurement (journal 2026-12-03 section 2): the PP Up pickup on the route is ~2.5 s of text
 PRIORS['post'] = dict(PRIORS['pre'])
 PRIORS['post']['ppup_f'] = ('ln', 300.0, 0.35, 120.0, 900.0)
 PRIORS['post']['museum'] = ('ln', 1.0, 0.18, 0.6, 1.6)
+# after the map-geometry estimates (rb_lib.GEO_FRAMES): `pkg` scales those medians, sd .3 in ln
+PRIORS['geo'] = dict(PRIORS['post'])
+PRIORS['geo']['pk'] = ('ln', 1.0, 0.30, 0.4, 3.0)
 
-CONT = ['lp', 'mp', 'cp', 'tf', 'mr', 'win_cv', 'slow', 'phit', 'ppup_f', 'hid', 'museum']
+CONT = ['lp', 'mp', 'cp', 'tf', 'mr', 'win_cv', 'slow', 'phit', 'ppup_f', 'hid', 'museum', 'pk']
 TRANS = {k: (math.log if PRIORS['pre'][k][0] == 'ln' else (lambda x: x)) for k in CONT}
 ALLV = ['lnQ', 'lnD'] + CONT
 
@@ -136,11 +140,12 @@ def sample_vec(prior, u, flatD=False):
     return v
 
 
-def plan_patch(base, cal, v):
+def plan_patch(base, cal, v, prior='pre'):
     lam = cal.lam_for(v['cp'], v['Q'])
     flat = cal.flat_for(v['lp'], v['mp'], v['D'])
+    pk = {'pkg': v['pk']} if prior == 'geo' else {'pk': v['pk']}
     q = L.patch(base, lane=lam, flat=flat, lp=v['lp'], mp=v['mp'], cp=v['cp'], tf=v['tf'], mr=v['mr'], win_cv=v['win_cv'],
-                slow=v['slow'], phit=v['phit'], ppup_f=v['ppup_f'], hid=v['hid'], museum=v['museum'])
+                slow=v['slow'], phit=v['phit'], ppup_f=v['ppup_f'], hid=v['hid'], museum=v['museum'], **pk)
     return q, lam, flat
 
 
@@ -176,7 +181,7 @@ def cmd_design(a):
         if i in done:
             continue
         v = sample_vec(prior, u, flatD)
-        q, lam, flat = plan_patch(base, cal, v)
+        q, lam, flat = plan_patch(base, cal, v, prior)
         row = {'i': i, 'v': v, 'lam': lam, 'flat': flat, 'prior': prior, 'eht': {}, 'fin': {}}
         for rg in rungs:
             e, f = L.run_eval(q, f'mc{i}', rg, R, seed0 + i)

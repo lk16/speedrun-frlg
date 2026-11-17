@@ -38,6 +38,10 @@ def corner(name, cal):
         'fast': dict(tf=0.65, mr=0.07, win_cv=0.0),
         'costly': dict(ppup_f=900, hid=2.0, museum=1.5),
         'cheap': dict(ppup_f=200, hid=0.6, museum=0.8),
+        # the 1058 pickups (rb_lib.NEW_PICKS): pk = x on the plan's frames (300-450 f), pkg = x on the map-geometry medians
+        'pk2': dict(pk=2.0), 'pk4': dict(pk=4.0), 'geo': dict(pkg=1.0), 'geo2': dict(pkg=2.0),
+        'lp1.0pk4': mk(lp=1.0) | dict(pk=4.0), 'cp1.7pk4': mk(cp=1.7) | dict(pk=4.0),
+        'lp1.8': mk(lp=1.8), 'cp2.3': mk(cp=2.3),
     }
     return table[name]
 
@@ -84,8 +88,24 @@ def _tactic(seg, x):
     return f
 
 
+def _drop_new(keys):
+    def f(q):
+        for k in keys:
+            lst, after, kind = L.NEW_PICKS[k]
+            q[lst] = [e for e in q[lst] if not (e.get('after') == after and e.get('kind') == kind)]
+    return f
+
+
 VARIANTS = {
     'base': lambda q: None,
+    'no_r9candy': _drop_new(['r9']),
+    'no_r17candy': _drop_new(['r17']),
+    'no_candy': _drop_new(['r9', 'r17']),
+    'no_hcalcium': _drop_new(['hideout']),
+    'no_scalcium': _drop_new(['silph']),
+    'no_calcium': _drop_new(['hideout', 'silph']),
+    'no_sell': _drop_new(['sell']),
+    'no_new': _drop_new(['r9', 'r17', 'hideout', 'silph', 'sell']),
     'ppup2': _drop_ppup(['celadon-tea']),
     'ppup1': _drop_ppup(['celadon-tea', 'cycling-road']),
     'ppup0': _drop_ppup(['celadon-tea', 'cycling-road', 'hideout-grunts']),
@@ -127,7 +147,7 @@ def main():
     assert cmd == 'grid'
     out, calp, rung, R, seed = a[0], a[1], a[2], int(a[3]), int(a[4])
     a = a[5:]
-    plan = opt(a, '--plan', '1057-calm-sp9-ppup-redo')
+    plan = opt(a, '--plan', '1058-hidden-candy-calcium-nugget')
     vs = opt(a, '--variants', ','.join(VARIANTS)).split(',')
     sc = opt(a, '--scen', 'base,Qlow,Dlow,lp1.0,mp1.0,cp1.7,slow,costly').split(',')
     base = L.load_plan(plan)

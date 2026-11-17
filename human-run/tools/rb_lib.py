@@ -15,6 +15,12 @@ os.makedirs(SCRATCH, exist_ok=True)
 
 POST = ['lorelei-2', 'bruno-2', 'agatha-2', 'lance-2', 'champion-2', 'icefall-grunt', 'warehouse-admin-1', 'warehouse-admin-2',
         'warehouse-gideon', 'lorelei', 'bruno', 'agatha', 'lance', 'champion']
+# the pickups plan 1058 added: key -> (list, after, kind). Frames the plan assumes: 300 / 450 / 450 / 450 / 350.
+NEW_PICKS = {'r9': ('elixirs', 'route9', 'candy'), 'r17': ('elixirs', 'cycling-road', 'candy'),
+             'hideout': ('elixirs', 'hideout-giovanni', 'calcium'), 'silph': ('elixirs', 'rival-silph', 'calcium'),
+             'sell': ('specials', 'celadon-tea', 'sell')}
+# map-geometry estimates (journal 2026-12-05): median frames of each new pickup
+GEO_FRAMES = {'r9': 170, 'r17': 1030, 'hideout': 400, 'silph': 1170, 'sell': 300}
 LANE_TACTICS = ['rival-ss-anne', 'rival-cerulean', 'misty']
 HIDDEN_KINDS = ('max', 'ether', 'maxether', 'elixir')   # `hid`; PP Ups have their own knob `ppup_f`
 
@@ -76,6 +82,11 @@ def patch(p, **kw):
             for e in q.get('specials', []):
                 if 'SPECIES_AERODACTYL' in e.get('species', []):
                     e['frames'] = int(round(e['frames'] * v))
+        elif k in ('pk', 'pkg'):   # pk: multiplier on the plan's frames of the 1058 pickups; pkg: multiplier on GEO_FRAMES (absolute)
+            for key, (lst, after, kind) in NEW_PICKS.items():
+                for e in q.get(lst, []):
+                    if e.get('after') == after and e.get('kind') == kind:
+                        e['frames'] = int(round(e['frames'] * v)) if k == 'pk' else int(round(GEO_FRAMES[key] * v))
         elif k == 'persim_frames':
             q['persim_frames'] = int(v)
         elif k == 'persim':
