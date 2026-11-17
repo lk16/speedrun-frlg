@@ -534,6 +534,12 @@ pub struct Params {
     /// (`human-run/video-analysis/data/calib/v4-e4r2.md`): each level-up costs `level_up()` frames and
     /// its stats follow the level.
     pub mewtwo_levels: bool,
+    /// Mewtwo's four slots carry their PP between fights (`Cmd_ppreduce`; refilled at a Centre, a
+    /// whiteout, an Elixir / Max Elixir before a trainer fight). Off = full PP every fight (old model).
+    pub mewtwo_pp: bool,
+    /// With `mewtwo_pp`: top Mewtwo up before a League fight when its Psychic PP is below this (0 = only
+    /// when a slot is empty or Fire Blast is below 3, the carry's rule).
+    pub mewtwo_pp_floor: i32,
     /// Mechanics model (journal 2026-11-16): `MonGainEVs` stops at 510 total EVs (255 per stat);
     /// `decompiled/src/pokemon.c:5512-5595`. Off = per-stat cap only (the old model).
     pub ev_cap: bool,
@@ -646,6 +652,10 @@ pub struct Params {
     /// fights", `human-run/video-analysis/STRATEGY.md`; the exact engine's Blizzard (5 PP) is empty
     /// by Lance otherwise).
     pub league_max_reserve: u32,
+    /// Outside the League the last `league_elixir_reserve` plain Elixirs also stay in the bag (the WR
+    /// carries an Elixir and a Max Elixir into Round 2, `video-analysis/data/calib/v4-e4r2.md`). Only
+    /// matters with `mewtwo_pp`; 0 = the old rule.
+    pub league_elixir_reserve: u32,
     /// Heal items the bag holds at the start of each League round: `xbuys[].heals` (Hyper Potions)
     /// count first, the Indigo mart tops up to this many at `league_heal_price` while the money
     /// lasts (the WR run: "two heals + a Max Elixir between E4 fights; Full Restores sparingly",
@@ -901,6 +911,8 @@ impl Default for Params {
             mewtwo_hp_bar: 0.0,
             mewtwo_heal_extra: 0.0,
             mewtwo_levels: false,
+            mewtwo_pp: false,
+            mewtwo_pp_floor: 0,
             ev_cap: false,
             ev_lag: false,
             mewtwo_evs: false,
@@ -940,6 +952,7 @@ impl Default for Params {
             mewtwo_power: 1.0,
             league_power: 0.0,
             league_max_reserve: 2,
+            league_elixir_reserve: 0,
             league_heals: 6,
             league_heal_price: 2500,
             league_preheal: 0.7,

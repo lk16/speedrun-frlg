@@ -514,6 +514,7 @@ fn main() {
                     "accuracy" => XItem::Accuracy,
                     "guard" => XItem::GuardSpec,
                     "calm" => XItem::CalmMind,
+                    o if o.starts_with("move:") => XItem::Move(dexr.move_id(&o[5..])),
                     o => panic!("unknown x item {o}"),
                 })
                 .collect();

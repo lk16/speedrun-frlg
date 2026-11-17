@@ -907,6 +907,20 @@ pub enum XItem {
     /// +1 Sp. Atk and +1 Sp. Def, `EFFECT_CALM_MIND`). A normal move turn (priority 0, one PP), no bag
     /// trip and no stock; the sim only queues it for a fighter that knows the move.
     CalmMind,
+    /// Any other self-targeting set-up move the fighter knows (`move:MOVE_BULK_UP`, `move:MOVE_SWORDS_DANCE`,
+    /// `move:MOVE_LIGHT_SCREEN`, ...): a normal move turn like `CalmMind`, queued only when known.
+    Move(usize),
+}
+
+impl XItem {
+    /// The move behind a set-up queue entry (not an item), if it is one.
+    pub fn setup_move(self, dex: &Dex) -> Option<usize> {
+        match self {
+            XItem::CalmMind => Some(dex.move_id("MOVE_CALM_MIND")),
+            XItem::Move(m) => Some(m),
+            _ => None,
+        }
+    }
 }
 
 /// What happened in a fight.
@@ -3363,8 +3377,8 @@ fn run(
             // --- order (`GetWhoStrikesFirst`): priority, then speed, ties Random() & 1.
             let my_prio = match my_action {
                 Action::Move(mv) => dex.moves[mv].prio,
-                Action::XItem(XItem::CalmMind) | Action::Sac(Some(XItem::CalmMind)) => {
-                    dex.moves[dex.move_id("MOVE_CALM_MIND")].prio
+                Action::XItem(x) | Action::Sac(Some(x)) if x.setup_move(dex).is_some() => {
+                    dex.moves[x.setup_move(dex).unwrap()].prio
                 }
                 _ => 6, // item use happens before moves
             };
@@ -3398,8 +3412,8 @@ fn run(
                     Action::Switch => {
                         out.item_turns += 1;
                     }
-                    Action::XItem(XItem::CalmMind) => {
-                        let mv = dex.move_id("MOVE_CALM_MIND");
+                    Action::XItem(x) if x.setup_move(dex).is_some() => {
+                        let mv = x.setup_move(dex).unwrap();
                         do_move(&ex, me, e, mv, my_side, en_side, true, first, out, rng);
                     }
                     Action::XItem(x) => {
@@ -3423,7 +3437,7 @@ fn run(
                                 apply_stat_change(me, 5, 1, false);
                             }
                             XItem::GuardSpec => my_side.mist = 5,
-                            XItem::CalmMind => unreachable!("handled above"),
+                            XItem::CalmMind | XItem::Move(_) => unreachable!("handled above"),
                         }
                     }
                     Action::Heal => {
@@ -3448,8 +3462,8 @@ fn run(
                             out.sacs_used += 1;
                         }
                         match x {
-                            Some(XItem::CalmMind) => {
-                                let mv = dex.move_id("MOVE_CALM_MIND");
+                            Some(x) if x.setup_move(dex).is_some() => {
+                                let mv = x.setup_move(dex).unwrap();
                                 do_move(&ex, me, e, mv, my_side, en_side, true, first, out, rng);
                             }
                             Some(x) => {
@@ -3472,7 +3486,7 @@ fn run(
                                         apply_stat_change(me, 5, 1, false);
                                     }
                                     XItem::GuardSpec => my_side.mist = 5,
-                                    XItem::CalmMind => unreachable!("handled above"),
+                                    XItem::CalmMind | XItem::Move(_) => unreachable!("handled above"),
                                 }
                             }
                             None if !tac.sac_free => {}

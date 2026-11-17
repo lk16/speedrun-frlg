@@ -83,6 +83,9 @@ impl Plan {
             "accuracy" => crate::battle::XItem::Accuracy,
             "guard" => crate::battle::XItem::GuardSpec,
             "calm" => crate::battle::XItem::CalmMind,
+            other if other.starts_with("move:") => {
+                crate::battle::XItem::Move(self.dex.move_id(&other[5..]))
+            }
             other => panic!("unknown x item {other}"),
         };
         let tactics = self
