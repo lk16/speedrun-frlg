@@ -194,23 +194,49 @@ impl Plan {
             power_early_end: seg_index(&self.segs, &self.params.power_early_until),
             risk_end: seg_index(&self.segs, &self.params.risk_until),
             risk_win: {
-                let mut v = vec![(0.0, 0.0, None); n];
-                let mut from = self
-                    .params
-                    .no_salvage_until
-                    .is_empty()
-                    .then_some(0)
-                    .or_else(|| seg_index(&self.segs, &self.params.no_salvage_until).map(|i| i + 1))
-                    .unwrap_or(0);
-                for w in &self.params.risk_windows {
-                    if let Some(e) = seg_index(&self.segs, &w.until) {
-                        for x in v.iter_mut().take(e + 1).skip(from) {
-                            *x = (w.power, w.foe, w.potions);
+                let window_table = |segs: &[Seg]| -> Vec<(f64, f64, Option<u32>)> {
+                    let mut v = vec![(0.0, 0.0, None); segs.len()];
+                    let mut from = self
+                        .params
+                        .no_salvage_until
+                        .is_empty()
+                        .then_some(0)
+                        .or_else(|| seg_index(segs, &self.params.no_salvage_until).map(|i| i + 1))
+                        .unwrap_or(0);
+                    for w in &self.params.risk_windows {
+                        if let Some(e) = seg_index(segs, &w.until) {
+                            for x in v.iter_mut().take(e + 1).skip(from) {
+                                *x = (w.power, w.foe, w.potions);
+                            }
+                            from = e + 1;
                         }
-                        from = e + 1;
                     }
+                    v
+                };
+                if let Some(canon_variants) = &self.params.risk_canon {
+                    let mut base = self.params.clone();
+                    base.route_variants = canon_variants.clone();
+                    base.risk_canon = None;
+                    let canon = build(self.dex, &base).expect("canonical order builds");
+                    let tab = window_table(&canon);
+                    let by_name: std::collections::HashMap<&str, (f64, f64, Option<u32>)> = canon
+                        .iter()
+                        .map(|s| s.name.as_str())
+                        .zip(tab.iter().copied())
+                        .collect();
+                    let mut last = (0.0, 0.0, None);
+                    self.segs
+                        .iter()
+                        .map(|s| {
+                            if let Some(&w) = by_name.get(s.name.as_str()) {
+                                last = w;
+                            }
+                            last
+                        })
+                        .collect()
+                } else {
+                    window_table(&self.segs)
                 }
-                v
             },
             torrent_end: seg_index(&self.segs, &self.params.torrent_until),
             no_salvage_end: seg_index(&self.segs, &self.params.no_salvage_until),

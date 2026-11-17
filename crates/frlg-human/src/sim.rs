@@ -3084,6 +3084,10 @@ pub fn attempt(
                     if special.kind == "buy" && ctx.p.money_model {
                         st.money -= special.cost;
                     }
+                    if special.kind == "sell" && ctx.p.money_model {
+                        // Items sold at a Poke Mart: `cost` is the money received.
+                        st.money += special.cost;
+                    }
                     if special.kind == "trade" {
                         let req: Vec<u32> = special
                             .requires
@@ -3195,6 +3199,12 @@ pub fn attempt(
                     ];
                     st.mewtwo = Some((ivs, (pid % 25) as u8));
                     st.mewtwo_exp = slow_exp(70);
+                    let k = st.candies.min(ctx.p.mewtwo_candies);
+                    if k > 0 && ctx.p.mewtwo_levels {
+                        st.candies -= k;
+                        st.mewtwo_exp = slow_exp(70 + k);
+                        bump(&mut st, 400.0 * k as f64 * ctx.p.text_factor);
+                    }
                     if st.mewtwo_moves.is_empty() {
                         st.mewtwo_moves = ctx.dex.default_moves(ctx.dex.id("SPECIES_MEWTWO"), 70);
                     }
@@ -3440,7 +3450,7 @@ pub fn attempt(
                     st.league_items = true;
                     // Rare Candies kept for the League go down now: a level each, worth the
                     // most exp this late (~400 frames per use).
-                    while st.candies > 0 && st.carry < 100 {
+                    while st.candies > ctx.p.mewtwo_candies && st.carry < 100 {
                         st.candies -= 1;
                         st.carry += 1;
                         st.exp = st
