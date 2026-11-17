@@ -3084,6 +3084,10 @@ pub fn attempt(
                     if special.kind == "buy" && ctx.p.money_model {
                         st.money -= special.cost;
                     }
+                    if special.kind == "sell" && ctx.p.money_model {
+                        // Items sold at a Poke Mart: `cost` is the money received.
+                        st.money += special.cost;
+                    }
                     if special.kind == "trade" {
                         let req: Vec<u32> = special
                             .requires
@@ -3195,6 +3199,12 @@ pub fn attempt(
                     ];
                     st.mewtwo = Some((ivs, (pid % 25) as u8));
                     st.mewtwo_exp = slow_exp(70);
+                    let k = st.candies.min(ctx.p.mewtwo_candies);
+                    if k > 0 && ctx.p.mewtwo_levels {
+                        st.candies -= k;
+                        st.mewtwo_exp = slow_exp(70 + k);
+                        bump(&mut st, 400.0 * k as f64 * ctx.p.text_factor);
+                    }
                     if st.mewtwo_moves.is_empty() {
                         st.mewtwo_moves = ctx.dex.default_moves(ctx.dex.id("SPECIES_MEWTWO"), 70);
                     }
@@ -3299,6 +3309,26 @@ pub fn attempt(
                             );
                         }
                         "candy" => st.candies += 1,
+                        // Vitamins found on the route (`item_effects.h`: +10 EVs, refused at 100 EVs in
+                        // the stat; stats recalculated on use). Order HP, Atk, Def, Spe, SpA, SpD.
+                        "hpup" | "protein" | "iron" | "carbos" | "calcium" | "zinc" => {
+                            let ix = match pickup.kind.as_str() {
+                                "hpup" => 0,
+                                "protein" => 1,
+                                "iron" => 2,
+                                "carbos" => 3,
+                                "calcium" => 4,
+                                _ => 5,
+                            };
+                            if st.evs_real[ix] < 100 {
+                                let mut y = [0u32; 6];
+                                y[ix] = 10.min(100 - st.evs_real[ix]);
+                                let mut real = st.evs_real;
+                                add_evs(ctx, &mut real, y);
+                                st.evs_real = real;
+                                st.evs = real;
+                            }
+                        }
                         k if stone_ix(k).is_some() => st.stones[stone_ix(k).unwrap_or(0)] += 1,
                         _ => st.elixirs += 1,
                     }
@@ -3440,7 +3470,7 @@ pub fn attempt(
                     st.league_items = true;
                     // Rare Candies kept for the League go down now: a level each, worth the
                     // most exp this late (~400 frames per use).
-                    while st.candies > 0 && st.carry < 100 {
+                    while st.candies > ctx.p.mewtwo_candies && st.carry < 100 {
                         st.candies -= 1;
                         st.carry += 1;
                         st.exp = st

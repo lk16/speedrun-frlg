@@ -840,6 +840,18 @@ pub struct Params {
     pub ablate_torrent: bool,
     /// Lane windows past `no_salvage_until` (plan 940+), in route order; see [`RiskWindow`].
     pub risk_windows: Vec<RiskWindow>,
+    /// Key the lane windows by the fight, not by position: each segment takes the window it has in the
+    /// order built with these `route_variants` (the order the windows were fitted on), so a reordering
+    /// variant carries every fight's fitted strength with it (None = windows by position).
+    pub risk_canon: Option<Vec<String>>,
+    /// Do the dex fill after the first Hall of Fame, just before Oak's check, instead of before the
+    /// Indigo door (the 60 caught count is only read there: `PalletTown_ProfessorOaksLab/scripts.inc`
+    /// `TryStartNationalDexScene`, reached only with `FLAG_SYS_GAME_CLEAR`, i.e. after the Hall of
+    /// Fame). Attempts that die in round 1 then never pay for the fill.
+    pub fill_after_hof: bool,
+    /// Rare Candies held back at the Indigo heal for Mewtwo (a level each, `mewtwo_levels`; 400 frames
+    /// per use) instead of going into the carry for round 1.
+    pub mewtwo_candies: u32,
     /// Segments skipped at run time when the attempt is behind the WR's pace; see [`CondSkip`].
     pub cond_skips: Vec<CondSkip>,
     /// A lane loss ends the attempt wherever it happens (the flat `fatal` hazards it replaces were
@@ -1032,6 +1044,9 @@ impl Default for Params {
             risk_adopt: false,
             ablate_torrent: false,
             risk_windows: vec![],
+            risk_canon: None,
+            fill_after_hof: false,
+            mewtwo_candies: 0,
             cond_skips: vec![],
             risk_abandon: false,
             risk_torrent_lost: false,

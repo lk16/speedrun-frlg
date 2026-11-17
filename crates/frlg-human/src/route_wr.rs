@@ -126,24 +126,26 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     leg_league_approach(b, p, h);
     // Whatever is still missing from the 60 is hunted now (the plan's `fill` list), before Indigo:
     // there is no post-Hall-of-Fame fill phase in this order.
-    let at = b
-        .segs
-        .iter()
-        .position(|s| s.name == "victory-road")
-        .expect("victory-road segment")
-        + 1;
-    b.segs.insert(
-        at,
-        Seg {
-            name: "dex-fill".into(),
-            src: Src::Guess,
-            inputs: 0,
-            split: false,
-            off_timer: false,
-            starter_check: false,
-            kind: Kind::OakCheck,
-        },
-    );
+    let fill_seg = Seg {
+        name: "dex-fill".into(),
+        src: Src::Guess,
+        inputs: 0,
+        split: false,
+        off_timer: false,
+        starter_check: false,
+        kind: Kind::OakCheck,
+    };
+    if p.fill_after_hof {
+        // Held back until after the Hall of Fame: it is inserted below, before Oak's check.
+    } else {
+        let at = b
+            .segs
+            .iter()
+            .position(|s| s.name == "victory-road")
+            .expect("victory-road segment")
+            + 1;
+        b.segs.insert(at, fill_seg.clone());
+    }
 
     // First Elite Four. The Hall of Fame's ~50 s (dialogue, save, cards) is calibrated against the
     // WR video's Champion 1 split (walk in 12:18 -> save 13:08 in the E4R1 window).
@@ -174,6 +176,9 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.text("fly-pallet-2", 700, Src::Guess);
     b.walk("pallet-to-oak", 30, e, None, Src::Tiles);
     // All 60 were caught before the League; Oak only confirms it.
+    if p.fill_after_hof {
+        b.segs.push(fill_seg);
+    }
     b.text("oak-national-dex", 2500, Src::Guess);
     b.text("to-one-island", 3000, Src::Guess);
     b.text("celio-ruby-request", 1500, Src::Guess);

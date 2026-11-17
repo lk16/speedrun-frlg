@@ -194,23 +194,49 @@ impl Plan {
             power_early_end: seg_index(&self.segs, &self.params.power_early_until),
             risk_end: seg_index(&self.segs, &self.params.risk_until),
             risk_win: {
-                let mut v = vec![(0.0, 0.0, None); n];
-                let mut from = self
-                    .params
-                    .no_salvage_until
-                    .is_empty()
-                    .then_some(0)
-                    .or_else(|| seg_index(&self.segs, &self.params.no_salvage_until).map(|i| i + 1))
-                    .unwrap_or(0);
-                for w in &self.params.risk_windows {
-                    if let Some(e) = seg_index(&self.segs, &w.until) {
-                        for x in v.iter_mut().take(e + 1).skip(from) {
-                            *x = (w.power, w.foe, w.potions);
+                let window_table = |segs: &[Seg]| -> Vec<(f64, f64, Option<u32>)> {
+                    let mut v = vec![(0.0, 0.0, None); segs.len()];
+                    let mut from = self
+                        .params
+                        .no_salvage_until
+                        .is_empty()
+                        .then_some(0)
+                        .or_else(|| seg_index(segs, &self.params.no_salvage_until).map(|i| i + 1))
+                        .unwrap_or(0);
+                    for w in &self.params.risk_windows {
+                        if let Some(e) = seg_index(segs, &w.until) {
+                            for x in v.iter_mut().take(e + 1).skip(from) {
+                                *x = (w.power, w.foe, w.potions);
+                            }
+                            from = e + 1;
                         }
-                        from = e + 1;
                     }
+                    v
+                };
+                if let Some(canon_variants) = &self.params.risk_canon {
+                    let mut base = self.params.clone();
+                    base.route_variants = canon_variants.clone();
+                    base.risk_canon = None;
+                    let canon = build(self.dex, &base).expect("canonical order builds");
+                    let tab = window_table(&canon);
+                    let by_name: std::collections::HashMap<&str, (f64, f64, Option<u32>)> = canon
+                        .iter()
+                        .map(|s| s.name.as_str())
+                        .zip(tab.iter().copied())
+                        .collect();
+                    let mut last = (0.0, 0.0, None);
+                    self.segs
+                        .iter()
+                        .map(|s| {
+                            if let Some(&w) = by_name.get(s.name.as_str()) {
+                                last = w;
+                            }
+                            last
+                        })
+                        .collect()
+                } else {
+                    window_table(&self.segs)
                 }
-                v
             },
             torrent_end: seg_index(&self.segs, &self.params.torrent_until),
             no_salvage_end: seg_index(&self.segs, &self.params.no_salvage_until),
@@ -886,6 +912,34 @@ mod tests {
         assert_eq!(weak, win(0.7), "same seed, same survivors");
         // A certain flat hazard ends everything, whatever the power.
         assert_eq!(through("\"fatal\":{\"hideout-giovanni\":1.0}"), 0);
+    }
+
+    #[test]
+    fn fill_after_hof_moves_the_oak_check_and_risk_canon_keeps_window_power_by_fight() {
+        let dex = DEX.get_or_init(Dex::load);
+        let base = |extra: &str| {
+            let text = PLAN.replace(
+                "\"name\":\"t\"",
+                &format!("\"name\":\"t\",\"route_style\":\"wr\",\"version\":\"LG\",{extra}"),
+            );
+            Plan::load(dex, &text).unwrap()
+        };
+        let pos = |p: &Plan, n: &str| p.segs.iter().position(|s| s.name == n).unwrap();
+        let early = base("\"fill_after_hof\":false");
+        let late = base("\"fill_after_hof\":true");
+        assert!(pos(&early, "dex-fill") < pos(&early, "hall-of-fame-1"));
+        assert!(pos(&late, "dex-fill") > pos(&late, "hall-of-fame-1"));
+        assert!(pos(&late, "dex-fill") < pos(&late, "oak-national-dex"));
+        // Windows keyed by fight: the same segment gets the same window in a reordered variant.
+        let win = "\"risk_windows\":[{\"until\":\"giovanni-badge\",\"power\":1.5}],\"no_salvage_until\":\"brock\"";
+        let a = base(&format!("{win},\"risk_canon\":[]"));
+        let b = base(&format!(
+            "{win},\"risk_canon\":[],\"route_variants\":[\"erika_pre_silph\"]"
+        ));
+        let (ca, cb) = (a.ctx(), b.ctx());
+        for n in ["rival-silph", "sabrina", "erika"] {
+            assert_eq!(ca.risk_win[pos(&a, n)], cb.risk_win[pos(&b, n)], "{n}");
+        }
     }
 
     #[test]

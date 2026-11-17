@@ -430,10 +430,14 @@ def evidence_ok(p, patch):
     # Rare Candy sources (journal 2026-11-19-14-00): only the item balls the runner's route walks past (Mt. Moon 1F,
     # Rocket Hideout B3F, Pokemon Tower 6F, Silph 10F, Victory Road 1F, the Warden's house) are real; the six hidden
     # candies (Cerulean, Routes 6/9/12/17, Mansion 3F) are not in any stream, and 4-5 candies per run is his count.
+    # 2026-12-04 (journal st-structure): plan 1058 adopted two hidden candies (Route 9, Route 17, decomp-cited); a
+    # candidate may keep what its parent already has but not add a new hidden candy or go past the parent's count.
+    have = p.get('elixirs', [])
     for e in patch.get('elixirs', []):
-        if e.get('kind') == 'candy' and e.get('after') in HIDDEN_CANDY_ANCHORS:
+        if e.get('kind') == 'candy' and e.get('after') in HIDDEN_CANDY_ANCHORS and e not in have:
             return False
-    if sum(e.get('kind') == 'candy' for e in patch.get('elixirs', [])) > 6:
+    cap = max(6, sum(e.get('kind') == 'candy' for e in have))
+    if sum(e.get('kind') == 'candy' for e in patch.get('elixirs', [])) > cap:
         return False
     if 'manip' in patch and patch['manip'].get('min_spe') != p.get('manip', {}).get('min_spe'):
         return False
