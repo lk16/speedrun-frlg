@@ -212,7 +212,7 @@ def candidates(p):
         for a in anchors:
             if a not in names or (get, a) in have:
                 continue
-            if any(s['species'][0] == get and s.get('kind') == 'trade' for s in specials):
+            if any((s.get('species') or [None])[0] == get and s.get('kind') == 'trade' for s in specials):
                 continue
             new = copy.deepcopy(specials)
             new.append({'after': a, 'kind': 'trade', 'species': [get], 'requires': [give], 'frames': frames})

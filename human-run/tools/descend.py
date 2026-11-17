@@ -172,7 +172,7 @@ def candidates(p):
             out.append(('addsite', f'add {site} {area} at position {pos}', {'fill': q}))
     # In-game trades not yet in the plan (decompiled/src/data/ingame_trades.h; Mr. Mime for an Abra at the
     # Route 2 house, Nidoran F for a Nidoran M at the Underground Path north entrance).
-    have_sp = {x['species'][0] for x in p.get('specials', [])}
+    have_sp = {x['species'][0] for x in p.get('specials', []) if x.get('species')}
     for sp, req, after, frames in (('SPECIES_MR_MIME', 'SPECIES_ABRA', 'fly-viridian', 2600),
                                    ('SPECIES_NIDORAN_F', 'SPECIES_NIDORAN_M', 'route5-6', 1500)):
         if sp not in have_sp:
@@ -473,6 +473,10 @@ def gen(p):
         sys.path.insert(0, HERE)
         import dexknobs, honestknobs
         cands = honestknobs.candidates(p) + candidates(p) + dexknobs.candidates(p)
+    elif SET == 'pp':
+        sys.path.insert(0, HERE)
+        import dexknobs, ppknobs
+        cands = ppknobs.candidates(p) + dexknobs.candidates(p) + candidates(p)
     elif SET in ('dex', 'all'):
         sys.path.insert(0, HERE)
         import dexknobs
