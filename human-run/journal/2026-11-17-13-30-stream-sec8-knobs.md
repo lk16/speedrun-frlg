@@ -24,3 +24,5 @@ there is no evidence for 2400. With 3225: 1043 WR+2m -3.8 h [-6.3,-1.5], WR -8.8
 if it is changed it is a model recalibration, worth ~1.5-2.5%.
 
 Addendum: seed 112, R 3.2M, WR rung: HP IV 5 +25.5 h [-3.2,+52.5] (n.s.), Venonat second hunt +154.6 h [+132.7,+180.7]. Verdicts unchanged.
+
+Seed 113 (R 3.2M) ran after all: no-Persim (no cost) WR+2m -5.2 [-7.5,-3.3], WR -12.4 [-17.2,-7.8]; with the guessed Misty cost n.s. (-3.0, -15.9); door gate +0.2/+0.3 (WR +0.3/+0.5). Same verdicts as seed 112.
