@@ -601,6 +601,32 @@ fn main() {
                 );
             }
         }
+        Some("units") => {
+            // units <plan>: the mistake model's exposure of one full run (diagnostic, model unchanged):
+            // the hundreds of walked tiles and mashed or menu inputs that `mistake_rate` is charged on,
+            // the events they give at the plan's rate and their mean frame cost.
+            use frlg_human::route::Kind;
+            let plan = load(&args[1]);
+            let ctx = plan.ctx();
+            let (mut tiles, mut inputs) = (0u64, 0u64);
+            for s in ctx.segs.iter().filter(|s| !s.off_timer) {
+                match &s.kind {
+                    Kind::Text { .. } => inputs += s.inputs as u64,
+                    Kind::Walk { tiles: t, .. } => tiles += *t as u64,
+                    _ => {}
+                }
+            }
+            let rate = plan.params.mistake_rate;
+            let (lo, hi) = (plan.params.react_lo as f64, plan.params.react_hi as f64);
+            let per_event = (60.0 + 299.0) / 2.0 + (lo + hi) / 2.0;
+            let units = (tiles + inputs) as f64 / 100.0;
+            println!(
+                "tiles {tiles} inputs {inputs} units(100) {units:.1} | rate {rate} -> events/run {:.1}, {per_event:.0} f ({:.2} s) per event, {:.0} s per run",
+                units * rate,
+                per_event / FPS,
+                units * rate * per_event / FPS
+            );
+        }
         Some("splits") => {
             // splits <plan> [--R n] [--all]: no-reset cumulative clock at each WR split (or every segment).
             let plan = load(&args[1]);

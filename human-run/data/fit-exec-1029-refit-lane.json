@@ -1,0 +1,75 @@
+{
+ "plan": "1029-refit-lane",
+ "mistakes": {
+  "units": 109.8,
+  "s_per_event": 3.38,
+  "plan_rate": 0.3,
+  "plan_s_per_run": 111.202,
+  "obs_s": 60.0,
+  "rate": 0.16167103178452485,
+  "lo": 0.0701601375827167,
+  "hi": 0.37254092450228576,
+  "sd_log": 0.4259098436667069
+ },
+ "trainer_fit": {
+  "rows": [
+   {
+    "tf": 0.6,
+    "mean_logratio": -0.08931108155787802,
+    "sd": 0.13320495210886188,
+    "door_mean_s": 8765
+   },
+   {
+    "tf": 0.65,
+    "mean_logratio": -0.05512133916064631,
+    "sd": 0.13050799688500056,
+    "door_mean_s": 8894
+   },
+   {
+    "tf": 0.7,
+    "mean_logratio": -0.016649928445888727,
+    "sd": 0.13139113268407637,
+    "door_mean_s": 8985
+   },
+   {
+    "tf": 0.75,
+    "mean_logratio": 0.017797098647463542,
+    "sd": 0.12876507408225468,
+    "door_mean_s": 9135
+   },
+   {
+    "tf": 0.8,
+    "mean_logratio": 0.04765391925504934,
+    "sd": 0.12270119441036993,
+    "door_mean_s": 9229
+   },
+   {
+    "tf": 0.85,
+    "mean_logratio": 0.0812733375044829,
+    "sd": 0.12265514804805164,
+    "door_mean_s": 9355
+   },
+   {
+    "tf": 0.9,
+    "mean_logratio": 0.11514659183740139,
+    "sd": 0.1211507712516103,
+    "door_mean_s": 9485
+   }
+  ],
+  "slope": 0.6789044437264533,
+  "fit": 0.7287917559130238,
+  "se": 0.06624023914745865,
+  "lo": 0.5989608871840049,
+  "hi": 0.8586226246420428
+ },
+ "door": {
+  "runner_arrivals_s": [
+   9577,
+   9720,
+   9900,
+   10140
+  ],
+  "runner_mean_s": 9834.25,
+  "note": "4 of the 5 door arrivals (the 5th, the finisher, is at ~2:40:00-2:42:00 by its 3:29:05 end and a 47-49 min post-game); the model (plan, no resets) mean/p10/p90 is in rows[*].door_mean_s"
+ }
+}
