@@ -196,6 +196,7 @@ pub struct Outcome {
     pub kind: u8,
 }
 
+#[derive(Clone)]
 struct State {
     /// The active target in frames (None = no resets) and the clock when the League began.
     target: Option<u64>,
@@ -1799,6 +1800,42 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     }
 }
 
+/// Soft-reset to the last save (`Params::reload_save_at`): `lost` frames of the dying fight and the reload
+/// are added to the clock, the saved state comes back, and the segment to replay from is returned; `None`
+/// when there is no save, no reload left, or the replay no longer fits the target.
+fn try_reload(
+    ctx: &Ctx,
+    st: &mut State,
+    ckpt: &Option<(usize, State)>,
+    reloads: &mut u32,
+    lost: f64,
+) -> Option<usize> {
+    let (ci, snap) = ckpt.as_ref()?;
+    if *reloads >= ctx.p.reload_max {
+        return None;
+    }
+    let t = st.target?;
+    let now = st.clock + (lost + ctx.p.reload_frames as f64 * ctx.p.text_factor).round() as u64;
+    let k = ci.saturating_sub(1);
+    let fl = if *ci > 0 {
+        ctx.floor_after[k] as f64
+    } else {
+        0.0
+    };
+    let mean = if *ci > 0 { ctx.mean_after[k] } else { fl };
+    if now as f64 + fl + ctx.p.reload_aggr * (mean - fl).max(0.0) > t as f64 {
+        return None;
+    }
+    let (off, whiteouts) = (st.off, st.whiteouts + 1);
+    *st = snap.clone();
+    st.clock = now;
+    st.off = off;
+    st.whiteouts = whiteouts;
+    st.abandoned = false;
+    *reloads += 1;
+    Some(*ci)
+}
+
 /// The risk lane of one fight (`Params::risk_until`): the same fight again with the formula's own
 /// damage (`risk_power`), foes scaled by the noise knob `risk_foe`, from the lane's own HP and with a
 /// finite potion budget. Returns true when the carry faints in it (or the fight's `risk_noise` draw
@@ -2624,63 +2661,108 @@ pub fn attempt(
     });
     let adj_table: Option<&Vec<(u8, f64, f64)>> =
         target.and_then(|t| ctx.cut_adj.iter().find(|(tt, _)| *tt == t).map(|(_, v)| v));
-    for (i, seg) in ctx.segs.iter().enumerate() {
-        let mut rng = Rng::new(seed, idx, hash_str(&seg.name));
-        // The game's stream, re-keyed per segment (see `GameRng`).
-        st.game = GameRng::from_u32(rng.next_u64() as u32);
-        let before = st.clock;
-        let wo_before = st.whiteouts;
-        st.seg_i = i;
-        if seg.name == "indigo-heal" || seg.name == "league-entry" {
-            st.league_t0 = st.clock;
-        }
-        // The Torrent phase walks past the Pokémon Centers it would have stopped at.
-        let skip_heal = seg.name.starts_with("center-heal@")
-            && ctx.torrent_end.is_some_and(|e| i <= e)
-            && !st.torrent_lost;
-        // Fidelity fit: an unsalvaged death in this segment (evaluation runs only).
-        if target.is_some() && !ctx.p.fatal.is_empty() {
-            if let Some(&p) = ctx.p.fatal.get(&seg.name) {
-                if Rng::new(seed, idx, hash_str(&seg.name) ^ 0xFA7A_1D1E).chance(p) {
-                    st.abandoned = true;
-                    st.whiteouts += 1;
-                    if let Some(r) = rec.as_deref_mut() {
-                        r[i].abandons += 1;
-                        r[i].whiteouts += 1;
+    let mut start = 0usize;
+    let mut reloads = 0u32;
+    let mut ckpt: Option<(usize, State)> = None;
+    'attempt: loop {
+        for (i, seg) in ctx.segs.iter().enumerate().skip(start) {
+            let salt = (reloads as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            let mut rng = Rng::new(seed, idx, hash_str(&seg.name) ^ salt);
+            // The game's stream, re-keyed per segment (see `GameRng`).
+            st.game = GameRng::from_u32(rng.next_u64() as u32);
+            let before = st.clock;
+            let wo_before = st.whiteouts;
+            st.seg_i = i;
+            if seg.name == "indigo-heal" || seg.name == "league-entry" {
+                st.league_t0 = st.clock;
+            }
+            // The Torrent phase walks past the Pokémon Centers it would have stopped at.
+            let skip_heal = seg.name.starts_with("center-heal@")
+                && ctx.torrent_end.is_some_and(|e| i <= e)
+                && !st.torrent_lost;
+            // Save point (`Params::reload_save_at`): the human saves before this segment.
+            if target.is_some()
+                && !ctx.p.reload_save_at.is_empty()
+                && ckpt.as_ref().is_none_or(|c| c.0 != i)
+                && ctx.p.reload_save_at.iter().any(|n| *n == seg.name)
+            {
+                bump(&mut st, ctx.p.reload_save_frames as f64 * ctx.p.text_factor);
+                ckpt = Some((i, st.clone()));
+            }
+            // Fidelity fit: an unsalvaged death in this segment (evaluation runs only).
+            if target.is_some() && !ctx.p.fatal.is_empty() {
+                if let Some(&p) = ctx.p.fatal.get(&seg.name) {
+                    if Rng::new(seed, idx, hash_str(&seg.name) ^ 0xFA7A_1D1E ^ salt).chance(p) {
+                        if let Some(ci) = try_reload(
+                            ctx,
+                            &mut st,
+                            &ckpt,
+                            &mut reloads,
+                            ctx.p.reload_fatal_frames as f64,
+                        ) {
+                            start = ci;
+                            continue 'attempt;
+                        }
+                        st.abandoned = true;
+                        st.whiteouts += 1;
+                        if let Some(r) = rec.as_deref_mut() {
+                            r[i].abandons += 1;
+                            r[i].whiteouts += 1;
+                        }
+                        break;
                     }
-                    break;
                 }
             }
-        }
-        let skipped = behind > ctx.cond_skip[i];
-        if skipped {
-            if let Some(r) = rec.as_deref_mut() {
-                r[i].skips += 1;
-            }
-        }
-        match &seg.kind {
-            _ if skipped => {}
-            Kind::Text { frames } => {
-                if !skip_heal {
-                    bump(&mut st, *frames as f64 * ctx.p.text_factor);
+            let skipped = behind > ctx.cond_skip[i];
+            if skipped {
+                if let Some(r) = rec.as_deref_mut() {
+                    r[i].skips += 1;
                 }
-                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
-                bump(&mut st, mistakes(ctx, &mut rng, seg.inputs as f64 / 100.0));
             }
-            Kind::Walk { tiles, era, enc } => {
-                bump(
-                    &mut st,
-                    *tiles as f64 * era.frames_per_tile() * ctx.p.path_overhead,
-                );
-                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
-                bump(&mut st, mistakes(ctx, &mut rng, *tiles as f64 / 100.0));
-                if let Some(e) = enc {
-                    let covered = use_repels(ctx, &mut st, seg, *tiles);
-                    let guarded = (e.steps as u64 * covered as u64 / (*tiles).max(1) as u64) as u32;
-                    for (steps, repel) in [(guarded, true), (e.steps - guarded, false)] {
+            match &seg.kind {
+                _ if skipped => {}
+                Kind::Text { frames } => {
+                    if !skip_heal {
+                        bump(&mut st, *frames as f64 * ctx.p.text_factor);
+                    }
+                    bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                    bump(&mut st, mistakes(ctx, &mut rng, seg.inputs as f64 / 100.0));
+                }
+                Kind::Walk { tiles, era, enc } => {
+                    bump(
+                        &mut st,
+                        *tiles as f64 * era.frames_per_tile() * ctx.p.path_overhead,
+                    );
+                    bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                    bump(&mut st, mistakes(ctx, &mut rng, *tiles as f64 / 100.0));
+                    if let Some(e) = enc {
+                        let covered = use_repels(ctx, &mut st, seg, *tiles);
+                        let guarded =
+                            (e.steps as u64 * covered as u64 / (*tiles).max(1) as u64) as u32;
+                        for (steps, repel) in [(guarded, true), (e.steps - guarded, false)] {
+                            let args = EncArgs {
+                                site: &e.site,
+                                area: e.area,
+                                steps,
+                                era: *era,
+                                skip: &[],
+                                stop_when_done: false,
+                                repel,
+                                repel_lvl: 0,
+                                stop_new: 0,
+                                pass_catch: !ctx.p.pass_off.contains(&seg.name),
+                            };
+                            run_encounters(ctx, &mut st, &mut rng, &args);
+                        }
+                    }
+                }
+                Kind::Wander { enc, era } => {
+                    let covered = use_repels(ctx, &mut st, seg, enc.steps);
+                    let guarded = covered.min(enc.steps);
+                    for (steps, repel) in [(guarded, true), (enc.steps - guarded, false)] {
                         let args = EncArgs {
-                            site: &e.site,
-                            area: e.area,
+                            site: &enc.site,
+                            area: enc.area,
                             steps,
                             era: *era,
                             skip: &[],
@@ -2693,73 +2775,17 @@ pub fn attempt(
                         run_encounters(ctx, &mut st, &mut rng, &args);
                     }
                 }
-            }
-            Kind::Wander { enc, era } => {
-                let covered = use_repels(ctx, &mut st, seg, enc.steps);
-                let guarded = covered.min(enc.steps);
-                for (steps, repel) in [(guarded, true), (enc.steps - guarded, false)] {
-                    let args = EncArgs {
-                        site: &enc.site,
-                        area: enc.area,
-                        steps,
-                        era: *era,
-                        skip: &[],
-                        stop_when_done: false,
-                        repel,
-                        repel_lvl: 0,
-                        stop_new: 0,
-                        pass_catch: !ctx.p.pass_off.contains(&seg.name),
-                    };
-                    run_encounters(ctx, &mut st, &mut rng, &args);
-                }
-            }
-            Kind::Trainer {
-                party,
-                intro,
-                adv,
-                money,
-                full,
-                ai,
-                heals,
-            } => {
-                if ctx.p.battle_sim && !full.is_empty() {
-                    let foes: Vec<_> = full
-                        .iter()
-                        .map(|m| crate::battle::enemy_mon(ctx.dex, m))
-                        .collect();
-                    let args = BattleArgs {
-                        name: &seg.name,
-                        foes: &foes,
-                        trainer: true,
-                        intro: *intro,
-                        ai: *ai,
-                        heals: *heals,
-                        yield_: None,
-                        league: is_league(&seg.name),
-                        wild: false,
-                    };
-                    if !sim_battle(ctx, &mut st, &mut rng, &args) {
-                        break;
-                    }
-                } else {
-                    let enemies = enemy_list(ctx, &st, party);
-                    let hand = if ctx.p.type_strength > 0.0 { 1.0 } else { *adv };
-                    if !battle(ctx, &mut st, &mut rng, &enemies, true, *intro, hand) {
-                        break;
-                    }
-                }
-                st.money += *money;
-            }
-            Kind::Parties {
-                parties,
-                money,
-                fulls,
-                ais,
-            } => {
-                let mut ok = true;
-                for (pi, p) in parties.iter().enumerate() {
-                    if ctx.p.battle_sim && fulls.get(pi).is_some_and(|f| !f.is_empty()) {
-                        let foes: Vec<_> = fulls[pi]
+                Kind::Trainer {
+                    party,
+                    intro,
+                    adv,
+                    money,
+                    full,
+                    ai,
+                    heals,
+                } => {
+                    if ctx.p.battle_sim && !full.is_empty() {
+                        let foes: Vec<_> = full
                             .iter()
                             .map(|m| crate::battle::enemy_mon(ctx.dex, m))
                             .collect();
@@ -2767,742 +2793,627 @@ pub fn attempt(
                             name: &seg.name,
                             foes: &foes,
                             trainer: true,
-                            intro: 600,
-                            ai: ais.get(pi).copied().unwrap_or(1),
-                            heals: 0,
+                            intro: *intro,
+                            ai: *ai,
+                            heals: *heals,
                             yield_: None,
                             league: is_league(&seg.name),
                             wild: false,
                         };
                         if !sim_battle(ctx, &mut st, &mut rng, &args) {
+                            break;
+                        }
+                    } else {
+                        let enemies = enemy_list(ctx, &st, party);
+                        let hand = if ctx.p.type_strength > 0.0 { 1.0 } else { *adv };
+                        if !battle(ctx, &mut st, &mut rng, &enemies, true, *intro, hand) {
+                            break;
+                        }
+                    }
+                    st.money += *money;
+                }
+                Kind::Parties {
+                    parties,
+                    money,
+                    fulls,
+                    ais,
+                } => {
+                    let mut ok = true;
+                    for (pi, p) in parties.iter().enumerate() {
+                        if ctx.p.battle_sim && fulls.get(pi).is_some_and(|f| !f.is_empty()) {
+                            let foes: Vec<_> = fulls[pi]
+                                .iter()
+                                .map(|m| crate::battle::enemy_mon(ctx.dex, m))
+                                .collect();
+                            let args = BattleArgs {
+                                name: &seg.name,
+                                foes: &foes,
+                                trainer: true,
+                                intro: 600,
+                                ai: ais.get(pi).copied().unwrap_or(1),
+                                heals: 0,
+                                yield_: None,
+                                league: is_league(&seg.name),
+                                wild: false,
+                            };
+                            if !sim_battle(ctx, &mut st, &mut rng, &args) {
+                                ok = false;
+                                break;
+                            }
+                            continue;
+                        }
+                        let enemies = enemy_list(ctx, &st, p);
+                        if !battle(ctx, &mut st, &mut rng, &enemies, true, 600, 1.0) {
                             ok = false;
                             break;
                         }
-                        continue;
                     }
-                    let enemies = enemy_list(ctx, &st, p);
-                    if !battle(ctx, &mut st, &mut rng, &enemies, true, 600, 1.0) {
-                        ok = false;
+                    if !ok {
                         break;
                     }
+                    st.money += *money;
                 }
-                if !ok {
-                    break;
-                }
-                st.money += *money;
-            }
-            Kind::Group {
-                n,
-                mons,
-                level,
-                yield_,
-            } => {
-                if hazard_death(ctx, &mut st, &mut rng, &seg.name) {
-                    break;
-                }
-                if !group_battle(ctx, &mut st, &mut rng, *n, *mons, *level, *yield_) {
-                    break;
-                }
-                // Class value 5 is a guess; the formula is `battle_script_commands.c:5373`.
-                st.money += n * 4 * level * 5;
-            }
-            Kind::Hunt { hunt: h, era } => hunt(ctx, &mut st, &mut rng, h, *era),
-            Kind::Grind {
-                battles,
-                level,
-                yield_,
-            } => {
-                for _ in 0..*battles {
-                    let gap = rng.geometric(0.07) + 1;
-                    bump(
-                        &mut st,
-                        gap as f64 * Era::Run.frames_per_tile() + ctx.enc_intro(),
-                    );
-                    let t =
-                        turns_per_mon(*level as f64, effective_level(&st, ctx.p), st.strength, 1.0);
-                    bump(&mut st, t * ctx.turn() + ctx.mon_overhead());
-                    let g = add_exp(ctx, &mut st, exp_gain(*yield_ as u8, *level as u8, false));
-                    bump(&mut st, g as f64 * ctx.level_up());
-                }
-            }
-            Kind::OakCheck => {
-                if let Some(pr) = probe.as_deref_mut() {
-                    pr.oak_count = st.caught.count();
-                    pr.oak_missing = (1..=151).filter(|&d| !st.caught.has(d)).collect();
-                }
-                // Once the list is exhausted the human goes round it again (at most 6 times).
-                let rounds = if ctx.p.fill.is_empty() { 0 } else { 6 };
-                for (hi, h) in (0..rounds).flat_map(|_| ctx.p.fill.iter().enumerate()) {
-                    if st.caught.count() >= 60 {
+                Kind::Group {
+                    n,
+                    mons,
+                    level,
+                    yield_,
+                } => {
+                    if hazard_death(ctx, &mut st, &mut rng, &seg.name) {
                         break;
                     }
-                    let (c0, n0) = (st.clock, st.caught.count());
-                    // The Power Plant forbids cycling (`allow_cycling` in its map.json).
-                    let era = if ctx.p.hunt_bike && ctx.p.bike && h.site != "MAP_POWER_PLANT" {
-                        Era::Bike
-                    } else {
-                        Era::Run
-                    };
-                    hunt(ctx, &mut st, &mut rng, h, era);
+                    if !group_battle(ctx, &mut st, &mut rng, *n, *mons, *level, *yield_) {
+                        break;
+                    }
+                    // Class value 5 is a guess; the formula is `battle_script_commands.c:5373`.
+                    st.money += n * 4 * level * 5;
+                }
+                Kind::Hunt { hunt: h, era } => hunt(ctx, &mut st, &mut rng, h, *era),
+                Kind::Grind {
+                    battles,
+                    level,
+                    yield_,
+                } => {
+                    for _ in 0..*battles {
+                        let gap = rng.geometric(0.07) + 1;
+                        bump(
+                            &mut st,
+                            gap as f64 * Era::Run.frames_per_tile() + ctx.enc_intro(),
+                        );
+                        let t = turns_per_mon(
+                            *level as f64,
+                            effective_level(&st, ctx.p),
+                            st.strength,
+                            1.0,
+                        );
+                        bump(&mut st, t * ctx.turn() + ctx.mon_overhead());
+                        let g = add_exp(ctx, &mut st, exp_gain(*yield_ as u8, *level as u8, false));
+                        bump(&mut st, g as f64 * ctx.level_up());
+                    }
+                }
+                Kind::OakCheck => {
                     if let Some(pr) = probe.as_deref_mut() {
-                        if pr.fill.len() <= hi {
-                            pr.fill.resize(hi + 1, (0.0, 0.0, 0));
-                        }
-                        let e = &mut pr.fill[hi];
-                        e.0 += (st.clock - c0) as f64;
-                        e.1 += (st.caught.count() - n0) as f64;
-                        e.2 += 1;
+                        pr.oak_count = st.caught.count();
+                        pr.oak_missing = (1..=151).filter(|&d| !st.caught.has(d)).collect();
                     }
-                    if let Some(t) = target {
-                        let left = if ctx.p.dex_resets {
-                            ctx.fill_slope * (60.0 - st.caught.count() as f64).max(0.0)
+                    // Once the list is exhausted the human goes round it again (at most 6 times).
+                    let rounds = if ctx.p.fill.is_empty() { 0 } else { 6 };
+                    for (hi, h) in (0..rounds).flat_map(|_| ctx.p.fill.iter().enumerate()) {
+                        if st.caught.count() >= 60 {
+                            break;
+                        }
+                        let (c0, n0) = (st.clock, st.caught.count());
+                        // The Power Plant forbids cycling (`allow_cycling` in its map.json).
+                        let era = if ctx.p.hunt_bike && ctx.p.bike && h.site != "MAP_POWER_PLANT" {
+                            Era::Bike
                         } else {
-                            0.0
+                            Era::Run
                         };
-                        let rem = ctx.floor_after[i] as f64
-                            + ctx.aggr[i]
-                                * (ctx.mean_after[i] + left - ctx.floor_after[i] as f64).max(0.0);
-                        if st.caught.count() < 60 && st.clock as f64 + rem > t as f64 {
-                            if let Some(r) = rec.as_deref_mut() {
-                                r[i].resets += 1;
+                        hunt(ctx, &mut st, &mut rng, h, era);
+                        if let Some(pr) = probe.as_deref_mut() {
+                            if pr.fill.len() <= hi {
+                                pr.fill.resize(hi + 1, (0.0, 0.0, 0));
                             }
-                            return Outcome {
-                                wall: st.clock + st.off,
-                                run: st.clock,
-                                finished: false,
-                                caught: st.caught.count(),
-                                whiteouts: st.whiteouts,
-                                off: st.off,
-                                end_seg: st.seg_i as u32,
-                                kind: 1,
+                            let e = &mut pr.fill[hi];
+                            e.0 += (st.clock - c0) as f64;
+                            e.1 += (st.caught.count() - n0) as f64;
+                            e.2 += 1;
+                        }
+                        if let Some(t) = target {
+                            let left = if ctx.p.dex_resets {
+                                ctx.fill_slope * (60.0 - st.caught.count() as f64).max(0.0)
+                            } else {
+                                0.0
                             };
+                            let rem = ctx.floor_after[i] as f64
+                                + ctx.aggr[i]
+                                    * (ctx.mean_after[i] + left - ctx.floor_after[i] as f64)
+                                        .max(0.0);
+                            if st.caught.count() < 60 && st.clock as f64 + rem > t as f64 {
+                                if let Some(r) = rec.as_deref_mut() {
+                                    r[i].resets += 1;
+                                }
+                                return Outcome {
+                                    wall: st.clock + st.off,
+                                    run: st.clock,
+                                    finished: false,
+                                    caught: st.caught.count(),
+                                    whiteouts: st.whiteouts,
+                                    off: st.off,
+                                    end_seg: st.seg_i as u32,
+                                    kind: 1,
+                                };
+                            }
                         }
                     }
-                }
-                if st.caught.count() < 60 {
-                    if let Some(pr) = probe.as_deref_mut() {
-                        pr.missing = (1..=151).filter(|&d| !st.caught.has(d)).collect();
+                    if st.caught.count() < 60 {
+                        if let Some(pr) = probe.as_deref_mut() {
+                            pr.missing = (1..=151).filter(|&d| !st.caught.has(d)).collect();
+                        }
+                        st.abandoned = true;
+                        break;
                     }
-                    st.abandoned = true;
-                    break;
                 }
-            }
-            Kind::Stones => {
-                for s in &ctx.p.stones {
-                    let want = format!("ITEM_{s}_STONE");
-                    // Bought in Celadon (Fire/Thunder/Water/Leaf) or picked up (Moon). guess frames.
-                    bump(
-                        &mut st,
-                        if s == "MOON" { 500.0 } else { 1500.0 } * ctx.p.text_factor,
-                    );
-                    'found: for sp in &ctx.dex.species {
-                        for (k, param, target) in &sp.evo {
-                            if k == "EVO_ITEM"
-                                && *param == want
-                                && sp.dex != 0
-                                && st.caught.has(sp.dex)
-                            {
-                                let t = ctx.dex.species[*target].dex;
-                                if !st.caught.has(t) {
-                                    let lv = st.catch_lv[sp.dex as usize] as u32;
-                                    got(&mut st, t, lv);
-                                    bump(&mut st, 700.0 * ctx.p.text_factor);
-                                    break 'found;
+                Kind::Stones => {
+                    for s in &ctx.p.stones {
+                        let want = format!("ITEM_{s}_STONE");
+                        // Bought in Celadon (Fire/Thunder/Water/Leaf) or picked up (Moon). guess frames.
+                        bump(
+                            &mut st,
+                            if s == "MOON" { 500.0 } else { 1500.0 } * ctx.p.text_factor,
+                        );
+                        'found: for sp in &ctx.dex.species {
+                            for (k, param, target) in &sp.evo {
+                                if k == "EVO_ITEM"
+                                    && *param == want
+                                    && sp.dex != 0
+                                    && st.caught.has(sp.dex)
+                                {
+                                    let t = ctx.dex.species[*target].dex;
+                                    if !st.caught.has(t) {
+                                        let lv = st.catch_lv[sp.dex as usize] as u32;
+                                        got(&mut st, t, lv);
+                                        bump(&mut st, 700.0 * ctx.p.text_factor);
+                                        break 'found;
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-            Kind::Special { special }
-                if special.requires.iter().any(|r| {
-                    let d = ctx.dex.species[ctx.dex.id(r)].dex;
-                    st.bodies[d as usize] == 0
-                }) => {}
-            Kind::Special { special }
-                if special.kind == "buy"
-                    && (special
-                        .species
-                        .iter()
-                        .all(|n| st.caught.has(ctx.dex.species[ctx.dex.id(n)].dex))
-                        || (ctx.p.money_model && st.money < special.cost)) => {}
-            Kind::Special { special } => {
-                if special.kind == "buy" && ctx.p.money_model {
-                    st.money -= special.cost;
-                }
-                if special.kind == "trade" {
-                    let req: Vec<u32> = special
-                        .requires
-                        .iter()
-                        .map(|r| ctx.dex.species[ctx.dex.id(r)].dex)
-                        .collect();
-                    pc_visit(ctx, &mut st, &req, &special.after);
-                    for &d in &req {
-                        st.bodies[d as usize] -= 1;
+                Kind::Special { special }
+                    if special.requires.iter().any(|r| {
+                        let d = ctx.dex.species[ctx.dex.id(r)].dex;
+                        st.bodies[d as usize] == 0
+                    }) => {}
+                Kind::Special { special }
+                    if special.kind == "buy"
+                        && (special
+                            .species
+                            .iter()
+                            .all(|n| st.caught.has(ctx.dex.species[ctx.dex.id(n)].dex))
+                            || (ctx.p.money_model && st.money < special.cost)) => {}
+                Kind::Special { special } => {
+                    if special.kind == "buy" && ctx.p.money_model {
+                        st.money -= special.cost;
+                    }
+                    if special.kind == "trade" {
+                        let req: Vec<u32> = special
+                            .requires
+                            .iter()
+                            .map(|r| ctx.dex.species[ctx.dex.id(r)].dex)
+                            .collect();
+                        pc_visit(ctx, &mut st, &req, &special.after);
+                        for &d in &req {
+                            st.bodies[d as usize] -= 1;
+                        }
+                    }
+                    bump(&mut st, special.frames as f64 * ctx.p.text_factor);
+                    bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                    for n in &special.species {
+                        let id = ctx.dex.id(n);
+                        let sp = &ctx.dex.species[id];
+                        if special.kind == "gift"
+                            || special.kind == "trade"
+                            || special.kind == "buy"
+                        {
+                            st.cur_src = match special.kind.as_str() {
+                                "trade" => 2,
+                                "buy" => 3,
+                                _ => 1,
+                            };
+                            got(&mut st, sp.dex, special.level);
+                            st.cur_src = 0;
+                        } else {
+                            bump(&mut st, ctx.enc_intro() + react(ctx, &mut rng) as f64);
+                            let turns = (((1.0 - special.hp_frac) / 0.25).ceil() as u32).max(1);
+                            bump(&mut st, turns as f64 * ctx.turn());
+                            if rng.chance((0.04 * turns as f64).min(0.9)) {
+                                continue;
+                            }
+                            let ball = match special.ball.as_str() {
+                                "poke" => 10,
+                                "great" => 15,
+                                _ => 20,
+                            };
+                            if throw_balls(
+                                ctx,
+                                &mut st,
+                                &mut rng,
+                                sp.catch_rate,
+                                special.hp_frac,
+                                Status1::None,
+                                Some(ball),
+                                special.max_throws,
+                            ) {
+                                got(&mut st, sp.dex, special.level);
+                                if sp.dex != 0
+                                    && (special.level as f64 * ctx.p.power_bonus) > st.power
+                                    && special.level >= 60
+                                {
+                                    st.power = special.level as f64 * ctx.p.power_bonus;
+                                }
+                            }
+                        }
                     }
                 }
-                bump(&mut st, special.frames as f64 * ctx.p.text_factor);
-                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
-                for n in &special.species {
-                    let id = ctx.dex.id(n);
-                    let sp = &ctx.dex.species[id];
-                    if special.kind == "gift" || special.kind == "trade" || special.kind == "buy" {
-                        st.cur_src = match special.kind.as_str() {
-                            "trade" => 2,
-                            "buy" => 3,
-                            _ => 1,
-                        };
-                        got(&mut st, sp.dex, special.level);
-                        st.cur_src = 0;
-                    } else {
-                        bump(&mut st, ctx.enc_intro() + react(ctx, &mut rng) as f64);
-                        let turns = (((1.0 - special.hp_frac) / 0.25).ceil() as u32).max(1);
-                        bump(&mut st, turns as f64 * ctx.turn());
-                        if rng.chance((0.04 * turns as f64).min(0.9)) {
+                Kind::Evolve { evo } => {
+                    evolve(ctx, &mut st, &mut rng, evo, seg);
+                }
+                Kind::Mart { mart } => {
+                    bump(&mut st, MART as f64 * ctx.p.text_factor);
+                    bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                    for (t, want) in [(0, mart.poke), (1, mart.great), (2, mart.ultra)] {
+                        if t > st.max_tier {
                             continue;
                         }
-                        let ball = match special.ball.as_str() {
-                            "poke" => 10,
-                            "great" => 15,
-                            _ => 20,
-                        };
-                        if throw_balls(
-                            ctx,
-                            &mut st,
-                            &mut rng,
-                            sp.catch_rate,
-                            special.hp_frac,
-                            Status1::None,
-                            Some(ball),
-                            special.max_throws,
-                        ) {
-                            got(&mut st, sp.dex, special.level);
-                            if sp.dex != 0
-                                && (special.level as f64 * ctx.p.power_bonus) > st.power
-                                && special.level >= 60
-                            {
-                                st.power = special.level as f64 * ctx.p.power_bonus;
-                            }
-                        }
+                        let qty = want.min(st.money / BALL_PRICE[t]);
+                        st.money -= qty * BALL_PRICE[t];
+                        st.balls[t] += qty;
                     }
                 }
-            }
-            Kind::Evolve { evo } => {
-                evolve(ctx, &mut st, &mut rng, evo, seg);
-            }
-            Kind::Mart { mart } => {
-                bump(&mut st, MART as f64 * ctx.p.text_factor);
-                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
-                for (t, want) in [(0, mart.poke), (1, mart.great), (2, mart.ultra)] {
-                    if t > st.max_tier {
-                        continue;
-                    }
-                    let qty = want.min(st.money / BALL_PRICE[t]);
-                    st.money -= qty * BALL_PRICE[t];
-                    st.balls[t] += qty;
-                }
-            }
-            Kind::TeleportOrWalk { frames, tiles } => {
-                // Abra is national dex 63.
-                if st.caught.has(63) {
-                    bump(&mut st, *frames as f64 * ctx.p.text_factor);
-                } else {
-                    bump(
-                        &mut st,
-                        *tiles as f64 * Era::Run.frames_per_tile() * ctx.p.path_overhead,
-                    );
-                }
-                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
-            }
-            Kind::Mewtwo => {
-                bump(&mut st, 1500.0 * ctx.p.text_factor);
-                bump(&mut st, ctx.throw_cost() + ctx.catch_end());
-                got(&mut st, 150, 70);
-                st.power = 70.0 * ctx.p.power_bonus;
-                // Roll its IVs and nature like any wild mon (`pokemon.c`, `CreateBoxMon`:
-                // personality then two IV words); its default level-70 moves are
-                // Swift/Recover/Safeguard/Psychic (`level_up_learnsets.h`), extended by
-                // `tms` entries with `mewtwo: true`.
-                let mut g = st.game;
-                let pid = (g.roll() as u32) | ((g.roll() as u32) << 16);
-                let iv1 = g.roll() as u32;
-                let iv2 = g.roll() as u32;
-                st.game = g;
-                let ivs = [
-                    iv1 & 0x1F,
-                    (iv1 >> 5) & 0x1F,
-                    (iv1 >> 10) & 0x1F,
-                    iv2 & 0x1F,
-                    (iv2 >> 5) & 0x1F,
-                    (iv2 >> 10) & 0x1F,
-                ];
-                st.mewtwo = Some((ivs, (pid % 25) as u8));
-                st.mewtwo_exp = slow_exp(70);
-                if st.mewtwo_moves.is_empty() {
-                    st.mewtwo_moves = ctx.dex.default_moves(ctx.dex.id("SPECIES_MEWTWO"), 70);
-                }
-                restore_mewtwo_pp(ctx, &mut st);
-            }
-            Kind::Teach { teach } => {
-                let mv = ctx.dex.move_id(&teach.mv);
-                let mewtwo_sp = ctx.dex.id("SPECIES_MEWTWO");
-                let learner = if teach.mewtwo {
-                    mewtwo_sp
-                } else {
-                    carry_species(ctx, st.carry)
-                };
-                let affordable = !ctx.p.money_model || st.money >= teach.cost;
-                let is_hm = matches!(
-                    ctx.dex.moves[mv].name.as_str(),
-                    "MOVE_CUT"
-                        | "MOVE_FLY"
-                        | "MOVE_SURF"
-                        | "MOVE_STRENGTH"
-                        | "MOVE_FLASH"
-                        | "MOVE_ROCK_SMASH"
-                        | "MOVE_WATERFALL"
-                        | "MOVE_DIVE"
-                );
-                let possible = can_learn(ctx, learner, mv)
-                    && (!teach.mewtwo || st.mewtwo.is_some())
-                    && (is_hm || !st.taught_once.contains(&mv));
-                if affordable && possible {
-                    if ctx.p.money_model {
-                        st.money -= teach.cost;
-                    }
-                    if !is_hm {
-                        st.taught_once.push(mv);
-                    }
-                    bump(&mut st, teach.frames as f64 * ctx.p.text_factor);
-                    bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
-                    if teach.mewtwo {
-                        if st.mewtwo_moves.len() < 4 {
-                            st.mewtwo_moves.push(mv);
-                            st.mewtwo_pp.push(ctx.dex.moves[mv].pp as i32);
-                        } else {
-                            // Psychic and Recover stay; the weakest other slot goes
-                            // (Safeguard, then Swift, then an earlier teach).
-                            let keep: Vec<usize> = if ctx.p.mewtwo_keep.is_empty() {
-                                vec![
-                                    ctx.dex.move_id("MOVE_PSYCHIC"),
-                                    ctx.dex.move_id("MOVE_RECOVER"),
-                                ]
-                            } else {
-                                ctx.p
-                                    .mewtwo_keep
-                                    .iter()
-                                    .map(|m| ctx.dex.move_id(m))
-                                    .collect()
-                            };
-                            if let Some(i) = st
-                                .mewtwo_moves
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, m)| !keep.contains(m))
-                                .min_by_key(|(_, &m)| ctx.dex.moves[m].power)
-                                .map(|(i, _)| i)
-                            {
-                                st.mewtwo_moves[i] = mv;
-                                st.mewtwo_pp[i] = ctx.dex.moves[mv].pp as i32;
-                            }
-                        }
+                Kind::TeleportOrWalk { frames, tiles } => {
+                    // Abra is national dex 63.
+                    if st.caught.has(63) {
+                        bump(&mut st, *frames as f64 * ctx.p.text_factor);
                     } else {
-                        offer_move(ctx, &mut st, mv, true);
-                    }
-                }
-            }
-            Kind::Elixir { pickup } => {
-                bump(&mut st, pickup.frames as f64 * ctx.p.text_factor);
-                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
-                match pickup.kind.as_str() {
-                    "max" => st.max_elixirs += 1,
-                    "candy" if ctx.p.candy_early && st.candies_eaten < ctx.p.candy_early_n => {
-                        st.candies_eaten += 1;
-                        // Eaten on the spot: a level now (400 frames), through the normal exp path
-                        // so evolutions and level-up moves happen.
-                        let need = exp_for_level(Growth::MediumSlow, (st.carry + 1) as u8)
-                            .saturating_sub(st.exp);
-                        let g = add_exp(ctx, &mut st, need.max(1));
                         bump(
                             &mut st,
-                            400.0 * ctx.p.text_factor + g as f64 * ctx.level_up(),
+                            *tiles as f64 * Era::Run.frames_per_tile() * ctx.p.path_overhead,
                         );
                     }
-                    "candy" => st.candies += 1,
-                    k if stone_ix(k).is_some() => st.stones[stone_ix(k).unwrap_or(0)] += 1,
-                    _ => st.elixirs += 1,
+                    bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                 }
-            }
-            Kind::XBuy { xbuy } => {
-                if std::env::var_os("FRLG_SIM_TRACE").is_some() {
-                    eprintln!(
-                        "STATE xbuy {} money {} x_stock {:?}",
-                        seg.name, st.money, st.x_stock
+                Kind::Mewtwo => {
+                    bump(&mut st, 1500.0 * ctx.p.text_factor);
+                    bump(&mut st, ctx.throw_cost() + ctx.catch_end());
+                    got(&mut st, 150, 70);
+                    st.power = 70.0 * ctx.p.power_bonus;
+                    // Roll its IVs and nature like any wild mon (`pokemon.c`, `CreateBoxMon`:
+                    // personality then two IV words); its default level-70 moves are
+                    // Swift/Recover/Safeguard/Psychic (`level_up_learnsets.h`), extended by
+                    // `tms` entries with `mewtwo: true`.
+                    let mut g = st.game;
+                    let pid = (g.roll() as u32) | ((g.roll() as u32) << 16);
+                    let iv1 = g.roll() as u32;
+                    let iv2 = g.roll() as u32;
+                    st.game = g;
+                    let ivs = [
+                        iv1 & 0x1F,
+                        (iv1 >> 5) & 0x1F,
+                        (iv1 >> 10) & 0x1F,
+                        iv2 & 0x1F,
+                        (iv2 >> 5) & 0x1F,
+                        (iv2 >> 10) & 0x1F,
+                    ];
+                    st.mewtwo = Some((ivs, (pid % 25) as u8));
+                    st.mewtwo_exp = slow_exp(70);
+                    if st.mewtwo_moves.is_empty() {
+                        st.mewtwo_moves = ctx.dex.default_moves(ctx.dex.id("SPECIES_MEWTWO"), 70);
+                    }
+                    restore_mewtwo_pp(ctx, &mut st);
+                }
+                Kind::Teach { teach } => {
+                    let mv = ctx.dex.move_id(&teach.mv);
+                    let mewtwo_sp = ctx.dex.id("SPECIES_MEWTWO");
+                    let learner = if teach.mewtwo {
+                        mewtwo_sp
+                    } else {
+                        carry_species(ctx, st.carry)
+                    };
+                    let affordable = !ctx.p.money_model || st.money >= teach.cost;
+                    let is_hm = matches!(
+                        ctx.dex.moves[mv].name.as_str(),
+                        "MOVE_CUT"
+                            | "MOVE_FLY"
+                            | "MOVE_SURF"
+                            | "MOVE_STRENGTH"
+                            | "MOVE_FLASH"
+                            | "MOVE_ROCK_SMASH"
+                            | "MOVE_WATERFALL"
+                            | "MOVE_DIVE"
                     );
-                }
-                bump(&mut st, xbuy.frames as f64 * ctx.p.text_factor);
-                bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
-                // Prices (`items.json`): X Attack 500, X Defend 550, X Speed 350,
-                // X Special 350, Dire Hit 650.
-                // Bought scarcest-first so a short purse fills the specials before
-                // the cheaper nice-to-haves (prices `items.json`).
-                {
-                    let qty = if ctx.p.money_model {
-                        xbuy.revives.min(st.money / 1500)
-                    } else {
-                        xbuy.revives
-                    };
-                    if ctx.p.money_model {
-                        st.money -= qty * 1500;
+                    let possible = can_learn(ctx, learner, mv)
+                        && (!teach.mewtwo || st.mewtwo.is_some())
+                        && (is_hm || !st.taught_once.contains(&mv));
+                    if affordable && possible {
+                        if ctx.p.money_model {
+                            st.money -= teach.cost;
+                        }
+                        if !is_hm {
+                            st.taught_once.push(mv);
+                        }
+                        bump(&mut st, teach.frames as f64 * ctx.p.text_factor);
+                        bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                        if teach.mewtwo {
+                            if st.mewtwo_moves.len() < 4 {
+                                st.mewtwo_moves.push(mv);
+                                st.mewtwo_pp.push(ctx.dex.moves[mv].pp as i32);
+                            } else {
+                                // Psychic and Recover stay; the weakest other slot goes
+                                // (Safeguard, then Swift, then an earlier teach).
+                                let keep: Vec<usize> = if ctx.p.mewtwo_keep.is_empty() {
+                                    vec![
+                                        ctx.dex.move_id("MOVE_PSYCHIC"),
+                                        ctx.dex.move_id("MOVE_RECOVER"),
+                                    ]
+                                } else {
+                                    ctx.p
+                                        .mewtwo_keep
+                                        .iter()
+                                        .map(|m| ctx.dex.move_id(m))
+                                        .collect()
+                                };
+                                if let Some(i) = st
+                                    .mewtwo_moves
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, m)| !keep.contains(m))
+                                    .min_by_key(|(_, &m)| ctx.dex.moves[m].power)
+                                    .map(|(i, _)| i)
+                                {
+                                    st.mewtwo_moves[i] = mv;
+                                    st.mewtwo_pp[i] = ctx.dex.moves[mv].pp as i32;
+                                }
+                            }
+                        } else {
+                            offer_move(ctx, &mut st, mv, true);
+                        }
                     }
-                    st.revives += qty;
                 }
-                {
-                    // Hyper Potions for the League, after the Revives.
-                    let price = ctx
-                        .dex
-                        .item_prices
-                        .get("ITEM_HYPER_POTION")
-                        .copied()
-                        .unwrap_or(1200);
-                    let qty = if ctx.p.money_model {
-                        xbuy.heals.min(st.money / price)
-                    } else {
-                        xbuy.heals
-                    };
-                    if ctx.p.money_model {
-                        st.money -= qty * price;
+                Kind::Elixir { pickup } => {
+                    bump(&mut st, pickup.frames as f64 * ctx.p.text_factor);
+                    bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                    match pickup.kind.as_str() {
+                        "max" => st.max_elixirs += 1,
+                        "candy" if ctx.p.candy_early && st.candies_eaten < ctx.p.candy_early_n => {
+                            st.candies_eaten += 1;
+                            // Eaten on the spot: a level now (400 frames), through the normal exp path
+                            // so evolutions and level-up moves happen.
+                            let need = exp_for_level(Growth::MediumSlow, (st.carry + 1) as u8)
+                                .saturating_sub(st.exp);
+                            let g = add_exp(ctx, &mut st, need.max(1));
+                            bump(
+                                &mut st,
+                                400.0 * ctx.p.text_factor + g as f64 * ctx.level_up(),
+                            );
+                        }
+                        "candy" => st.candies += 1,
+                        k if stone_ix(k).is_some() => st.stones[stone_ix(k).unwrap_or(0)] += 1,
+                        _ => st.elixirs += 1,
                     }
-                    st.heal_items += qty;
                 }
-                for (i, want, price) in [
-                    (3usize, xbuy.special, 350),
-                    (2, xbuy.speed, 350),
-                    (0, xbuy.attack, 500),
-                    (1, xbuy.defend, 550),
-                    (4, xbuy.dire, 650),
-                    (5, xbuy.accuracy, 950),
-                    (6, xbuy.guard, 700),
-                ] {
-                    let qty = if ctx.p.money_model {
-                        want.min(st.money / price)
-                    } else {
-                        want
-                    };
-                    if ctx.p.money_model {
-                        st.money -= qty * price;
+                Kind::XBuy { xbuy } => {
+                    if std::env::var_os("FRLG_SIM_TRACE").is_some() {
+                        eprintln!(
+                            "STATE xbuy {} money {} x_stock {:?}",
+                            seg.name, st.money, st.x_stock
+                        );
                     }
-                    st.x_stock[i] += qty;
+                    bump(&mut st, xbuy.frames as f64 * ctx.p.text_factor);
+                    bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                    // Prices (`items.json`): X Attack 500, X Defend 550, X Speed 350,
+                    // X Special 350, Dire Hit 650.
+                    // Bought scarcest-first so a short purse fills the specials before
+                    // the cheaper nice-to-haves (prices `items.json`).
+                    {
+                        let qty = if ctx.p.money_model {
+                            xbuy.revives.min(st.money / 1500)
+                        } else {
+                            xbuy.revives
+                        };
+                        if ctx.p.money_model {
+                            st.money -= qty * 1500;
+                        }
+                        st.revives += qty;
+                    }
+                    {
+                        // Hyper Potions for the League, after the Revives.
+                        let price = ctx
+                            .dex
+                            .item_prices
+                            .get("ITEM_HYPER_POTION")
+                            .copied()
+                            .unwrap_or(1200);
+                        let qty = if ctx.p.money_model {
+                            xbuy.heals.min(st.money / price)
+                        } else {
+                            xbuy.heals
+                        };
+                        if ctx.p.money_model {
+                            st.money -= qty * price;
+                        }
+                        st.heal_items += qty;
+                    }
+                    for (i, want, price) in [
+                        (3usize, xbuy.special, 350),
+                        (2, xbuy.speed, 350),
+                        (0, xbuy.attack, 500),
+                        (1, xbuy.defend, 550),
+                        (4, xbuy.dire, 650),
+                        (5, xbuy.accuracy, 950),
+                        (6, xbuy.guard, 700),
+                    ] {
+                        let qty = if ctx.p.money_model {
+                            want.min(st.money / price)
+                        } else {
+                            want
+                        };
+                        if ctx.p.money_model {
+                            st.money -= qty * price;
+                        }
+                        st.x_stock[i] += qty;
+                    }
                 }
             }
-        }
-        if st.abandoned {
-            if let Some(r) = rec.as_deref_mut() {
-                r[i].abandons += 1;
-                r[i].whiteouts += (st.whiteouts - wo_before) as u64;
-            }
-            break;
-        }
-        // Fidelity fit: execution-loss events when the segment completes (`Params::slow`).
-        if !ctx.p.slow.is_empty() {
-            for (k, ev) in ctx.p.slow.iter().enumerate() {
-                let hit = match ev.seg.strip_suffix('*') {
-                    Some(pre) => seg.name.starts_with(pre),
-                    None => seg.name == ev.seg,
-                };
-                if !hit {
-                    continue;
+            if st.abandoned {
+                if let Some(ci) = try_reload(ctx, &mut st, &ckpt, &mut reloads, 0.0) {
+                    start = ci;
+                    continue 'attempt;
                 }
-                let mut r = Rng::new(seed, idx, hash_str(&seg.name) ^ (0x510E_0000 + k as u64));
-                if r.chance((ev.p * ctx.p.slow_scale).min(1.0)) {
-                    let u = r.f64();
-                    bump(&mut st, -(1.0 - u).ln() * ev.mean_s * FPS);
+                if let Some(r) = rec.as_deref_mut() {
+                    r[i].abandons += 1;
+                    r[i].whiteouts += (st.whiteouts - wo_before) as u64;
+                }
+                break;
+            }
+            // Fidelity fit: execution-loss events when the segment completes (`Params::slow`).
+            if !ctx.p.slow.is_empty() {
+                for (k, ev) in ctx.p.slow.iter().enumerate() {
+                    let hit = match ev.seg.strip_suffix('*') {
+                        Some(pre) => seg.name.starts_with(pre),
+                        None => seg.name == ev.seg,
+                    };
+                    if !hit {
+                        continue;
+                    }
+                    let mut r = Rng::new(seed, idx, hash_str(&seg.name) ^ (0x510E_0000 + k as u64));
+                    if r.chance((ev.p * ctx.p.slow_scale).min(1.0)) {
+                        let u = r.f64();
+                        bump(&mut st, -(1.0 - u).ln() * ev.mean_s * FPS);
+                    }
                 }
             }
-        }
-        // Fidelity fit: execution noise on the WR split windows (`Params::win_cv`).
-        if !win_f.is_empty() && !seg.off_timer {
-            let d = st.clock.saturating_sub(before) as f64;
-            let delta = (d * (win_f[i] - 1.0)).round() as i64;
-            st.clock = (st.clock as i64 + delta).max(before as i64) as u64;
-        }
-        // Marts that sell better balls: Lavender (Great), Fuchsia (Ultra)
-        // (`decompiled/data/maps/LavenderTown_Mart/scripts.inc:29`, `FuchsiaCity_Mart/scripts.inc:25`).
-        if !ctx.p.mystic_after.is_empty()
-            && seg.name == ctx.p.mystic_after
-            && !st.mystic
-            && (!ctx.p.money_model || st.money >= ctx.p.mystic_cost)
-        {
-            if ctx.p.money_model {
-                st.money -= ctx.p.mystic_cost;
+            // Fidelity fit: execution noise on the WR split windows (`Params::win_cv`).
+            if !win_f.is_empty() && !seg.off_timer {
+                let d = st.clock.saturating_sub(before) as f64;
+                let delta = (d * (win_f[i] - 1.0)).round() as i64;
+                st.clock = (st.clock as i64 + delta).max(before as i64) as u64;
             }
-            st.mystic = true;
-            bump(&mut st, ctx.p.mystic_frames as f64 * ctx.p.text_factor);
-        }
-        match seg.name.as_str() {
-            "black-glasses-swap" => st.glasses = true,
-            "brock" => {
-                st.repel_ok = true;
-                st.badges |= 1;
+            // Marts that sell better balls: Lavender (Great), Fuchsia (Ultra)
+            // (`decompiled/data/maps/LavenderTown_Mart/scripts.inc:29`, `FuchsiaCity_Mart/scripts.inc:25`).
+            if !ctx.p.mystic_after.is_empty()
+                && seg.name == ctx.p.mystic_after
+                && !st.mystic
+                && (!ctx.p.money_model || st.money >= ctx.p.mystic_cost)
+            {
+                if ctx.p.money_model {
+                    st.money -= ctx.p.mystic_cost;
+                }
+                st.mystic = true;
+                bump(&mut st, ctx.p.mystic_frames as f64 * ctx.p.text_factor);
             }
-            "koga-badge" => {
-                st.max_tier = 2;
-                st.badges |= 1 << 4;
-            }
-            // Thunder Badge boosts the player's battle speed by 10%
-            // (`GetWhoStrikesFirst`, `battle_main.c:3444-3446`).
-            "surge-badge" => st.badges |= 1 << 2,
-            "blaine-badge-and-sevii-scene" => st.badges |= 1 << 6,
-            // Giovanni hands over TM26 Earthquake
-            // (`ViridianCity_Gym/scripts.inc:28-30`); teaching it is a plan choice via
-            // `tms`, not automatic (a taught move displaces a slot).
-            "indigo-heal" => {
-                if std::env::var_os("FRLG_SIM_TRACE").is_some() {
-                    eprintln!(
+            match seg.name.as_str() {
+                "black-glasses-swap" => st.glasses = true,
+                "brock" => {
+                    st.repel_ok = true;
+                    st.badges |= 1;
+                }
+                "koga-badge" => {
+                    st.max_tier = 2;
+                    st.badges |= 1 << 4;
+                }
+                // Thunder Badge boosts the player's battle speed by 10%
+                // (`GetWhoStrikesFirst`, `battle_main.c:3444-3446`).
+                "surge-badge" => st.badges |= 1 << 2,
+                "blaine-badge-and-sevii-scene" => st.badges |= 1 << 6,
+                // Giovanni hands over TM26 Earthquake
+                // (`ViridianCity_Gym/scripts.inc:28-30`); teaching it is a plan choice via
+                // `tms`, not automatic (a taught move displaces a slot).
+                "indigo-heal" => {
+                    if std::env::var_os("FRLG_SIM_TRACE").is_some() {
+                        eprintln!(
                         "STATE indigo-heal money {} x_stock {:?} revives {} fodder {} candies {} carry {} elixirs {} max {}",
                         st.money, st.x_stock, st.revives, st.fodder, st.candies, st.carry, st.elixirs, st.max_elixirs
                     );
+                    }
+                    st.league_items = true;
+                    // Rare Candies kept for the League go down now: a level each, worth the
+                    // most exp this late (~400 frames per use).
+                    while st.candies > 0 && st.carry < 100 {
+                        st.candies -= 1;
+                        st.carry += 1;
+                        st.exp = st
+                            .exp
+                            .max(exp_for_level(Growth::MediumSlow, st.carry as u8));
+                        bump(&mut st, 400.0 * ctx.p.text_factor);
+                    }
+                    learn_moves(ctx, &mut st);
                 }
-                st.league_items = true;
-                // Rare Candies kept for the League go down now: a level each, worth the
-                // most exp this late (~400 frames per use).
-                while st.candies > 0 && st.carry < 100 {
-                    st.candies -= 1;
-                    st.carry += 1;
-                    st.exp = st
-                        .exp
-                        .max(exp_for_level(Growth::MediumSlow, st.carry as u8));
-                    bump(&mut st, 400.0 * ctx.p.text_factor);
+                // HM03 Surf is taught to the carry after the Safari trip (the route needs a
+                // surfer anyway; `plan.md` HM gates).
+                "safari-walk" => {
+                    let surf = ctx.dex.move_id("MOVE_SURF");
+                    if can_learn(ctx, carry_species(ctx, st.carry), surf) {
+                        offer_move(ctx, &mut st, surf, true);
+                    }
                 }
-                learn_moves(ctx, &mut st);
+                "lavender-heal" => st.max_tier = st.max_tier.max(1),
+                _ => {}
             }
-            // HM03 Surf is taught to the carry after the Safari trip (the route needs a
-            // surfer anyway; `plan.md` HM gates).
-            "safari-walk" => {
-                let surf = ctx.dex.move_id("MOVE_SURF");
-                if can_learn(ctx, carry_species(ctx, st.carry), surf) {
-                    offer_move(ctx, &mut st, surf, true);
+            // Poison outside battle: 1 HP per 5 steps while walking or reading text.
+            if ctx.p.poison_frames_per_hp > 0.0
+                && matches!(
+                    seg.kind,
+                    Kind::Text { .. } | Kind::Walk { .. } | Kind::Wander { .. }
+                )
+                && matches!(st.carry_status, Status1::Poison | Status1::Toxic(_))
+            {
+                let d = (st.clock - before) as f64;
+                field_poison(ctx, &mut st, d);
+            }
+            // league-entry is the Indigo Plateau Centre before the rematch chain.
+            if !skip_heal && (seg.name.contains("heal") || seg.name == "league-entry") {
+                // The party fillers (gift mons, caught fodder) stand revived; five slots
+                // beside the carry once the party has filled out (guess: by Misty).
+                st.fodder = if st.carry >= 20 { 5 } else { 2 };
+                st.hp_frac = 1.0;
+                st.carry_status = Status1::None;
+                for (k, &m) in st.slots.clone().iter().enumerate() {
+                    st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
                 }
+                restore_mewtwo_pp(ctx, &mut st);
             }
-            "lavender-heal" => st.max_tier = st.max_tier.max(1),
-            _ => {}
-        }
-        // Poison outside battle: 1 HP per 5 steps while walking or reading text.
-        if ctx.p.poison_frames_per_hp > 0.0
-            && matches!(
-                seg.kind,
-                Kind::Text { .. } | Kind::Walk { .. } | Kind::Wander { .. }
-            )
-            && matches!(st.carry_status, Status1::Poison | Status1::Toxic(_))
-        {
-            let d = (st.clock - before) as f64;
-            field_poison(ctx, &mut st, d);
-        }
-        // league-entry is the Indigo Plateau Centre before the rematch chain.
-        if !skip_heal && (seg.name.contains("heal") || seg.name == "league-entry") {
-            // The party fillers (gift mons, caught fodder) stand revived; five slots
-            // beside the carry once the party has filled out (guess: by Misty).
-            st.fodder = if st.carry >= 20 { 5 } else { 2 };
-            st.hp_frac = 1.0;
-            st.carry_status = Status1::None;
-            for (k, &m) in st.slots.clone().iter().enumerate() {
-                st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
+            if seg.off_timer {
+                let d = st.clock - before;
+                st.off += d;
+                st.clock = before;
             }
-            restore_mewtwo_pp(ctx, &mut st);
-        }
-        if seg.off_timer {
-            let d = st.clock - before;
-            st.off += d;
-            st.clock = before;
-        }
-        // The evolution stat gate: the human opens the summary at the first evolution
-        // and resets unless the minima hold (finer IV information than level 5 gives).
-        if !st.evo_checked
-            && st.carry >= ctx.evo_at[0]
-            && ctx.p.evo_min_stats.iter().any(|&m| m > 0)
-        {
-            st.evo_checked = true;
-            bump(&mut st, 250.0 * ctx.p.text_factor);
-            let m = crate::battle::make_mon(
-                ctx.dex,
-                carry_species(ctx, st.carry),
-                st.carry,
-                st.ivs,
-                st.evs,
-                st.nature,
-                0,
-            );
-            let stats = [
-                m.max_hp, m.stat[0], m.stat[1], m.stat[2], m.stat[3], m.stat[4],
-            ];
-            let ok = stats
-                .iter()
-                .zip(ctx.p.evo_min_stats)
-                .all(|(&v, lo)| v as u32 >= lo);
-            if !ok {
-                if let Some(r) = rec.as_deref_mut() {
-                    r[i].resets += 1;
-                }
-                return Outcome {
-                    wall: st.clock + st.off,
-                    run: st.clock,
-                    finished: false,
-                    caught: st.caught.count(),
-                    whiteouts: st.whiteouts,
-                    off: st.off,
-                    end_seg: st.seg_i as u32,
-                    kind: 4,
-                };
-            }
-        }
-        if seg.starter_check && manip {
-            let mp = &ctx.p.manip;
-            // On-timer: the route's own segments plus the extra human seconds and the idle frames
-            // waiting for the table's frame.
-            let extra = (mp.s_title_naming + mp.s_naming_ball + mp.s_ball_stats) * FPS;
-            // Not `bump`: the game stream is re-keyed at the next segment, and an idle of
-            // hundreds of thousands of frames (one-dial tiers) would spin the LCG for nothing.
-            st.clock += (extra + draw.idle_frames).round() as u64;
-            let (ok, strength, ivs, nat) =
-                manip_starter(ctx, &draw, &mut Rng::new(seed, idx, 0x5748));
-            st.strength = strength;
-            st.ivs = ivs;
-            st.nature = nat;
-            if let Some(pr) = probe.as_deref_mut() {
-                pr.phase = Some(crate::manip::PhaseSample {
-                    wall_frames: (st.clock + st.off) as f64
-                        + if ok { 0.0 } else { mp.s_reset * FPS },
-                    pass: ok,
-                    hits: draw.title_hit as u8 + draw.naming_hit as u8 + draw.ball_hit as u8,
-                    quiet: draw.quiet,
-                    planned: draw.planned,
-                });
-            }
-            if !ok {
-                st.off += (mp.s_reset * FPS).round() as u64;
-                if let Some(r) = rec.as_deref_mut() {
-                    r[i].resets += 1;
-                }
-                return Outcome {
-                    wall: st.clock + st.off,
-                    run: st.clock,
-                    finished: false,
-                    caught: st.caught.count(),
-                    whiteouts: st.whiteouts,
-                    off: st.off,
-                    end_seg: st.seg_i as u32,
-                    kind: 2,
-                };
-            }
-        } else if seg.starter_check {
-            let (mut ok, mut strength, mut ivs, mut nat) =
-                starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747));
-            if !ok && ctx.p.starter_save_reroll {
-                // Saved in the lab before choosing: soft reset, Continue, choose again. The timer
-                // keeps running, so every re-roll is run time but not a lost attempt.
-                let mut k = 0u64;
-                while !ok && k < 20_000 {
-                    k += 1;
-                    bump(&mut st, ctx.p.reroll_frames as f64 * ctx.p.text_factor);
-                    (ok, strength, ivs, nat) =
-                        starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747 + k * 7919));
-                }
-            }
-            st.strength = strength;
-            st.ivs = ivs;
-            st.nature = nat;
-            if !ok {
-                let wall = st.clock + st.off;
-                if let Some(r) = rec.as_deref_mut() {
-                    r[i].resets += 1;
-                }
-                return Outcome {
-                    wall,
-                    run: st.clock,
-                    finished: false,
-                    caught: st.caught.count(),
-                    whiteouts: st.whiteouts,
-                    off: st.off,
-                    end_seg: st.seg_i as u32,
-                    kind: 2,
-                };
-            }
-        }
-        if let Some(r) = rec.as_deref_mut() {
-            let d = (st.clock - before) as f64;
-            r[i].n += 1;
-            r[i].sum += d;
-            r[i].sumsq += d * d;
-            r[i].whiteouts += (st.whiteouts - wo_before) as u64;
-            r[i].level_sum += st.carry as f64;
-            r[i].caught_sum += st.caught.count() as f64;
-            r[i].money_sum += st.money as f64;
-            r[i].balls_sum += st.balls.iter().sum::<u32>() as f64;
-        }
-        if let Some(sc) = split_clock.as_deref_mut() {
-            sc[i] = st.clock;
-        }
-        if ctx.wr_at[i] >= 0.0 {
-            behind = st.clock as f64 / FPS - ctx.wr_at[i];
-        }
-        if let Some(pr) = probe.as_deref_mut() {
-            if pr.snap_at == Some(i) {
-                pr.snap = Some(Snapshot {
-                    mons: (1..=151u32)
-                        .filter(|&d| st.caught.has(d))
-                        .map(|d| {
-                            (
-                                d,
-                                st.catch_lv[d as usize] as u32,
-                                st.catch_seq[d as usize] as u32,
-                                st.src[d as usize],
-                            )
-                        })
-                        .collect(),
-                    candies: st.candies,
-                    money: st.money,
-                    clock: st.clock,
-                    carry: st.carry,
-                });
-            }
-            pr.fights.append(&mut st.fight_log);
-            if pr.caught_at.len() <= i {
-                pr.caught_at.resize(i + 1, 0);
-            }
-            pr.caught_at[i] = st.caught.count();
-            if pr.level_at.len() <= i {
-                pr.level_at.resize(i + 1, 0);
-            }
-            pr.level_at[i] = st.carry;
-        }
-        if seg.split {
-            if let Some(pr) = probe.as_deref_mut() {
-                pr.split_log.push((i as u32, st.clock, st.clock + st.off));
-                pr.split_x.push((st.caught.count(), st.carry));
-            }
-            if let Some(t) = target {
-                let cut = cut_table.map(|c| c[i]).filter(|c| !c.is_nan());
-                let mean = if ctx.p.dex_resets && i < ctx.oak_idx {
-                    // The fill still to come depends on how many species are in the bag by then.
-                    let dex_proj = st.caught.count() as f64 + ctx.gain_after[i];
-                    ctx.mean_nofill_after[i]
-                        + ctx.fill_base
-                        + ctx.fill_slope * (60.0 - dex_proj).max(0.0)
-                } else {
-                    ctx.mean_after[i]
-                };
-                let remaining = ctx.floor_after[i] as f64
-                    + match cut {
-                        Some(_) => 0.0,
-                        None => ctx.aggr[i] * (mean - ctx.floor_after[i] as f64).max(0.0),
-                    };
-                let shift = match adj_table.map(|a| a[i]) {
-                    Some((1, r, k)) => k * (st.caught.count() as f64 - r),
-                    Some((2, r, k)) => k * (st.carry as f64 - r),
-                    _ => 0.0,
-                };
-                let over_cut = cut.is_some_and(|c| st.clock as f64 > c + shift);
-                if over_cut || st.clock as f64 + remaining > t as f64 {
+            // The evolution stat gate: the human opens the summary at the first evolution
+            // and resets unless the minima hold (finer IV information than level 5 gives).
+            if !st.evo_checked
+                && st.carry >= ctx.evo_at[0]
+                && ctx.p.evo_min_stats.iter().any(|&m| m > 0)
+            {
+                st.evo_checked = true;
+                bump(&mut st, 250.0 * ctx.p.text_factor);
+                let m = crate::battle::make_mon(
+                    ctx.dex,
+                    carry_species(ctx, st.carry),
+                    st.carry,
+                    st.ivs,
+                    st.evs,
+                    st.nature,
+                    0,
+                );
+                let stats = [
+                    m.max_hp, m.stat[0], m.stat[1], m.stat[2], m.stat[3], m.stat[4],
+                ];
+                let ok = stats
+                    .iter()
+                    .zip(ctx.p.evo_min_stats)
+                    .all(|(&v, lo)| v as u32 >= lo);
+                if !ok {
                     if let Some(r) = rec.as_deref_mut() {
                         r[i].resets += 1;
                     }
@@ -3514,11 +3425,176 @@ pub fn attempt(
                         whiteouts: st.whiteouts,
                         off: st.off,
                         end_seg: st.seg_i as u32,
-                        kind: 1,
+                        kind: 4,
                     };
                 }
             }
+            if seg.starter_check && manip {
+                let mp = &ctx.p.manip;
+                // On-timer: the route's own segments plus the extra human seconds and the idle frames
+                // waiting for the table's frame.
+                let extra = (mp.s_title_naming + mp.s_naming_ball + mp.s_ball_stats) * FPS;
+                // Not `bump`: the game stream is re-keyed at the next segment, and an idle of
+                // hundreds of thousands of frames (one-dial tiers) would spin the LCG for nothing.
+                st.clock += (extra + draw.idle_frames).round() as u64;
+                let (ok, strength, ivs, nat) =
+                    manip_starter(ctx, &draw, &mut Rng::new(seed, idx, 0x5748));
+                st.strength = strength;
+                st.ivs = ivs;
+                st.nature = nat;
+                if let Some(pr) = probe.as_deref_mut() {
+                    pr.phase = Some(crate::manip::PhaseSample {
+                        wall_frames: (st.clock + st.off) as f64
+                            + if ok { 0.0 } else { mp.s_reset * FPS },
+                        pass: ok,
+                        hits: draw.title_hit as u8 + draw.naming_hit as u8 + draw.ball_hit as u8,
+                        quiet: draw.quiet,
+                        planned: draw.planned,
+                    });
+                }
+                if !ok {
+                    st.off += (mp.s_reset * FPS).round() as u64;
+                    if let Some(r) = rec.as_deref_mut() {
+                        r[i].resets += 1;
+                    }
+                    return Outcome {
+                        wall: st.clock + st.off,
+                        run: st.clock,
+                        finished: false,
+                        caught: st.caught.count(),
+                        whiteouts: st.whiteouts,
+                        off: st.off,
+                        end_seg: st.seg_i as u32,
+                        kind: 2,
+                    };
+                }
+            } else if seg.starter_check {
+                let (mut ok, mut strength, mut ivs, mut nat) =
+                    starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747));
+                if !ok && ctx.p.starter_save_reroll {
+                    // Saved in the lab before choosing: soft reset, Continue, choose again. The timer
+                    // keeps running, so every re-roll is run time but not a lost attempt.
+                    let mut k = 0u64;
+                    while !ok && k < 20_000 {
+                        k += 1;
+                        bump(&mut st, ctx.p.reroll_frames as f64 * ctx.p.text_factor);
+                        (ok, strength, ivs, nat) =
+                            starter_ok(ctx, &mut Rng::new(seed, idx, 0x5747 + k * 7919));
+                    }
+                }
+                st.strength = strength;
+                st.ivs = ivs;
+                st.nature = nat;
+                if !ok {
+                    let wall = st.clock + st.off;
+                    if let Some(r) = rec.as_deref_mut() {
+                        r[i].resets += 1;
+                    }
+                    return Outcome {
+                        wall,
+                        run: st.clock,
+                        finished: false,
+                        caught: st.caught.count(),
+                        whiteouts: st.whiteouts,
+                        off: st.off,
+                        end_seg: st.seg_i as u32,
+                        kind: 2,
+                    };
+                }
+            }
+            if let Some(r) = rec.as_deref_mut() {
+                let d = (st.clock - before) as f64;
+                r[i].n += 1;
+                r[i].sum += d;
+                r[i].sumsq += d * d;
+                r[i].whiteouts += (st.whiteouts - wo_before) as u64;
+                r[i].level_sum += st.carry as f64;
+                r[i].caught_sum += st.caught.count() as f64;
+                r[i].money_sum += st.money as f64;
+                r[i].balls_sum += st.balls.iter().sum::<u32>() as f64;
+            }
+            if let Some(sc) = split_clock.as_deref_mut() {
+                sc[i] = st.clock;
+            }
+            if ctx.wr_at[i] >= 0.0 {
+                behind = st.clock as f64 / FPS - ctx.wr_at[i];
+            }
+            if let Some(pr) = probe.as_deref_mut() {
+                if pr.snap_at == Some(i) {
+                    pr.snap = Some(Snapshot {
+                        mons: (1..=151u32)
+                            .filter(|&d| st.caught.has(d))
+                            .map(|d| {
+                                (
+                                    d,
+                                    st.catch_lv[d as usize] as u32,
+                                    st.catch_seq[d as usize] as u32,
+                                    st.src[d as usize],
+                                )
+                            })
+                            .collect(),
+                        candies: st.candies,
+                        money: st.money,
+                        clock: st.clock,
+                        carry: st.carry,
+                    });
+                }
+                pr.fights.append(&mut st.fight_log);
+                if pr.caught_at.len() <= i {
+                    pr.caught_at.resize(i + 1, 0);
+                }
+                pr.caught_at[i] = st.caught.count();
+                if pr.level_at.len() <= i {
+                    pr.level_at.resize(i + 1, 0);
+                }
+                pr.level_at[i] = st.carry;
+            }
+            if seg.split {
+                if let Some(pr) = probe.as_deref_mut() {
+                    pr.split_log.push((i as u32, st.clock, st.clock + st.off));
+                    pr.split_x.push((st.caught.count(), st.carry));
+                }
+                if let Some(t) = target {
+                    let cut = cut_table.map(|c| c[i]).filter(|c| !c.is_nan());
+                    let mean = if ctx.p.dex_resets && i < ctx.oak_idx {
+                        // The fill still to come depends on how many species are in the bag by then.
+                        let dex_proj = st.caught.count() as f64 + ctx.gain_after[i];
+                        ctx.mean_nofill_after[i]
+                            + ctx.fill_base
+                            + ctx.fill_slope * (60.0 - dex_proj).max(0.0)
+                    } else {
+                        ctx.mean_after[i]
+                    };
+                    let remaining = ctx.floor_after[i] as f64
+                        + match cut {
+                            Some(_) => 0.0,
+                            None => ctx.aggr[i] * (mean - ctx.floor_after[i] as f64).max(0.0),
+                        };
+                    let shift = match adj_table.map(|a| a[i]) {
+                        Some((1, r, k)) => k * (st.caught.count() as f64 - r),
+                        Some((2, r, k)) => k * (st.carry as f64 - r),
+                        _ => 0.0,
+                    };
+                    let over_cut = cut.is_some_and(|c| st.clock as f64 > c + shift);
+                    if over_cut || st.clock as f64 + remaining > t as f64 {
+                        if let Some(r) = rec.as_deref_mut() {
+                            r[i].resets += 1;
+                        }
+                        return Outcome {
+                            wall: st.clock + st.off,
+                            run: st.clock,
+                            finished: false,
+                            caught: st.caught.count(),
+                            whiteouts: st.whiteouts,
+                            off: st.off,
+                            end_seg: st.seg_i as u32,
+                            kind: 1,
+                        };
+                    }
+                }
+            }
         }
+        break;
     }
     let finished = !st.abandoned;
     Outcome {

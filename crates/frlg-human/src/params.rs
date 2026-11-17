@@ -778,6 +778,20 @@ pub struct Params {
     /// again (`league_redo` times the League clock spent so far, plus the whiteout cost) instead of
     /// resetting. 0 = reset (the old model).
     pub league_redo: f64,
+    /// Save-and-reload discipline (what-if; the category rules say only that the timer starts at New Game, so a
+    /// reload from an in-game save keeps the timer running): the human saves at the start of each listed
+    /// segment (`reload_save_frames`: Start menu, overwrite prompt, "Saving..."), and when an attempt would die
+    /// at or after it (a lost League fight, or a flat `fatal` hit, which costs `reload_fatal_frames` of the
+    /// dying fight) he soft-resets and loads instead: the clock keeps what has passed plus `reload_frames`
+    /// (reset, logos, Continue), the whole game state is the saved one (heal items, X items, money, HP, PP),
+    /// the segments replay with fresh draws. At most `reload_max` reloads per attempt, and only while
+    /// `clock + floor + reload_aggr * (mean - floor)` of the replay still fits the target.
+    pub reload_save_at: Vec<String>,
+    pub reload_save_frames: u32,
+    pub reload_frames: u32,
+    pub reload_fatal_frames: u32,
+    pub reload_max: u32,
+    pub reload_aggr: f64,
     /// Poison outside battle costs 1 HP per this many frames of walking/text (decomp: 1 HP per 5
     /// steps, `field_control_avatar.c:710-733`; a step is 8-16 frames; guess for the blend). 0 = no
     /// field poison. The human drinks an Antidote when the HP reaches `poison_floor`.
@@ -994,6 +1008,12 @@ impl Default for Params {
             salvage_at: Default::default(),
             salvage_default: -1.0,
             league_redo: 0.0,
+            reload_save_at: vec![],
+            reload_save_frames: 800,
+            reload_frames: 1500,
+            reload_fatal_frames: 3900,
+            reload_max: 3,
+            reload_aggr: 0.8,
             poison_frames_per_hp: 0.0,
             poison_floor: 3,
             torrent_hits: 2.0,
