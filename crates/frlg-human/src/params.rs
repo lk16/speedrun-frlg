@@ -479,6 +479,12 @@ pub struct Params {
     /// Same audit: Persim Berry (Misty), Black Glasses swaps (Lavender rival, Lorelei) and the
     /// Mark-guy / potion shopping menus (`STRATEGY.md` sections 4, 6): bag trips in frames.
     pub item_swaps: bool,
+    /// `item_swaps`: the Persim Berry is fetched for Misty (default). false skips the berry trip,
+    /// saving `persim_frames` of the 810-frame `persim-and-potions` bag segment; the cost (confusion
+    /// self-hits, extra potions) is a plan choice in `fight_tactics.misty` (stream 2026-11-14 A1:
+    /// no Persim, potions 7 -> 1, "really bad Misty fight"). guess: 300 frames.
+    pub persim: bool,
+    pub persim_frames: u32,
     /// Same audit: probability that one player action in a battle is a menu slip (wrong move row,
     /// Right+A on the same frame, a late A): the turn goes to another move of the set and the foe
     /// acts as usual. guess; `STRATEGY.md` section 4 (T10 2:49:21 "kick-select input errors nearly
@@ -881,6 +887,8 @@ impl Default for Params {
             ruby_text: 4800,
             resort_text: 6000,
             item_swaps: false,
+            persim: true,
+            persim_frames: 300,
             menu_slip: 0.0,
             fatal: Default::default(),
             slow: vec![],
