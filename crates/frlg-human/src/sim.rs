@@ -188,6 +188,12 @@ pub struct Outcome {
     pub finished: bool,
     pub caught: u32,
     pub whiteouts: u32,
+    /// Wall frames spent off the timer (starter resets, boot).
+    pub off: u64,
+    /// Segment index the attempt ended in (reset, death or the last one).
+    pub end_seg: u32,
+    /// 0 finished, 1 reset at a split/dex check, 2 starter-phase reject, 3 death/abandon, 4 evo-stat reject.
+    pub kind: u8,
 }
 
 struct State {
@@ -2866,6 +2872,9 @@ pub fn attempt(
                                 finished: false,
                                 caught: st.caught.count(),
                                 whiteouts: st.whiteouts,
+                                off: st.off,
+                                end_seg: st.seg_i as u32,
+                                kind: 1,
                             };
                         }
                     }
@@ -3340,6 +3349,9 @@ pub fn attempt(
                     finished: false,
                     caught: st.caught.count(),
                     whiteouts: st.whiteouts,
+                    off: st.off,
+                    end_seg: st.seg_i as u32,
+                    kind: 4,
                 };
             }
         }
@@ -3377,6 +3389,9 @@ pub fn attempt(
                     finished: false,
                     caught: st.caught.count(),
                     whiteouts: st.whiteouts,
+                    off: st.off,
+                    end_seg: st.seg_i as u32,
+                    kind: 2,
                 };
             }
         } else if seg.starter_check {
@@ -3407,6 +3422,9 @@ pub fn attempt(
                     finished: false,
                     caught: st.caught.count(),
                     whiteouts: st.whiteouts,
+                    off: st.off,
+                    end_seg: st.seg_i as u32,
+                    kind: 2,
                 };
             }
         }
@@ -3494,6 +3512,9 @@ pub fn attempt(
                         finished: false,
                         caught: st.caught.count(),
                         whiteouts: st.whiteouts,
+                        off: st.off,
+                        end_seg: st.seg_i as u32,
+                        kind: 1,
                     };
                 }
             }
@@ -3506,5 +3527,8 @@ pub fn attempt(
         finished,
         caught: st.caught.count(),
         whiteouts: st.whiteouts,
+        off: st.off,
+        end_seg: st.seg_i as u32,
+        kind: if finished { 0 } else { 3 },
     }
 }

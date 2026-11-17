@@ -206,6 +206,282 @@ fn main() {
                 by_src[2] / tot * 100.0
             );
         }
+        Some("attr") => {
+            // Attribution of the expected wall time: where each finish's hours go.
+            use rayon::prelude::*;
+            let plan = load(&args[1]);
+            let ctx = plan.ctx();
+            let rung = rung_arg(&args);
+            let r: u64 = arg(&args, "--R", 100_000);
+            let target = rung_frames(rung);
+            let n = plan.segs.len();
+            let door = plan
+                .segs
+                .iter()
+                .position(|s| s.name == "indigo-heal")
+                .or_else(|| plan.segs.iter().position(|s| s.name == "league-entry"))
+                .unwrap_or(n);
+            let door2 = plan
+                .segs
+                .iter()
+                .position(|s| s.name == "league-entry")
+                .unwrap_or(n);
+            #[derive(Clone, Default)]
+            struct A {
+                cnt: [u64; 5],
+                run: [f64; 5],
+                off: [f64; 5],
+                post: [f64; 5],
+                post2: [f64; 5],
+            }
+            let per: Vec<A> = (0..r)
+                .into_par_iter()
+                .fold(
+                    || vec![A::default(); n],
+                    |mut v, i| {
+                        let mut sc = vec![0u64; n];
+                        let o = attempt(&ctx, seed, i, Some(target), None, Some(&mut sc), None);
+                        let fin = o.finished && o.run <= target;
+                        // too-slow finishers are filed with the deaths (kind 3) at the last segment
+                        let k = if fin {
+                            0
+                        } else if o.finished {
+                            3
+                        } else {
+                            o.kind as usize
+                        };
+                        let e = (o.end_seg as usize).min(n - 1);
+                        let a = &mut v[e];
+                        a.cnt[k] += 1;
+                        a.run[k] += o.run as f64;
+                        a.off[k] += o.off as f64;
+                        if door < n && e >= door {
+                            let d0 = if door > 0 { sc[door - 1] } else { 0 };
+                            a.post[k] += o.run.saturating_sub(d0) as f64;
+                        }
+                        if door2 < n && e >= door2 {
+                            let d0 = if door2 > 0 { sc[door2 - 1] } else { 0 };
+                            a.post2[k] += o.run.saturating_sub(d0) as f64;
+                        }
+                        v
+                    },
+                )
+                .reduce(
+                    || vec![A::default(); n],
+                    |mut x, y| {
+                        for i in 0..n {
+                            for k in 0..5 {
+                                x[i].cnt[k] += y[i].cnt[k];
+                                x[i].run[k] += y[i].run[k];
+                                x[i].off[k] += y[i].off[k];
+                                x[i].post[k] += y[i].post[k];
+                                x[i].post2[k] += y[i].post2[k];
+                            }
+                        }
+                        x
+                    },
+                );
+            let h = |f: f64| f / FPS / 3600.0;
+            let fin: u64 = per.iter().map(|a| a.cnt[0]).sum();
+            let finf = fin.max(1) as f64;
+            let tot_run: f64 = per.iter().flat_map(|a| a.run.iter()).sum();
+            let tot_off: f64 = per.iter().flat_map(|a| a.off.iter()).sum();
+            let ph = |x: f64| h(x) / finf;
+            println!(
+                "{} @ {} R={} finishes={} EHT={:.2} h  (on-timer {:.2} h + off-timer {:.2} h per finish)",
+                plan.params.name,
+                rung_name(rung),
+                r,
+                fin,
+                ph(tot_run + tot_off),
+                ph(tot_run),
+                ph(tot_off)
+            );
+            let names = [
+                "finished<=T",
+                "reset@split",
+                "starter reject",
+                "death/abandon/slow-fin",
+                "evo-stat reject",
+            ];
+            println!("\nby outcome (hours per finish):");
+            for k in 0..5 {
+                let (c, ru, of): (u64, f64, f64) = per.iter().fold((0, 0.0, 0.0), |s, a| {
+                    (s.0 + a.cnt[k], s.1 + a.run[k], s.2 + a.off[k])
+                });
+                println!(
+                    "  {:<24} n={:>9} ({:>6.3}%)  run {:>8.2}  off {:>8.2}  total {:>8.2} ({:>4.1}%)",
+                    names[k],
+                    c,
+                    c as f64 / r as f64 * 100.0,
+                    ph(ru),
+                    ph(of),
+                    ph(ru + of),
+                    (ru + of) / (tot_run + tot_off) * 100.0
+                );
+            }
+            let post: f64 = per.iter().flat_map(|a| a.post.iter()).sum();
+            let postf: f64 = per.iter().map(|a| a.post[0]).sum();
+            let post2: f64 = per.iter().flat_map(|a| a.post2.iter()).sum();
+            println!(
+                "\npost-door (from {} on, on-timer): {:.2} h per finish = {:.1}% of EHT (finishing attempts {:.2} h, failed {:.2} h); from league-entry on {:.2} h ({:.1}%)",
+                plan.segs.get(door).map_or("-", |s| s.name.as_str()),
+                ph(post),
+                post / (tot_run + tot_off) * 100.0,
+                ph(postf),
+                ph(post - postf),
+                ph(post2),
+                post2 / (tot_run + tot_off) * 100.0
+            );
+            let bysegment = args.iter().any(|a| a == "--bysegment");
+            let mut by_split: Vec<(usize, A)> = vec![];
+            let mut cur = A::default();
+            for i in 0..n {
+                for k in 0..5 {
+                    cur.cnt[k] += per[i].cnt[k];
+                    cur.run[k] += per[i].run[k];
+                    cur.off[k] += per[i].off[k];
+                }
+                if bysegment || plan.segs[i].split || plan.segs[i].starter_check || i + 1 == n {
+                    by_split.push((i, std::mem::take(&mut cur)));
+                }
+            }
+            println!("\nwaste by the split window the attempt ended in (whole wall of those attempts incl. starter/off time; h per finish)");
+            println!(
+                "{:<34}{:>9}{:>9}{:>9}{:>9}{:>9}{:>8}{:>7}",
+                "split (window end)",
+                "n_rst",
+                "n_death",
+                "h_rst",
+                "h_death",
+                "h_tot",
+                "share%",
+                "cum%"
+            );
+            let waste: f64 = per
+                .iter()
+                .map(|a| (1..5).map(|k| a.run[k] + a.off[k]).sum::<f64>())
+                .sum();
+            let mut cum = 0.0;
+            for (i, a) in &by_split {
+                let n_r = a.cnt[1] + a.cnt[4];
+                let n_d = a.cnt[3];
+                let hr = ph(a.run[1] + a.off[1] + a.run[4] + a.off[4]);
+                let hd = ph(a.run[3] + a.off[3]);
+                let ht = hr + hd;
+                if ht < 0.05 {
+                    continue;
+                }
+                cum += ht;
+                println!(
+                    "{:<34}{:>9}{:>9}{:>9.2}{:>9.2}{:>9.2}{:>7.1}%{:>6.1}%",
+                    plan.segs[*i].name,
+                    n_r,
+                    n_d,
+                    hr,
+                    hd,
+                    ht,
+                    ht / ph(waste) * 100.0,
+                    cum / ph(waste) * 100.0
+                );
+            }
+            // Leverage: per window, reach probability, death rate, wall cost, and the EHT ratio if the
+            // window's non-finish probability were halved (later windows scale by x, A + x B form).
+            {
+                let ends: Vec<usize> = by_split.iter().map(|(i, _)| *i).collect();
+                let w = ends.len();
+                let res: Vec<(u64, u64, f64)> = (0..r)
+                    .into_par_iter()
+                    .fold(
+                        || vec![(0u64, 0u64, 0.0f64); w],
+                        |mut v, i| {
+                            let mut sc = vec![0u64; n];
+                            let o = attempt(&ctx, seed, i, Some(target), None, Some(&mut sc), None);
+                            let e = o.end_seg as usize;
+                            let mut prev = 0u64;
+                            for (j, &we) in ends.iter().enumerate() {
+                                let start_of = if j == 0 { 0 } else { ends[j - 1] + 1 };
+                                if e < start_of {
+                                    break;
+                                }
+                                v[j].0 += 1;
+                                let end_clock = if e <= we && !(o.finished && e == we) {
+                                    o.run
+                                } else {
+                                    sc[we]
+                                };
+                                let end_clock = if e <= we {
+                                    o.run.min(end_clock.max(sc[start_of.saturating_sub(1)]))
+                                } else {
+                                    end_clock
+                                };
+                                v[j].2 += (end_clock.saturating_sub(prev)) as f64
+                                    + if j == 0 { o.off as f64 } else { 0.0 };
+                                prev = end_clock;
+                                if e <= we && !(o.finished && o.run <= target) {
+                                    v[j].1 += 1;
+                                    break;
+                                }
+                            }
+                            v
+                        },
+                    )
+                    .reduce(
+                        || vec![(0u64, 0u64, 0.0f64); w],
+                        |mut x, y| {
+                            for j in 0..w {
+                                x[j].0 += y[j].0;
+                                x[j].1 += y[j].1;
+                                x[j].2 += y[j].2;
+                            }
+                            x
+                        },
+                    );
+                let total: f64 = res.iter().map(|x| x.2).sum();
+                println!("\nleverage by window (reach = share of all attempts entering; fail = non-finish share of those entering; cost = share of all wall spent in the window; halve = EHT ratio if its failure rate were halved, >1 worse)");
+                println!(
+                    "{:<34}{:>8}{:>8}{:>8}{:>8}{:>8}",
+                    "window (ends at)", "reach%", "fail%", "cost%", "cum%", "halve"
+                );
+                let mut cum = 0.0;
+                for (j, x) in res.iter().enumerate() {
+                    cum += x.2;
+                    let d = x.1 as f64 / x.0.max(1) as f64;
+                    let xs = (1.0 - d / 2.0) / (1.0 - d).max(1e-9);
+                    let ratio = (cum + xs * (total - cum)) / (xs * total);
+                    if x.2 / total < 0.002 && d < 0.01 {
+                        continue;
+                    }
+                    println!(
+                        "{:<34}{:>7.2}%{:>7.2}%{:>7.1}%{:>7.1}%{:>8.3}",
+                        plan.segs[ends[j]].name,
+                        x.0 as f64 / r as f64 * 100.0,
+                        d * 100.0,
+                        x.2 / total * 100.0,
+                        cum / total * 100.0,
+                        ratio
+                    );
+                }
+            }
+            let (s_c, s_r, s_o) = per.iter().fold((0u64, 0.0, 0.0), |s, a| {
+                (s.0 + a.cnt[2], s.1 + a.run[2], s.2 + a.off[2])
+            });
+            println!(
+                "\nstarter rejects: {} attempts ({:.1}% of all); on-timer part {:.2} h/finish, off-timer part {:.2} h/finish",
+                s_c,
+                s_c as f64 / r as f64 * 100.0,
+                ph(s_r),
+                ph(s_o)
+            );
+            let off_pass: f64 = per
+                .iter()
+                .map(|a| a.off[0] + a.off[1] + a.off[3] + a.off[4])
+                .sum();
+            println!(
+                "off-timer of attempts that passed the starter (boot/pre-press): {:.2} h/finish",
+                ph(off_pass)
+            );
+        }
         Some("starter-phase") => {
             let plan = load(&args[1]);
             let ctx = plan.ctx();
