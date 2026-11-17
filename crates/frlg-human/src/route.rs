@@ -1084,6 +1084,11 @@ pub(crate) fn leg_postgame(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
             Src::Guess,
         );
         b.push("mewtwo", Src::Guess, 10, Kind::Mewtwo);
+    } else if let Some(prev) = b.segs.last().map(|s| s.name.clone()) {
+        // The Mewtwo leg is absent: anchors on it fall back to the segment before it.
+        for n in ["fly-cerulean", "cerulean-cave", "mewtwo"] {
+            b.skipped.insert(n.to_string(), prev.clone());
+        }
     }
     if p.grind_pre_rematch > 0 {
         b.push(

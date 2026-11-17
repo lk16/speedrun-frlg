@@ -555,6 +555,15 @@ mod tests {
         let tm = "\"tms\":[{\"after\":\"mewtwo\",\"mv\":\"MOVE_EARTHQUAKE\",\"frames\":600,\"cost\":0,\"mewtwo\":true}]";
         let plan = Plan::load(dex, &with(&format!("\"mewtwo\":false,{tm}"))).unwrap();
         assert!(!plan.segs.iter().any(|s| s.name.starts_with("tm-")));
+        // Anchors on the omitted Mewtwo leg resolve to the segment before it.
+        let heal = with("\"mewtwo\":false,\"extra_heals\":[\"mewtwo\"]");
+        let plan = Plan::load(dex, &heal).unwrap();
+        let h = plan
+            .segs
+            .iter()
+            .position(|s| s.name == "center-heal@mewtwo")
+            .unwrap();
+        assert_eq!(plan.segs[h - 1].name, "celio-network-machine");
         // A teach anchored at TM28 with no_dig has no segment to follow: a clean error.
         let dig = "\"no_dig\":true,\"tms\":[{\"after\":\"tm28-dig\",\"mv\":\"MOVE_DIG\",\"frames\":800,\"cost\":0}]";
         let e = Plan::load(dex, &with(dig)).err().expect("must be rejected");
