@@ -72,7 +72,9 @@ def candidates(p):
     for v in (rs - 1, rs + 1):
         if v >= 0:
             out.append(('ppfloor', f'league_max_reserve {rs}->{v}', {'league_max_reserve': v}))
-    for v in (0.5, 1.0):
+    # league_redo is the cost of walking the rooms again (x League clock): a model constant, not a choice.
+    # 1.0 -> 0.5 was accepted (plan 1062, -7.4 h) and withdrawn; only >= 1.0 stays as a sensitivity probe.
+    for v in (1.5,):
         if p.get('league_redo') != v:
             out.append(('redo', f'league_redo {p.get("league_redo")}->{v}', {'league_redo': v}))
     sa = p.get('salvage_at', {})
