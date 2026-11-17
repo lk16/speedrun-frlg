@@ -3786,6 +3786,89 @@ mod tests {
         GameRng::from_u32(k.wrapping_mul(2654435761).wrapping_add(1))
     }
 
+    /// Calm Mind audit (`decompiled/src/pokemon.c:2440-2446` badge boosts, `CalculateBaseDamage` stage ratios):
+    /// the Champion-2 specials against Mewtwo L73 (IV 20, Volcano badge) at SpD stage 0 / +1 / +2, hand-derived
+    /// with integer math from the sim stats (trainer natures included: Gyarados SpA 126, Tyranitar SpA 147; Gen-3 Ghost is physical, so Shadow Ball ignores Calm Mind). Crits ignore the defender's positive stages.
+    #[test]
+    fn calm_mind_scales_champion_specials_by_hand() {
+        let dex = Dex::load();
+        let mut mew = make_mon(&dex, dex.id("SPECIES_MEWTWO"), 73, [20; 6], [0; 6], 0, 255);
+        let f = dex.fight("TRAINER_CHAMPION_REMATCH_BULBASAUR");
+        let en = |sp: &str| {
+            let p = f
+                .full
+                .iter()
+                .find(|m| dex.species[m.species].name == sp)
+                .unwrap();
+            enemy_mon(&dex, p)
+        };
+        let cases = [
+            (
+                "SPECIES_ALAKAZAM",
+                "MOVE_SHADOW_BALL",
+                [(52, 62), (52, 62), (52, 62)],
+                (105, 124),
+            ),
+            (
+                "SPECIES_GYARADOS",
+                "MOVE_HYDRO_PUMP",
+                [(73, 87), (49, 58), (38, 45)],
+                (147, 174),
+            ),
+            (
+                "SPECIES_TYRANITAR",
+                "MOVE_CRUNCH",
+                [(112, 132), (76, 90), (57, 68)],
+                (224, 264),
+            ),
+        ];
+        for (sp, mv, exp, crit) in cases {
+            let e = en(sp);
+            let mv = dex.move_id(mv);
+            for (i, st) in [0i8, 1, 2].into_iter().enumerate() {
+                mew.stages[4] = st;
+                let (lo, hi) = damage_range(&dex, &e, &mew, mv);
+                assert_eq!((lo, hi), exp[i], "{sp} stage {st}");
+            }
+            let c = calc_damage(&dex, &e, &mew, mv, 0, true, &Side::default(), None);
+            assert_eq!((c * 85 / 100, c), crit, "{sp} crit ignores +2");
+        }
+    }
+
+    /// The Champion-2 hits against the WR's Mewtwo (IVs 5/14, L73, 241 HP, all badges), engine vs
+    /// `video-analysis/data/calib/v4-e4r2.md`. The video's 4 s frames catch the HP counter mid-drain, so single
+    /// readings (Hydro Pump "55", Extreme Speed "24", Shadow Ball "37") understate; the totals agree with the
+    /// engine's one-hit ranges: Shadow Ball 238 -> 176 = 62 (engine 56-66), Hydro Pump 164 -> 55 with one
+    /// sandstorm tick (15) = 94 (engine 76-90 + crit-free roll), Extreme Speed 241 -> 178 with one tick = 48
+    /// (engine 51-60). Journal 2026-11-29-10-00.
+    #[test]
+    fn champion2_hits_against_the_wr_mewtwo_match_the_video_totals() {
+        let dex = Dex::load();
+        let mew = make_mon(
+            &dex,
+            dex.id("SPECIES_MEWTWO"),
+            73,
+            [5, 14, 14, 14, 14, 14],
+            [0; 6],
+            0,
+            255,
+        );
+        let f = dex.fight("TRAINER_CHAMPION_REMATCH_BULBASAUR");
+        for (sp, mv, want) in [
+            ("SPECIES_GYARADOS", "MOVE_HYDRO_PUMP", (76, 90)),
+            ("SPECIES_ARCANINE", "MOVE_EXTREME_SPEED", (51, 60)),
+            ("SPECIES_ALAKAZAM", "MOVE_SHADOW_BALL", (56, 66)),
+        ] {
+            let p = f
+                .full
+                .iter()
+                .find(|m| dex.species[m.species].name == sp)
+                .unwrap();
+            let e = enemy_mon(&dex, p);
+            assert_eq!(damage_range(&dex, &e, &mew, dex.move_id(mv)), want, "{sp}");
+        }
+    }
+
     #[test]
     fn damage_follows_the_decomp_pipeline() {
         // Hand case: L50, power 95, A=100, D=100, no stab, neutral type, no crit:
