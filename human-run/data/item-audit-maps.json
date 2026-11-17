@@ -1,0 +1,2619 @@
+{
+"_note": "every item ball and hidden item in decompiled/data/maps/*/map.json; hidden items with underfoot=true need the Itemfinder (field_control_avatar.c:497-500, itemfinder.c:241-246); Itemfinder: Route11_EastEntrance_2F aide, 30 Kanto species caught",
+"items": [
+{
+"map": "CeladonCity",
+"kind": "ball",
+"x": 5,
+"y": 3,
+"item": "Ether"
+},
+{
+"map": "CeladonCity",
+"kind": "hidden",
+"x": 55,
+"y": 20,
+"item": "PP_UP",
+"underfoot": false
+},
+{
+"map": "CeladonCity_Condominiums_RoofRoom",
+"kind": "ball",
+"x": 7,
+"y": 3,
+"item": "EeveeBall"
+},
+{
+"map": "CeruleanCave_1F",
+"kind": "ball",
+"x": 7,
+"y": 3,
+"item": "Nugget"
+},
+{
+"map": "CeruleanCave_1F",
+"kind": "ball",
+"x": 11,
+"y": 16,
+"item": "FullRestore"
+},
+{
+"map": "CeruleanCave_1F",
+"kind": "ball",
+"x": 25,
+"y": 5,
+"item": "MaxElixir"
+},
+{
+"map": "CeruleanCave_1F",
+"kind": "hidden",
+"x": 12,
+"y": 2,
+"item": "ULTRA_BALL",
+"underfoot": false
+},
+{
+"map": "CeruleanCave_2F",
+"kind": "ball",
+"x": 9,
+"y": 18,
+"item": "PPUp"
+},
+{
+"map": "CeruleanCave_2F",
+"kind": "ball",
+"x": 29,
+"y": 16,
+"item": "UltraBall"
+},
+{
+"map": "CeruleanCave_2F",
+"kind": "ball",
+"x": 33,
+"y": 12,
+"item": "FullRestore"
+},
+{
+"map": "CeruleanCave_B1F",
+"kind": "ball",
+"x": 31,
+"y": 9,
+"item": "UltraBall"
+},
+{
+"map": "CeruleanCave_B1F",
+"kind": "ball",
+"x": 32,
+"y": 2,
+"item": "MaxRevive"
+},
+{
+"map": "CeruleanCity",
+"kind": "hidden",
+"x": 18,
+"y": 7,
+"item": "RARE_CANDY",
+"underfoot": false
+},
+{
+"map": "FiveIsland_LostCave_Room10",
+"kind": "ball",
+"x": 5,
+"y": 2,
+"item": "SilkScarf"
+},
+{
+"map": "FiveIsland_LostCave_Room11",
+"kind": "ball",
+"x": 5,
+"y": 5,
+"item": "LaxIncense"
+},
+{
+"map": "FiveIsland_LostCave_Room12",
+"kind": "ball",
+"x": 5,
+"y": 5,
+"item": "SeaIncense"
+},
+{
+"map": "FiveIsland_LostCave_Room13",
+"kind": "ball",
+"x": 5,
+"y": 5,
+"item": "MaxRevive"
+},
+{
+"map": "FiveIsland_LostCave_Room14",
+"kind": "ball",
+"x": 5,
+"y": 5,
+"item": "RareCandy"
+},
+{
+"map": "FiveIsland_Meadow",
+"kind": "ball",
+"x": 12,
+"y": 11,
+"item": "MaxPotion"
+},
+{
+"map": "FiveIsland_Meadow",
+"kind": "ball",
+"x": 3,
+"y": 22,
+"item": "PPUp"
+},
+{
+"map": "FiveIsland_MemorialPillar",
+"kind": "ball",
+"x": 4,
+"y": 47,
+"item": "MetalCoat"
+},
+{
+"map": "FiveIsland_MemorialPillar",
+"kind": "hidden",
+"x": 8,
+"y": 52,
+"item": "BIG_PEARL",
+"underfoot": false
+},
+{
+"map": "FiveIsland_MemorialPillar",
+"kind": "hidden",
+"x": 15,
+"y": 7,
+"item": "RAZZ_BERRY",
+"underfoot": false
+},
+{
+"map": "FiveIsland_MemorialPillar",
+"kind": "hidden",
+"x": 17,
+"y": 22,
+"item": "SITRUS_BERRY",
+"underfoot": false
+},
+{
+"map": "FiveIsland_MemorialPillar",
+"kind": "hidden",
+"x": 14,
+"y": 25,
+"item": "BLUK_BERRY",
+"underfoot": false
+},
+{
+"map": "FiveIsland_ResortGorgeous",
+"kind": "hidden",
+"x": 10,
+"y": 7,
+"item": "NEST_BALL",
+"underfoot": false
+},
+{
+"map": "FiveIsland_ResortGorgeous",
+"kind": "hidden",
+"x": 27,
+"y": 11,
+"item": "STARDUST",
+"underfoot": false
+},
+{
+"map": "FiveIsland_ResortGorgeous",
+"kind": "hidden",
+"x": 40,
+"y": 12,
+"item": "STAR_PIECE",
+"underfoot": false
+},
+{
+"map": "FiveIsland_ResortGorgeous",
+"kind": "hidden",
+"x": 27,
+"y": 5,
+"item": "STARDUST",
+"underfoot": false
+},
+{
+"map": "FiveIsland_RocketWarehouse",
+"kind": "ball",
+"x": 8,
+"y": 25,
+"item": "BigPearl"
+},
+{
+"map": "FiveIsland_RocketWarehouse",
+"kind": "ball",
+"x": 17,
+"y": 3,
+"item": "TM36"
+},
+{
+"map": "FiveIsland_RocketWarehouse",
+"kind": "ball",
+"x": 1,
+"y": 16,
+"item": "Pearl"
+},
+{
+"map": "FiveIsland_RocketWarehouse",
+"kind": "ball",
+"x": 4,
+"y": 5,
+"item": "UpGrade"
+},
+{
+"map": "FiveIsland_RocketWarehouse",
+"kind": "hidden",
+"x": 27,
+"y": 2,
+"item": "NEST_BALL",
+"underfoot": false
+},
+{
+"map": "FiveIsland_RocketWarehouse",
+"kind": "hidden",
+"x": 7,
+"y": 16,
+"item": "NET_BALL",
+"underfoot": false
+},
+{
+"map": "FourIsland",
+"kind": "ball",
+"x": 5,
+"y": 6,
+"item": "StarPiece"
+},
+{
+"map": "FourIsland",
+"kind": "ball",
+"x": 32,
+"y": 19,
+"item": "Stardust"
+},
+{
+"map": "FourIsland",
+"kind": "hidden",
+"x": 22,
+"y": 34,
+"item": "PEARL",
+"underfoot": false
+},
+{
+"map": "FourIsland",
+"kind": "hidden",
+"x": 6,
+"y": 21,
+"item": "ULTRA_BALL",
+"underfoot": false
+},
+{
+"map": "FourIsland_IcefallCave_1F",
+"kind": "ball",
+"x": 11,
+"y": 7,
+"item": "UltraBall"
+},
+{
+"map": "FourIsland_IcefallCave_1F",
+"kind": "ball",
+"x": 12,
+"y": 16,
+"item": "HM07"
+},
+{
+"map": "FourIsland_IcefallCave_B1F",
+"kind": "ball",
+"x": 10,
+"y": 14,
+"item": "FullRestore"
+},
+{
+"map": "FourIsland_IcefallCave_B1F",
+"kind": "ball",
+"x": 21,
+"y": 7,
+"item": "NeverMeltIce"
+},
+{
+"map": "FuchsiaCity",
+"kind": "hidden",
+"x": 33,
+"y": 26,
+"item": "MAX_REVIVE",
+"underfoot": false
+},
+{
+"map": "FuchsiaCity_WardensHouse",
+"kind": "ball",
+"x": 11,
+"y": 5,
+"item": "RareCandy"
+},
+{
+"map": "MtEmber_Exterior",
+"kind": "ball",
+"x": 13,
+"y": 6,
+"item": "UltraBall"
+},
+{
+"map": "MtEmber_Exterior",
+"kind": "ball",
+"x": 38,
+"y": 10,
+"item": "FireStone"
+},
+{
+"map": "MtEmber_Exterior",
+"kind": "ball",
+"x": 48,
+"y": 20,
+"item": "DireHit"
+},
+{
+"map": "MtEmber_Exterior",
+"kind": "hidden",
+"x": 18,
+"y": 17,
+"item": "FIRE_STONE",
+"underfoot": false
+},
+{
+"map": "MtEmber_Exterior",
+"kind": "hidden",
+"x": 8,
+"y": 30,
+"item": "ULTRA_BALL",
+"underfoot": false
+},
+{
+"map": "MtMoon_1F",
+"kind": "ball",
+"x": 2,
+"y": 22,
+"item": "ParalyzeHeal"
+},
+{
+"map": "MtMoon_1F",
+"kind": "ball",
+"x": 11,
+"y": 35,
+"item": "TM09"
+},
+{
+"map": "MtMoon_1F",
+"kind": "ball",
+"x": 26,
+"y": 32,
+"item": "Potion"
+},
+{
+"map": "MtMoon_1F",
+"kind": "ball",
+"x": 42,
+"y": 35,
+"item": "RareCandy"
+},
+{
+"map": "MtMoon_1F",
+"kind": "ball",
+"x": 44,
+"y": 21,
+"item": "EscapeRope"
+},
+{
+"map": "MtMoon_1F",
+"kind": "ball",
+"x": 3,
+"y": 2,
+"item": "MoonStone"
+},
+{
+"map": "MtMoon_B1F",
+"kind": "hidden",
+"x": 46,
+"y": 2,
+"item": "TINY_MUSHROOM",
+"underfoot": false
+},
+{
+"map": "MtMoon_B1F",
+"kind": "hidden",
+"x": 26,
+"y": 2,
+"item": "TINY_MUSHROOM",
+"underfoot": false
+},
+{
+"map": "MtMoon_B1F",
+"kind": "hidden",
+"x": 39,
+"y": 34,
+"item": "TINY_MUSHROOM",
+"underfoot": false
+},
+{
+"map": "MtMoon_B1F",
+"kind": "hidden",
+"x": 24,
+"y": 35,
+"item": "BIG_MUSHROOM",
+"underfoot": false
+},
+{
+"map": "MtMoon_B1F",
+"kind": "hidden",
+"x": 6,
+"y": 12,
+"item": "BIG_MUSHROOM",
+"underfoot": false
+},
+{
+"map": "MtMoon_B1F",
+"kind": "hidden",
+"x": 25,
+"y": 34,
+"item": "BIG_MUSHROOM",
+"underfoot": false
+},
+{
+"map": "MtMoon_B2F",
+"kind": "ball",
+"x": 30,
+"y": 26,
+"item": "StarPiece"
+},
+{
+"map": "MtMoon_B2F",
+"kind": "ball",
+"x": 35,
+"y": 5,
+"item": "TM46"
+},
+{
+"map": "MtMoon_B2F",
+"kind": "ball",
+"x": 24,
+"y": 6,
+"item": "Revive"
+},
+{
+"map": "MtMoon_B2F",
+"kind": "ball",
+"x": 3,
+"y": 11,
+"item": "Antidote"
+},
+{
+"map": "MtMoon_B2F",
+"kind": "hidden",
+"x": 20,
+"y": 16,
+"item": "MOON_STONE",
+"underfoot": false
+},
+{
+"map": "MtMoon_B2F",
+"kind": "hidden",
+"x": 39,
+"y": 11,
+"item": "ETHER",
+"underfoot": false
+},
+{
+"map": "NavelRock_Summit",
+"kind": "hidden",
+"x": 9,
+"y": 11,
+"item": "SACRED_ASH",
+"underfoot": true
+},
+{
+"map": "OneIsland_KindleRoad",
+"kind": "ball",
+"x": 15,
+"y": 70,
+"item": "Ether"
+},
+{
+"map": "OneIsland_KindleRoad",
+"kind": "ball",
+"x": 17,
+"y": 103,
+"item": "MaxRepel"
+},
+{
+"map": "OneIsland_KindleRoad",
+"kind": "ball",
+"x": 18,
+"y": 114,
+"item": "Carbos"
+},
+{
+"map": "OneIsland_TreasureBeach",
+"kind": "hidden",
+"x": 8,
+"y": 20,
+"item": "STARDUST",
+"underfoot": false
+},
+{
+"map": "OneIsland_TreasureBeach",
+"kind": "hidden",
+"x": 13,
+"y": 27,
+"item": "STARDUST",
+"underfoot": false
+},
+{
+"map": "OneIsland_TreasureBeach",
+"kind": "hidden",
+"x": 11,
+"y": 31,
+"item": "PEARL",
+"underfoot": false
+},
+{
+"map": "OneIsland_TreasureBeach",
+"kind": "hidden",
+"x": 9,
+"y": 34,
+"item": "PEARL",
+"underfoot": false
+},
+{
+"map": "OneIsland_TreasureBeach",
+"kind": "hidden",
+"x": 15,
+"y": 22,
+"item": "ULTRA_BALL",
+"underfoot": false
+},
+{
+"map": "OneIsland_TreasureBeach",
+"kind": "hidden",
+"x": 16,
+"y": 33,
+"item": "ULTRA_BALL",
+"underfoot": false
+},
+{
+"map": "OneIsland_TreasureBeach",
+"kind": "hidden",
+"x": 15,
+"y": 29,
+"item": "STAR_PIECE",
+"underfoot": false
+},
+{
+"map": "OneIsland_TreasureBeach",
+"kind": "hidden",
+"x": 8,
+"y": 27,
+"item": "BIG_PEARL",
+"underfoot": false
+},
+{
+"map": "PalletTown_ProfessorOaksLab",
+"kind": "ball",
+"x": 8,
+"y": 4,
+"item": "BulbasaurBall"
+},
+{
+"map": "PalletTown_ProfessorOaksLab",
+"kind": "ball",
+"x": 9,
+"y": 4,
+"item": "SquirtleBall"
+},
+{
+"map": "PalletTown_ProfessorOaksLab",
+"kind": "ball",
+"x": 10,
+"y": 4,
+"item": "CharmanderBall"
+},
+{
+"map": "PewterCity",
+"kind": "hidden",
+"x": 6,
+"y": 3,
+"item": "POKE_BALL",
+"underfoot": false
+},
+{
+"map": "PokemonMansion_1F",
+"kind": "ball",
+"x": 29,
+"y": 32,
+"item": "Carbos"
+},
+{
+"map": "PokemonMansion_1F",
+"kind": "ball",
+"x": 22,
+"y": 6,
+"item": "EscapeRope"
+},
+{
+"map": "PokemonMansion_1F",
+"kind": "ball",
+"x": 27,
+"y": 15,
+"item": "Protein"
+},
+{
+"map": "PokemonMansion_1F",
+"kind": "hidden",
+"x": 2,
+"y": 21,
+"item": "MOON_STONE",
+"underfoot": false
+},
+{
+"map": "PokemonMansion_2F",
+"kind": "ball",
+"x": 36,
+"y": 8,
+"item": "Calcium"
+},
+{
+"map": "PokemonMansion_2F",
+"kind": "ball",
+"x": 18,
+"y": 23,
+"item": "Zinc"
+},
+{
+"map": "PokemonMansion_2F",
+"kind": "ball",
+"x": 35,
+"y": 17,
+"item": "HPUp"
+},
+{
+"map": "PokemonMansion_3F",
+"kind": "ball",
+"x": 9,
+"y": 19,
+"item": "MaxPotion"
+},
+{
+"map": "PokemonMansion_3F",
+"kind": "ball",
+"x": 32,
+"y": 6,
+"item": "Iron"
+},
+{
+"map": "PokemonMansion_3F",
+"kind": "hidden",
+"x": 36,
+"y": 13,
+"item": "RARE_CANDY",
+"underfoot": false
+},
+{
+"map": "PokemonMansion_B1F",
+"kind": "ball",
+"x": 6,
+"y": 21,
+"item": "TM22"
+},
+{
+"map": "PokemonMansion_B1F",
+"kind": "ball",
+"x": 23,
+"y": 4,
+"item": "TM14"
+},
+{
+"map": "PokemonMansion_B1F",
+"kind": "ball",
+"x": 2,
+"y": 29,
+"item": "FullRestore"
+},
+{
+"map": "PokemonMansion_B1F",
+"kind": "ball",
+"x": 5,
+"y": 7,
+"item": "SecretKey"
+},
+{
+"map": "PokemonMansion_B1F",
+"kind": "hidden",
+"x": 35,
+"y": 5,
+"item": "ELIXIR",
+"underfoot": false
+},
+{
+"map": "PokemonTower_3F",
+"kind": "ball",
+"x": 13,
+"y": 2,
+"item": "EscapeRope"
+},
+{
+"map": "PokemonTower_4F",
+"kind": "ball",
+"x": 12,
+"y": 11,
+"item": "Elixir"
+},
+{
+"map": "PokemonTower_4F",
+"kind": "ball",
+"x": 8,
+"y": 11,
+"item": "Awakening"
+},
+{
+"map": "PokemonTower_4F",
+"kind": "ball",
+"x": 11,
+"y": 16,
+"item": "GreatBall"
+},
+{
+"map": "PokemonTower_5F",
+"kind": "ball",
+"x": 6,
+"y": 16,
+"item": "Nugget"
+},
+{
+"map": "PokemonTower_5F",
+"kind": "ball",
+"x": 11,
+"y": 9,
+"item": "CleanseTag"
+},
+{
+"map": "PokemonTower_5F",
+"kind": "hidden",
+"x": 7,
+"y": 3,
+"item": "BIG_MUSHROOM",
+"underfoot": false
+},
+{
+"map": "PokemonTower_6F",
+"kind": "ball",
+"x": 5,
+"y": 15,
+"item": "RareCandy"
+},
+{
+"map": "PokemonTower_6F",
+"kind": "ball",
+"x": 15,
+"y": 15,
+"item": "XAccuracy"
+},
+{
+"map": "PokemonTower_7F",
+"kind": "hidden",
+"x": 11,
+"y": 4,
+"item": "SOOTHE_BELL",
+"underfoot": true
+},
+{
+"map": "PowerPlant",
+"kind": "ball",
+"x": 7,
+"y": 27,
+"item": "MaxPotion"
+},
+{
+"map": "PowerPlant",
+"kind": "ball",
+"x": 40,
+"y": 22,
+"item": "TM17"
+},
+{
+"map": "PowerPlant",
+"kind": "ball",
+"x": 46,
+"y": 37,
+"item": "TM25"
+},
+{
+"map": "PowerPlant",
+"kind": "ball",
+"x": 45,
+"y": 4,
+"item": "ThunderStone"
+},
+{
+"map": "PowerPlant",
+"kind": "ball",
+"x": 26,
+"y": 22,
+"item": "Elixir"
+},
+{
+"map": "PowerPlant",
+"kind": "ball",
+"x": 36,
+"y": 5,
+"item": "Electrode2"
+},
+{
+"map": "PowerPlant",
+"kind": "ball",
+"x": 30,
+"y": 38,
+"item": "Electrode1"
+},
+{
+"map": "PowerPlant",
+"kind": "hidden",
+"x": 29,
+"y": 16,
+"item": "MAX_ELIXIR",
+"underfoot": false
+},
+{
+"map": "PowerPlant",
+"kind": "hidden",
+"x": 8,
+"y": 12,
+"item": "THUNDER_STONE",
+"underfoot": false
+},
+{
+"map": "RockTunnel_1F",
+"kind": "ball",
+"x": 37,
+"y": 5,
+"item": "Repel"
+},
+{
+"map": "RockTunnel_1F",
+"kind": "ball",
+"x": 33,
+"y": 22,
+"item": "Pearl"
+},
+{
+"map": "RockTunnel_1F",
+"kind": "ball",
+"x": 22,
+"y": 22,
+"item": "EscapeRope"
+},
+{
+"map": "RockTunnel_B1F",
+"kind": "ball",
+"x": 2,
+"y": 37,
+"item": "Revive"
+},
+{
+"map": "RockTunnel_B1F",
+"kind": "ball",
+"x": 9,
+"y": 2,
+"item": "MaxEther"
+},
+{
+"map": "RocketHideout_B1F",
+"kind": "ball",
+"x": 5,
+"y": 16,
+"item": "EscapeRope"
+},
+{
+"map": "RocketHideout_B1F",
+"kind": "ball",
+"x": 1,
+"y": 22,
+"item": "HyperPotion"
+},
+{
+"map": "RocketHideout_B1F",
+"kind": "hidden",
+"x": 16,
+"y": 17,
+"item": "PP_UP",
+"underfoot": false
+},
+{
+"map": "RocketHideout_B2F",
+"kind": "ball",
+"x": 15,
+"y": 3,
+"item": "XSpeed"
+},
+{
+"map": "RocketHideout_B2F",
+"kind": "ball",
+"x": 2,
+"y": 5,
+"item": "MoonStone"
+},
+{
+"map": "RocketHideout_B2F",
+"kind": "ball",
+"x": 5,
+"y": 7,
+"item": "TM12"
+},
+{
+"map": "RocketHideout_B2F",
+"kind": "ball",
+"x": 0,
+"y": 14,
+"item": "SuperPotion"
+},
+{
+"map": "RocketHideout_B3F",
+"kind": "ball",
+"x": 12,
+"y": 12,
+"item": "RareCandy"
+},
+{
+"map": "RocketHideout_B3F",
+"kind": "ball",
+"x": 19,
+"y": 14,
+"item": "TM21"
+},
+{
+"map": "RocketHideout_B3F",
+"kind": "ball",
+"x": 14,
+"y": 24,
+"item": "BlackGlasses"
+},
+{
+"map": "RocketHideout_B3F",
+"kind": "hidden",
+"x": 1,
+"y": 3,
+"item": "NUGGET",
+"underfoot": false
+},
+{
+"map": "RocketHideout_B4F",
+"kind": "ball",
+"x": 20,
+"y": 5,
+"item": "SilphScope"
+},
+{
+"map": "RocketHideout_B4F",
+"kind": "ball",
+"x": 3,
+"y": 2,
+"item": "LiftKey"
+},
+{
+"map": "RocketHideout_B4F",
+"kind": "ball",
+"x": 1,
+"y": 6,
+"item": "TM49"
+},
+{
+"map": "RocketHideout_B4F",
+"kind": "ball",
+"x": 4,
+"y": 14,
+"item": "MaxEther"
+},
+{
+"map": "RocketHideout_B4F",
+"kind": "ball",
+"x": 6,
+"y": 23,
+"item": "Calcium"
+},
+{
+"map": "RocketHideout_B4F",
+"kind": "hidden",
+"x": 22,
+"y": 6,
+"item": "NEST_BALL",
+"underfoot": false
+},
+{
+"map": "RocketHideout_B4F",
+"kind": "hidden",
+"x": 16,
+"y": 6,
+"item": "NET_BALL",
+"underfoot": false
+},
+{
+"map": "Route10",
+"kind": "hidden",
+"x": 10,
+"y": 19,
+"item": "SUPER_POTION",
+"underfoot": false
+},
+{
+"map": "Route10",
+"kind": "hidden",
+"x": 12,
+"y": 40,
+"item": "MAX_ETHER",
+"underfoot": false
+},
+{
+"map": "Route10",
+"kind": "hidden",
+"x": 6,
+"y": 26,
+"item": "CHERI_BERRY",
+"underfoot": false
+},
+{
+"map": "Route10",
+"kind": "hidden",
+"x": 17,
+"y": 29,
+"item": "PERSIM_BERRY",
+"underfoot": false
+},
+{
+"map": "Route10",
+"kind": "hidden",
+"x": 20,
+"y": 57,
+"item": "NANAB_BERRY",
+"underfoot": false
+},
+{
+"map": "Route11",
+"kind": "ball",
+"x": 42,
+"y": 12,
+"item": "XDefend"
+},
+{
+"map": "Route11",
+"kind": "ball",
+"x": 63,
+"y": 13,
+"item": "GreatBall"
+},
+{
+"map": "Route11",
+"kind": "ball",
+"x": 13,
+"y": 3,
+"item": "Awakening"
+},
+{
+"map": "Route11",
+"kind": "hidden",
+"x": 58,
+"y": 5,
+"item": "ESCAPE_ROPE",
+"underfoot": false
+},
+{
+"map": "Route12",
+"kind": "ball",
+"x": 18,
+"y": 36,
+"item": "TM48"
+},
+{
+"map": "Route12",
+"kind": "ball",
+"x": 9,
+"y": 101,
+"item": "Iron"
+},
+{
+"map": "Route12",
+"kind": "hidden",
+"x": 18,
+"y": 57,
+"item": "HYPER_POTION",
+"underfoot": false
+},
+{
+"map": "Route12",
+"kind": "hidden",
+"x": 14,
+"y": 70,
+"item": "LEFTOVERS",
+"underfoot": true
+},
+{
+"map": "Route12",
+"kind": "hidden",
+"x": 9,
+"y": 116,
+"item": "RARE_CANDY",
+"underfoot": false
+},
+{
+"map": "Route13",
+"kind": "hidden",
+"x": 23,
+"y": 14,
+"item": "PP_UP",
+"underfoot": false
+},
+{
+"map": "Route14",
+"kind": "hidden",
+"x": 9,
+"y": 20,
+"item": "ZINC",
+"underfoot": false
+},
+{
+"map": "Route14",
+"kind": "hidden",
+"x": 19,
+"y": 53,
+"item": "PINAP_BERRY",
+"underfoot": false
+},
+{
+"map": "Route15",
+"kind": "ball",
+"x": 20,
+"y": 6,
+"item": "TM18"
+},
+{
+"map": "Route16",
+"kind": "hidden",
+"x": 31,
+"y": 13,
+"item": "LEFTOVERS",
+"underfoot": true
+},
+{
+"map": "Route17",
+"kind": "hidden",
+"x": 18,
+"y": 83,
+"item": "RARE_CANDY",
+"underfoot": false
+},
+{
+"map": "Route17",
+"kind": "hidden",
+"x": 10,
+"y": 53,
+"item": "FULL_RESTORE",
+"underfoot": false
+},
+{
+"map": "Route17",
+"kind": "hidden",
+"x": 4,
+"y": 68,
+"item": "PP_UP",
+"underfoot": false
+},
+{
+"map": "Route17",
+"kind": "hidden",
+"x": 4,
+"y": 125,
+"item": "MAX_REVIVE",
+"underfoot": false
+},
+{
+"map": "Route17",
+"kind": "hidden",
+"x": 14,
+"y": 157,
+"item": "MAX_ELIXIR",
+"underfoot": false
+},
+{
+"map": "Route2",
+"kind": "ball",
+"x": 17,
+"y": 54,
+"item": "Ether"
+},
+{
+"map": "Route2",
+"kind": "ball",
+"x": 17,
+"y": 64,
+"item": "ParalyzeHeal"
+},
+{
+"map": "Route20",
+"kind": "hidden",
+"x": 23,
+"y": 6,
+"item": "STARDUST",
+"underfoot": false
+},
+{
+"map": "Route21_North",
+"kind": "hidden",
+"x": 17,
+"y": 42,
+"item": "PEARL",
+"underfoot": false
+},
+{
+"map": "Route23",
+"kind": "hidden",
+"x": 19,
+"y": 42,
+"item": "FULL_RESTORE",
+"underfoot": false
+},
+{
+"map": "Route23",
+"kind": "hidden",
+"x": 20,
+"y": 72,
+"item": "ULTRA_BALL",
+"underfoot": false
+},
+{
+"map": "Route23",
+"kind": "hidden",
+"x": 11,
+"y": 101,
+"item": "MAX_ETHER",
+"underfoot": false
+},
+{
+"map": "Route23",
+"kind": "hidden",
+"x": 3,
+"y": 18,
+"item": "LUM_BERRY",
+"underfoot": false
+},
+{
+"map": "Route23",
+"kind": "hidden",
+"x": 2,
+"y": 29,
+"item": "SITRUS_BERRY",
+"underfoot": false
+},
+{
+"map": "Route23",
+"kind": "hidden",
+"x": 10,
+"y": 67,
+"item": "ASPEAR_BERRY",
+"underfoot": false
+},
+{
+"map": "Route23",
+"kind": "hidden",
+"x": 3,
+"y": 128,
+"item": "LEPPA_BERRY",
+"underfoot": false
+},
+{
+"map": "Route23",
+"kind": "hidden",
+"x": 9,
+"y": 8,
+"item": "MAX_ELIXIR",
+"underfoot": false
+},
+{
+"map": "Route24",
+"kind": "ball",
+"x": 11,
+"y": 4,
+"item": "TM45"
+},
+{
+"map": "Route24",
+"kind": "hidden",
+"x": 19,
+"y": 4,
+"item": "PECHA_BERRY",
+"underfoot": false
+},
+{
+"map": "Route25",
+"kind": "ball",
+"x": 26,
+"y": 2,
+"item": "TM43"
+},
+{
+"map": "Route25",
+"kind": "hidden",
+"x": 14,
+"y": 2,
+"item": "ELIXIR",
+"underfoot": false
+},
+{
+"map": "Route25",
+"kind": "hidden",
+"x": 58,
+"y": 6,
+"item": "ETHER",
+"underfoot": false
+},
+{
+"map": "Route25",
+"kind": "hidden",
+"x": 33,
+"y": 8,
+"item": "ORAN_BERRY",
+"underfoot": false
+},
+{
+"map": "Route25",
+"kind": "hidden",
+"x": 40,
+"y": 3,
+"item": "BLUK_BERRY",
+"underfoot": false
+},
+{
+"map": "Route3",
+"kind": "hidden",
+"x": 26,
+"y": 9,
+"item": "ORAN_BERRY",
+"underfoot": false
+},
+{
+"map": "Route4",
+"kind": "ball",
+"x": 67,
+"y": 5,
+"item": "TM05"
+},
+{
+"map": "Route4",
+"kind": "hidden",
+"x": 43,
+"y": 2,
+"item": "GREAT_BALL",
+"underfoot": false
+},
+{
+"map": "Route4",
+"kind": "hidden",
+"x": 5,
+"y": 4,
+"item": "PERSIM_BERRY",
+"underfoot": false
+},
+{
+"map": "Route4",
+"kind": "hidden",
+"x": 67,
+"y": 17,
+"item": "RAZZ_BERRY",
+"underfoot": false
+},
+{
+"map": "Route6",
+"kind": "hidden",
+"x": 5,
+"y": 5,
+"item": "SITRUS_BERRY",
+"underfoot": false
+},
+{
+"map": "Route6",
+"kind": "hidden",
+"x": 19,
+"y": 5,
+"item": "RARE_CANDY",
+"underfoot": false
+},
+{
+"map": "Route7",
+"kind": "hidden",
+"x": 16,
+"y": 15,
+"item": "WEPEAR_BERRY",
+"underfoot": false
+},
+{
+"map": "Route8",
+"kind": "hidden",
+"x": 42,
+"y": 10,
+"item": "RAWST_BERRY",
+"underfoot": false
+},
+{
+"map": "Route8",
+"kind": "hidden",
+"x": 38,
+"y": 11,
+"item": "LUM_BERRY",
+"underfoot": false
+},
+{
+"map": "Route8",
+"kind": "hidden",
+"x": 42,
+"y": 15,
+"item": "LEPPA_BERRY",
+"underfoot": false
+},
+{
+"map": "Route9",
+"kind": "ball",
+"x": 12,
+"y": 17,
+"item": "TM40"
+},
+{
+"map": "Route9",
+"kind": "ball",
+"x": 65,
+"y": 17,
+"item": "BurnHeal"
+},
+{
+"map": "Route9",
+"kind": "hidden",
+"x": 15,
+"y": 7,
+"item": "ETHER",
+"underfoot": false
+},
+{
+"map": "Route9",
+"kind": "hidden",
+"x": 63,
+"y": 2,
+"item": "RARE_CANDY",
+"underfoot": false
+},
+{
+"map": "Route9",
+"kind": "hidden",
+"x": 48,
+"y": 2,
+"item": "CHESTO_BERRY",
+"underfoot": false
+},
+{
+"map": "SSAnne_1F_Room2",
+"kind": "ball",
+"x": 5,
+"y": 7,
+"item": "TM31"
+},
+{
+"map": "SSAnne_2F_Room2",
+"kind": "ball",
+"x": 3,
+"y": 3,
+"item": "Stardust"
+},
+{
+"map": "SSAnne_2F_Room4",
+"kind": "ball",
+"x": 2,
+"y": 4,
+"item": "XAttack"
+},
+{
+"map": "SSAnne_B1F_Corridor",
+"kind": "hidden",
+"x": 21,
+"y": 5,
+"item": "HYPER_POTION",
+"underfoot": false
+},
+{
+"map": "SSAnne_B1F_Room2",
+"kind": "ball",
+"x": 3,
+"y": 2,
+"item": "TM44"
+},
+{
+"map": "SSAnne_B1F_Room3",
+"kind": "ball",
+"x": 1,
+"y": 5,
+"item": "Ether"
+},
+{
+"map": "SSAnne_B1F_Room5",
+"kind": "ball",
+"x": 2,
+"y": 2,
+"item": "SuperPotion"
+},
+{
+"map": "SSAnne_Exterior",
+"kind": "hidden",
+"x": 58,
+"y": 28,
+"item": "LAVA_COOKIE",
+"underfoot": false
+},
+{
+"map": "SSAnne_Kitchen",
+"kind": "ball",
+"x": 1,
+"y": 10,
+"item": "GreatBall"
+},
+{
+"map": "SSAnne_Kitchen",
+"kind": "hidden",
+"x": 14,
+"y": 8,
+"item": "CHESTO_BERRY",
+"underfoot": false
+},
+{
+"map": "SSAnne_Kitchen",
+"kind": "hidden",
+"x": 14,
+"y": 4,
+"item": "PECHA_BERRY",
+"underfoot": false
+},
+{
+"map": "SSAnne_Kitchen",
+"kind": "hidden",
+"x": 14,
+"y": 6,
+"item": "CHERI_BERRY",
+"underfoot": false
+},
+{
+"map": "SafariZone_Center",
+"kind": "ball",
+"x": 24,
+"y": 15,
+"item": "Nugget"
+},
+{
+"map": "SafariZone_Center",
+"kind": "hidden",
+"x": 27,
+"y": 15,
+"item": "LEAF_STONE",
+"underfoot": false
+},
+{
+"map": "SafariZone_East",
+"kind": "ball",
+"x": 13,
+"y": 12,
+"item": "MaxPotion"
+},
+{
+"map": "SafariZone_East",
+"kind": "ball",
+"x": 37,
+"y": 15,
+"item": "FullRestore"
+},
+{
+"map": "SafariZone_East",
+"kind": "ball",
+"x": 31,
+"y": 18,
+"item": "TM11"
+},
+{
+"map": "SafariZone_East",
+"kind": "ball",
+"x": 36,
+"y": 17,
+"item": "LeafStone"
+},
+{
+"map": "SafariZone_North",
+"kind": "ball",
+"x": 33,
+"y": 5,
+"item": "Protein"
+},
+{
+"map": "SafariZone_North",
+"kind": "ball",
+"x": 28,
+"y": 9,
+"item": "TM47"
+},
+{
+"map": "SafariZone_North",
+"kind": "ball",
+"x": 29,
+"y": 17,
+"item": "QuickClaw"
+},
+{
+"map": "SafariZone_West",
+"kind": "ball",
+"x": 28,
+"y": 14,
+"item": "GoldTeeth"
+},
+{
+"map": "SafariZone_West",
+"kind": "ball",
+"x": 17,
+"y": 13,
+"item": "TM32"
+},
+{
+"map": "SafariZone_West",
+"kind": "ball",
+"x": 16,
+"y": 27,
+"item": "MaxPotion"
+},
+{
+"map": "SafariZone_West",
+"kind": "ball",
+"x": 27,
+"y": 24,
+"item": "MaxRevive"
+},
+{
+"map": "SafariZone_West",
+"kind": "hidden",
+"x": 13,
+"y": 11,
+"item": "REVIVE",
+"underfoot": false
+},
+{
+"map": "SaffronCity_CopycatsHouse_2F",
+"kind": "hidden",
+"x": 2,
+"y": 1,
+"item": "NUGGET",
+"underfoot": false
+},
+{
+"map": "SaffronCity_Dojo",
+"kind": "ball",
+"x": 5,
+"y": 3,
+"item": "HitmonleeBall"
+},
+{
+"map": "SaffronCity_Dojo",
+"kind": "ball",
+"x": 7,
+"y": 3,
+"item": "HitmonchanBall"
+},
+{
+"map": "SeafoamIslands_1F",
+"kind": "ball",
+"x": 11,
+"y": 8,
+"item": "IceHeal"
+},
+{
+"map": "SeafoamIslands_B1F",
+"kind": "ball",
+"x": 19,
+"y": 18,
+"item": "WaterStone"
+},
+{
+"map": "SeafoamIslands_B1F",
+"kind": "ball",
+"x": 24,
+"y": 14,
+"item": "Revive"
+},
+{
+"map": "SeafoamIslands_B2F",
+"kind": "ball",
+"x": 18,
+"y": 15,
+"item": "BigPearl"
+},
+{
+"map": "SeafoamIslands_B3F",
+"kind": "hidden",
+"x": 5,
+"y": 12,
+"item": "NUGGET",
+"underfoot": false
+},
+{
+"map": "SeafoamIslands_B4F",
+"kind": "ball",
+"x": 22,
+"y": 19,
+"item": "UltraBall"
+},
+{
+"map": "SeafoamIslands_B4F",
+"kind": "hidden",
+"x": 13,
+"y": 8,
+"item": "WATER_STONE",
+"underfoot": false
+},
+{
+"map": "SevenIsland_SevaultCanyon",
+"kind": "ball",
+"x": 18,
+"y": 45,
+"item": "KingsRock"
+},
+{
+"map": "SevenIsland_SevaultCanyon",
+"kind": "ball",
+"x": 7,
+"y": 38,
+"item": "MaxElixir"
+},
+{
+"map": "SevenIsland_SevaultCanyon",
+"kind": "ball",
+"x": 17,
+"y": 23,
+"item": "Nugget"
+},
+{
+"map": "SevenIsland_SevaultCanyon",
+"kind": "hidden",
+"x": 15,
+"y": 66,
+"item": "CHERI_BERRY",
+"underfoot": false
+},
+{
+"map": "SevenIsland_SevaultCanyon_Entrance",
+"kind": "hidden",
+"x": 8,
+"y": 29,
+"item": "RAWST_BERRY",
+"underfoot": false
+},
+{
+"map": "SevenIsland_SevaultCanyon_House",
+"kind": "ball",
+"x": 6,
+"y": 4,
+"item": "LuckyPunch"
+},
+{
+"map": "SevenIsland_TanobyRuins",
+"kind": "hidden",
+"x": 33,
+"y": 10,
+"item": "HEART_SCALE",
+"underfoot": false
+},
+{
+"map": "SevenIsland_TanobyRuins",
+"kind": "hidden",
+"x": 86,
+"y": 9,
+"item": "HEART_SCALE",
+"underfoot": false
+},
+{
+"map": "SevenIsland_TanobyRuins",
+"kind": "hidden",
+"x": 125,
+"y": 5,
+"item": "HEART_SCALE",
+"underfoot": false
+},
+{
+"map": "SevenIsland_TanobyRuins",
+"kind": "hidden",
+"x": 8,
+"y": 2,
+"item": "HEART_SCALE",
+"underfoot": false
+},
+{
+"map": "SevenIsland_TrainerTower",
+"kind": "hidden",
+"x": 49,
+"y": 27,
+"item": "BIG_PEARL",
+"underfoot": false
+},
+{
+"map": "SevenIsland_TrainerTower",
+"kind": "hidden",
+"x": 47,
+"y": 30,
+"item": "PEARL",
+"underfoot": false
+},
+{
+"map": "SevenIsland_TrainerTower",
+"kind": "hidden",
+"x": 59,
+"y": 32,
+"item": "NANAB_BERRY",
+"underfoot": false
+},
+{
+"map": "SilphCo_10F",
+"kind": "ball",
+"x": 5,
+"y": 15,
+"item": "Carbos"
+},
+{
+"map": "SilphCo_10F",
+"kind": "ball",
+"x": 2,
+"y": 15,
+"item": "UltraBall"
+},
+{
+"map": "SilphCo_10F",
+"kind": "ball",
+"x": 3,
+"y": 17,
+"item": "RareCandy"
+},
+{
+"map": "SilphCo_10F",
+"kind": "hidden",
+"x": 9,
+"y": 9,
+"item": "HP_UP",
+"underfoot": false
+},
+{
+"map": "SilphCo_11F",
+"kind": "ball",
+"x": 16,
+"y": 18,
+"item": "Zinc"
+},
+{
+"map": "SilphCo_11F",
+"kind": "hidden",
+"x": 10,
+"y": 18,
+"item": "REVIVE",
+"underfoot": false
+},
+{
+"map": "SilphCo_2F",
+"kind": "hidden",
+"x": 11,
+"y": 21,
+"item": "ULTRA_BALL",
+"underfoot": false
+},
+{
+"map": "SilphCo_3F",
+"kind": "ball",
+"x": 8,
+"y": 10,
+"item": "HyperPotion"
+},
+{
+"map": "SilphCo_3F",
+"kind": "hidden",
+"x": 34,
+"y": 18,
+"item": "PROTEIN",
+"underfoot": false
+},
+{
+"map": "SilphCo_4F",
+"kind": "ball",
+"x": 3,
+"y": 11,
+"item": "MaxRevive"
+},
+{
+"map": "SilphCo_4F",
+"kind": "ball",
+"x": 4,
+"y": 12,
+"item": "EscapeRope"
+},
+{
+"map": "SilphCo_4F",
+"kind": "ball",
+"x": 2,
+"y": 13,
+"item": "FullHeal"
+},
+{
+"map": "SilphCo_4F",
+"kind": "ball",
+"x": 30,
+"y": 18,
+"item": "TM41"
+},
+{
+"map": "SilphCo_4F",
+"kind": "hidden",
+"x": 35,
+"y": 20,
+"item": "IRON",
+"underfoot": false
+},
+{
+"map": "SilphCo_5F",
+"kind": "ball",
+"x": 4,
+"y": 9,
+"item": "Protein"
+},
+{
+"map": "SilphCo_5F",
+"kind": "ball",
+"x": 1,
+"y": 18,
+"item": "TM01"
+},
+{
+"map": "SilphCo_5F",
+"kind": "ball",
+"x": 22,
+"y": 21,
+"item": "CardKey"
+},
+{
+"map": "SilphCo_5F",
+"kind": "hidden",
+"x": 13,
+"y": 16,
+"item": "ELIXIR",
+"underfoot": false
+},
+{
+"map": "SilphCo_5F",
+"kind": "hidden",
+"x": 32,
+"y": 9,
+"item": "PP_UP",
+"underfoot": false
+},
+{
+"map": "SilphCo_6F",
+"kind": "ball",
+"x": 2,
+"y": 14,
+"item": "HPUp"
+},
+{
+"map": "SilphCo_6F",
+"kind": "ball",
+"x": 1,
+"y": 17,
+"item": "XSpecial"
+},
+{
+"map": "SilphCo_6F",
+"kind": "hidden",
+"x": 1,
+"y": 8,
+"item": "CARBOS",
+"underfoot": false
+},
+{
+"map": "SilphCo_7F",
+"kind": "ball",
+"x": 0,
+"y": 12,
+"item": "Calcium"
+},
+{
+"map": "SilphCo_7F",
+"kind": "ball",
+"x": 30,
+"y": 11,
+"item": "TM08"
+},
+{
+"map": "SilphCo_7F",
+"kind": "hidden",
+"x": 22,
+"y": 11,
+"item": "ZINC",
+"underfoot": false
+},
+{
+"map": "SilphCo_8F",
+"kind": "ball",
+"x": 24,
+"y": 8,
+"item": "Iron"
+},
+{
+"map": "SilphCo_8F",
+"kind": "hidden",
+"x": 29,
+"y": 10,
+"item": "NUGGET",
+"underfoot": false
+},
+{
+"map": "SilphCo_9F",
+"kind": "hidden",
+"x": 11,
+"y": 14,
+"item": "MAX_POTION",
+"underfoot": false
+},
+{
+"map": "SilphCo_9F",
+"kind": "hidden",
+"x": 5,
+"y": 8,
+"item": "CALCIUM",
+"underfoot": false
+},
+{
+"map": "SixIsland",
+"kind": "hidden",
+"x": 9,
+"y": 7,
+"item": "LEPPA_BERRY",
+"underfoot": false
+},
+{
+"map": "SixIsland_GreenPath",
+"kind": "hidden",
+"x": 12,
+"y": 9,
+"item": "ULTRA_BALL",
+"underfoot": false
+},
+{
+"map": "SixIsland_OutcastIsland",
+"kind": "ball",
+"x": 11,
+"y": 16,
+"item": "PPUp"
+},
+{
+"map": "SixIsland_OutcastIsland",
+"kind": "hidden",
+"x": 16,
+"y": 23,
+"item": "STAR_PIECE",
+"underfoot": false
+},
+{
+"map": "SixIsland_OutcastIsland",
+"kind": "hidden",
+"x": 6,
+"y": 24,
+"item": "NET_BALL",
+"underfoot": false
+},
+{
+"map": "SixIsland_RuinValley",
+"kind": "ball",
+"x": 5,
+"y": 33,
+"item": "HPUp"
+},
+{
+"map": "SixIsland_RuinValley",
+"kind": "ball",
+"x": 19,
+"y": 11,
+"item": "FullRestore"
+},
+{
+"map": "SixIsland_RuinValley",
+"kind": "ball",
+"x": 43,
+"y": 32,
+"item": "SunStone"
+},
+{
+"map": "SixIsland_WaterPath",
+"kind": "ball",
+"x": 17,
+"y": 19,
+"item": "Elixir"
+},
+{
+"map": "SixIsland_WaterPath",
+"kind": "ball",
+"x": 17,
+"y": 87,
+"item": "DragonScale"
+},
+{
+"map": "SixIsland_WaterPath",
+"kind": "hidden",
+"x": 15,
+"y": 76,
+"item": "ASPEAR_BERRY",
+"underfoot": false
+},
+{
+"map": "SixIsland_WaterPath",
+"kind": "hidden",
+"x": 3,
+"y": 8,
+"item": "ORAN_BERRY",
+"underfoot": false
+},
+{
+"map": "SixIsland_WaterPath",
+"kind": "hidden",
+"x": 13,
+"y": 63,
+"item": "PINAP_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland",
+"kind": "ball",
+"x": 18,
+"y": 17,
+"item": "Zinc"
+},
+{
+"map": "ThreeIsland",
+"kind": "hidden",
+"x": 5,
+"y": 13,
+"item": "PP_UP",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "ball",
+"x": 12,
+"y": 5,
+"item": "MaxEther"
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "ball",
+"x": 27,
+"y": 11,
+"item": "FullHeal"
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "ball",
+"x": 12,
+"y": 43,
+"item": "MaxElixir"
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 31,
+"y": 25,
+"item": "RAZZ_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 15,
+"y": 15,
+"item": "BLUK_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 25,
+"y": 24,
+"item": "NANAB_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 11,
+"y": 24,
+"item": "WEPEAR_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 37,
+"y": 18,
+"item": "ORAN_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 14,
+"y": 23,
+"item": "CHERI_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 47,
+"y": 5,
+"item": "CHESTO_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 7,
+"y": 30,
+"item": "PECHA_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 16,
+"y": 5,
+"item": "RAWST_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 25,
+"y": 6,
+"item": "ASPEAR_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 46,
+"y": 32,
+"item": "PERSIM_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 43,
+"y": 16,
+"item": "PINAP_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BerryForest",
+"kind": "hidden",
+"x": 8,
+"y": 5,
+"item": "LUM_BERRY",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BondBridge",
+"kind": "hidden",
+"x": 61,
+"y": 5,
+"item": "MAX_REPEL",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BondBridge",
+"kind": "hidden",
+"x": 44,
+"y": 12,
+"item": "PEARL",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_BondBridge",
+"kind": "hidden",
+"x": 33,
+"y": 7,
+"item": "STARDUST",
+"underfoot": false
+},
+{
+"map": "ThreeIsland_DunsparceTunnel",
+"kind": "hidden",
+"x": 21,
+"y": 3,
+"item": "NUGGET",
+"underfoot": false
+},
+{
+"map": "TwoIsland",
+"kind": "ball",
+"x": 39,
+"y": 16,
+"item": "Revive"
+},
+{
+"map": "TwoIsland_CapeBrink",
+"kind": "hidden",
+"x": 16,
+"y": 28,
+"item": "PP_MAX",
+"underfoot": true
+},
+{
+"map": "TwoIsland_CapeBrink",
+"kind": "hidden",
+"x": 15,
+"y": 13,
+"item": "RARE_CANDY",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_EastWestTunnel",
+"kind": "hidden",
+"x": 7,
+"y": 3,
+"item": "POTION",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_EastWestTunnel",
+"kind": "hidden",
+"x": 17,
+"y": 5,
+"item": "PARALYZE_HEAL",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_EastWestTunnel",
+"kind": "hidden",
+"x": 31,
+"y": 4,
+"item": "AWAKENING",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_EastWestTunnel",
+"kind": "hidden",
+"x": 45,
+"y": 3,
+"item": "BURN_HEAL",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_EastWestTunnel",
+"kind": "hidden",
+"x": 70,
+"y": 3,
+"item": "ICE_HEAL",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_EastWestTunnel",
+"kind": "hidden",
+"x": 55,
+"y": 2,
+"item": "ETHER",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_EastWestTunnel",
+"kind": "hidden",
+"x": 62,
+"y": 5,
+"item": "ANTIDOTE",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_NorthSouthTunnel",
+"kind": "hidden",
+"x": 5,
+"y": 30,
+"item": "POTION",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_NorthSouthTunnel",
+"kind": "hidden",
+"x": 5,
+"y": 6,
+"item": "ANTIDOTE",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_NorthSouthTunnel",
+"kind": "hidden",
+"x": 2,
+"y": 57,
+"item": "BURN_HEAL",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_NorthSouthTunnel",
+"kind": "hidden",
+"x": 1,
+"y": 24,
+"item": "AWAKENING",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_NorthSouthTunnel",
+"kind": "hidden",
+"x": 6,
+"y": 53,
+"item": "ICE_HEAL",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_NorthSouthTunnel",
+"kind": "hidden",
+"x": 3,
+"y": 15,
+"item": "PARALYZE_HEAL",
+"underfoot": false
+},
+{
+"map": "UndergroundPath_NorthSouthTunnel",
+"kind": "hidden",
+"x": 3,
+"y": 39,
+"item": "ETHER",
+"underfoot": false
+},
+{
+"map": "VermilionCity",
+"kind": "hidden",
+"x": 14,
+"y": 11,
+"item": "MAX_ETHER",
+"underfoot": false
+},
+{
+"map": "VictoryRoad_1F",
+"kind": "ball",
+"x": 12,
+"y": 3,
+"item": "RareCandy"
+},
+{
+"map": "VictoryRoad_1F",
+"kind": "ball",
+"x": 14,
+"y": 1,
+"item": "TM02"
+},
+{
+"map": "VictoryRoad_1F",
+"kind": "hidden",
+"x": 12,
+"y": 12,
+"item": "ULTRA_BALL",
+"underfoot": false
+},
+{
+"map": "VictoryRoad_1F",
+"kind": "hidden",
+"x": 16,
+"y": 1,
+"item": "FULL_RESTORE",
+"underfoot": false
+},
+{
+"map": "VictoryRoad_2F",
+"kind": "ball",
+"x": 17,
+"y": 6,
+"item": "GuardSpec"
+},
+{
+"map": "VictoryRoad_2F",
+"kind": "ball",
+"x": 40,
+"y": 7,
+"item": "TM07"
+},
+{
+"map": "VictoryRoad_2F",
+"kind": "ball",
+"x": 25,
+"y": 13,
+"item": "FullHeal"
+},
+{
+"map": "VictoryRoad_2F",
+"kind": "ball",
+"x": 14,
+"y": 13,
+"item": "TM37"
+},
+{
+"map": "VictoryRoad_3F",
+"kind": "ball",
+"x": 38,
+"y": 7,
+"item": "MaxRevive"
+},
+{
+"map": "VictoryRoad_3F",
+"kind": "ball",
+"x": 12,
+"y": 9,
+"item": "TM50"
+},
+{
+"map": "ViridianCity",
+"kind": "ball",
+"x": 17,
+"y": 5,
+"item": "Potion"
+},
+{
+"map": "ViridianCity_Gym",
+"kind": "hidden",
+"x": 2,
+"y": 2,
+"item": "MACHO_BRACE",
+"underfoot": true
+},
+{
+"map": "ViridianForest",
+"kind": "ball",
+"x": 5,
+"y": 41,
+"item": "PokeBall"
+},
+{
+"map": "ViridianForest",
+"kind": "ball",
+"x": 40,
+"y": 21,
+"item": "Antidote"
+},
+{
+"map": "ViridianForest",
+"kind": "ball",
+"x": 21,
+"y": 34,
+"item": "Potion"
+},
+{
+"map": "ViridianForest",
+"kind": "ball",
+"x": 49,
+"y": 60,
+"item": "Potion2"
+},
+{
+"map": "ViridianForest",
+"kind": "hidden",
+"x": 3,
+"y": 22,
+"item": "POTION",
+"underfoot": false
+},
+{
+"map": "ViridianForest",
+"kind": "hidden",
+"x": 28,
+"y": 57,
+"item": "ANTIDOTE",
+"underfoot": false
+}
+]
+}

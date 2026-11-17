@@ -273,6 +273,10 @@ struct State {
     mewtwo_evs_real: [u32; 6],
     /// Black Glasses equipped (`Params::black_glasses`).
     glasses: bool,
+    /// Never-Melt Ice held (pickup kind `neverice`): Ice moves x1.1, instead of the glasses.
+    ice: bool,
+    /// Leftovers held (pickup kind `leftovers`): 1/16 HP per turn, instead of the glasses.
+    leftovers: bool,
     /// Mystic Water bought and held (`Params::mystic_after`).
     mystic: bool,
     hp_frac: f64,
@@ -1583,9 +1587,12 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             m.force_torrent = cfg.free_torrent;
             if st.mystic {
                 m.boost = Some((11, 10));
-            } else if ctx.p.black_glasses && st.glasses {
+            } else if st.ice {
+                m.boost = Some((15, 10));
+            } else if ctx.p.black_glasses && st.glasses && !st.leftovers {
                 m.boost = Some((17, 10));
             }
+            m.leftovers = st.leftovers;
             if a.league && std::env::var_os("FRLG_HACK_PP").is_some() {
                 m.pp = vec![50; m.moves.len()];
             }
@@ -1948,9 +1955,12 @@ fn risk_fight(
     me.status = st.carry_status;
     if st.mystic {
         me.boost = Some((11, 10));
-    } else if ctx.p.black_glasses && st.glasses {
+    } else if st.ice {
+        me.boost = Some((15, 10));
+    } else if ctx.p.black_glasses && st.glasses && !st.leftovers {
         me.boost = Some((17, 10));
     }
+    me.leftovers = st.leftovers;
     let win = ctx
         .risk_win
         .get(st.seg_i)
@@ -2644,6 +2654,8 @@ pub fn attempt(
         mewtwo_evs: [0; 6],
         mewtwo_evs_real: [0; 6],
         glasses: false,
+        ice: false,
+        leftovers: false,
         mystic: false,
         hp_frac: 1.0,
         risk_hp: 1.0,
@@ -3309,6 +3321,11 @@ pub fn attempt(
                             );
                         }
                         "candy" => st.candies += 1,
+                        "neverice" => st.ice = true,
+                        "leftovers" => st.leftovers = true,
+                        // Any heal-to-full item found counts as a League heal (replaces one purchase).
+                        "heal" => st.heal_items += 1,
+                        "revive" => st.revives += 1,
                         // Vitamins found on the route (`item_effects.h`: +10 EVs, refused at 100 EVs in
                         // the stat; stats recalculated on use). Order HP, Atk, Def, Spe, SpA, SpD.
                         "hpup" | "protein" | "iron" | "carbos" | "calcium" | "zinc" => {
@@ -3478,6 +3495,9 @@ pub fn attempt(
                             .max(exp_for_level(Growth::MediumSlow, st.carry as u8));
                         bump(&mut st, 400.0 * ctx.p.text_factor);
                     }
+                    // A Rare Candy runs `CalculateMonStats`: the cached stats pick up every EV gained since
+                    // the last level-up (`pokemon.c`, `PokemonUseItemEffects` ITEM3_LEVEL_UP).
+                    st.evs = st.evs_real;
                     learn_moves(ctx, &mut st);
                 }
                 // HM03 Surf is taught to the carry after the Safari trip (the route needs a
