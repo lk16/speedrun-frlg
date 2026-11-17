@@ -22,3 +22,5 @@ No stream gives a timed museum+revive: A1 (11-14) never shows the Pewter detour 
 Aerodactyl, Diglett and the Mime trade. 54 s = 3225 f. The model's whole bundle (3600 + Mime 2600 + Diglett walk/hunt) is already about 160 s, matching 3 x 54;
 there is no evidence for 2400. With 3225: 1043 WR+2m -3.8 h [-6.3,-1.5], WR -8.8 h [-14.4,-4.5] (R 800k, seed 114). Constant left at 3600 (guess, error bar +-400 f);
 if it is changed it is a model recalibration, worth ~1.5-2.5%.
+
+Addendum: seed 112, R 3.2M, WR rung: HP IV 5 +25.5 h [-3.2,+52.5] (n.s.), Venonat second hunt +154.6 h [+132.7,+180.7]. Verdicts unchanged.
