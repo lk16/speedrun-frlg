@@ -129,6 +129,21 @@ impl Plan {
                     Some((rung_frames(r), v))
                 })
                 .collect(),
+            cut_adj: self
+                .params
+                .reset_adj
+                .iter()
+                .filter_map(|(rung, tab)| {
+                    let r = (0..LADDER_MINUTES.len()).find(|&r| rung_name(r) == *rung)?;
+                    let mut v = vec![(0u8, 0.0, 0.0); n];
+                    for (name, &(k, rf, sec)) in tab {
+                        if let Some(i) = self.segs.iter().position(|s| s.name == *name) {
+                            v[i] = (k, rf, sec * FPS);
+                        }
+                    }
+                    Some((rung_frames(r), v))
+                })
+                .collect(),
             oak_idx: self
                 .segs
                 .iter()

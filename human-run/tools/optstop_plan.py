@@ -39,6 +39,7 @@ for t in tables:
         if line.startswith('{'):
             j = json.loads(line)
             d.setdefault('reset_table', {})[j['rung']] = j['table']
+            d.setdefault('reset_adj', {})[j['rung']] = j.get('adj', {})
 if name:
     d['name'] = name
 new = text[:m.start(1)] + json.dumps(d, indent=1) + text[m.end(1):]

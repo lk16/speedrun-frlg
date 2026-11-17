@@ -80,6 +80,10 @@ pub struct Ctx<'a> {
     /// Optimal-stopping cutoffs: for a target in frames, the elapsed frames per segment above which
     /// the human resets at that split (NaN = no table entry, use the `reset_aggr` formula).
     pub cut_tables: Vec<(u64, Vec<f64>)>,
+    /// Second-variable adjustment of the cutoff per split: (kind 0 none / 1 dex count / 2 lead level,
+    /// reference value, frames of cutoff per unit above the reference): reset if
+    /// `clock > cut + slope * (x - ref)`. Same indexing as `cut_tables`.
+    pub cut_adj: Vec<(u64, Vec<(u8, f64, f64)>)>,
     /// The starter and its two evolutions.
     pub starter_line: [usize; 3],
     /// Levels at which the starter evolves (`decompiled/src/data/pokemon/evolution.h:3-8`).
@@ -164,6 +168,8 @@ pub struct Probe {
     /// Every split reached: (segment index, run clock, wall clock) just before the reset check
     /// (`optstop.rs` trains on these).
     pub split_log: Vec<(u32, u64, u64)>,
+    /// Alongside `split_log`: (Kanto species caught, lead level) at each split.
+    pub split_x: Vec<(u32, u32)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -2505,6 +2511,8 @@ pub fn attempt(
             .find(|(tt, _)| *tt == t)
             .map(|(_, v)| v)
     });
+    let adj_table: Option<&Vec<(u8, f64, f64)>> =
+        target.and_then(|t| ctx.cut_adj.iter().find(|(tt, _)| *tt == t).map(|(_, v)| v));
     for (i, seg) in ctx.segs.iter().enumerate() {
         let mut rng = Rng::new(seed, idx, hash_str(&seg.name));
         // The game's stream, re-keyed per segment (see `GameRng`).
@@ -3341,6 +3349,7 @@ pub fn attempt(
         if seg.split {
             if let Some(pr) = probe.as_deref_mut() {
                 pr.split_log.push((i as u32, st.clock, st.clock + st.off));
+                pr.split_x.push((st.caught.count(), st.carry));
             }
             if let Some(t) = target {
                 let cut = cut_table.map(|c| c[i]).filter(|c| !c.is_nan());
@@ -3358,7 +3367,12 @@ pub fn attempt(
                         Some(_) => 0.0,
                         None => ctx.aggr[i] * (mean - ctx.floor_after[i] as f64).max(0.0),
                     };
-                let over_cut = cut.is_some_and(|c| st.clock as f64 > c);
+                let shift = match adj_table.map(|a| a[i]) {
+                    Some((1, r, k)) => k * (st.caught.count() as f64 - r),
+                    Some((2, r, k)) => k * (st.carry as f64 - r),
+                    _ => 0.0,
+                };
+                let over_cut = cut.is_some_and(|c| st.clock as f64 > c + shift);
                 if over_cut || st.clock as f64 + remaining > t as f64 {
                     if let Some(r) = rec.as_deref_mut() {
                         r[i].resets += 1;

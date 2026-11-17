@@ -373,6 +373,11 @@ pub struct Params {
     /// above which the human resets at that split. A split without an entry keeps the
     /// `reset_aggr` formula; the best-case floor test always applies.
     pub reset_table: std::collections::HashMap<String, std::collections::HashMap<String, f64>>,
+    /// Second variable of the reset rule (`optstop.rs`): per rung name, per split,
+    /// `[kind, reference, seconds per unit]` with kind 1 = species caught, 2 = lead level; the
+    /// split's cutoff becomes `reset_table + seconds * (x - reference)`.
+    pub reset_adj:
+        std::collections::HashMap<String, std::collections::HashMap<String, (u8, f64, f64)>>,
     /// More segments after which the human checks the reset rule (the badge splits, the Hall of
     /// Fame and Oak's check are always splits).
     pub extra_splits: Vec<String>,
@@ -845,6 +850,7 @@ impl Default for Params {
             reset_aggr: 0.0,
             reset_aggr_at: Default::default(),
             reset_table: Default::default(),
+            reset_adj: Default::default(),
             extra_splits: vec![],
             dex_resets: false,
             battle_sim: false,

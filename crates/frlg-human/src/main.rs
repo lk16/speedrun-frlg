@@ -223,6 +223,9 @@ fn main() {
                 iters: arg(&args, "--iters", 4),
                 slack_s: arg(&args, "--slack", 240.0),
                 seed,
+                adj: args.iter().any(|a| a == "--adj" || a == "--slope-only"),
+                slope_only: args.iter().any(|a| a == "--slope-only"),
+                win_s: arg(&args, "--win", 400.0),
             };
             let rn = rung_name(rung);
             let res = frlg_human::optstop::run(&mut ctx, &cfg, |it| {
@@ -234,10 +237,16 @@ fn main() {
                     .iter()
                     .map(|(n, c, _, _)| format!("\"{n}\":{c:.0}"))
                     .collect();
+                let adjb: Vec<String> = last
+                    .adj
+                    .iter()
+                    .map(|(n, k, r, sl)| format!("\"{n}\":[{k},{r:.0},{sl:.0}]"))
+                    .collect();
                 println!(
-                    "{{\"rung\":\"{rn}\",\"eht_h\":{:.3},\"table\":{{{}}}}}",
+                    "{{\"rung\":\"{rn}\",\"eht_h\":{:.3},\"table\":{{{}}},\"adj\":{{{}}}}}",
                     last.lambda_h,
-                    body.join(",")
+                    body.join(","),
+                    adjb.join(",")
                 );
                 for (n, c, np, cens) in &last.table {
                     eprintln!(

@@ -19,9 +19,26 @@ pub struct Cfg {
     pub iters: u32,
     pub slack_s: f64,
     pub seed: u64,
+    /// Fit a second variable (dex count or lead level) per split.
+    pub adj: bool,
+    /// Keep the cutoffs of the starting table and fit only the second-variable slopes, locally
+    /// around each cutoff (`win_s` seconds either side).
+    pub slope_only: bool,
+    pub win_s: f64,
+}
+
+/// A split's rule: reset if `clock > cut + slope * (x - refx)`, x = species caught (kind 1) or lead
+/// level (kind 2); kind 0 = elapsed time only. `cut` and `slope` in frames.
+#[derive(Clone, Copy, Default)]
+pub struct Rule {
+    pub cut: f64,
+    pub kind: u8,
+    pub refx: f64,
+    pub slope: f64,
 }
 
 struct Traj {
+    x: Vec<(u32, u32)>,
     log: Vec<(u32, u64, u64)>,
     wall: u64,
     succ: bool,
@@ -80,16 +97,21 @@ impl Vfn {
 
     /// Largest elapsed with V > 0, and whether the data were censored (V stayed positive to the end).
     fn cutoff(&self) -> (f64, bool) {
+        self.cutoff_at(0.0)
+    }
+
+    /// The zero crossing of `V + d`.
+    fn cutoff_at(&self, d: f64) -> (f64, bool) {
         let p = &self.pts;
         if p.is_empty() {
             return (f64::NEG_INFINITY, false);
         }
-        if p[0].1 <= 0.0 {
+        if p[0].1 + d <= 0.0 {
             return (p[0].0, false);
         }
         for w in p.windows(2) {
-            if w[1].1 <= 0.0 {
-                let f = w[0].1 / (w[0].1 - w[1].1);
+            if w[1].1 + d <= 0.0 {
+                let f = (w[0].1 + d) / (w[0].1 - w[1].1);
                 return (w[0].0 + f * (w[1].0 - w[0].0), false);
             }
         }
@@ -118,10 +140,97 @@ fn fit(mut pts: Vec<(f64, f64)>) -> Vfn {
     }
 }
 
+/// Joint fit of `p ~ f(e) + c (x - xbar)` by back-fitting; returns (f, c, xbar, sd of x, t of c).
+fn fit_joint(mut pts: Vec<(f64, f64, f64)>) -> (Vfn, f64, f64, f64, f64) {
+    let n = pts.len();
+    pts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let nf = n as f64;
+    let xbar = pts.iter().map(|q| q.1).sum::<f64>() / nf;
+    let sd = (pts.iter().map(|q| (q.1 - xbar).powi(2)).sum::<f64>() / nf).sqrt();
+    let bins = (n / 300).clamp(1, 80);
+    let size = n.div_ceil(bins);
+    let chunks: Vec<&[(f64, f64, f64)]> = pts.chunks(size).collect();
+    let ws: Vec<f64> = chunks.iter().map(|c| c.len() as f64).collect();
+    let xs: Vec<f64> = chunks
+        .iter()
+        .map(|c| c.iter().map(|q| q.0).sum::<f64>() / c.len() as f64)
+        .collect();
+    let bx: Vec<f64> = chunks
+        .iter()
+        .map(|c| c.iter().map(|q| q.1).sum::<f64>() / c.len() as f64)
+        .collect();
+    let (mut c, mut fitted, mut t) = (0.0f64, vec![], 0.0f64);
+    for _ in 0..5 {
+        let ys: Vec<f64> = chunks
+            .iter()
+            .map(|ch| ch.iter().map(|q| q.2 - c * (q.1 - xbar)).sum::<f64>() / ch.len() as f64)
+            .collect();
+        fitted = pav_down(&ys, &ws);
+        let (mut sxy, mut sxx) = (0.0, 0.0);
+        for (k, ch) in chunks.iter().enumerate() {
+            for q in ch.iter() {
+                let xr = q.1 - bx[k];
+                sxy += (q.2 - fitted[k]) * xr;
+                sxx += xr * xr;
+            }
+        }
+        c = if sxx > 0.0 { sxy / sxx } else { 0.0 };
+        let mut rss = 0.0;
+        for (k, ch) in chunks.iter().enumerate() {
+            for q in ch.iter() {
+                rss += (q.2 - fitted[k] - c * (q.1 - bx[k])).powi(2);
+            }
+        }
+        let se = if sxx > 0.0 {
+            (rss / nf / sxx).sqrt()
+        } else {
+            f64::INFINITY
+        };
+        t = c / se;
+    }
+    (
+        Vfn {
+            pts: xs.into_iter().zip(fitted).collect(),
+        },
+        c,
+        xbar,
+        sd,
+        t,
+    )
+}
+
+/// A fitted split value: elapsed-time function plus an optional linear term in a second variable.
+#[derive(Clone, Default)]
+struct V2 {
+    f: Vfn,
+    kind: u8,
+    xbar: f64,
+    c: f64,
+}
+
+impl V2 {
+    fn at(&self, e: f64, xs: (u32, u32)) -> f64 {
+        let x = match self.kind {
+            1 => xs.0 as f64,
+            2 => xs.1 as f64,
+            _ => return self.f.at(e),
+        };
+        self.f.at(e) + self.c * (x - self.xbar)
+    }
+}
+
 type Info = Vec<(usize, usize, bool)>;
 
-/// One backward pass: the cutoff (frames) per segment index for the trajectories and `lambda` (frames).
-fn backward(ctx: &Ctx, trajs: &[Traj], lambda: f64, target: u64) -> (Vec<f64>, Info) {
+/// One backward pass: the rule per segment index for the trajectories and `lambda` (frames).
+fn backward(
+    ctx: &Ctx,
+    trajs: &[Traj],
+    lambda: f64,
+    target: u64,
+    adj: bool,
+    start: &[Rule],
+    cfg: &Cfg,
+) -> (Vec<Rule>, Info) {
     let n = ctx.segs.len();
     let mut by_seg: Vec<Vec<(u32, u32)>> = vec![vec![]; n];
     for (k, t) in trajs.iter().enumerate() {
@@ -129,18 +238,25 @@ fn backward(ctx: &Ctx, trajs: &[Traj], lambda: f64, target: u64) -> (Vec<f64>, I
             by_seg[e.0 as usize].push((k as u32, j as u32));
         }
     }
-    let mut cut = vec![f64::NAN; n];
-    let mut vfn: Vec<Vfn> = vec![Vfn::default(); n];
+    let mut rules = vec![
+        Rule {
+            cut: f64::NAN,
+            ..Default::default()
+        };
+        n
+    ];
+    let mut vfn: Vec<V2> = vec![V2::default(); n];
     let mut info = vec![];
     let splits: Vec<usize> = (0..n).filter(|&i| !by_seg[i].is_empty()).collect();
     for &s in splits.iter().rev() {
         let mut pts = Vec::with_capacity(by_seg[s].len());
+        let mut xs = Vec::with_capacity(by_seg[s].len());
         for &(k, j) in &by_seg[s] {
             let t = &trajs[k as usize];
             let (_, e, w) = t.log[j as usize];
             let p = match t.log.get(j as usize + 1) {
                 Some(&(sn, en, wn)) => {
-                    let v = vfn[sn as usize].at(en as f64).max(0.0);
+                    let v = vfn[sn as usize].at(en as f64, t.x[j as usize + 1]).max(0.0);
                     // The next split's rule also applies the floor; a state past it is worth 0.
                     let ok = (en + ctx.floor_after[sn as usize]) <= target;
                     -((wn - w) as f64) + if ok { v } else { 0.0 }
@@ -148,17 +264,89 @@ fn backward(ctx: &Ctx, trajs: &[Traj], lambda: f64, target: u64) -> (Vec<f64>, I
                 None => -((t.wall - w) as f64) + if t.succ { lambda } else { 0.0 },
             };
             pts.push((e as f64, p));
+            xs.push(t.x[j as usize]);
         }
         let n_pts = pts.len();
-        let f = fit(pts);
-        let (c, censored) = f.cutoff();
         let floor_c = target as f64 - ctx.floor_after[s] as f64;
-        cut[s] = c.min(floor_c);
-        vfn[s] = f;
+        let base = fit(pts.clone());
+        let (c0, censored) = base.cutoff();
+        let c0 = if cfg.slope_only && !start[s].cut.is_nan() {
+            start[s].cut
+        } else {
+            c0
+        };
+        let mut rule = Rule {
+            cut: c0.min(floor_c),
+            ..Default::default()
+        };
+        let mut v2 = V2 {
+            f: base,
+            ..Default::default()
+        };
+        if adj {
+            // Best of the two candidate variables by t statistic.
+            let mut best: Option<(u8, Vfn, f64, f64, f64, f64)> = None;
+            for kind in [1u8, 2] {
+                let win = if cfg.slope_only {
+                    cfg.win_s * FPS
+                } else {
+                    f64::INFINITY
+                };
+                let jp: Vec<(f64, f64, f64)> = pts
+                    .iter()
+                    .zip(&xs)
+                    .filter(|(q, _)| (q.0 - c0).abs() <= win)
+                    .map(|(q, x)| (q.0, if kind == 1 { x.0 as f64 } else { x.1 as f64 }, q.1))
+                    .collect();
+                if jp.len() < 600 {
+                    continue;
+                }
+                let (f, c, xbar, sd, t) = fit_joint(jp);
+                if best.as_ref().is_none_or(|b| t.abs() > b.5.abs()) {
+                    best = Some((kind, f, c, xbar, sd, t));
+                }
+            }
+            if let Some((kind, f, c, xbar, sd, t)) = best {
+                if t.abs() >= 3.0 && sd > 0.0 {
+                    let refx = xbar.round();
+                    let (mut c_ref, cens) = f.cutoff_at(c * (refx - xbar));
+                    if cfg.slope_only {
+                        // Cutoff at the reference: the starting table's cutoff, moved by the local slope
+                        // from the mean x of the window to the (rounded) reference.
+                        c_ref = c0 + (c_ref - f.cutoff_at(0.0).0);
+                    }
+                    let (hi, _) = f.cutoff_at(c * sd);
+                    let (lo, _) = f.cutoff_at(-c * sd);
+                    // Whole seconds per unit of the second variable (the shift for `+sd` vs `-sd`).
+                    let slope = ((hi - lo) / (2.0 * sd) / FPS).round() * FPS;
+                    if slope != 0.0 {
+                        rule = Rule {
+                            cut: c_ref.min(floor_c),
+                            kind,
+                            refx,
+                            slope,
+                        };
+                        v2 = if cfg.slope_only {
+                            V2 {
+                                f: v2.f.clone(),
+                                kind,
+                                xbar,
+                                c,
+                            }
+                        } else {
+                            V2 { f, kind, xbar, c }
+                        };
+                        let _ = cens;
+                    }
+                }
+            }
+        }
+        rules[s] = rule;
+        vfn[s] = v2;
         info.push((s, n_pts, censored));
     }
     info.reverse();
-    (cut, info)
+    (rules, info)
 }
 
 fn formula_cut(ctx: &Ctx, target: u64) -> Vec<f64> {
@@ -171,9 +359,15 @@ fn formula_cut(ctx: &Ctx, target: u64) -> Vec<f64> {
         .collect()
 }
 
-fn set_table(ctx: &mut Ctx, target: u64, cut: Vec<f64>) {
+fn set_rules(ctx: &mut Ctx, target: u64, rules: &[Rule], extra: f64) {
     ctx.cut_tables.retain(|(t, _)| *t != target);
-    ctx.cut_tables.push((target, cut));
+    ctx.cut_tables
+        .push((target, rules.iter().map(|r| r.cut + extra).collect()));
+    ctx.cut_adj.retain(|(t, _)| *t != target);
+    ctx.cut_adj.push((
+        target,
+        rules.iter().map(|r| (r.kind, r.refx, r.slope)).collect(),
+    ));
 }
 
 pub struct Iter {
@@ -181,21 +375,29 @@ pub struct Iter {
     pub finishes: u64,
     /// (segment, cutoff seconds, trajectories, censored)
     pub table: Vec<(String, f64, usize, bool)>,
+    /// (segment, kind, reference, seconds per unit) for the splits with a second variable
+    pub adj: Vec<(String, u8, f64, f64)>,
 }
 
 pub fn run(ctx: &mut Ctx, cfg: &Cfg, mut log: impl FnMut(&Iter)) -> Vec<Iter> {
     let n = ctx.segs.len();
     let split_ids: Vec<usize> = (0..n).filter(|&i| ctx.segs[i].split).collect();
-    let mut cur = formula_cut(ctx, cfg.target);
-    for (i, c) in cur.iter_mut().enumerate() {
-        if !ctx.segs[i].split {
-            *c = f64::NAN;
-        }
-    }
+    let existing = ctx
+        .cut_tables
+        .iter()
+        .find(|(t, _)| *t == cfg.target)
+        .map(|(_, v)| v.clone());
+    let init = existing.unwrap_or_else(|| formula_cut(ctx, cfg.target));
+    let mut cur: Vec<Rule> = (0..n)
+        .map(|i| Rule {
+            cut: if ctx.segs[i].split { init[i] } else { f64::NAN },
+            ..Default::default()
+        })
+        .collect();
     for &i in &split_ids {
-        eprintln!("  formula {:40} {:8.0} s", ctx.segs[i].name, cur[i] / FPS);
+        eprintln!("  start {:40} {:8.0} s", ctx.segs[i].name, cur[i].cut / FPS);
     }
-    set_table(ctx, cfg.target, cur.clone());
+    set_rules(ctx, cfg.target, &cur, 0.0);
     let eval = |ctx: &Ctx, seed: u64| {
         let t = totals(&evaluate_blocks(ctx, seed, cfg.eval, cfg.target), cfg.eval);
         (t.eht_hours().unwrap_or(f64::INFINITY), t.finishes)
@@ -205,13 +407,12 @@ pub fn run(ctx: &mut Ctx, cfg: &Cfg, mut log: impl FnMut(&Iter)) -> Vec<Iter> {
         lambda_h,
         finishes: fin0,
         table: vec![],
+        adj: vec![],
     });
     let mut out = vec![];
     for it in 0..cfg.iters {
         // Train on a policy slightly looser than the current table.
-        let slack = cfg.slack_s * FPS;
-        let train: Vec<f64> = cur.iter().map(|c| c + slack).collect();
-        set_table(ctx, cfg.target, train);
+        set_rules(ctx, cfg.target, &cur, cfg.slack_s * FPS);
         let seed = cfg.seed.wrapping_add(1000 * (it as u64 + 1));
         let ctx_ref: &Ctx = ctx;
         let trajs: Vec<Traj> = (0..cfg.train)
@@ -228,6 +429,7 @@ pub fn run(ctx: &mut Ctx, cfg: &Cfg, mut log: impl FnMut(&Iter)) -> Vec<Iter> {
                     Some(&mut pr),
                 );
                 Traj {
+                    x: pr.split_x,
                     log: pr.split_log,
                     wall: o.wall,
                     succ: o.finished && o.run <= cfg.target,
@@ -235,28 +437,50 @@ pub fn run(ctx: &mut Ctx, cfg: &Cfg, mut log: impl FnMut(&Iter)) -> Vec<Iter> {
             })
             .collect();
         let lambda = lambda_h * 3600.0 * FPS;
-        let (new_cut, info) = backward(ctx, &trajs, lambda, cfg.target);
+        let (new_rules, info) = backward(ctx, &trajs, lambda, cfg.target, cfg.adj, &cur, cfg);
         drop(trajs);
         // Whole seconds: the table a human memorises.
-        let mut cutv = vec![f64::NAN; n];
+        let mut nxt = vec![
+            Rule {
+                cut: f64::NAN,
+                ..Default::default()
+            };
+            n
+        ];
         for &i in &split_ids {
-            cutv[i] = if new_cut[i].is_nan() {
+            nxt[i] = if new_rules[i].cut.is_nan() {
                 cur[i]
             } else {
-                (new_cut[i] / FPS).floor() * FPS
+                Rule {
+                    cut: (new_rules[i].cut / FPS).floor() * FPS,
+                    ..new_rules[i]
+                }
             };
         }
-        cur = cutv;
-        set_table(ctx, cfg.target, cur.clone());
+        cur = nxt;
+        set_rules(ctx, cfg.target, &cur, 0.0);
         let (l, fin) = eval(ctx, seed ^ 0xE7A1);
         let table = info
             .iter()
-            .map(|&(s, np, cens)| (ctx.segs[s].name.clone(), cur[s] / FPS, np, cens))
+            .map(|&(s, np, cens)| (ctx.segs[s].name.clone(), cur[s].cut / FPS, np, cens))
+            .collect();
+        let adj = info
+            .iter()
+            .filter(|&&(s, _, _)| cur[s].kind != 0)
+            .map(|&(s, _, _)| {
+                (
+                    ctx.segs[s].name.clone(),
+                    cur[s].kind,
+                    cur[s].refx,
+                    cur[s].slope / FPS,
+                )
+            })
             .collect();
         let rec = Iter {
             lambda_h: l,
             finishes: fin,
             table,
+            adj,
         };
         log(&rec);
         lambda_h = l;
