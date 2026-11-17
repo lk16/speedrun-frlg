@@ -1566,9 +1566,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         let xs: Vec<XItem> = x_plan
             .iter()
             .filter(|&&x| {
-                if x == XItem::CalmMind {
+                if let Some(m) = x.setup_move(dex) {
                     // A move, not stock: queued only for a fighter that knows it.
-                    return me.moves.contains(&dex.move_id("MOVE_CALM_MIND"));
+                    return me.moves.contains(&m);
                 }
                 let i = x_index(x);
                 if stock[i] > 0 {
@@ -1622,7 +1622,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         for x in xs
             .iter()
-            .filter(|&&x| x != XItem::CalmMind)
+            .filter(|&&x| x.setup_move(dex).is_none())
             .take(out.x_used as usize)
         {
             st.x_stock[x_index(*x)] -= 1;
@@ -1967,7 +1967,7 @@ fn x_index(x: XItem) -> usize {
         XItem::DireHit => 4,
         XItem::Accuracy => 5,
         XItem::GuardSpec => 6,
-        XItem::CalmMind => unreachable!("Calm Mind is a move, not stock"),
+        XItem::CalmMind | XItem::Move(_) => unreachable!("a set-up move is not stock"),
     }
 }
 
