@@ -370,6 +370,7 @@ fn set_rules(ctx: &mut Ctx, target: u64, rules: &[Rule], extra: f64) {
     ));
 }
 
+#[derive(Clone)]
 pub struct Iter {
     pub lambda_h: f64,
     pub finishes: u64,
@@ -402,14 +403,31 @@ pub fn run(ctx: &mut Ctx, cfg: &Cfg, mut log: impl FnMut(&Iter)) -> Vec<Iter> {
         let t = totals(&evaluate_blocks(ctx, seed, cfg.eval, cfg.target), cfg.eval);
         (t.eht_hours().unwrap_or(f64::INFINITY), t.finishes)
     };
-    let (mut lambda_h, fin0) = eval(ctx, cfg.seed ^ 0xE0);
-    log(&Iter {
+    // Every iterate is evaluated on the same seed (paired with the starting table), and the best
+    // one is returned: at a low finish rate the fit is noisy and a refit can be worse than the
+    // table it started from (journal 2026-11-30), so the last iterate is not trusted.
+    let eval_seed = cfg.seed ^ 0xE0;
+    let (mut lambda_h, fin0) = eval(ctx, eval_seed);
+    let table_of = |ctx: &Ctx, cur: &[Rule], info: &[usize]| -> Vec<(String, f64, usize, bool)> {
+        info.iter()
+            .map(|&s| (ctx.segs[s].name.clone(), cur[s].cut / FPS, 0, false))
+            .collect()
+    };
+    let start_rec = Iter {
         lambda_h,
         finishes: fin0,
-        table: vec![],
+        table: table_of(ctx, &cur, &split_ids),
         adj: vec![],
-    });
+    };
+    log(&start_rec);
+    let mut best = start_rec;
     let mut out = vec![];
+    if cfg.train > 0 && fin0 * cfg.train / cfg.eval.max(1) < 1500 {
+        eprintln!(
+            "  warning: about {} finishes in the training set; refits below ~1500 are noise-dominated",
+            fin0 * cfg.train / cfg.eval.max(1)
+        );
+    }
     for it in 0..cfg.iters {
         // Train on a policy slightly looser than the current table.
         set_rules(ctx, cfg.target, &cur, cfg.slack_s * FPS);
@@ -459,7 +477,7 @@ pub fn run(ctx: &mut Ctx, cfg: &Cfg, mut log: impl FnMut(&Iter)) -> Vec<Iter> {
         }
         cur = nxt;
         set_rules(ctx, cfg.target, &cur, 0.0);
-        let (l, fin) = eval(ctx, seed ^ 0xE7A1);
+        let (l, fin) = eval(ctx, eval_seed);
         let table = info
             .iter()
             .map(|&(s, np, cens)| (ctx.segs[s].name.clone(), cur[s].cut / FPS, np, cens))
@@ -484,8 +502,13 @@ pub fn run(ctx: &mut Ctx, cfg: &Cfg, mut log: impl FnMut(&Iter)) -> Vec<Iter> {
         };
         log(&rec);
         lambda_h = l;
+        if rec.lambda_h < best.lambda_h {
+            best = rec.clone();
+        }
         out.push(rec);
     }
+    // The best iterate last (the caller prints the last element).
+    out.push(best);
     out
 }
 
