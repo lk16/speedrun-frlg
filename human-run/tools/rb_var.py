@@ -105,6 +105,9 @@ VARIANTS = {
     'nomaxe_route23': lambda q: q.__setitem__('elixirs', [e for e in q['elixirs'] if not (e['kind'] == 'max' and e['after'] == 'route23')]),
     'spe27': _set(**{'manip.min_spe': 27}),
     'spe23': _set(**{'manip.min_spe': 23}),
+    'combo': lambda q: (_xbuy_special(11)(q), _set(heal_below=0.5)(q), _tactic('champion-2', ['calm', 'calm', 'calm'])(q)),
+    'combo_hs': lambda q: (_xbuy_special(11)(q), _set(heal_below=0.5)(q)),
+    'hb5_c3': lambda q: (_set(heal_below=0.5)(q), _tactic('champion-2', ['calm', 'calm', 'calm'])(q)),
     'phit_free': _set(**{'manip.quiet_max_hits': 4}),
 }
 
