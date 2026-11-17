@@ -23,3 +23,7 @@ WR+2m 419.5 h (1831 finishes), 407.4 h (1883); WR 595.2 h (1229), 582.3 h (1254)
 
 ## Next
 Restart pass 1 (`descend.py --set all`) from 1029: the 9 promotions were all chosen against the old windows, so some may reverse under the refit windows.
+
+## Closing: pass 1 from 1029 (done; accepted 0)
+`descend.py --set all --rung WR+2m --r1 3200000 --r2 3200000` (FRLG_MINGAIN 0.01) from `1029-refit-lane`: 667 candidates, 5 screen accepts, 0 confirmed on seed 2, 0 promotions. The five: hunts[6] ROUTE23 stop_after 2->1 (screen -13.0 h, confirm -7.2), hunts[7] ROUTE10 stop_after 2->1 (-21.0, confirm -0.9, CI spans 0), fight_until_level 18->17 (-9.9, confirm -6.9), hunts[6] ROUTE23 steps x0.5 (-10.8, confirm -2.7, CI spans 0), xbuys[1] heals 4->2 (-13.8, confirm -6.8, CI spans 0). The confirms are all below the 1% bar or consistent with 0; the nine pass-0 promotions survive the refit windows (none reversed). 1029 is converged on the `--set all` knob set (and on early and earlymid, journal 2026-11-23-14-00); CURRENT stays `1029-refit-lane` (WR+2m 407-420 h, WR 582-595 h, R 3.2M seeds 51/52).
+Not done / remains: the risk windows and S rest on 3-10 observations per late window (the +180 h refit cost shows how much EHT depends on them); stand-ins league_power 1.4, mewtwo_power 1.2, carry_power are still fitted constants; a tier-1 calibration of the League Champion fights would narrow the 260-850 h grid range.
