@@ -915,6 +915,34 @@ mod tests {
     }
 
     #[test]
+    fn fill_after_hof_moves_the_oak_check_and_risk_canon_keeps_window_power_by_fight() {
+        let dex = DEX.get_or_init(Dex::load);
+        let base = |extra: &str| {
+            let text = PLAN.replace(
+                "\"name\":\"t\"",
+                &format!("\"name\":\"t\",\"route_style\":\"wr\",\"version\":\"LG\",{extra}"),
+            );
+            Plan::load(dex, &text).unwrap()
+        };
+        let pos = |p: &Plan, n: &str| p.segs.iter().position(|s| s.name == n).unwrap();
+        let early = base("\"fill_after_hof\":false");
+        let late = base("\"fill_after_hof\":true");
+        assert!(pos(&early, "dex-fill") < pos(&early, "hall-of-fame-1"));
+        assert!(pos(&late, "dex-fill") > pos(&late, "hall-of-fame-1"));
+        assert!(pos(&late, "dex-fill") < pos(&late, "oak-national-dex"));
+        // Windows keyed by fight: the same segment gets the same window in a reordered variant.
+        let win = "\"risk_windows\":[{\"until\":\"giovanni-badge\",\"power\":1.5}],\"no_salvage_until\":\"brock\"";
+        let a = base(&format!("{win},\"risk_canon\":[]"));
+        let b = base(&format!(
+            "{win},\"risk_canon\":[],\"route_variants\":[\"erika_pre_silph\"]"
+        ));
+        let (ca, cb) = (a.ctx(), b.ctx());
+        for n in ["rival-silph", "sabrina", "erika"] {
+            assert_eq!(ca.risk_win[pos(&a, n)], cb.risk_win[pos(&b, n)], "{n}");
+        }
+    }
+
+    #[test]
     fn plan_without_json_block_is_an_error() {
         let dex = DEX.get_or_init(Dex::load);
         assert!(Plan::load(dex, "no block here").is_err());
