@@ -168,8 +168,10 @@ def cmd_design(a):
     prior = opt(a, '--prior', 'pre')
     var = opt(a, '--variant', '')
     flatD = '--flatD' in a
+    carry = opt(a, '--carry', '')       # CAL.json of an earlier plan: take lane / flat from ITS calibration (same residual hazard)
+    carryplan = opt(a, '--carryplan', '1057-calm-sp9-ppup-redo')
     base = L.load_plan(plan)
-    cal = Cal(calp, base)
+    cal = Cal(carry, L.load_plan(carryplan)) if carry else Cal(calp, base)
     if var:
         import rb_var as V
         base = V.variant(var, base)
