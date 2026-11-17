@@ -349,7 +349,14 @@ fn main() {
             println!("\nwaste by the split window the attempt ended in (whole wall of those attempts incl. starter/off time; h per finish)");
             println!(
                 "{:<34}{:>9}{:>9}{:>9}{:>9}{:>9}{:>8}{:>7}",
-                "split (window end)", "n_rst", "n_death", "h_rst", "h_death", "h_tot", "share%", "cum%"
+                "split (window end)",
+                "n_rst",
+                "n_death",
+                "h_rst",
+                "h_death",
+                "h_tot",
+                "share%",
+                "cum%"
             );
             let waste: f64 = per
                 .iter()
@@ -403,7 +410,11 @@ fn main() {
                                 } else {
                                     sc[we]
                                 };
-                                let end_clock = if e <= we { o.run.min(end_clock.max(sc[start_of.saturating_sub(1)])) } else { end_clock };
+                                let end_clock = if e <= we {
+                                    o.run.min(end_clock.max(sc[start_of.saturating_sub(1)]))
+                                } else {
+                                    end_clock
+                                };
                                 v[j].2 += (end_clock.saturating_sub(prev)) as f64
                                     + if j == 0 { o.off as f64 } else { 0.0 };
                                 prev = end_clock;

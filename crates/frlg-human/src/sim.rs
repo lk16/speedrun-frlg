@@ -2820,9 +2820,9 @@ pub fn attempt(
                                 finished: false,
                                 caught: st.caught.count(),
                                 whiteouts: st.whiteouts,
-off: st.off,
-end_seg: st.seg_i as u32,
-kind: 1,
+                                off: st.off,
+                                end_seg: st.seg_i as u32,
+                                kind: 1,
                             };
                         }
                     }
@@ -3293,9 +3293,9 @@ kind: 1,
                     finished: false,
                     caught: st.caught.count(),
                     whiteouts: st.whiteouts,
-off: st.off,
-end_seg: st.seg_i as u32,
-kind: 4,
+                    off: st.off,
+                    end_seg: st.seg_i as u32,
+                    kind: 4,
                 };
             }
         }
@@ -3333,9 +3333,9 @@ kind: 4,
                     finished: false,
                     caught: st.caught.count(),
                     whiteouts: st.whiteouts,
-off: st.off,
-end_seg: st.seg_i as u32,
-kind: 2,
+                    off: st.off,
+                    end_seg: st.seg_i as u32,
+                    kind: 2,
                 };
             }
         } else if seg.starter_check {
@@ -3366,9 +3366,9 @@ kind: 2,
                     finished: false,
                     caught: st.caught.count(),
                     whiteouts: st.whiteouts,
-off: st.off,
-end_seg: st.seg_i as u32,
-kind: 2,
+                    off: st.off,
+                    end_seg: st.seg_i as u32,
+                    kind: 2,
                 };
             }
         }
@@ -3456,9 +3456,9 @@ kind: 2,
                         finished: false,
                         caught: st.caught.count(),
                         whiteouts: st.whiteouts,
-off: st.off,
-end_seg: st.seg_i as u32,
-kind: 1,
+                        off: st.off,
+                        end_seg: st.seg_i as u32,
+                        kind: 1,
                     };
                 }
             }
@@ -3471,8 +3471,8 @@ kind: 1,
         finished,
         caught: st.caught.count(),
         whiteouts: st.whiteouts,
-off: st.off,
-end_seg: st.seg_i as u32,
-kind: if finished { 0 } else { 3 },
+        off: st.off,
+        end_seg: st.seg_i as u32,
+        kind: if finished { 0 } else { 3 },
     }
 }
