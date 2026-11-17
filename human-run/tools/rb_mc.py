@@ -161,9 +161,13 @@ def cmd_design(a):
     seed0 = opt(a, '--seed0', 100)
     rungs = opt(a, '--rungs', 'WR+2m,WR').split(',')
     prior = opt(a, '--prior', 'pre')
+    var = opt(a, '--variant', '')
     flatD = '--flatD' in a
     base = L.load_plan(plan)
     cal = Cal(calp, base)
+    if var:
+        import rb_var as V
+        base = V.variant(var, base)
     rng = random.Random(seed0)
     U = lhs(n, 2 + len(CONT), rng)
     rows = json.load(open(out)) if os.path.exists(out) else []
