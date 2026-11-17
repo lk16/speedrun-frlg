@@ -24,7 +24,8 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     if p.item_swaps {
         // Persim Berry for Misty's confusion every run, and the Mark-guy / potion menus
         // (`STRATEGY.md` 4, 6: T07 1:23:20, T06 2:55:15, 3:33:25). Frames: guesses (bag trips).
-        b.text("persim-and-potions", 810, Src::Guess);
+        let fr = if p.persim { 810 } else { 810 - p.persim_frames.min(810) };
+        b.text("persim-and-potions", fr, Src::Guess);
     }
     leg_misty(b, p, h);
     // then Nugget Bridge and Bill (the rival at Cerulean, `CeruleanCity/scripts.inc`, stands on the

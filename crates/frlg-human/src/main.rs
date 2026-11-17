@@ -513,6 +513,7 @@ fn main() {
                     "dire" => XItem::DireHit,
                     "accuracy" => XItem::Accuracy,
                     "guard" => XItem::GuardSpec,
+                    "calm" => XItem::CalmMind,
                     o => panic!("unknown x item {o}"),
                 })
                 .collect();
