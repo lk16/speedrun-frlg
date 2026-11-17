@@ -903,6 +903,10 @@ pub enum XItem {
     Accuracy,
     /// Guard Spec: Mist for five turns on the player's side (`ITEM_GUARD_SPEC`, `item_effects.h`).
     GuardSpec,
+    /// Not an item: the fighter's own Calm Mind (TM04, Sabrina's gift, `SaffronCity_Gym/scripts.inc:22-24`;
+    /// +1 Sp. Atk and +1 Sp. Def, `EFFECT_CALM_MIND`). A normal move turn (priority 0, one PP), no bag
+    /// trip and no stock; the sim only queues it for a fighter that knows the move.
+    CalmMind,
 }
 
 /// What happened in a fight.
@@ -3359,6 +3363,9 @@ fn run(
             // --- order (`GetWhoStrikesFirst`): priority, then speed, ties Random() & 1.
             let my_prio = match my_action {
                 Action::Move(mv) => dex.moves[mv].prio,
+                Action::XItem(XItem::CalmMind) | Action::Sac(Some(XItem::CalmMind)) => {
+                    dex.moves[dex.move_id("MOVE_CALM_MIND")].prio
+                }
                 _ => 6, // item use happens before moves
             };
             let en_prio = if enemy_heals_now || enemy_switched {
@@ -3391,6 +3398,10 @@ fn run(
                     Action::Switch => {
                         out.item_turns += 1;
                     }
+                    Action::XItem(XItem::CalmMind) => {
+                        let mv = dex.move_id("MOVE_CALM_MIND");
+                        do_move(&ex, me, e, mv, my_side, en_side, true, first, out, rng);
+                    }
                     Action::XItem(x) => {
                         out.item_turns += 1;
                         out.x_used += 1;
@@ -3412,6 +3423,7 @@ fn run(
                                 apply_stat_change(me, 5, 1, false);
                             }
                             XItem::GuardSpec => my_side.mist = 5,
+                            XItem::CalmMind => unreachable!("handled above"),
                         }
                     }
                     Action::Heal => {
@@ -3436,6 +3448,10 @@ fn run(
                             out.sacs_used += 1;
                         }
                         match x {
+                            Some(XItem::CalmMind) => {
+                                let mv = dex.move_id("MOVE_CALM_MIND");
+                                do_move(&ex, me, e, mv, my_side, en_side, true, first, out, rng);
+                            }
                             Some(x) => {
                                 out.x_used += 1;
                                 match x {
@@ -3456,6 +3472,7 @@ fn run(
                                         apply_stat_change(me, 5, 1, false);
                                     }
                                     XItem::GuardSpec => my_side.mist = 5,
+                                    XItem::CalmMind => unreachable!("handled above"),
                                 }
                             }
                             None if !tac.sac_free => {}
