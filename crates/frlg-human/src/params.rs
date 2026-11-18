@@ -494,6 +494,10 @@ pub struct Params {
     /// acts as usual. guess; `STRATEGY.md` section 4 (T10 2:49:21 "kick-select input errors nearly
     /// killed runs"), section 1.3 (late-day errors, T03/T10). 0 = off.
     pub menu_slip: f64,
+    /// Value factor of a scarce-PP move (Blizzard / Fire Blast, base PP <= 5) in the player's move choice unless it
+    /// kills. 0.6 rations Blizzard for Lance; the WR video and the 2026-11-14 stream Blizzard Gyarados at once
+    /// (`video-analysis/data/calib/league-*.json`), 1.0 = no rationing.
+    pub scarce_factor: f64,
     /// Fidelity fit 2026-11-14 (`human-run/journal/2026-11-14-22-00-fidelity-fit.md`): per segment
     /// probability that the attempt ends there for good (a death the human does not salvage:
     /// a whiteout in the League sends him back to the first room, one in a mid-game fight loses
@@ -930,6 +934,7 @@ impl Default for Params {
             persim: true,
             persim_frames: 300,
             menu_slip: 0.0,
+            scarce_factor: 0.6,
             fatal: Default::default(),
             slow: vec![],
             slow_scale: 1.0,

@@ -97,17 +97,6 @@ const SCARCE_PP: u32 = 5;
 /// A scarce move's value is scaled by this unless it kills.
 const SCARCE_FACTOR: f64 = 0.6;
 
-/// `FRLG_SCARCE` overrides `SCARCE_FACTOR` (calibration studies only).
-fn scarce_factor() -> f64 {
-    static V: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
-    *V.get_or_init(|| {
-        std::env::var("FRLG_SCARCE")
-            .ok()
-            .and_then(|v| v.parse().ok())
-            .unwrap_or(SCARCE_FACTOR)
-    })
-}
-
 /// How the engine interprets a move's `EFFECT_*` (`battle_moves.h`). Everything that the
 /// route's trainers, wilds and the player can carry maps to one of these; unmodelled
 /// effects fall into `Nop` (status moves that then do nothing) or `PlainHit`.
@@ -883,6 +872,9 @@ pub struct Tactics {
     /// Probability that one chosen move is a menu slip: another usable move of the set is used
     /// instead (`Params::menu_slip`).
     pub menu_slip: f64,
+    /// Value factor of a scarce-PP move (Blizzard, Fire Blast) unless it kills (`Params::scarce_factor`;
+    /// 1.0 = no rationing).
+    pub scarce: f64,
 }
 
 impl Default for Tactics {
@@ -903,6 +895,7 @@ impl Default for Tactics {
             rollouts: 0,
             setup_min: 1,
             menu_slip: 0.0,
+            scarce: SCARCE_FACTOR,
         }
     }
 }
@@ -2850,6 +2843,7 @@ fn ai_wants_item(total: u32, left: u32, valid: u32, e: &Mon) -> bool {
 /// Mutable state of one fight that a rollout must be able to copy.
 #[derive(Clone)]
 struct Fs {
+    scarce: f64,
     my_side: Side,
     en_side: Side,
     setup_idx: usize,
@@ -2907,6 +2901,7 @@ pub fn fight(
         others_alive: tac.others_alive,
         stalls: 0,
         last_move: None,
+        scarce: tac.scarce,
     };
     // Party slots, so that a mon the AI switches out returns to its place on the bench.
     let numbered: Vec<Mon> = foes
@@ -3142,7 +3137,7 @@ fn best_attack(
         // WR run keeps Blizzard for Lance ("Max Elixir between E4 fights"; the
         // exact-engine audit of 2026-11-14 found the pool drained by Agatha).
         if m.pp <= SCARCE_PP && !wild {
-            s *= scarce_factor();
+            s *= fs.scarce;
         }
         let min_roll = (calc_damage(dex, me, e, mv, 0, false, &fs.en_side, None) * 85) / 100;
         let acc_ok = hit_pct(me, e, m) >= 95;
@@ -4138,6 +4133,7 @@ mod tests {
                 rollouts: 0,
                 setup_min: 1,
                 menu_slip: 0.0,
+                scarce: SCARCE_FACTOR,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);

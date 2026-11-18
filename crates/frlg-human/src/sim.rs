@@ -1728,6 +1728,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             rollouts: if a.league { ctx.p.league_rollouts } else { 0 },
             setup_min: ctx.p.setup_min_turns,
             menu_slip: ctx.p.menu_slip,
+            scarce: ctx.p.scarce_factor,
         };
         // Risk lane: the honest copy of this fight decides whether the attempt survives it.
         let mut risk_healed = false;
