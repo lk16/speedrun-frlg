@@ -1,5 +1,7 @@
 # human-run: a human-executable Round 2 plan, optimised by simulation
 
+> **Open-ended run:** start the 10-minute watchdog cron from `CLAUDE.md` ("Open-ended tasks: the watchdog cron") in your first turn, use `bin/frlg-watchdog` for status, and read `human-run/NEXT.md` for the ranked search queue.
+
 You are on branch `human-run`. This target is different from everything else in the repo:
 the goal is **not** a TAS. It is the plan a *human* should follow to beat the Elite 4 Round 2
 world record, found by simulating a human executing candidate plans many times in Rust and
