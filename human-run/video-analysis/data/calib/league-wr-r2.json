@@ -1,0 +1,791 @@
+{
+ "source": "frlgr2-wr-3.25.25-main97.mp4, video 3:12:00-3:24:30 (run time = video - 0:35); frames sampled every 3 s over the whole window with 1-2 s zooms on ambiguous turns; foe bars from tools/foe-bar.py at STEP=1 s. Player is one Mewtwo 'A' (Psychic/Fire Blast/Safeguard/Earthquake); party also Ch'ding Lv6, Clefable Lv8, Omanyte Lv5, Abra Lv9, Blastoise Lv59 (109/176).",
+ "fights": [
+  {
+   "fight": "lorelei",
+   "video_start": "3:12:18",
+   "video_end": "3:14:01",
+   "player": {
+    "species": "Mewtwo",
+    "nickname": "A",
+    "level_start": 70,
+    "level_end": 70,
+    "max_hp_start": 231,
+    "stats_seen": null
+   },
+   "turns": [
+    {
+     "n": 1,
+     "t": "3:12:33",
+     "foe": "Dewgong",
+     "foe_lv": 64,
+     "action": "Psychic",
+     "foe_move": "Double Team",
+     "hp_before": 231,
+     "hp_after": 231,
+     "foe_bar_before": 47,
+     "foe_bar_after": 15,
+     "notes": "foe bar drained in one hit; Dewgong used Double Team after"
+    },
+    {
+     "n": 2,
+     "t": "3:12:42",
+     "foe": "Dewgong",
+     "foe_lv": 64,
+     "action": "Psychic (MISSED: 'A's attack missed!', Double Team evasion)",
+     "foe_move": "Surf",
+     "hp_before": 231,
+     "hp_after": 168,
+     "foe_bar_before": 15,
+     "foe_bar_after": 15,
+     "notes": "Surf = 63 dmg (231->168)"
+    },
+    {
+     "n": 3,
+     "t": "3:12:49",
+     "foe": "Dewgong",
+     "foe_lv": 64,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 168,
+     "hp_after": 168,
+     "foe_bar_before": 15,
+     "foe_bar_after": 0,
+     "notes": "KO"
+    },
+    {
+     "n": 4,
+     "t": "3:13:00",
+     "foe": "Cloyster",
+     "foe_lv": 63,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 168,
+     "hp_after": 168,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "KO, foe never moved"
+    },
+    {
+     "n": 5,
+     "t": "3:13:10",
+     "foe": "Piloswine",
+     "foe_lv": 63,
+     "action": "Fire Blast",
+     "foe_move": null,
+     "hp_before": 168,
+     "hp_after": 168,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO"
+    },
+    {
+     "n": 6,
+     "t": "3:13:28",
+     "foe": "Jynx",
+     "foe_lv": 66,
+     "action": "Fire Blast",
+     "foe_move": null,
+     "hp_before": 168,
+     "hp_after": 168,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO"
+    },
+    {
+     "n": 7,
+     "t": "3:13:42",
+     "foe": "Lapras",
+     "foe_lv": 66,
+     "action": "Psychic",
+     "foe_move": "Ice Beam (critical hit)",
+     "hp_before": 168,
+     "hp_after": 13,
+     "foe_bar_before": 47,
+     "foe_bar_after": 20,
+     "notes": "Ice Beam crit = 155 dmg (168->13), text 'A critical hit!'"
+    },
+    {
+     "n": 8,
+     "t": "3:13:54",
+     "foe": "Lapras",
+     "foe_lv": 66,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 13,
+     "hp_after": 13,
+     "foe_bar_before": 20,
+     "foe_bar_after": 0,
+     "notes": "KO"
+    }
+   ],
+   "mons_ko": [
+    "Dewgong",
+    "Cloyster",
+    "Piloswine",
+    "Jynx",
+    "Lapras"
+   ],
+   "n_player_actions": 8,
+   "damage_taken_total": 218,
+   "items_used": {},
+   "notes": "Window starts in the Indigo Plateau Pokemon Center (3:12:00 video), Lorelei dialogue ~11530, swirl ~11538. Psychic PP 9/10 after use 1, 8/10 after use 2 (menu); Fire Blast PP 3/5 at 11616 (two uses). Exp: Dewgong 2413, Cloyster 2740, Piloswine 2160, Lapras 3096; prize 6600."
+  },
+  {
+   "fight": "bruno",
+   "video_start": "3:14:34",
+   "video_end": "3:16:08",
+   "player": {
+    "species": "Mewtwo",
+    "nickname": "A",
+    "level_start": 70,
+    "level_end": 71,
+    "max_hp_start": 231,
+    "stats_seen": null
+   },
+   "turns": [
+    {
+     "n": 1,
+     "t": "3:14:49",
+     "foe": "Steelix",
+     "foe_lv": 65,
+     "action": "Fire Blast",
+     "foe_move": null,
+     "hp_before": 213,
+     "hp_after": 213,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO"
+    },
+    {
+     "n": 2,
+     "t": "3:15:04",
+     "foe": "Steelix",
+     "foe_lv": 66,
+     "action": "Fire Blast",
+     "foe_move": null,
+     "hp_before": 213,
+     "hp_after": 213,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO"
+    },
+    {
+     "n": 3,
+     "t": "3:15:22",
+     "foe": "Hitmonlee",
+     "foe_lv": 65,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 213,
+     "hp_after": 217,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "KO; level-up to 71 (HP 213/231 -> 217/235, +4 max); stat box NOT seen"
+    },
+    {
+     "n": 4,
+     "t": "3:15:37",
+     "foe": "Hitmonchan",
+     "foe_lv": 65,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 217,
+     "hp_after": 217,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO"
+    },
+    {
+     "n": 5,
+     "t": "3:15:52",
+     "foe": "Machamp",
+     "foe_lv": 68,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 217,
+     "hp_after": 217,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO"
+    }
+   ],
+   "mons_ko": [
+    "Steelix",
+    "Steelix",
+    "Hitmonlee",
+    "Hitmonchan",
+    "Machamp"
+   ],
+   "n_player_actions": 5,
+   "damage_taken_total": 0,
+   "items_used": {},
+   "notes": "Pre-fight (not a turn): Hyper Potion 13->213 (+200) at ~11655, then Max Elixir (PP). Foe never acted. Exp: Steelix65 2730, Hitmonlee 1935, Hitmonchan 1950, Machamp 2811. Mewtwo Lv70 213/231 at fight start."
+  },
+  {
+   "fight": "agatha",
+   "video_start": "3:16:19",
+   "video_end": "3:17:56",
+   "player": {
+    "species": "Mewtwo",
+    "nickname": "A",
+    "level_start": 71,
+    "level_end": 71,
+    "max_hp_start": 235,
+    "stats_seen": null
+   },
+   "turns": [
+    {
+     "n": 1,
+     "t": "3:16:37",
+     "foe": "Gengar",
+     "foe_lv": 66,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 217,
+     "hp_after": 217,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO"
+    },
+    {
+     "n": 2,
+     "t": "3:16:49",
+     "foe": "Crobat",
+     "foe_lv": 66,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 217,
+     "hp_after": 217,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO"
+    },
+    {
+     "n": 3,
+     "t": "3:17:04",
+     "foe": "Gengar",
+     "foe_lv": 70,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 217,
+     "hp_after": 217,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO"
+    },
+    {
+     "n": 4,
+     "t": "3:17:18",
+     "foe": "Misdreavus",
+     "foe_lv": 65,
+     "action": "X Special (6->5)",
+     "foe_move": "Shadow Ball (critical hit)",
+     "hp_before": 217,
+     "hp_after": 45,
+     "foe_bar_before": 47,
+     "foe_bar_after": 47,
+     "notes": "Shadow Ball crit + super effective = 172 dmg (217->45); Mewtwo went first (item priority)"
+    },
+    {
+     "n": 5,
+     "t": "3:17:30",
+     "foe": "Misdreavus",
+     "foe_lv": 65,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 45,
+     "hp_after": 45,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "KO, Sp.Atk +1 from X Special active"
+    },
+    {
+     "n": 6,
+     "t": "3:17:43",
+     "foe": "Arbok",
+     "foe_lv": 68,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 45,
+     "hp_after": 45,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO; Arbok Intimidate cut Mewtwo Attack on entry (11857)"
+    }
+   ],
+   "mons_ko": [
+    "Gengar",
+    "Crobat",
+    "Gengar",
+    "Misdreavus",
+    "Arbok"
+   ],
+   "n_player_actions": 6,
+   "damage_taken_total": 172,
+   "items_used": {
+    "X Special": 1
+   },
+   "notes": "Only damage: Misdreavus Shadow Ball crit 172. Post-fight: Full Restore 45->235 (HP ticks 58, 88, 207, 235 on party screen) and Elixir (count 1->0, PP) at ~11886-11895. Exp: Gengar66 2686, Crobat 2884, Gengar70 2850."
+  },
+  {
+   "fight": "lance",
+   "video_start": "3:18:37",
+   "video_end": "3:20:29",
+   "player": {
+    "species": "Mewtwo",
+    "nickname": "A",
+    "level_start": 71,
+    "level_end": 72,
+    "max_hp_start": 235,
+    "stats_seen": null
+   },
+   "turns": [
+    {
+     "n": 1,
+     "t": "3:18:57",
+     "foe": "Gyarados",
+     "foe_lv": 68,
+     "action": "Safeguard (PP 25/25 shown)",
+     "foe_move": "Dragon Dance (Attack+Speed rose)",
+     "hp_before": 235,
+     "hp_after": 235,
+     "foe_bar_before": 47,
+     "foe_bar_after": 47,
+     "notes": "Intimidate on entry; 'Ally's party is covered by a veil!'"
+    },
+    {
+     "n": 2,
+     "t": "3:19:08",
+     "foe": "Gyarados",
+     "foe_lv": 68,
+     "action": "X Special (5->4)",
+     "foe_move": "Thunder Wave (blocked: 'A's party is protected by SAFEGUARD!')",
+     "hp_before": 235,
+     "hp_after": 235,
+     "foe_bar_before": 47,
+     "foe_bar_after": 47,
+     "notes": "foe moved first (Speed +1 from Dragon Dance)"
+    },
+    {
+     "n": 3,
+     "t": "3:19:19",
+     "foe": "Gyarados",
+     "foe_lv": 68,
+     "action": "Psychic (critical hit)",
+     "foe_move": "Thunder Wave (blocked by Safeguard)",
+     "hp_before": 235,
+     "hp_after": 235,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "foe moved first again, blocked; crit Psychic KO from full bar; level-up to 72 (235->238)"
+    },
+    {
+     "n": 4,
+     "t": "3:19:36",
+     "foe": "Kingdra",
+     "foe_lv": 66,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 238,
+     "hp_after": 238,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "KO"
+    },
+    {
+     "n": 5,
+     "t": "3:19:54",
+     "foe": "Dragonite",
+     "foe_lv": 66,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 238,
+     "hp_after": 238,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "KO (single drain 47->0)"
+    },
+    {
+     "n": 6,
+     "t": "3:20:07",
+     "foe": "Aerodactyl",
+     "foe_lv": 70,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 238,
+     "hp_after": 238,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "KO"
+    },
+    {
+     "n": 7,
+     "t": "3:20:22",
+     "foe": "Dragonite",
+     "foe_lv": 72,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 238,
+     "hp_after": 238,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "KO (single drain 47->0)"
+    }
+   ],
+   "mons_ko": [
+    "Gyarados",
+    "Kingdra",
+    "Dragonite",
+    "Aerodactyl",
+    "Dragonite"
+   ],
+   "n_player_actions": 7,
+   "damage_taken_total": 0,
+   "items_used": {
+    "X Special": 1
+   },
+   "notes": "No damage taken. Exp: Gyarados 3117, Kingdra 2926, Dragonite66 3082, Aerodactyl 3030, Dragonite72 3363."
+  },
+  {
+   "fight": "champion",
+   "video_start": "3:20:55",
+   "video_end": "3:24:11",
+   "player": {
+    "species": "Mewtwo",
+    "nickname": "A",
+    "level_start": 72,
+    "level_end": 73,
+    "max_hp_start": 238,
+    "stats_seen": null
+   },
+   "turns": [
+    {
+     "n": 1,
+     "t": "3:21:10",
+     "foe": "Heracross",
+     "foe_lv": 72,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 238,
+     "hp_after": 238,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO (foe never moved)"
+    },
+    {
+     "n": 2,
+     "t": "3:21:24",
+     "foe": "Alakazam",
+     "foe_lv": 73,
+     "action": "X Special (4->3)",
+     "foe_move": "Shadow Ball",
+     "hp_before": 238,
+     "hp_after": 176,
+     "foe_bar_before": 47,
+     "foe_bar_after": 47,
+     "notes": "Shadow Ball = 62 dmg (238->176), super effective, no crit seen"
+    },
+    {
+     "n": 3,
+     "t": "3:21:32",
+     "foe": "Alakazam",
+     "foe_lv": 73,
+     "action": "X Attack (3->2)",
+     "foe_move": "Calm Mind (Sp.Atk+1, Sp.Def+1)",
+     "hp_before": 176,
+     "hp_after": 176,
+     "foe_bar_before": 47,
+     "foe_bar_after": 47,
+     "notes": "Earthquake (physical) next, so Atk stage matters"
+    },
+    {
+     "n": 4,
+     "t": "3:21:42",
+     "foe": "Alakazam",
+     "foe_lv": 73,
+     "action": "X Attack (2->1)",
+     "foe_move": "Calm Mind (2nd)",
+     "hp_before": 176,
+     "hp_after": 176,
+     "foe_bar_before": 47,
+     "foe_bar_after": 47,
+     "notes": ""
+    },
+    {
+     "n": 5,
+     "t": "3:21:52",
+     "foe": "Alakazam",
+     "foe_lv": 73,
+     "action": "Earthquake (critical hit)",
+     "foe_move": null,
+     "hp_before": 176,
+     "hp_after": 176,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "KO from full bar; level-up to 73 right after (HP 176/238 -> 179/241)"
+    },
+    {
+     "n": 6,
+     "t": "3:22:16",
+     "foe": "Tyranitar",
+     "foe_lv": 72,
+     "action": "Earthquake",
+     "foe_move": null,
+     "hp_before": 179,
+     "hp_after": 164,
+     "foe_bar_before": 47,
+     "foe_bar_after": 0,
+     "notes": "KO from full bar (Atk +2). Sandstorm set on Tyranitar entry: Mewtwo 179->164 (15 = 1/16 of 241) at 12133"
+    },
+    {
+     "n": 7,
+     "t": "3:22:43",
+     "foe": "Gyarados",
+     "foe_lv": 73,
+     "action": "Psychic",
+     "foe_move": "Hydro Pump",
+     "hp_before": 164,
+     "hp_after": 70,
+     "foe_bar_before": 44,
+     "foe_bar_after": 19,
+     "notes": "Pre-turn sandstorm chip on entry 164->149 and foe bar 47->44. Hydro Pump = 79 dmg (149->70). End-turn sandstorm 70->55"
+    },
+    {
+     "n": 8,
+     "t": "3:22:58",
+     "foe": "Gyarados",
+     "foe_lv": 73,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 55,
+     "hp_after": 55,
+     "foe_bar_before": 15,
+     "foe_bar_after": 0,
+     "notes": "KO; then Arcanine entry sandstorm 55->40"
+    },
+    {
+     "n": 9,
+     "t": "3:23:20",
+     "foe": "Arcanine",
+     "foe_lv": 73,
+     "action": "Full Restore (2->1, count after use inferred)",
+     "foe_move": "Extremespeed",
+     "hp_before": 40,
+     "hp_after": 178,
+     "foe_bar_before": 44,
+     "foe_bar_after": 41,
+     "notes": "Heal 40->241 (party screen ticks 88, 214, 241). Extremespeed = 63 dmg (241->178), then sandstorm 178->163. Arcanine Intimidate cut Attack on entry"
+    },
+    {
+     "n": 10,
+     "t": "3:23:40",
+     "foe": "Arcanine",
+     "foe_lv": 73,
+     "action": "Earthquake (PP 8/10 shown)",
+     "foe_move": null,
+     "hp_before": 163,
+     "hp_after": 163,
+     "foe_bar_before": 38,
+     "foe_bar_after": 0,
+     "notes": "super effective, KO; foe bar 47->44->41->38 from sandstorm before the hit"
+    },
+    {
+     "n": 11,
+     "t": "3:24:00",
+     "foe": "Venusaur",
+     "foe_lv": 75,
+     "action": "Psychic",
+     "foe_move": null,
+     "hp_before": 163,
+     "hp_after": 148,
+     "foe_bar_before": 44,
+     "foe_bar_after": 0,
+     "notes": "sandstorm chip on entry 163->148 (shown 155 mid-tick); super effective KO"
+    }
+   ],
+   "mons_ko": [
+    "Heracross",
+    "Alakazam",
+    "Tyranitar",
+    "Gyarados",
+    "Arcanine",
+    "Venusaur"
+   ],
+   "n_player_actions": 11,
+   "damage_taken_total": 204,
+   "items_used": {
+    "X Special": 1,
+    "X Attack": 2,
+    "Full Restore": 1
+   },
+   "notes": "Mewtwo ends 148/241. Move damage (non-sandstorm): Shadow Ball 62, Hydro Pump 79, Extremespeed 63. Sandstorm chips of 15 (six in this fight: 179->164, 164->149, 70->55, 55->40, 178->163, 163->148) are not move damage. Exp: Heracross 3085, Alakazam 2908, Tyranitar 3363, Gyarados 3346, Arcanine 3331 (v4). 'Player defeated CHAMPION A!' at 12250."
+  }
+ ],
+ "bag_snapshots": [
+  {
+   "t": "3:14:13",
+   "Full Restore": 3,
+   "Max Revive": 1,
+   "Revive": 1,
+   "Hyper Potion": 1,
+   "Blackglasses": 1,
+   "note": "cursor on Blackglasses, bottom of list"
+  },
+  {
+   "t": "3:14:22",
+   "X Special": 6,
+   "Guard Spec": 1,
+   "Elixir": 1,
+   "Max Elixir": 1,
+   "Full Heal": 2,
+   "Full Restore": 3,
+   "note": "cursor on Max Elixir ('Fully restores the PP of all moves')"
+  },
+  {
+   "t": "3:17:18",
+   "X Special": 6,
+   "Guard Spec": 1,
+   "Elixir": 1,
+   "Full Heal": 2,
+   "Full Restore": 3,
+   "Max Revive": 1,
+   "note": "Max Elixir gone; shown just before X Special use"
+  },
+  {
+   "t": "3:17:50",
+   "Super Potion": 1,
+   "X Attack": 3,
+   "X Special": 5,
+   "Guard Spec": 1,
+   "Elixir": 1,
+   "Full Heal": 2,
+   "note": "Hyper Potion no longer listed"
+  },
+  {
+   "t": "3:18:12",
+   "Guard Spec": 1,
+   "Elixir": 1,
+   "Full Heal": 2,
+   "Full Restore": 2,
+   "Max Revive": 1,
+   "Revive": 1,
+   "note": "after Full Restore use (3->2)"
+  },
+  {
+   "t": "3:18:16",
+   "X Special": 5,
+   "Guard Spec": 1,
+   "Full Heal": 2,
+   "Full Restore": 2,
+   "Max Revive": 1,
+   "Revive": 1,
+   "note": "Elixir gone (used)"
+  },
+  {
+   "t": "3:19:06",
+   "Super Potion": 1,
+   "X Attack": 3,
+   "X Special": 5,
+   "Guard Spec": 1,
+   "Full Heal": 2,
+   "Full Restore": 2,
+   "note": "before X Special use"
+  },
+  {
+   "t": "3:19:13",
+   "Potion": 2,
+   "Super Potion": 1,
+   "X Attack": 3,
+   "X Special": 4,
+   "Guard Spec": 1,
+   "Full Heal": 2,
+   "note": "just after X Special use"
+  },
+  {
+   "t": "3:21:24",
+   "Potion": 2,
+   "Super Potion": 1,
+   "X Attack": 3,
+   "X Special": 3,
+   "Guard Spec": 1,
+   "Full Heal": 2,
+   "note": "just after X Special use"
+  },
+  {
+   "t": "3:21:32",
+   "X Attack": 2,
+   "X Special": 3,
+   "note": "just after X Attack use"
+  },
+  {
+   "t": "3:21:42",
+   "Potion": 2,
+   "Super Potion": 1,
+   "X Attack": 1,
+   "X Special": 3,
+   "Guard Spec": 1,
+   "Full Heal": 2,
+   "note": "just after 2nd X Attack"
+  },
+  {
+   "t": "3:23:19",
+   "Super Potion": 1,
+   "X Special": 3,
+   "Guard Spec": 1,
+   "Full Heal": 2,
+   "Full Restore": 2,
+   "Max Revive": 1,
+   "note": "before Arcanine Full Restore use"
+  }
+ ],
+ "mewtwo_levels": {
+  "70": "231",
+  "71": "235 (during Bruno, after Hitmonlee)",
+  "72": "238 (end of Lance, after Gyarados)",
+  "73": "241 (Champion, after Alakazam)"
+ },
+ "move_damage_taken": {
+  "Surf (Dewgong Lv64)": 63,
+  "Ice Beam crit (Lapras Lv66)": 155,
+  "Shadow Ball crit (Misdreavus Lv65)": 172,
+  "Shadow Ball (Alakazam Lv73)": 62,
+  "Hydro Pump (Gyarados Lv73)": 79,
+  "Extremespeed (Arcanine Lv73)": 63,
+  "Sandstorm tick": 15
+ },
+ "heals": [
+  {
+   "t": "3:14:15",
+   "item": "Hyper Potion",
+   "hp_before": 13,
+   "hp_after": 213,
+   "note": "+200; between Lorelei and Bruno"
+  },
+  {
+   "t": "3:14:20",
+   "item": "Max Elixir",
+   "note": "PP, between Lorelei and Bruno"
+  },
+  {
+   "t": "3:18:07",
+   "item": "Full Restore",
+   "hp_before": 45,
+   "hp_after": 235,
+   "note": "between Agatha and Lance"
+  },
+  {
+   "t": "3:18:13",
+   "item": "Elixir",
+   "note": "PP, between Agatha and Lance"
+  },
+  {
+   "t": "3:23:23",
+   "item": "Full Restore",
+   "hp_before": 40,
+   "hp_after": 241,
+   "note": "in battle vs Arcanine (1 turn)"
+  }
+ ],
+ "caveats": "Foe bar full reads as 47/48 (foe-bar.py). Bar after a KO = 0 means the hit was >= remaining bar (lower bound), and most KOs here took the whole bar in one hit. Hit time t is the move-text frame (+-3 s). Mid-drain HP readings (e.g. 49, 139, 155) are animation frames; final values used. Level-up stat boxes were never shown in any frame (1 s zooms at Lv71/72/73), so no stat totals; only max HP 231/235/238/241. Hyper Potion identity inferred from +200 heal and the list entry vanishing. Full Restore count after the Arcanine use (1) is inferred. Crit status read from 'A critical hit!' text frames (foe crits on Mewtwo print the same text because the target is named A). Sandstorm (Tyranitar) also chips foes that are not Rock/Ground/Steel (3 px of the bar)."
+}

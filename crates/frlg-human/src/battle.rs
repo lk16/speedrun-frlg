@@ -97,6 +97,17 @@ const SCARCE_PP: u32 = 5;
 /// A scarce move's value is scaled by this unless it kills.
 const SCARCE_FACTOR: f64 = 0.6;
 
+/// `FRLG_SCARCE` overrides `SCARCE_FACTOR` (calibration studies only).
+fn scarce_factor() -> f64 {
+    static V: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+    *V.get_or_init(|| {
+        std::env::var("FRLG_SCARCE")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(SCARCE_FACTOR)
+    })
+}
+
 /// How the engine interprets a move's `EFFECT_*` (`battle_moves.h`). Everything that the
 /// route's trainers, wilds and the player can carry maps to one of these; unmodelled
 /// effects fall into `Nop` (status moves that then do nothing) or `PlainHit`.
@@ -3131,7 +3142,7 @@ fn best_attack(
         // WR run keeps Blizzard for Lance ("Max Elixir between E4 fights"; the
         // exact-engine audit of 2026-11-14 found the pool drained by Agatha).
         if m.pp <= SCARCE_PP && !wild {
-            s *= SCARCE_FACTOR;
+            s *= scarce_factor();
         }
         let min_roll = (calc_damage(dex, me, e, mv, 0, false, &fs.en_side, None) * 85) / 100;
         let acc_ok = hit_pct(me, e, m) >= 95;

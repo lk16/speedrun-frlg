@@ -1053,10 +1053,11 @@ fn main() {
             let rung = rung_arg(&args);
             let t = rung_frames(rung);
             let r: u64 = arg(&args, "--R", 20_000);
+            let from: String = arg(&args, "--from", "lorelei".to_string());
             for i in 0..r {
                 let mut pr = Probe::default();
                 let o = attempt(&ctx, seed, i, Some(t), None, None, Some(&mut pr));
-                if !pr.fights.iter().any(|f| f.0 == "lorelei") {
+                if !pr.fights.iter().any(|f| f.0 == from) {
                     continue;
                 }
                 println!(
