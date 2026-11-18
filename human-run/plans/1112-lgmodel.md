@@ -1,6 +1,10 @@
-# Plan 1103-dropfill442
+# Plan 1112-lgmodel
 
-Parent: `1102-order437`. Change: drop fill[3] MAP_POWER_PLANT land (descend.py; confirmed on seeds 1 and 2)
+Parent: `1103-dropfill442`. **MODEL CHANGE (not a plan change; same route, same tactics): the League stand-ins are replaced by the evidence-fitted values**
+(journal `2026-12-08-14-00-league-standins-recalibration.md`, ROBUSTNESS 19): `league_power` 1.4 -> **1.0** [1.0, 1.1], `mewtwo_power` 1.2 -> **1.3** [1.15, >= 1.4],
+`scarce_factor` 0.6 -> **1.0** (both runners Blizzard at once), `carry_power` kept at 2.0 (the fit prefers <= 1.7 weakly; at 1.7 the lane cannot reach Sabrina in the model).
+Re-fitted on the new constants: the flat post-door `fatal` rows (`fit_post_evidence.py`, 5 door fighters, 2 finishes), the `reset_table` (both rungs, train R 3M, eval 1.6M, six iterations);
+the lane windows pass `fit_lane.py --check` unchanged (they do not depend on League constants). Numbers of this plan are not comparable with 1103's.
 
 The step-by-step description, citations and branch rules in `001-crude.md` still apply except
 where the parameters below differ; `frlg-human` reads only the block below. Every segment cost
@@ -1079,40 +1083,40 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
  "helper_hp": 24,
  "reset_table": {
   "WR+2m": {
-   "brock": 1057,
-   "misty-badge": 1915,
-   "bill-cottage": 2586,
-   "bike-redeem": 2926,
-   "scope-and-dig": 4103,
-   "surge-badge": 4842,
-   "super-rod": 4970,
-   "koga-badge": 5726,
-   "blaine-badge": 6504,
-   "blaine-badge-and-sevii-scene": 7464,
-   "sabrina-badge": 8402,
-   "erika-badge": 8614,
-   "giovanni-badge": 8873,
-   "indigo-heal": 9445,
-   "hall-of-fame-1": 10327,
-   "celio-network-machine": 11533
+   "brock": 1080,
+   "misty-badge": 1891,
+   "bill-cottage": 2541,
+   "bike-redeem": 2868,
+   "scope-and-dig": 4025,
+   "surge-badge": 4750,
+   "snorlax": 4858,
+   "koga-badge": 5575,
+   "blaine-badge": 6295,
+   "blaine-badge-and-sevii-scene": 7260,
+   "sabrina-badge": 8235,
+   "erika-badge": 8462,
+   "giovanni-badge": 8725,
+   "indigo-heal": 9360,
+   "hall-of-fame-1": 10284,
+   "celio-network-machine": 11499
   },
   "WR": {
-   "brock": 1057,
-   "misty-badge": 1915,
-   "bill-cottage": 2586,
-   "bike-redeem": 2926,
-   "scope-and-dig": 4103,
-   "surge-badge": 4842,
-   "super-rod": 4970,
-   "koga-badge": 5580,
-   "blaine-badge": 6343,
-   "blaine-badge-and-sevii-scene": 7279,
-   "sabrina-badge": 8202,
-   "erika-badge": 8452,
-   "giovanni-badge": 8729,
-   "indigo-heal": 9343,
-   "hall-of-fame-1": 10212,
-   "celio-network-machine": 11404
+   "brock": 1063,
+   "misty-badge": 1817,
+   "bill-cottage": 2458,
+   "bike-redeem": 2795,
+   "scope-and-dig": 3997,
+   "surge-badge": 4740,
+   "snorlax": 4848,
+   "koga-badge": 5439,
+   "blaine-badge": 6196,
+   "blaine-badge-and-sevii-scene": 7128,
+   "sabrina-badge": 8063,
+   "erika-badge": 8317,
+   "giovanni-badge": 8597,
+   "indigo-heal": 9250,
+   "hall-of-fame-1": 10172,
+   "celio-network-machine": 11377
   }
  },
  "mewtwo_keep": [
@@ -1136,11 +1140,16 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
   "lance-2": 0.9,
   "champion-2": 0.9
  },
- "scarce_factor": 1.0
+ "scarce_factor": 1.0,
+ "reset_adj": {
+  "WR+2m": {},
+  "WR": {}
+ }
 }
 ```
 
 ## Score
 
-- rung **WR+2m**, EHT 92.8161 h at R=3200000, 95% CI of the paired difference to the parent [-1.1127, -0.1851] (negative is better), parent EHT 93.451
-- evaluation line: `human-run/scores.jsonl`, plan `d1103-442`; ledger of everything tried is in that file.
+- R 3.2M, seeds 7101 / 7102: **WR+2m 128.95 / 127.58 h, WR 175.13 / 172.77 h** (7240 / 5258 finishes). Same plan on 1103's old reset_table: 129.32 / 128.00 and 176.46 / 173.96 (the refit is -0.4 / -1.3 h, CI excludes 0, under the 1% bar; adopted as part of the model refit).
+- 1103 itself at these constants was ~124 h (D pinned .23) in the calibration journal; here the door-to-finish survival is the evidence-fitted rows (model D .22, pre-door Q .107).
+- ledger of everything tried is in `human-run/scores.jsonl`.

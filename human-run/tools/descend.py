@@ -465,6 +465,30 @@ def gen(p):
         sys.path.insert(0, HERE)
         import earlyknobs, manipknobs
         cands = earlyknobs.candidates(p) + manipknobs.candidates(p)
+    elif SET == 'league':
+        # League tactics only (plan 1112+): X queues, sacrifices, heals, X purchases, Mewtwo moves, Calm Mind tokens.
+        sys.path.insert(0, HERE)
+        import copy as _copy
+        import ppknobs
+        base = candidates(p) + ppknobs.candidates(p)
+        cands = []
+        for c in base:
+            kind, label = c[0], c[1]
+            lead = label.split(':')[0].split(' ')[0]
+            if kind == 'tactic' and (lead in LEAGUE_FIGHTS or label.startswith('setup_min_turns')):
+                cands.append(c)
+            elif kind in ('xbuy', 'ppfloor') or (kind == 'heal' and label.startswith('league_preheal')):
+                cands.append(c)
+            elif kind == 'tm' and '(mewtwo)' in label:
+                cands.append(c)
+        ft = p.get('fight_tactics', {})
+        for f in sorted(LEAGUE_FIGHTS):
+            for v in (0.0, 0.2, 0.35, 0.5, 0.65):
+                if ft.get(f, {}).get('heal_below', -1) != v:
+                    q = _copy.deepcopy(ft)
+                    q[f] = dict(q.get(f, {}))
+                    q[f]['heal_below'] = v
+                    cands.append(('fheal', f'{f} heal_below ->{v}', {'fight_tactics': q}))
     elif SET == 'recalib':
         sys.path.insert(0, HERE)
         import dexknobs, honestknobs, manipknobs
