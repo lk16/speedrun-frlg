@@ -949,6 +949,123 @@ fn main() {
                 units * rate * per_event / FPS
             );
         }
+        Some("lstate") => {
+            // lstate <plan> --after <segment> [--R n]: the carry's battle-relevant state at a segment,
+            // one JSON line per attempt that reached it (calibration of the League stand-ins).
+            let plan = load(&args[1]);
+            let ctx = plan.ctx();
+            let after: String = arg(&args, "--after", String::new());
+            let idx = plan
+                .segs
+                .iter()
+                .position(|s| s.name == after)
+                .unwrap_or_else(|| panic!("--after {after:?} matches no segment"));
+            let r: u64 = arg(&args, "--R", 2_000);
+            for i in 0..r {
+                let mut pr = Probe {
+                    snap_at: Some(idx),
+                    ..Default::default()
+                };
+                attempt(&ctx, seed, i, None, None, None, Some(&mut pr));
+                let Some(sn) = pr.snap else { continue };
+                let c = &sn.carry_state;
+                let mv = |v: &Vec<usize>| -> Vec<String> {
+                    v.iter().map(|&m| ctx.dex.moves[m].name.clone()).collect()
+                };
+                println!(
+                    "{}",
+                    serde_json::json!({"i": i, "carry": sn.carry, "ivs": c.ivs, "evs": c.evs, "evs_real": c.evs_real,
+                    "nature": c.nature, "moves": mv(&c.slots), "x": c.x_stock, "glasses": c.glasses, "mystic": c.mystic,
+                    "ice": c.ice, "leftovers": c.leftovers, "heal_items": c.heal_items, "candies": c.candies,
+                    "mewtwo": c.mewtwo, "mewtwo_evs": c.mewtwo_evs, "mewtwo_level": c.mewtwo_level,
+                    "mewtwo_moves": mv(&c.mewtwo_moves), "elixirs": c.elixirs, "max_elixirs": c.max_elixirs,
+                    "revives": c.revives, "badges": c.badges, "money": sn.money})
+                );
+            }
+        }
+        Some("hit") => {
+            // hit --species S --level L [--ivs h,atk,def,spe,spa,spd] [--evs ...] [--nature n] [--badges mask]
+            //     [--stages atk,def,spe,spa,spd] [--boost TYPE,PCT] --move M --foe TRAINER_ID:idx [--foe-stages ...]
+            //     [--rev]: engine damage range (HP) and foe max HP; `--rev` = the foe mon hits the player's mon.
+            use frlg_human::battle::{damage_range, enemy_mon, make_mon};
+            let dexr = dex();
+            let species = dexr.id(&arg(&args, "--species", String::new()));
+            let level: u32 = arg(&args, "--level", 50u32);
+            let list = |flag: &str, def: [u32; 6]| -> [u32; 6] {
+                let s: String = arg(&args, flag, String::new());
+                if s.is_empty() {
+                    return def;
+                }
+                let v: Vec<u32> = s.split(',').map(|x| x.parse().unwrap()).collect();
+                [v[0], v[1], v[2], v[3], v[4], v[5]]
+            };
+            let stg = |flag: &str| -> [i8; 5] {
+                let s: String = arg(&args, flag, String::new());
+                let mut o = [0i8; 5];
+                for (i, x) in s.split(',').filter(|x| !x.is_empty()).enumerate().take(5) {
+                    o[i] = x.parse().unwrap();
+                }
+                o
+            };
+            let mut me = make_mon(
+                dexr,
+                species,
+                level,
+                list("--ivs", [15; 6]),
+                list("--evs", [0; 6]),
+                arg(&args, "--nature", 0u8),
+                arg(&args, "--badges", 0u8),
+            );
+            let sg = stg("--stages");
+            for i in 0..5 {
+                me.stages[i] = sg[i];
+            }
+            let boost: String = arg(&args, "--boost", String::new());
+            if let Some((t, p)) = boost.split_once(',') {
+                me.boost = Some((t.parse().unwrap(), p.parse().unwrap()));
+            }
+            let foe_spec: String = arg(&args, "--foe", String::new());
+            let (fid, fidx) = foe_spec.split_once(':').unwrap();
+            let fd = dexr.fight(fid);
+            let mut foe = enemy_mon(dexr, &fd.full[fidx.parse::<usize>().unwrap()]);
+            let fs = stg("--foe-stages");
+            for i in 0..5 {
+                foe.stages[i] = fs[i];
+            }
+            let mv = dexr.move_id(&arg(&args, "--move", String::new()));
+            let rev = args.iter().any(|a| a == "--rev");
+            let (lo, hi) = if rev {
+                damage_range(dexr, &foe, &me, mv)
+            } else {
+                damage_range(dexr, &me, &foe, mv)
+            };
+            println!(
+                "{}",
+                serde_json::json!({"lo": lo, "hi": hi, "me_hp": me.max_hp, "me_stats": me.stat, "foe_species": dexr.species[foe.species].name,
+                "foe_level": foe.level, "foe_hp": foe.max_hp, "foe_stats": foe.stat})
+            );
+        }
+        Some("fightdist") => {
+            // fightdist <plan> --rung r --R n: one JSON line per attempt that fought a League member, with
+            // every trainer fight (name, player actions, won, frames) and whether it finished within the rung.
+            let plan = load(&args[1]);
+            let ctx = plan.ctx();
+            let rung = rung_arg(&args);
+            let t = rung_frames(rung);
+            let r: u64 = arg(&args, "--R", 20_000);
+            for i in 0..r {
+                let mut pr = Probe::default();
+                let o = attempt(&ctx, seed, i, Some(t), None, None, Some(&mut pr));
+                if !pr.fights.iter().any(|f| f.0 == "lorelei") {
+                    continue;
+                }
+                println!(
+                    "{}",
+                    serde_json::json!({"i": i, "finished": o.finished, "run": o.run, "kind": o.kind, "end_seg": o.end_seg,
+                    "fights": pr.fights.iter().map(|f| serde_json::json!([f.0, f.1, f.2, f.3])).collect::<Vec<_>>()})
+                );
+            }
+        }
         Some("splits") => {
             // splits <plan> [--R n] [--all]: no-reset cumulative clock at each WR split (or every segment).
             let plan = load(&args[1]);
