@@ -130,7 +130,7 @@ def main():
     for _ in range(draws):
         t = 1.0
         for f in FIGHTS:
-            t *= 1 - random.betavariate(*posts[f])
+            t *= 1 - random.betavariate(max(posts[f][0], 1e-6), max(posts[f][1], 1e-6))
         tots.append(t)
         fats.append(t / eng_prod)
     tots.sort()
