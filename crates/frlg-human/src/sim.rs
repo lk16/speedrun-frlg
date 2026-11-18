@@ -180,6 +180,33 @@ pub struct Snapshot {
     pub money: u32,
     pub clock: u64,
     pub carry: u32,
+    /// The carry's battle-relevant state (`frlg-human lstate`): IVs, EVs, nature, moves, X stock, held
+    /// boosters, Mewtwo's pair.
+    pub carry_state: CarryState,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct CarryState {
+    pub ivs: [u32; 6],
+    pub evs: [u32; 6],
+    pub evs_real: [u32; 6],
+    pub nature: u8,
+    pub slots: Vec<usize>,
+    pub x_stock: [u32; 7],
+    pub glasses: bool,
+    pub mystic: bool,
+    pub ice: bool,
+    pub leftovers: bool,
+    pub heal_items: u32,
+    pub candies: u32,
+    pub mewtwo: Option<([u32; 6], u8)>,
+    pub mewtwo_evs: [u32; 6],
+    pub mewtwo_level: u32,
+    pub mewtwo_moves: Vec<usize>,
+    pub elixirs: u32,
+    pub max_elixirs: u32,
+    pub revives: u32,
+    pub badges: u8,
 }
 
 pub struct Outcome {
@@ -1701,6 +1728,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             rollouts: if a.league { ctx.p.league_rollouts } else { 0 },
             setup_min: ctx.p.setup_min_turns,
             menu_slip: ctx.p.menu_slip,
+            scarce: ctx.p.scarce_factor,
         };
         // Risk lane: the honest copy of this fight decides whether the attempt survives it.
         let mut risk_healed = false;
@@ -3706,6 +3734,28 @@ pub fn attempt(
                         money: st.money,
                         clock: st.clock,
                         carry: st.carry,
+                        carry_state: CarryState {
+                            ivs: st.ivs,
+                            evs: st.evs,
+                            evs_real: st.evs_real,
+                            nature: st.nature,
+                            slots: st.slots.clone(),
+                            x_stock: st.x_stock,
+                            glasses: st.glasses,
+                            mystic: st.mystic,
+                            ice: st.ice,
+                            leftovers: st.leftovers,
+                            heal_items: st.heal_items,
+                            candies: st.candies,
+                            mewtwo: st.mewtwo,
+                            mewtwo_evs: st.mewtwo_evs,
+                            mewtwo_level: mewtwo_level(ctx, &st),
+                            mewtwo_moves: st.mewtwo_moves.clone(),
+                            elixirs: st.elixirs,
+                            max_elixirs: st.max_elixirs,
+                            revives: st.revives,
+                            badges: st.badges,
+                        },
                     });
                 }
                 pr.fights.append(&mut st.fight_log);
