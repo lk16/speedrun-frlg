@@ -36,3 +36,5 @@ Third block, on 1103 (the descent was restarted from 1103 with `--untried`, drop
 | 1107-evo10 | PARASECT via level after koga-badge | +3.4 / +4.2 | +5.6 / +5.7 | lp1.0 +9.5, cp1.7 +5.1, door .10 +17.2, all CIs > 0: **adopted** |
 
 CURRENT = 1107-evo10.
+
+Pass 2 (`--untried`, 88 candidates) finished: accepted 2 (1107, 1112-evo48 = GOLBAT level evolution after victory-road, screen -0.73 / -0.64 h, NOT confirmed at R 3.2M: wrapped up on the coordinator's request before the League model change). 'pp' set only; 'all' / 'earlymid' sets and the second consecutive pass were not run.
