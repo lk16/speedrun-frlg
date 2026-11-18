@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Read-only status for the 10-minute progress/hygiene check (see CLAUDE.md, "Open-ended tasks").
+# Prints: live compute processes by worktree, stale poller shells (bash -c until/while loops, which
+# never exit when their pgrep -f pattern matches themselves), and per-worktree last commit and
+# scores.jsonl mtime. It never kills anything; kill by exact PID after reading the output.
+set -u
+repo="${FRLG_REPO:-$(cd "$(dirname "$0")/.." && pwd)}"
+now=$(date +%s)
+echo "== $(date +%H:%M) load: $(cut -d' ' -f1-3 /proc/loadavg)  CURRENT: $(cat "$repo/human-run/plans/CURRENT" 2>/dev/null)"
+
+echo "== compute (frlg-human / descend.py / try.py / cargo / ffmpeg): etimes %cpu what"
+ps -eo pid,etimes,pcpu,args | grep -E 'frlg-human|descend\.py|try\.py|cargo |ffmpeg' | grep -v -E 'grep|frlg-watchdog|claude --' |
+  sed -E 's#.*/\.claude/worktrees/agent-([a-f0-9]{7})[a-f0-9]*#W:\1#' | awk '{printf "%s pid=%s %ss %s%% ", ($4 ~ /^W:/ ? $4 : "-"), $1, $2, $3; for (i=4;i<=NF && i<=7;i++) printf "%s ", $i; print ""}'
+
+echo "== stale pollers (bash -c with until/while loops; candidates for kill <pid>)"
+for p in $(pgrep -x bash); do
+  c=$(tr '\0' ' ' < /proc/$p/cmdline 2>/dev/null) || continue
+  case "$c" in *"until "*|*"while "*)
+    age=$(ps -o etimes= -p "$p" | tr -d ' ')
+    pat=$(printf '%s' "$c" | grep -o -E "(until|while)[^;]{0,80}" | head -1)
+    echo "pid=$p age=${age}s $pat" ;;
+  esac
+done
+
+echo "== worktrees (newest scores.jsonl mtime, minutes ago; last commit)"
+for w in "$repo"/.claude/worktrees/agent-*; do
+  [ -d "$w/.git" ] || [ -f "$w/.git" ] || continue
+  id=$(basename "$w" | cut -c7-13)
+  f="$w/human-run/scores.jsonl"
+  m=-1; [ -f "$f" ] && m=$(( (now - $(stat -c %Y "$f")) / 60 ))
+  c=$(git -C "$w" log -1 --format='%cr: %s' 2>/dev/null | cut -c1-80)
+  # only show worktrees touched in the last 3 hours
+  [ "$m" -ge 0 ] && [ "$m" -le 180 ] && echo "W:$id scores ${m}m ago | $c"
+done
+exit 0

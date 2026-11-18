@@ -222,3 +222,10 @@ Do not spend turns discovering these: `apt`, `pip install` from an index, `cargo
 any download; running BizHawk; writing to `$FRLG_DECOMP_RO`; `pre-commit`, whose hook repos come
 from GitHub. If one of them is genuinely the only way forward, stop and say which host you would
 need allowed and why.
+
+## Open-ended tasks need a watchdog
+
+For work that runs until the human stops it (the `human-run` route search is the example), create the
+10-minute progress and hygiene cron described in `CLAUDE.md` ("Open-ended tasks: the watchdog cron") at
+the start, run `bin/frlg-watchdog` for the status, and keep `human-run/NEXT.md` current for the next
+session. The cron is session-only; recreate it after a restart.

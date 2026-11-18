@@ -75,3 +75,46 @@ Nobody is there to approve prompts. `.claude/settings.json` denies `rm`, `rmdir`
 and `git clean` outright, so they fail instead of waiting. Never delete: write each temp file under
 a unique name in the scratchpad (stale ones are harmless; `scratch/` is wiped per sandbox anyway),
 overwrite with `>` or the Write tool, and leave old generated files in place.
+
+## Open-ended tasks: the watchdog cron
+
+Any task that runs "forever" or until the human stops it (route and strategy searches such as
+`human-run/`) must start a **10-minute watchdog** in the first turn, and keep it until the human
+says to wrap up. Create it with `CronCreate` (every 10 minutes, recurring; it is session-only, so
+recreate it after a restart or `/resume`; `CronList` shows whether it is alive; cancel it with
+`CronDelete` only at wrap-up). Do not rely on agents waking themselves: they stall in "waiting on
+background work" and background poll loops never wake them.
+
+Cron prompt (use verbatim, adjust the target if it is not `human-run`):
+
+> Progress and hygiene check (every 10 min). 1) Run `bin/frlg-watchdog` (live compute by worktree,
+> stale poller shells, per-worktree scores.jsonl mtime and last commit), `git log --since='60 minutes ago'
+> --oneline`, and `ListAgents`. 2) Dead work: an agent with no live process (frlg-human, descend.py,
+> try.py, cargo) and no new scores.jsonl rows or commits for 20+ minutes is dead or stalled: SendMessage
+> it to check its log, commit and report, or merge its committed branch and launch a replacement (TaskStop
+> it first if it ignores two messages). 3) Cleanup: kill only orphaned or stuck processes and stale poller
+> shells by exact PID (`kill <pid>`); never `pkill -f`, never kill claude/tini/sleep-infinity or a live
+> agent's compute job or descent. TaskStop stale monitors of completed agents. 4) If no agent is running,
+> or CPU is idle, start the next improvement round from `human-run/NEXT.md` in worktree-isolated agents,
+> and merge finished branches into the target branch (merge first, resolve `scores.jsonl` conflicts by
+> keeping both sides, run fmt/build/tests, commit). Never use rm. Report in 3 lines: progress yes/no,
+> what was killed, what was started.
+
+Rules the watchdog and the agents follow:
+
+- **Cheap checks.** Run `bin/frlg-watchdog` first; it is read-only. Do not sleep-poll in the
+  main turn (`sleep` chains are blocked); wait for notifications.
+- **Poller shells.** Agents leave `until`/`while ... pgrep -f PATTERN` loops behind; when the pattern
+  appears in the loop's own command line it matches itself and never exits. Kill those by exact PID
+  and tell agents not to write them. Prefer polling a result file with a hard timeout.
+- **Agents.** One topic per agent in its own worktree; tell each to `git merge <target branch>` first
+  (worktrees can be cut from a stale commit), use a unique scratchpad file prefix (shared scratchpad
+  files collided once), commit as it goes, never `pkill -f`, and not end its turn while a job it needs is
+  running. Agents that finish with background work still running are not dead: check for a live process
+  before resuming them.
+- **Keep the handoff current.** Maintain a `NEXT.md` (state, model changes, ranked upcoming searches)
+  in the target directory (`human-run/NEXT.md`); commit it at every merge milestone and at wrap-up, so a
+  fresh session can start from it.
+- **Wrap-up.** When the human asks to wrap up: let in-flight confirmations finish, start no new
+  candidates, stop descents by exact PID, merge and verify (build, fmt, tests), update `NEXT.md`, commit,
+  then `CronDelete` the watchdog.
