@@ -15,4 +15,13 @@ Descent: `descend.py --pointer CURRENT-1092 --set pp --rung WR+2m --r1 800000 --
 
 The three late steps are not additive (b2f alone is worse at WR, the ball rule alone worse at lp1.0), so they are adopted together, judged as a block vs 1096: CIs exclude 0 on every main cell, no corner significantly negative.
 
-CURRENT = 1099-passoff388.
+Second block, on 1099:
+
+| step | change | WR+2m | WR | corners |
+| --- | --- | --- | --- | --- |
+| 1101-order434 | swap fill[5] Seafoam B4F with fill[6] | +1.06 / +0.79 | +1.25 / +0.97 | cp1.7 +3.3 sig, rest n.s.: kept |
+| 1102-order437 | swap fill[8] Route 23 with fill[9] | +0.30 / +0.17 [-0.01,0.35] | n.s. | seed 7092 includes 0: not confirmed (rides along in 1103, effect < 0.3 h) |
+| 1103-dropfill442 | drop fill[3] Power Plant | +0.78 / +0.58 | +1.36 / +1.54 | lp1.0 +1.5, cp1.7 +1.9, door .10 +2.1: all n.s. or positive: kept |
+| **1103 vs 1099** | | +1.69 / +2.01 | +2.99 / +2.96 | lp1.0 +3.6 sig, cp1.7 +3.6 sig, door n.s. +: **adopted** |
+
+CURRENT = 1103-dropfill442.
