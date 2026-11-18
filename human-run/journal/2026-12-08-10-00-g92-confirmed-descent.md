@@ -24,4 +24,17 @@ Second block, on 1099:
 | 1103-dropfill442 | drop fill[3] Power Plant | +0.78 / +0.58 | +1.36 / +1.54 | lp1.0 +1.5, cp1.7 +1.9, door .10 +2.1: all n.s. or positive: kept |
 | **1103 vs 1099** | | +1.69 / +2.01 | +2.99 / +2.96 | lp1.0 +3.6 sig, cp1.7 +3.6 sig, door n.s. +: **adopted** |
 
-CURRENT = 1103-dropfill442.
+CURRENT after block 2 = 1103-dropfill442.
+
+Third block, on 1103 (the descent was restarted from 1103 with `--untried`, dropping 1104-1106):
+
+| step | change | WR+2m | WR | corners |
+| --- | --- | --- | --- | --- |
+| 1104-addsite531 | add Seafoam B1F fill site | +0.40 / +0.25 [-0.02,0.58] | +0.45 / +0.48 | seed 7122 includes 0: not confirmed |
+| 1105-tactic592 | koga +x special | +7.7 / +8.3 | +10.5 / +10.1 | lp1.0 +27, door .10 +38, **cp1.7 -47.8 [-61,-36] (WR -88.8): fails the corner**: rejected (a hedge candidate: wins everywhere but carry_power 1.7) |
+| 1106-tactic616 | rival-tower +x special (rode on 1105) | not tested on 1103 | | |
+| 1107-evo10 | PARASECT via level after koga-badge | +3.4 / +4.2 | +5.6 / +5.7 | lp1.0 +9.5, cp1.7 +5.1, door .10 +17.2, all CIs > 0: **adopted** |
+
+CURRENT = 1107-evo10.
+
+Pass 2 (`--untried`, 88 candidates) finished: accepted 2 (1107, 1112-evo48 = GOLBAT level evolution after victory-road, screen -0.73 / -0.64 h, NOT confirmed at R 3.2M: wrapped up on the coordinator's request before the League model change). 'pp' set only; 'all' / 'earlymid' sets and the second consecutive pass were not run.
