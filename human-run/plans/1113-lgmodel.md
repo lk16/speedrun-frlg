@@ -1,6 +1,10 @@
-# Plan 1107-evo10
+# Plan 1113-lgmodel
 
-Parent: `1103-dropfill442`. Change: +evolution PARASECT via level after koga-badge (pre in bag 61%, Lv 22) (descend.py; confirmed on seeds 1 and 2)
+Parent: `1107-evo10`. **MODEL CHANGE (same route and tactics as 1107): the League stand-ins are replaced by the evidence-fitted values**
+(journal `2026-12-08-14-00-league-standins-recalibration.md`, ROBUSTNESS 19): `league_power` 1.4 -> **1.0** [1.0, 1.1], `mewtwo_power` 1.2 -> **1.3** [1.15, >= 1.4],
+`scarce_factor` 0.6 -> **1.0** (both runners Blizzard at once), `carry_power` kept at 2.0 (the fit prefers <= 1.7 weakly; at 1.7 the lane cannot reach Sabrina in the model).
+Refitted on the new constants: flat post-door `fatal` rows (`fit_post_evidence.py`, 5 door fighters, 2 finishes), `reset_table` (both rungs, train R 3M, eval 1.6M, 6 iterations);
+lane windows pass `fit_lane.py --check` unchanged (they do not depend on League constants). Numbers are not comparable with 1107's (84.5 h WR+2m / 108.8 h WR).
 
 The step-by-step description, citations and branch rules in `001-crude.md` still apply except
 where the parameters below differ; `frlg-human` reads only the block below. Every segment cost
@@ -1084,40 +1088,40 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
  "helper_hp": 24,
  "reset_table": {
   "WR+2m": {
-   "brock": 1057,
-   "misty-badge": 1915,
-   "bill-cottage": 2586,
-   "bike-redeem": 2926,
-   "scope-and-dig": 4103,
-   "surge-badge": 4842,
-   "super-rod": 4970,
-   "koga-badge": 5726,
-   "blaine-badge": 6504,
-   "blaine-badge-and-sevii-scene": 7464,
-   "sabrina-badge": 8402,
-   "erika-badge": 8614,
-   "giovanni-badge": 8873,
-   "indigo-heal": 9445,
-   "hall-of-fame-1": 10327,
-   "celio-network-machine": 11533
+   "brock": 1079,
+   "misty-badge": 1886,
+   "bill-cottage": 2539,
+   "bike-redeem": 2870,
+   "scope-and-dig": 4030,
+   "surge-badge": 4754,
+   "snorlax": 4861,
+   "koga-badge": 5583,
+   "blaine-badge": 6322,
+   "blaine-badge-and-sevii-scene": 7283,
+   "sabrina-badge": 8256,
+   "erika-badge": 8484,
+   "giovanni-badge": 8747,
+   "indigo-heal": 9353,
+   "hall-of-fame-1": 10278,
+   "celio-network-machine": 11494
   },
   "WR": {
-   "brock": 1057,
-   "misty-badge": 1915,
-   "bill-cottage": 2586,
-   "bike-redeem": 2926,
-   "scope-and-dig": 4103,
-   "surge-badge": 4842,
-   "super-rod": 4970,
-   "koga-badge": 5580,
-   "blaine-badge": 6343,
-   "blaine-badge-and-sevii-scene": 7279,
-   "sabrina-badge": 8202,
-   "erika-badge": 8452,
-   "giovanni-badge": 8729,
-   "indigo-heal": 9343,
-   "hall-of-fame-1": 10212,
-   "celio-network-machine": 11404
+   "brock": 1053,
+   "misty-badge": 1804,
+   "bill-cottage": 2444,
+   "bike-redeem": 2786,
+   "scope-and-dig": 3987,
+   "surge-badge": 4737,
+   "snorlax": 4841,
+   "koga-badge": 5431,
+   "blaine-badge": 6207,
+   "blaine-badge-and-sevii-scene": 7140,
+   "sabrina-badge": 8072,
+   "erika-badge": 8315,
+   "giovanni-badge": 8605,
+   "indigo-heal": 9245,
+   "hall-of-fame-1": 10172,
+   "celio-network-machine": 11368
   }
  },
  "mewtwo_keep": [
@@ -1141,11 +1145,15 @@ is a model estimate (see `001-crude.md` for what is ledger, tile-count or guess)
   "lance-2": 0.9,
   "champion-2": 0.9
  },
- "scarce_factor": 1.0
+ "scarce_factor": 1.0,
+ "reset_adj": {
+  "WR+2m": {},
+  "WR": {}
+ }
 }
 ```
 
 ## Score
 
-- rung **WR+2m**, EHT 86.6578 h at R=800000, 95% CI of the paired difference to the parent [-5.3917, -3.5434] (negative is better), parent EHT 91.0291
-- evaluation line: `human-run/scores.jsonl`, plan `d1107-10`; ledger of everything tried is in that file.
+- R 3.2M, seed 7101: **WR+2m 123.37 h (7576 finishes), WR 166.15 h (5536)**. Same plan on the inherited reset_table: 123.73 / 167.45 (refit -0.35 / -1.30 h, CI excludes 0).
+- ledger of everything tried is in `human-run/scores.jsonl`.
