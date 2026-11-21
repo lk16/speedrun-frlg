@@ -1,3 +1,4 @@
+# syntax=docker/sandbox-kit:3
 # The agent's own API calls and nothing else. Every toolchain this project needs is
 # either baked into the sandbox image or prebuilt on the host by tools/host-prep.sh and
 # mounted read-only, so nothing here has to reach the network -- and the agent cannot
@@ -5,213 +6,206 @@
 # of a web search. Note that the image is not the stock one; the `template` in
 # .box/config.json names it, and on sbx's own claude image there is no compiler and
 # nothing builds.
-schemaVersion: "2"
+schemaVersion: "3"
 kind: mixin
-name: speedrun-frlg-network-policy
+# v3 has no name field: a kit is named by the reference it is used by (here, this directory).
 displayName: speedrun-frlg network policy
 description: The agent's own API calls only; ROM, emulator, Rust and Python all come off read-only mounts
 
-permissions:
-  network:
-    allow:
-      - api.anthropic.com:443   # the agent's own API calls (not auto-included by the claude kit)
-      #
-      # Deliberately absent, and each absence is load-bearing:
-      #   crates.io      -- Rust deps come from the vendored tree in <deps>/cargo-vendor
-      #   pypi.org       -- Python deps come from the wheelhouse in <deps>/wheels
-      #   github.com     -- agbcc, mGBA and BizHawk are prebuilt into <deps> on the host
-      #   everything else-- so route knowledge cannot be looked up
-
-setup:
-  startup:
-    # xclip and wl-paste are shims that `exec sbx-clipboard`, so removing only the two binaries
-    # below left them on PATH failing with exit 127 instead of the exit 0 they were written to
-    # return. Anything that probes for a clipboard sees a broken tool rather than an absent one.
-    - command: ["sudo", "rm", "-f",
-                "/usr/local/bin/clipboard-bridge", "/usr/local/bin/sbx-clipboard",
-                "/usr/local/bin/xclip", "/usr/local/bin/wl-paste"]
-      description: Remove the clipboard bridge binaries and their shims (no documented off-switch exists)
-
-    - command:
-        - "sh"
-        - "-c"
-        - |
-          set -eu
-
-          # A mount keeps the path it has on the host, and those differ per machine, so find
-          # the three by what they contain rather than by where anyone happens to keep them.
-          DEPS=""; DECOMP=""; ART=""; REPO=""
-          mounts=$(awk '$2 != "/" && $2 !~ "^/(proc|sys|dev|run|etc|var|usr|boot|tmp|snap)(/|$)" {print $2}' /proc/mounts)
-          for m in $mounts; do
-            if [ -f "$m/.frlg-deps" ]; then DEPS="$m"; fi
-            if [ -f "$m/.frlg-artifacts" ]; then ART="$m"; fi
-            if [ -f "$m/firered.sha1" ] && [ -d "$m/src" ]; then DECOMP="$m"; fi
-            # The cloned workspace, found the same way and for the same reason: `sbx create
-            # --clone` gives it the path it had on the host, which differs per machine.
-            if [ -f "$m/bin/frlg-doctor" ] && [ -f "$m/.box/config.json" ]; then REPO="$m"; fi
-          done
-
-          if [ -z "$DEPS" ] || [ -z "$DECOMP" ] || [ -z "$ART" ]; then
-            echo "frlg startup: mount not found (deps='$DEPS' decomp='$DECOMP' artifacts='$ART')" >&2
-            echo "frlg startup: run tools/host-prep.sh on the host, then box config" >&2
-          fi
-
-          # One place that says where everything is. Every script in this repo reads these
-          # rather than hardcoding a path, because none of these paths are stable.
+capabilities:
+  - type: com.docker.sandbox/network-policy@2
+    config:
+      runtime:
+        allow:
+          - api.anthropic.com:443   # the agent's own API calls (not auto-included by the claude kit)
           #
-          # The compiler, the ARM binutils, cmake, pkg-config and libpng all come from the
-          # image (tools/host-prep.sh builds it), so nothing here has to put a directory of
-          # distro libraries on the search paths -- which is what keeps LD_LIBRARY_PATH down
-          # to mGBA's own prefix. Anything wider shadows the image's OpenSSL and curl and
-          # silently breaks TLS for python3 and every system tool.
-          sudo tee /etc/profile.d/10-frlg.sh >/dev/null <<EOF
-          export FRLG_DEPS="$DEPS"
-          export FRLG_DECOMP_RO="$DECOMP"
-          export FRLG_DECOMP="\$HOME/decomp"
-          export FRLG_ARTIFACTS="$ART"
-          export FRLG_REPO="$REPO"
-          export MGBA_PREFIX="$DEPS/mgba/prefix"
-          export BIZHAWK_HOME="$DEPS/bizhawk"
+          # Deliberately absent, and each absence is load-bearing:
+          #   crates.io      -- Rust deps come from the vendored tree in <deps>/cargo-vendor
+          #   pypi.org       -- Python deps come from the wheelhouse in <deps>/wheels
+          #   github.com     -- agbcc, mGBA and BizHawk are prebuilt into <deps> on the host
+          #   everything else-- so route knowledge cannot be looked up
 
-          # This file is sourced by every non-interactive shell (BASH_ENV, below), so the
-          # path variables are prepended only when they are not already there. A plain
-          # prepend grows PATH by three entries per subshell.
-          for _frlg_d in "\$HOME/.cargo/bin" "$DEPS/bin" "$DEPS/rust/bin"; do
-            case ":\$PATH:" in *":\$_frlg_d:"*) ;; *) PATH="\$_frlg_d:\$PATH" ;; esac
-          done
-          export PATH
-          unset _frlg_d
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      startup:
+        # xclip and wl-paste are shims that `exec sbx-clipboard`, so removing only the two binaries
+        # below left them on PATH failing with exit 127 instead of the exit 0 they were written to
+        # return. Anything that probes for a clipboard sees a broken tool rather than an absent one.
+        - command: ["sudo", "rm", "-f",
+                    "/usr/local/bin/clipboard-bridge", "/usr/local/bin/sbx-clipboard",
+                    "/usr/local/bin/xclip", "/usr/local/bin/wl-paste"]
+          description: Remove the clipboard bridge binaries and their shims (no documented off-switch exists)
 
-          case ":\${LD_LIBRARY_PATH:-}:" in
-            *":$DEPS/mgba/prefix/lib:"*) ;;
-            *) LD_LIBRARY_PATH="$DEPS/mgba/prefix/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}" ;;
-          esac
-          export LD_LIBRARY_PATH
-          export CPATH="$DEPS/mgba/prefix/include"
-          export LIBRARY_PATH="$DEPS/mgba/prefix/lib"
-          export PKG_CONFIG_PATH="$DEPS/mgba/prefix/lib/pkgconfig"
+        - command: |
+            set -eu
 
-          export RUSTUP_HOME="$DEPS/rustup"
-          export CARGO_HOME="\$HOME/.cargo"
-          export CARGO_NET_OFFLINE=true
-          # No PIP_NO_INDEX / PIP_FIND_LINKS on purpose. They used to be exported at an empty
-          # <deps>/wheels and made the sandbox look like it had an offline install path; it does
-          # not. `pip install X` stops at PEP 668 before --no-index is ever consulted, and
-          # `python3 -m venv` gives an environment with no pip. Python here is stdlib-only.
+            # A mount keeps the path it has on the host, and those differ per machine, so find
+            # the three by what they contain rather than by where anyone happens to keep them.
+            DEPS=""; DECOMP=""; ART=""; REPO=""
+            mounts=$(awk '$2 != "/" && $2 !~ "^/(proc|sys|dev|run|etc|var|usr|boot|tmp|snap)(/|$)" {print $2}' /proc/mounts)
+            for m in $mounts; do
+              if [ -f "$m/.frlg-deps" ]; then DEPS="$m"; fi
+              if [ -f "$m/.frlg-artifacts" ]; then ART="$m"; fi
+              if [ -f "$m/firered.sha1" ] && [ -d "$m/src" ]; then DECOMP="$m"; fi
+              # The cloned workspace, found the same way and for the same reason: `sbx create
+              # --clone` gives it the path it had on the host, which differs per machine.
+              if [ -f "$m/bin/frlg-doctor" ] && [ -f "$m/.box/config.json" ]; then REPO="$m"; fi
+            done
 
-          # sccache is the one build cache allowed to live in artifacts: it caps itself,
-          # which is what makes it safe against the disk budget.
-          export SCCACHE_DIR="$ART/cache/sccache"
-          export SCCACHE_CACHE_SIZE=4G
-          EOF
-
-          # Non-login shells do not read profile.d, and almost nothing the agent runs is a
-          # login shell: `bash -c ...`, a Makefile recipe and every subprocess would all
-          # miss cargo and sccache. The harness sources CLAUDE_ENV_FILE before each command
-          # and bash reads BASH_ENV for each non-interactive shell; both point at
-          # /etc/sandbox-persistent.sh, which ships empty. One `.` line in it, and nothing
-          # else -- anything that writes to stdout from there corrupts command output.
-          for f in $(printf '%s\n' "${CLAUDE_ENV_FILE:-}" "${BASH_ENV:-}" \
-                       /etc/sandbox-persistent.sh | grep -v '^$' | sort -u); do
-            sudo touch "$f" 2>/dev/null || continue
-            grep -q 10-frlg "$f" 2>/dev/null \
-              || echo '. /etc/profile.d/10-frlg.sh' | sudo tee -a "$f" >/dev/null
-          done
-          if ! grep -q 10-frlg "$HOME/.bashrc" 2>/dev/null; then
-            echo '. /etc/profile.d/10-frlg.sh' >> "$HOME/.bashrc"
-          fi
-      description: >-
-        Resolve the three mounts and write /etc/profile.d/10-frlg.sh, the single
-        place that says where the toolchain, the decomp and the artifacts volume
-        landed on this machine.
-
-    - command:
-        - "sh"
-        - "-c"
-        - |
-          set -eu
-          . /etc/profile.d/10-frlg.sh
-
-          # cargo insists on a writable CARGO_HOME, so it is sandbox-local and the vendored
-          # tree it reads is the read-only mount. Generated here because the vendor path is
-          # only known once the mount has been resolved.
-          mkdir -p "$HOME/.cargo"
-          cat > "$HOME/.cargo/config.toml" <<EOF
-          [source.crates-io]
-          replace-with = "vendored-sources"
-
-          [source.vendored-sources]
-          directory = "$FRLG_DEPS/cargo-vendor"
-
-          [net]
-          offline = true
-          EOF
-          if [ -x "$FRLG_DEPS/bin/sccache" ]; then
-            printf '\n[build]\nrustc-wrapper = "%s"\n' "$FRLG_DEPS/bin/sccache" >> "$HOME/.cargo/config.toml"
-          fi
-      description: Point cargo at the vendored crate tree, offline.
-
-    - command:
-        - "sh"
-        - "-c"
-        - |
-          set -eu
-          . /etc/profile.d/10-frlg.sh
-
-          # The decomp is mounted read-only but pokefirered builds in-tree and wants agbcc
-          # inside tools/, so the build gets a writable copy on the sandbox's own disk.
-          # Ephemeral on purpose: nothing but /artifacts is writable, and a build tree is
-          # exactly the kind of thing that should not survive a sandbox.
-          #
-          # ~/decomp is on the sandbox's own disk, which survives stop/start of the same
-          # sandbox, so "copy once if absent" let the copy go stale whenever the host updated
-          # its checkout and the sandbox was restarted rather than recreated. Nothing detected
-          # it, and since decompiled/ points here, every citation in the docs would then name a
-          # tree that no longer matches the host's. Stamp the source revision and re-copy when
-          # it moves. The copy drops .git, so this file is the only provenance it carries.
-          want=$(git -C "$FRLG_DECOMP_RO" rev-parse HEAD 2>/dev/null || echo unknown)
-          have=$(cat "$FRLG_DECOMP/.frlg-src" 2>/dev/null || echo none)
-          [ "$want" = "$have" ] || rm -rf "$FRLG_DECOMP"
-
-          if [ -n "${FRLG_DECOMP_RO:-}" ] && [ ! -d "$FRLG_DECOMP" ]; then
-            rm -rf "$FRLG_DECOMP.incoming"
-            mkdir -p "$FRLG_DECOMP.incoming"
-            tar -C "$FRLG_DECOMP_RO" --exclude=./.git -cf - . \
-              | tar -C "$FRLG_DECOMP.incoming" -xf -
-            if [ -d "$FRLG_DEPS/agbcc" ]; then
-              mkdir -p "$FRLG_DECOMP.incoming/tools/agbcc"
-              cp -a "$FRLG_DEPS/agbcc/." "$FRLG_DECOMP.incoming/tools/agbcc/"
+            if [ -z "$DEPS" ] || [ -z "$DECOMP" ] || [ -z "$ART" ]; then
+              echo "frlg startup: mount not found (deps='$DEPS' decomp='$DECOMP' artifacts='$ART')" >&2
+              echo "frlg startup: run tools/host-prep.sh on the host, then box config" >&2
             fi
-            printf '%s\n' "$want" > "$FRLG_DECOMP.incoming/.frlg-src"
-            mv "$FRLG_DECOMP.incoming" "$FRLG_DECOMP"
-          fi
 
-          # Every citation in docs/ and route notes is written `decompiled/...`. The link is
-          # gitignored (the target is outside the repo -- a mount nested inside the workspace
-          # hangs sbx create), so it has to be made here. bin/frlg-doctor recreates it too, as a
-          # backstop; making it only there meant a session that skipped doctor found every
-          # citation in the repo dangling.
-          if [ -n "${FRLG_REPO:-}" ] && [ -d "$FRLG_DECOMP" ]; then
-            ln -sfn "$FRLG_DECOMP" "$FRLG_REPO/decompiled"
-          fi
-      description: >-
-        Copy the read-only decomp to ~/decomp when its revision moves, drop agbcc
-        into its tools/, and link it as decompiled/ for the citations.
+            # One place that says where everything is. Every script in this repo reads these
+            # rather than hardcoding a path, because none of these paths are stable.
+            #
+            # The compiler, the ARM binutils, cmake, pkg-config and libpng all come from the
+            # image (tools/host-prep.sh builds it), so nothing here has to put a directory of
+            # distro libraries on the search paths -- which is what keeps LD_LIBRARY_PATH down
+            # to mGBA's own prefix. Anything wider shadows the image's OpenSSL and curl and
+            # silently breaks TLS for python3 and every system tool.
+            sudo tee /etc/profile.d/10-frlg.sh >/dev/null <<EOF
+            export FRLG_DEPS="$DEPS"
+            export FRLG_DECOMP_RO="$DECOMP"
+            export FRLG_DECOMP="\$HOME/decomp"
+            export FRLG_ARTIFACTS="$ART"
+            export FRLG_REPO="$REPO"
+            export MGBA_PREFIX="$DEPS/mgba/prefix"
+            export BIZHAWK_HOME="$DEPS/bizhawk"
 
-    - command:
-        - "sh"
-        - "-c"
-        - |
-          set -eu
-          . /etc/profile.d/10-frlg.sh
-          [ -n "${FRLG_ARTIFACTS:-}" ] || exit 0
+            # This file is sourced by every non-interactive shell (BASH_ENV, below), so the
+            # path variables are prepended only when they are not already there. A plain
+            # prepend grows PATH by three entries per subshell.
+            for _frlg_d in "\$HOME/.cargo/bin" "$DEPS/bin" "$DEPS/rust/bin"; do
+              case ":\$PATH:" in *":\$_frlg_d:"*) ;; *) PATH="\$_frlg_d:\$PATH" ;; esac
+            done
+            export PATH
+            unset _frlg_d
 
-          # Fixed layout, because the budget in bin/frlg-artifacts-gc is per directory.
-          for d in rom states runs scratch cache/sccache verify/queue verify/results; do
-            mkdir -p "$FRLG_ARTIFACTS/$d"
-          done
+            case ":\${LD_LIBRARY_PATH:-}:" in
+              *":$DEPS/mgba/prefix/lib:"*) ;;
+              *) LD_LIBRARY_PATH="$DEPS/mgba/prefix/lib\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}" ;;
+            esac
+            export LD_LIBRARY_PATH
+            export CPATH="$DEPS/mgba/prefix/include"
+            export LIBRARY_PATH="$DEPS/mgba/prefix/lib"
+            export PKG_CONFIG_PATH="$DEPS/mgba/prefix/lib/pkgconfig"
 
-          # scratch is defined as "gone at the start of every sandbox". Anything worth
-          # keeping goes in runs/ or states/ and is subject to the budget.
-          find "$FRLG_ARTIFACTS/scratch" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
-      description: Create the artifacts layout and sweep scratch/.
+            export RUSTUP_HOME="$DEPS/rustup"
+            export CARGO_HOME="\$HOME/.cargo"
+            export CARGO_NET_OFFLINE=true
+            # No PIP_NO_INDEX / PIP_FIND_LINKS on purpose. They used to be exported at an empty
+            # <deps>/wheels and made the sandbox look like it had an offline install path; it does
+            # not. `pip install X` stops at PEP 668 before --no-index is ever consulted, and
+            # `python3 -m venv` gives an environment with no pip. Python here is stdlib-only.
+
+            # sccache is the one build cache allowed to live in artifacts: it caps itself,
+            # which is what makes it safe against the disk budget.
+            export SCCACHE_DIR="$ART/cache/sccache"
+            export SCCACHE_CACHE_SIZE=4G
+            EOF
+
+            # Non-login shells do not read profile.d, and almost nothing the agent runs is a
+            # login shell: `bash -c ...`, a Makefile recipe and every subprocess would all
+            # miss cargo and sccache. The harness sources CLAUDE_ENV_FILE before each command
+            # and bash reads BASH_ENV for each non-interactive shell; both point at
+            # /etc/sandbox-persistent.sh, which ships empty. One `.` line in it, and nothing
+            # else -- anything that writes to stdout from there corrupts command output.
+            for f in $(printf '%s\n' "${CLAUDE_ENV_FILE:-}" "${BASH_ENV:-}" \
+                         /etc/sandbox-persistent.sh | grep -v '^$' | sort -u); do
+              sudo touch "$f" 2>/dev/null || continue
+              grep -q 10-frlg "$f" 2>/dev/null \
+                || echo '. /etc/profile.d/10-frlg.sh' | sudo tee -a "$f" >/dev/null
+            done
+            if ! grep -q 10-frlg "$HOME/.bashrc" 2>/dev/null; then
+              echo '. /etc/profile.d/10-frlg.sh' >> "$HOME/.bashrc"
+            fi
+          # v3 passes a hook only PATH, HOME and a few others unless it names more here.
+          env: [CLAUDE_ENV_FILE, BASH_ENV]
+          description: >-
+            Resolve the three mounts and write /etc/profile.d/10-frlg.sh, the single
+            place that says where the toolchain, the decomp and the artifacts volume
+            landed on this machine.
+
+        - command: |
+            set -eu
+            . /etc/profile.d/10-frlg.sh
+
+            # cargo insists on a writable CARGO_HOME, so it is sandbox-local and the vendored
+            # tree it reads is the read-only mount. Generated here because the vendor path is
+            # only known once the mount has been resolved.
+            mkdir -p "$HOME/.cargo"
+            cat > "$HOME/.cargo/config.toml" <<EOF
+            [source.crates-io]
+            replace-with = "vendored-sources"
+
+            [source.vendored-sources]
+            directory = "$FRLG_DEPS/cargo-vendor"
+
+            [net]
+            offline = true
+            EOF
+            if [ -x "$FRLG_DEPS/bin/sccache" ]; then
+              printf '\n[build]\nrustc-wrapper = "%s"\n' "$FRLG_DEPS/bin/sccache" >> "$HOME/.cargo/config.toml"
+            fi
+          description: Point cargo at the vendored crate tree, offline.
+
+        - command: |
+            set -eu
+            . /etc/profile.d/10-frlg.sh
+
+            # The decomp is mounted read-only but pokefirered builds in-tree and wants agbcc
+            # inside tools/, so the build gets a writable copy on the sandbox's own disk.
+            # Ephemeral on purpose: nothing but /artifacts is writable, and a build tree is
+            # exactly the kind of thing that should not survive a sandbox.
+            #
+            # ~/decomp is on the sandbox's own disk, which survives stop/start of the same
+            # sandbox, so "copy once if absent" let the copy go stale whenever the host updated
+            # its checkout and the sandbox was restarted rather than recreated. Nothing detected
+            # it, and since decompiled/ points here, every citation in the docs would then name a
+            # tree that no longer matches the host's. Stamp the source revision and re-copy when
+            # it moves. The copy drops .git, so this file is the only provenance it carries.
+            want=$(git -C "$FRLG_DECOMP_RO" rev-parse HEAD 2>/dev/null || echo unknown)
+            have=$(cat "$FRLG_DECOMP/.frlg-src" 2>/dev/null || echo none)
+            [ "$want" = "$have" ] || rm -rf "$FRLG_DECOMP"
+
+            if [ -n "${FRLG_DECOMP_RO:-}" ] && [ ! -d "$FRLG_DECOMP" ]; then
+              rm -rf "$FRLG_DECOMP.incoming"
+              mkdir -p "$FRLG_DECOMP.incoming"
+              tar -C "$FRLG_DECOMP_RO" --exclude=./.git -cf - . \
+                | tar -C "$FRLG_DECOMP.incoming" -xf -
+              if [ -d "$FRLG_DEPS/agbcc" ]; then
+                mkdir -p "$FRLG_DECOMP.incoming/tools/agbcc"
+                cp -a "$FRLG_DEPS/agbcc/." "$FRLG_DECOMP.incoming/tools/agbcc/"
+              fi
+              printf '%s\n' "$want" > "$FRLG_DECOMP.incoming/.frlg-src"
+              mv "$FRLG_DECOMP.incoming" "$FRLG_DECOMP"
+            fi
+
+            # Every citation in docs/ and route notes is written `decompiled/...`. The link is
+            # gitignored (the target is outside the repo -- a mount nested inside the workspace
+            # hangs sbx create), so it has to be made here. bin/frlg-doctor recreates it too, as a
+            # backstop; making it only there meant a session that skipped doctor found every
+            # citation in the repo dangling.
+            if [ -n "${FRLG_REPO:-}" ] && [ -d "$FRLG_DECOMP" ]; then
+              ln -sfn "$FRLG_DECOMP" "$FRLG_REPO/decompiled"
+            fi
+          description: >-
+            Copy the read-only decomp to ~/decomp when its revision moves, drop agbcc
+            into its tools/, and link it as decompiled/ for the citations.
+
+        - command: |
+            set -eu
+            . /etc/profile.d/10-frlg.sh
+            [ -n "${FRLG_ARTIFACTS:-}" ] || exit 0
+
+            # Fixed layout, because the budget in bin/frlg-artifacts-gc is per directory.
+            for d in rom states runs scratch cache/sccache verify/queue verify/results; do
+              mkdir -p "$FRLG_ARTIFACTS/$d"
+            done
+
+            # scratch is defined as "gone at the start of every sandbox". Anything worth
+            # keeping goes in runs/ or states/ and is subject to the budget.
+            find "$FRLG_ARTIFACTS/scratch" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+          description: Create the artifacts layout and sweep scratch/.
