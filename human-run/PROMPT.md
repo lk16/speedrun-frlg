@@ -1,6 +1,8 @@
 # human-run: a human-executable Round 2 plan, optimised by simulation
 
 > **Open-ended run:** start the 10-minute watchdog cron from `CLAUDE.md` ("Open-ended tasks: the watchdog cron") in your first turn, use `bin/frlg-watchdog` for status, and read `human-run/NEXT.md` for the ranked search queue.
+> **Next phase:** a controller that plays the plan in libmgba and renders a review video. See
+> *Next phase: a playing controller and a review video* below, and work its step plan in order.
 
 You are on branch `human-run`. This target is different from everything else in the repo:
 the goal is **not** a TAS. It is the plan a *human* should follow to beat the Elite 4 Round 2
@@ -145,6 +147,132 @@ plan's markdown is fine. No plan DSL beyond what the current plans need.
 Run the loop open-ended while context allows. Stop early after about 8 refuted ideas in a
 row, and say why in the journal. Always finish with a journal entry naming the next ideas,
 and commit it.
+
+## Next phase: a playing controller and a review video
+
+Everything above scores a *model*. The next phase builds a **controller**: a bot that plays the
+CURRENT plan in libmgba, one input per frame, with the human input model. It records an input log
+and a decision log, and renders both into one video of a whole attempt. The video has two jobs:
+
+1. **Prove the time.** One played attempt is one sample of the no-reset clock, to set against the
+   model's no-reset finish (about 4:23, p10 4:14, `README.md`). It does not prove an EHT, which is
+   an expectation over resets. Each played segment is a measurement and replaces a Guess segment
+   in the model.
+2. **Human review.** A person watches it to catch strategy flaws and decision bugs. So every
+   decision the bot makes is on screen, with the numbers behind it, as it happens.
+
+### Principles
+
+- **One decision source.** At every choice point (moves, X items, heals, catch/run, ball choice,
+  reset verdicts) the controller calls the *same* policy code the simulator uses
+  (`crates/frlg-human/src/battle.rs`, `sim.rs`, plan params), fed the real game state instead of
+  sampled state. Copying the logic into a second implementation is not allowed. When the game
+  gives the policy a state the sim never produces, that is a model bug: log it and fix the model.
+- **Reuse before writing.** `frlg-emu` (frames, RAM, savestates, `.ilog`), `frlg-route`'s
+  `nav.rs` / `observe.rs` / `world.rs` (walking and state reading for the TAS targets),
+  `bin/frlg-mapgraph` (tile paths), and `frlg video` (`crates/frlg-route/src/video.rs`: replay +
+  ffmpeg). Every RAM address and script fact cites `decompiled/`.
+- **Human inputs, not TAS inputs.** Mashed inputs late by `U{0..N}`, reaction delays of
+  `U{15..30}` on unpredictable events, same knobs and same `(seed, attempt)` keying as the sim.
+  No frame-perfect movement and no RNG manipulation beyond what the plan models.
+- **Deterministic and resumable.** The run is a single `.ilog` from power-on that replays to the
+  same frames. During development each segment starts from a savestate checkpoint
+  (`$FRLG_ARTIFACTS/states/human-play/`). The final log is the concatenation of the segment logs,
+  checked by replaying from boot and comparing RAM hashes at every checkpoint.
+- **No resets in the review attempt.** The controller plays on. At every split it logs the reset
+  verdict the plan *would* have given (`elapsed + best_case_remaining` vs T, and the optstop
+  table), so the reviewer sees each one. Starter resets are not filmed one by one. The controller
+  finds the first qualifying starter by actually resetting (or by a seed search that a human could
+  have hit), and the video opens with one message giving the reset count and the off-timer time
+  spent.
+
+### The decision log (`events.jsonl`)
+
+There is one JSON line per event: `frame` (absolute), `t` (run timer in seconds, null before New Game),
+`kind` (`split`, `decision`, `battle`, `catch`, `encounter`, `reset-verdict`, `model-vs-actual`,
+`warn`), `text` (one human-readable sentence), and `nums` (a small object with the numbers behind
+it). Examples of `nums`: win probability, expected turns, HP, PP left, money, balls, catch
+chance, split time against the model's p50/p10, and the running total against the 4:23 forecast.
+The log is a run artifact, never hand-edited, and it is enough to rebuild the overlay without
+replaying.
+
+### The video layout (1920x1080, modelled on Main97's overlay, `video-analysis/METHOD.md`)
+
+| Region | Box (x,y w x h) | Content |
+| --- | --- | --- |
+| Game | 360,16 1200x800 | GBA picture, nearest-neighbour 5x, aspect kept (3:2) |
+| Left column | 16,16 328x1048 | big run timer (starts at New Game per the category rules); splits table: split, actual, model p50, delta; attempt/seed line; starter box (species, nature, IVs, reset count) |
+| Dex bar | 360,832 1200x232 | the plan's species grid: caught ones lit, planned-but-missing dim, with where/when each was caught; `CAUGHT n / 60` at the right edge |
+| Chat column | 1576,16 328x1048 | the "webcam + chat" area: decision feed, new lines at the bottom, old lines scroll off the top |
+
+The chat column uses a monospace font (DejaVu Sans Mono, about 14 px, line height 16 px). That
+gives roughly 38 columns by 64 lines, many messages at once and still readable at 1080p. Each
+message starts with the run timer at the moment it was produced (`[1:23:45]`, `[--:--]` before New
+Game). The renderer wraps text at the column width itself, with continuation lines indented under
+the message text, so nothing overflows. Event kinds get a colour each (decision, warning, reset
+verdict, model-vs-actual) so a reviewer can skim.
+
+Rendering goes through ffmpeg, since no font crate is vendored: the game stream is scaled and
+padded, the side panels are an ASS subtitle track (libass handles fonts, wrapping, colour and
+position), and the timer is a `drawtext` with a pts offset so it does not need an event per frame.
+Extend `frlg video` with an overlay option. Do not write a second renderer.
+
+### Where the video goes (never into git)
+
+Write it to **`$FRLG_ARTIFACTS/videos/`**. That is already a directory on the host's disk, so it
+outlives the sandbox and needs no `sbx cp`. Do not use the default `ignored/videos`, which lives in
+the clone and dies with the sandbox. Give `videos` its own cap in `bin/frlg-artifacts-gc` (start at
+8 GiB) and run the gc after rendering. The review video is **lossy** (x264, CRF about 20, yuv420p,
+AAC). The existing lossless `frlg video` formats would run to hundreds of GB for four hours.
+`docs/sandbox.md`'s "never dump video" is about debugging dumps; this deliverable is the one
+exception. If ffmpeg or its fonts are missing from the sandbox image (`frlg-doctor` checks ffmpeg),
+the sandbox still produces the `.ilog` and `events.jsonl`, and the same command renders on the host.
+
+### Step plan
+
+Work through these in order. Each step ends with a commit, a journal entry and a status update
+here (`[ ]` → `[x]`, with the commit). A step is done only when its check passes. Measured segment
+times go into `calibration.md` and, as a labelled MODEL CHANGE, into the model.
+
+- [ ] **S0. Plumbing check.** In the sandbox: ffmpeg with libx264 and libass, a monospace font
+  visible to fontconfig, `$FRLG_ARTIFACTS/videos/` writable, the gc cap added. *Check:* a 10 s
+  test clip from the existing `defeat-brock` log, with a dummy ASS panel, renders and plays on
+  the host. If something is missing, name the package for `IMAGE_PKGS` in `tools/host-prep.sh`.
+- [ ] **S1. Overlay renderer.** `frlg video --overlay events.jsonl --plan <plan>` (layout above),
+  driven by a hand-written `events.jsonl` over the `defeat-brock` TAS log. *Check:* timer, splits,
+  dex bar and scrolling chat look right. Lines never overflow at a 38-column worst case. Timestamps
+  match the timer.
+- [ ] **S2. Controller skeleton.** `frlg-human play <plan> --seed S --until <split>`: an emulator
+  loop with the human input model, `.ilog` + `events.jsonl` output, savestate checkpoints, and
+  replay-from-boot verification. *Check:* the same seed gives a byte-identical `.ilog`, and the
+  replay matches the checkpoint RAM hashes.
+- [ ] **S3. Primitives.** Advance text (mash with jitter), walk a tile path (mapgraph route, step
+  until the position changes, handle bumps, NPCs and warps), menus by cursor position read from RAM
+  (start, bag, party, shop, PC), HM field moves, Fly. Use `frlg-route` readers where they exist.
+  *Check:* scripted mini-segments (Pallet → Viridian, buy at a mart, Fly) reach their target state.
+- [ ] **S4. Battles and catches.** Read the battle state from RAM and drive the sim's policy:
+  moves, switches, X items, heals, run, ball throws. Log each choice with its numbers. *Check:*
+  Brock and a wild catch, with the decisions in the log matching what the sim's policy says for
+  that state.
+- [ ] **S5. Starter phase and opening to Brock.** Starter reset loop to the plan's thresholds, then
+  New Game through Brock. *Check:* played split vs the model's Brock split, and vs the TAS
+  `defeat-brock` time as a floor. **First full review video** of this stretch (S1 renderer).
+- [ ] **S6. Main story to the first Hall of Fame,** one WR split at a time, in the plan's order
+  (`route_wr.rs`). Each split gets a savestate checkpoint, a measured time against the model, and a
+  model update. *Check:* every split reached; the deltas against the model listed in the journal.
+- [ ] **S7. Dex fill.** Encounter loops, catch rules, Safari Zone, fishing, evolutions, all 60
+  species in the plan's order. *Check:* National Dex unlock condition met (cite the script).
+- [ ] **S8. Post-game.** Sevii Islands, Rocket Warehouse, National Dex, Elite Four Round 2 and the
+  Champion, up to the first full black frame of the second Hall of Fame. *Check:* finish frame
+  reached and the timer stopped by the category rule.
+- [ ] **S9. Full run and video.** `frlg-human video <plan> --seed S` runs (or reuses) the full
+  `.ilog` and `events.jsonl` and writes `$FRLG_ARTIFACTS/videos/<plan>-<seed>.mp4`. *Check:* the
+  replay from boot verifies. The journal states the played finish time against the model's
+  no-reset distribution, plus every segment where they disagree.
+
+Steps S6-S8 can be split across worktree agents per split range once S2-S4 exist. Each agent
+starts from the previous range's checkpoint savestate. Keep a running list of model bugs the
+controller exposes. They are the most valuable output after the video itself.
 
 ## Rules that still apply
 
