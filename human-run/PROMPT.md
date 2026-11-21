@@ -179,6 +179,21 @@ and a decision log, and renders both into one video of a whole attempt. The vide
   same frames. During development each segment starts from a savestate checkpoint
   (`$FRLG_ARTIFACTS/states/human-play/`). The final log is the concatenation of the segment logs,
   checked by replaying from boot and comparing RAM hashes at every checkpoint.
+- **Roll back, don't restart.** A human-routed attempt dies mid-run more often than not (the model's
+  door-to-finish survival is about 0.23, `NEXT.md`). The controller saves a checkpoint savestate
+  after every split and every gym, rival and Elite Four fight, and before known high-risk fights
+  (Lance, Champion). A branch is **dead** if it blacks out, soft-locks, or falls past the plan's
+  reset threshold. A dead branch rolls back to the last checkpoint and replays with a **fresh
+  human-model seed**: the same inputs from the same state reproduce the same death, so the input
+  timing, and with it the game RNG, has to change. The dead branch's inputs are discarded. The
+  final `.ilog` is still one continuous run from boot, replayable and verifiable. This is not an
+  in-game save/reload (still banned) and nothing of it is visible in the video.
+  - **First survivor, not best of k.** Keep the first branch that survives each checkpoint, never
+    the fastest of several, so the video is an unbiased sample of a *finishing* run. A best-of-k
+    showcase is allowed only if it is labelled as one in the video and the journal.
+  - **Count the deaths.** Log every rollback (checkpoint, cause, retries) in `events.jsonl` and
+    show it in the chat column (`rollback #3 at Lance: Dragonite crit`). Retries per checkpoint are
+    a measured hazard: compare them to the model's death rates in the S9 journal.
 - **No resets in the review attempt.** The controller plays on. At every split it logs the reset
   verdict the plan *would* have given (`elapsed + best_case_remaining` vs T, and the optstop
   table), so the reviewer sees each one. Starter resets are not filmed one by one. The controller
@@ -189,7 +204,7 @@ and a decision log, and renders both into one video of a whole attempt. The vide
 ### The decision log (`events.jsonl`)
 
 There is one JSON line per event: `frame` (absolute), `t` (run timer in seconds, null before New Game),
-`kind` (`split`, `decision`, `battle`, `catch`, `encounter`, `reset-verdict`, `model-vs-actual`,
+`kind` (`split`, `decision`, `battle`, `catch`, `encounter`, `reset-verdict`, `rollback`, `model-vs-actual`,
 `warn`), `text` (one human-readable sentence), and `nums` (a small object with the numbers behind
 it). Examples of `nums`: win probability, expected turns, HP, PP left, money, balls, catch
 chance, split time against the model's p50/p10, and the running total against the 4:23 forecast.
@@ -244,8 +259,10 @@ times go into `calibration.md` and, as a labelled MODEL CHANGE, into the model.
   match the timer.
 - [ ] **S2. Controller skeleton.** `frlg-human play <plan> --seed S --until <split>`: an emulator
   loop with the human input model, `.ilog` + `events.jsonl` output, savestate checkpoints, and
-  replay-from-boot verification. *Check:* the same seed gives a byte-identical `.ilog`, and the
-  replay matches the checkpoint RAM hashes.
+  replay-from-boot verification, plus rollback to the last checkpoint with a fresh human seed.
+  *Check:* the same seed gives a byte-identical `.ilog`; the replay matches the checkpoint RAM
+  hashes; a forced rollback produces a different continuation, and the stitched `.ilog` still
+  verifies from boot.
 - [ ] **S3. Primitives.** Advance text (mash with jitter), walk a tile path (mapgraph route, step
   until the position changes, handle bumps, NPCs and warps), menus by cursor position read from RAM
   (start, bag, party, shop, PC), HM field moves, Fly. Use `frlg-route` readers where they exist.
