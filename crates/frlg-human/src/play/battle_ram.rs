@@ -72,6 +72,29 @@ const SUBSTRUCT_POS: [[u8; 4]; 24] = [
     [3, 2, 1, 0],
 ];
 
+/// The XOR key of a mon's `secure` block: `otId ^ personality`, or 0 when the block is stored in
+/// the clear. The 16-bit sum of the decrypted halfwords must equal `checksum` at 0x1C
+/// (`CalculateBoxMonChecksum`, `decompiled/src/pokemon.c:2069-2090`); the s11 Misty state holds
+/// `gPlayerParty[0]` unencrypted at the action menu, so both keys are tried.
+fn secure_key(emu: &mut Emu, base: u32, pid: u32) -> u32 {
+    let enc = pid ^ emu.read32(base + pmon::OT_ID);
+    let want = emu.read16(base + 0x1C);
+    let words: Vec<u32> = (0..12)
+        .map(|i| emu.read32(base + pmon::SECURE + 4 * i))
+        .collect();
+    let sum = |k: u32| {
+        words.iter().fold(0u16, |acc, &w| {
+            let v = w ^ k;
+            acc.wrapping_add(v as u16).wrapping_add((v >> 16) as u16)
+        })
+    };
+    if sum(enc) == want || sum(0) != want {
+        enc
+    } else {
+        0
+    }
+}
+
 /// `struct SaveBlock1` (`decompiled/include/global.h:759-782`): the bag pockets, `struct ItemSlot
 /// {u16 itemId; u16 quantity}` (`global.h:400-404`), counts from `include/constants/global.h:36-40`.
 mod sb1 {
@@ -215,7 +238,7 @@ impl BattleRam {
 
     fn party_mon(&self, emu: &mut Emu, base: u32) -> RawPartyMon {
         let pid = emu.read32(base + pmon::PERSONALITY);
-        let key = pid ^ emu.read32(base + pmon::OT_ID);
+        let key = secure_key(emu, base, pid);
         let pos = SUBSTRUCT_POS[(pid % 24) as usize];
         let word = |emu: &mut Emu, sub: usize, off: u32| -> u32 {
             emu.read32(base + pmon::SECURE + pos[sub] as u32 * 12 + off) ^ key
