@@ -38,6 +38,51 @@ fn main() {
                 emu.read8(wild + 8)
             );
         }
+        if a.len() > 5 && a[5] == "spin" {
+            // Tap-turn in place (one frame of the direction, then release): count the encounter
+            // rolls (`stepsSinceLastEncounter`, `encounterRateBuff`) without any tile change.
+            let p0 = obs.pos(&mut emu);
+            let mut turns = 0;
+            let mut d = k1;
+            let mut fr = 0;
+            while turns < 200 && !obs.in_battle(&mut emu) {
+                emu.step(d);
+                emu.step(0);
+                fr += 2;
+                for _ in 0..30 {
+                    if obs.player_can_step(&mut emu) || obs.in_battle(&mut emu) {
+                        break;
+                    }
+                    emu.step(0);
+                    fr += 1;
+                }
+                turns += 1;
+                d = if d == k1 { k2 } else { k1 };
+                if turns <= 8 {
+                    println!(
+                        "  turn {turns}: pos {:?} buff {} steps_since {} frames {fr}",
+                        obs.pos(&mut emu),
+                        emu.read16(wild + 6),
+                        emu.read8(wild + 8)
+                    );
+                }
+                if !obs.callback2_is(&mut emu, "CB2_Overworld") {
+                    break;
+                }
+            }
+            for _ in 0..200 {
+                if obs.in_battle(&mut emu) {
+                    break;
+                }
+                emu.step(0);
+            }
+            println!(
+                "trial {t}: spin turns {turns} frames {fr} battle {} moved {}",
+                obs.in_battle(&mut emu),
+                obs.pos(&mut emu) != p0
+            );
+            continue;
+        }
         let mut steps = 0u32;
         let mut dir = k1;
         let mut got = false;

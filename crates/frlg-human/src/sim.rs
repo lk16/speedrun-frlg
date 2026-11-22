@@ -401,6 +401,10 @@ impl Ctx<'_> {
 
     /// One ball thrown and its result back at the menu: 397-416 measured, x1.2.
     fn throw_cost(&self) -> f64 {
+        if self.p.throw_frames > 0 {
+            // MODEL CHANGE `throw_frames` (played misses, calibration 2026-11-22).
+            return self.p.throw_frames as f64;
+        }
         if self.p.calib_wr {
             // Measured floor 397-416 per ball (`calibration.md`) x ~1.05.
             425.0
@@ -414,7 +418,10 @@ impl Ctx<'_> {
     /// After the last shake: Gotcha text, dex page, nickname prompt. The measured throw-to-overworld
     /// total is 409-549, so what comes after the throw cycle is small.
     fn catch_end(&self) -> f64 {
-        let base = if self.p.calib_wr {
+        let base = if self.p.catch_end_new > 0 {
+            // MODEL CHANGE `catch_end_new`: a new species' dex page (`battle_scripts_2.s:73-91`).
+            self.p.catch_end_new as f64
+        } else if self.p.calib_wr {
             130.0
         } else if self.p.calib_enc {
             150.0
@@ -497,6 +504,10 @@ impl Ctx<'_> {
     pub fn floor_frames(&self, seg: &Seg) -> f64 {
         let p = self.p;
         match &seg.kind {
+            // MODEL CHANGE `fly_frames`: a played Fly, menu to control on arrival (calibration 2026-11-22).
+            Kind::Text { .. } if p.fly_frames > 0 && seg.name.starts_with("fly-") => {
+                p.fly_frames as f64
+            }
             Kind::Text { frames } => *frames as f64 * p.text_factor,
             Kind::Walk { tiles, era, .. } => {
                 *tiles as f64 * era.frames_per_tile() * p.path_overhead
@@ -1306,8 +1317,14 @@ fn encounter(
     } else if safari {
         // Safari battles have no Run roll and a two-row menu: leaving an unwanted
         // encounter is one press (`decompiled/src/battle_script_commands.c`, Safari
-        // flee always succeeds). 200 frames is the fill audit's estimate (guess).
-        bump(st, 200.0);
+        // flee always succeeds). 200 frames is the fill audit's estimate (guess); MODEL CHANGE
+        // `safari_run_frames`: played 100 (calibration 2026-11-22).
+        let f = if ctx.p.safari_run_frames > 0 {
+            ctx.p.safari_run_frames as f64
+        } else {
+            200.0
+        };
+        bump(st, f);
     } else {
         flee(ctx, st, rng);
     }
@@ -1330,6 +1347,12 @@ fn flee(ctx: &Ctx, st: &mut State, rng: &mut Rng) {
         (430.0, 400.0)
     } else {
         (500.0, 470.0)
+    };
+    // MODEL CHANGE `flee_frames` (played Runs at carry L36, calibration 2026-11-22).
+    let ok_cost = if ctx.p.flee_frames > 0 {
+        ctx.p.flee_frames as f64
+    } else {
+        ok_cost
     };
     loop {
         if rng.chance(p_ok) {
@@ -3154,9 +3177,10 @@ pub fn attempt(
             }
             match &seg.kind {
                 _ if skipped => {}
-                Kind::Text { frames } => {
+                Kind::Text { .. } => {
                     if !skip_heal {
-                        bump(&mut st, *frames as f64 * ctx.p.text_factor);
+                        // `floor_frames`: `frames` x `text_factor`, or a MODEL CHANGE `fly_frames`.
+                        bump(&mut st, ctx.floor_frames(seg));
                     }
                     bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                     bump(&mut st, mistakes(ctx, &mut rng, seg.inputs as f64 / 100.0));
