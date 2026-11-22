@@ -75,9 +75,18 @@ pub fn talk_to(s: &mut Session, map: &str, local_id: u8) -> PResult<()> {
                 .find(|l| l.local_id == local_id)
                 .map(|l| (l.x, l.y))
         };
+        // Off screen (objects only spawn near the camera): head for where the map puts it.
+        let pos = pos.or_else(|| {
+            let g = s.graph();
+            g.maps[&g.id(map)]
+                .objects
+                .iter()
+                .find(|ob| ob.local_id == local_id)
+                .map(|ob| (ob.x, ob.y))
+        });
         let Some((x, y)) = pos else {
             return Err(super::session::PlayError::Fatal(format!(
-                "object {local_id} of {map} is not on screen"
+                "object {local_id} of {map} is not on the map"
             )));
         };
         go_face(s, map, x, y, &o)?;
