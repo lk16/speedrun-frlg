@@ -3911,6 +3911,23 @@ pub fn outlook(
     )
 }
 
+/// Weakening a wild mon before a throw. The simulator abstracts it (`Params::weaken`: one or two
+/// turns that leave `weaken_hp` of the HP, `weaken_ko` risk); the playing controller needs a move:
+/// the best expected damage ([`player_score`]) among the moves whose max roll (no crit) leaves the
+/// foe at least 1 HP. `None` when no damaging move is that gentle.
+pub fn weaken_move(dex: &Dex, me: &Mon, e: &Mon) -> Option<usize> {
+    me.moves
+        .iter()
+        .filter(|&&mv| me.has_pp(mv))
+        .filter_map(|&mv| {
+            let (_, hi) = damage_range(dex, me, e, mv);
+            let s = player_score(dex, me, e, mv, &Side::default());
+            (s > 0.0 && hi > 0 && hi < e.hp).then_some((mv, s))
+        })
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+        .map(|(mv, _)| mv)
+}
+
 /// The lookahead human: try the sensible actions and keep the one that wins most often in
 /// `tac.rollouts` simulated continuations (the greedy action wins ties).
 #[allow(clippy::too_many_arguments)]

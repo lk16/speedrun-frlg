@@ -2286,7 +2286,7 @@ fn hazard_death(ctx: &Ctx, st: &mut State, rng: &mut Rng, name: &str) -> bool {
     false
 }
 
-fn is_league(name: &str) -> bool {
+pub fn is_league(name: &str) -> bool {
     let n = name.trim_end_matches("-2");
     matches!(n, "lorelei" | "bruno" | "agatha" | "lance" | "champion")
 }

@@ -588,6 +588,14 @@ impl Dex {
         }
     }
 
+    pub fn has_species(&self, name: &str) -> bool {
+        self.by_name.contains_key(name)
+    }
+
+    pub fn has_move(&self, name: &str) -> bool {
+        self.move_by_name.contains_key(name)
+    }
+
     pub fn id(&self, name: &str) -> usize {
         *self
             .by_name
