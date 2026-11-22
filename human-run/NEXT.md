@@ -1,5 +1,25 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 21:35 boss turns (read first; journal `journal/2026-11-22-21-35-boss-turns.md`)
+
+The sim's short boss fights come from `carry_power` 2.0: the timing lane one-shots every rival / leader mon
+(Cerulean rival 4 actions for 4 mons, the WR 7), so X items never trigger. Fixed without touching survival:
+**`turn_power` 1.4 / `turn_power_boss` 1.0** (the clock pays the actions of a copy of each non-League trainer fight at
+that power; outcome stays at `carry_power`; a FIT on the WR's 67 fights: actions 239.7 vs 237, bosses 0.98 [0.88,
+1.08] of the WR, 1285: 0.74). Level-ups out of the fit: `trainer_cost` [798, 536, 251] x the recomputed WR factor
+0.938 [0.904, 0.981] = **[749, 503, 235]**. A third double count found and removed: **`tcost_whole`** (no jitter,
+reactions or risk-lane potion turns on top of the WR-fitted price; 126 s on the list). **MODEL CHANGE
+1423-boss-turns-whole: WR+2m 455.5 h, +179 [138, 234] vs 1285** (seed 7401, R 800k); halves: 1420 (level-ups only)
+161 h, 1421 (turns only) 4851 h, 1422 (both, extras charged) 864 h; SENS WR factor 0.904 / 0.981: 234 h / 2097 h,
+`turn_power_boss` 1.1: 344 h. Core fight price on the WR list 3693 s vs 3684 s; no-reset clock at Giovanni 3 -43 s
+(1285: -151 s). **Recommended as model of record** (does not pass the +-60 s window check: 8 windows out vs 1285's 4,
+the early-fight overshoot at 1.4 and Silph Giovanni at boss power). The League agent's refit should be recombined with
+1423 (no League keys touched). Non-fight time still ~150 s under the WR to Giovanni 3 (Koga -117: Safari plan;
+Giovanni 3 -109: gym spin-tile walk 6 s vs the WR's ~35 s, badge text, evolutions/trade/Diglett placed differently;
+Misty -93; Bike -71; Sevii -65; vs Blaine +132), offset by ~84 s of pre-fight bag trips the WR does not make. Next:
+time the lab rival and Silph Giovanni on the VOD; per-fight look at the earliest fights and the tower rival (why 1.4
+vs 1.0); the Viridian Gym walk and badge-text guesses; the pre-fight Elixir / pre-heal policy.
+
 ## 2026-11-22 21:00 WR fight timing (read first; journal `journal/2026-11-22-21-00-wr-fight-timing.md`)
 
 67 WR trainer fights (Sammy -> Route 22 rival) frame-timed off the VOD with a colour-cell battle detector
