@@ -438,9 +438,17 @@ fn fill_round(s: &mut Session) -> PResult<()> {
         json!({"site": h.site, "new_species": k, "share": share, "caught": n}),
     );
     if let Some((map, sec)) = fly_point(s, &h.site, &h.area) {
-        let fl = format!("FLAG_WORLD_MAP_{}", map.trim_start_matches("MAP_"));
-        let known = super::names::names().get(&fl).is_some();
-        if (!known || flag(s, &fl)) && region_cell(&sec).is_some_and(|c| c.0 == 0) {
+        // The Fly flag: `FLAG_WORLD_MAP_<map>`, or for a route's center
+        // `FLAG_WORLD_MAP_<center map>` (`include/constants/flags.h`, e.g.
+        // `FLAG_WORLD_MAP_ROUTE10_POKEMON_CENTER_1F`). Unknown: walk instead of flying.
+        let mut cands = vec![format!("FLAG_WORLD_MAP_{}", map.trim_start_matches("MAP_"))];
+        if let Some(pc) = center_of(s, &map) {
+            cands.push(format!("FLAG_WORLD_MAP_{}", pc.trim_start_matches("MAP_")));
+        }
+        let can_fly = cands
+            .iter()
+            .any(|f| super::names::names().get(f).is_some() && flag(s, f));
+        if can_fly && region_cell(&sec).is_some_and(|c| c.0 == 0) {
             leave_to_fly(s, &map)?;
             super::items::fly(s, &sec)?;
             let lead = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
