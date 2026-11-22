@@ -100,6 +100,8 @@ pub struct PlayCfg {
     /// Stage names that die once (after succeeding) to exercise the rollback (`--force-rollback`).
     pub force_rollback: Vec<String>,
     pub max_retries: u32,
+    /// Resume from this checkpoint of the resume directory instead of its last one (`--from`).
+    pub from: Option<String>,
 }
 
 pub struct Session<'p> {
@@ -189,7 +191,14 @@ impl<'p> Session<'p> {
         let obs = Observer::new(syms)?;
         let ilog = read_ilog(&resume.join("run.ilog"))?;
         let mut log = EventLog::load(&resume.join("events.jsonl")).map_err(|e| e.to_string())?;
-        let recs = resume_checkpoints(resume, &log, ilog.len() as u64, &cfg.state_dir)?;
+        let mut recs = resume_checkpoints(resume, &log, ilog.len() as u64, &cfg.state_dir)?;
+        if let Some(from) = &cfg.from {
+            let k = recs
+                .iter()
+                .rposition(|r| &r.name == from)
+                .ok_or_else(|| format!("no checkpoint {from} in {}", resume.display()))?;
+            recs.truncate(k + 1);
+        }
         let last = recs.last().ok_or("no checkpoint to resume from")?.clone();
         if (last.frame as usize) > ilog.len() {
             return Err(PlayError::Fatal(format!(
@@ -350,6 +359,7 @@ impl<'p> Session<'p> {
                 self.frame()
             );
             self.seg = st.name.to_string();
+            self.wild_plan = super::battle::WildPlan::Flee;
             let mut res = (st.run)(self);
             if res.is_ok()
                 && self.cfg.force_rollback.iter().any(|n| n == st.name)

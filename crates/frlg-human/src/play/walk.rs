@@ -101,6 +101,7 @@ impl ObjInfo {
     }
 }
 
+#[derive(Clone)]
 pub struct MapInfo {
     pub name: String,
     pub id: String,
@@ -285,6 +286,8 @@ struct View {
     surfing: bool,
     flags: HashMap<u16, bool>,
     temp_block: HashSet<Node>,
+    /// The current map as the game holds it now (collision patched from `VMap`).
+    cur_live: Option<MapInfo>,
 }
 
 /// Cost of one step and the human's tie-breakers, in hundredths of a step.
@@ -457,7 +460,12 @@ impl Graph {
                 break;
             }
             let (mid, x, y) = node;
-            let Some(m) = self.maps.get(&mid) else {
+            let Some(m) = (if mid == view.cur_map {
+                view.cur_live.as_ref()
+            } else {
+                None
+            })
+            .or_else(|| self.maps.get(&mid)) else {
                 continue;
             };
             let (blk, trees, sight) = cache
@@ -656,7 +664,34 @@ fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
         surfing,
         flags,
         temp_block: temp_block.clone(),
+        cur_live: live_map(s, cur_map),
     }
+}
+
+/// The current map with its collision bits read from the live grid: `VMap.map[(x + 7) +
+/// VMap.Xsize * (y + 7)]`, collision in bits 10-11 (`decompiled/src/fieldmap.c:17,57-59,107-124`,
+/// `struct BackupMapLayout` in `include/global.fieldmap.h:103-108`). Scripts' `setmetatile`
+/// (gym beams, opened doors) write there, so this sees barriers the layout file does not.
+fn live_map(s: &mut Session, cur: MapId) -> Option<MapInfo> {
+    let g = s.graph();
+    let mut m = g.maps.get(&cur)?.clone();
+    let vmap = s.sym("VMap");
+    let emu = s.hf.rec.emu();
+    let xsize = emu.read32(vmap) as i32;
+    let ptr = emu.read32(vmap + 8);
+    if !(0x0200_0000..0x0204_0000).contains(&ptr) || xsize != m.w as i32 + 15 {
+        return None;
+    }
+    let row = (m.w as u32) * 2;
+    for y in 0..m.h {
+        let a = ptr + (((y as i32 + 7) * xsize + 7) * 2) as u32;
+        let bytes = emu.read_bytes(a, row);
+        for x in 0..m.w {
+            let v = u16::from_le_bytes([bytes[x as usize * 2], bytes[x as usize * 2 + 1]]);
+            m.tiles[(x + y * m.w) as usize].collision = ((v >> 10) & 3) as u8;
+        }
+    }
+    Some(m)
 }
 
 /// Whether to hold B (run) while walking: on foot only (`PLAYER_AVATAR_FLAG_ON_FOOT`), and the

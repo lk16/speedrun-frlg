@@ -83,6 +83,7 @@ pub fn main(cmd: &str, args: &[String], dex: &'static Dex) {
                 force_rollback: flag(args, "--force-rollback")
                     .map(|s| s.split(',').map(str::to_string).collect())
                     .unwrap_or_default(),
+                from: flag(args, "--from"),
                 max_retries: flag(args, "--retries").map_or(12, |s| s.parse().unwrap()),
             };
             let mut s = Session::resume(&plan, cfg, &resume, model).unwrap_or_else(|e| {

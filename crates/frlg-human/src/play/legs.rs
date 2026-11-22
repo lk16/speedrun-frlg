@@ -288,6 +288,138 @@ fn surge(s: &mut Session) -> PResult<()> {
     split(s, "Surge", "surge-badge")
 }
 
+/// `leg_tower`: "tower-walk" to 2F, where the rival waits (`rival-tower`); his scene fires on the
+/// coord events (16, 6) / (17, 5) next to him (`PokemonTower_2F/map.json`), which the plan's fight
+/// needs, so the human walks onto (16, 6).
+fn tower_rival(s: &mut Session) -> PResult<()> {
+    let _ = super::items::mount_bike(s)?;
+    go_map(s, "MAP_POKEMON_TOWER_1F", &Opts::default())?;
+    s.seg = "rival-tower".into();
+    go(s, "MAP_POKEMON_TOWER_2F", 16, 6, &Opts::default())?;
+    settle(s)
+}
+
+/// 3F-6F with the forced channelers (`tower-channelers`: Emilia, Jennifer, one of Karina / Tammy),
+/// up to the Marowak ghost's coord events (11, 15) / (12, 16) of 6F
+/// (`PokemonTower_6F/scripts.inc` `MarowakGhost`). The ghost battle has to be won: the Silph
+/// Scope reveals it and it blocks the stairs until beaten.
+fn tower_marowak(s: &mut Session) -> PResult<()> {
+    s.seg = "tower-channelers".into();
+    go(s, "MAP_POKEMON_TOWER_6F", 12, 16, &Opts::default())?;
+    settle(s)?;
+    let scene = super::names::names().get("VAR_MAP_SCENE_POKEMON_TOWER_6F");
+    let v = scene.and_then(|v| s.obs.var(s.hf.rec.emu(), v));
+    s.event(
+        "decision",
+        format!("Marowak scene var {v:?}"),
+        json!({"var": v}),
+    );
+    Ok(())
+}
+
+/// 7F: the three Rockets (`tower-rockets`, `maps_group ... PokemonTower_7F, 3`), then Mr. Fuji at
+/// (11, 4), who warps the player to the Volunteer House (`PokemonTower_7F/scripts.inc:13`) and
+/// gives the Poké Flute there ("fuji-flute").
+fn tower_fuji(s: &mut Session) -> PResult<()> {
+    s.seg = "tower-rockets".into();
+    s.wild_plan = super::battle::WildPlan::Flee;
+    talk_to(s, "MAP_POKEMON_TOWER_7F", 1)?;
+    settle(s)?;
+    let flute = super::names::id("ITEM_POKE_FLUTE");
+    for _ in 0..3 {
+        if super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), flute) > 0 {
+            break;
+        }
+        // Fuji's house: he talks on arrival; if not, talk to him.
+        settle(s)?;
+        if super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), flute) == 0 {
+            s.hf.press(keys::A)?;
+            settle(s)?;
+        }
+    }
+    if super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), flute) == 0 {
+        return Err(super::session::PlayError::Fatal(
+            "no Poke Flute after Fuji".into(),
+        ));
+    }
+    s.event("decision", "got the Poke Flute from Mr. Fuji", json!({}));
+    Ok(())
+}
+
+/// Heal at a Pokémon Center: walk in, stand two tiles below the nurse (the counter between),
+/// face up, talk, and let the script run (its yes/no defaults to YES).
+pub fn center_heal(s: &mut Session, center_map: &str) -> PResult<()> {
+    let o = Opts::default();
+    let g = s.graph();
+    let mid = g.id(center_map);
+    let nurse = g.maps[&mid]
+        .objects
+        .iter()
+        .find(|ob| ob.graphics.contains("NURSE"))
+        .map(|ob| (ob.x, ob.y))
+        .ok_or("no nurse")?;
+    go(s, center_map, nurse.0, nurse.1 + 2, &o)?;
+    super::walk::face(s, keys::UP)?;
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    let party = super::ram::Ram::new(&s.obs).party(s.hf.rec.emu());
+    s.event(
+        "decision",
+        format!("healed at {center_map}"),
+        json!({"hp": party.iter().map(|m| (m.hp, m.max_hp)).collect::<Vec<_>>()}),
+    );
+    Ok(())
+}
+
+/// Not in the model: `leg_tower` has no heal between the Surge fight and the tower rival. Blastoise
+/// arrives at about half HP and paralysed, and the first branch played into the tower lost to the
+/// channelers' Gastly with every heal item spent on the rival; a human heals at Lavender's center,
+/// next to the fly point.
+fn lavender_heal(s: &mut Session) -> PResult<()> {
+    s.event(
+        "model-vs-actual",
+        "model has no heal before the tower; healing at the Lavender center (Blastoise half HP, paralysed)",
+        json!({"segment": "tower-walk"}),
+    );
+    center_heal(s, "MAP_LAVENDER_TOWN_POKEMON_CENTER_1F")
+}
+
+fn fly_celadon(s: &mut Session) -> PResult<()> {
+    go_map(s, "MAP_LAVENDER_TOWN", &Opts::default())?;
+    super::items::fly(s, "MAPSEC_CELADON_CITY")
+}
+
+/// `leg_cycling` "snorlax": west out of Celadon on the bike to the Snorlax on Route 16 (31, 13),
+/// the flute (`Route16/scripts.inc` `Snorlax`: yes/no, then `dowildbattle`), the battle fled.
+fn snorlax(s: &mut Session) -> PResult<()> {
+    let _ = super::items::mount_bike(s)?;
+    s.seg = "snorlax".into();
+    go_face(s, "MAP_ROUTE16", 31, 13, &Opts::default())?;
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    let hide = super::names::id("FLAG_HIDE_ROUTE_16_SNORLAX");
+    if !s.obs.flag(s.hf.rec.emu(), hide).unwrap_or(false) {
+        return Err(super::session::PlayError::Fatal(
+            "Snorlax still there".into(),
+        ));
+    }
+    s.event(
+        "decision",
+        "woke Snorlax with the Poke Flute and fled",
+        json!({}),
+    );
+    Ok(())
+}
+
+/// "cycling-road" (374 tiles, `route.rs`): the gate, Cycling Road (Route 17) and Route 18 to
+/// Fuchsia on the bike; the "Snorlax" WR split is taken on arrival.
+fn cycling(s: &mut Session) -> PResult<()> {
+    let _ = super::items::mount_bike(s)?;
+    s.seg = "cycling-road".into();
+    go_map(s, "MAP_FUCHSIA_CITY", &Opts::default())?;
+    split(s, "Snorlax", "snorlax")
+}
+
 fn fly_lavender(s: &mut Session) -> PResult<()> {
     // Fly works outdoors only ("Can't use that here."): out of the gym first.
     go_map(s, "MAP_VERMILION_CITY", &Opts::default())?;
@@ -327,6 +459,34 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "fly-lavender",
             run: fly_lavender,
+        },
+        Stage {
+            name: "lavender-heal",
+            run: lavender_heal,
+        },
+        Stage {
+            name: "tower-rival",
+            run: tower_rival,
+        },
+        Stage {
+            name: "tower-marowak",
+            run: tower_marowak,
+        },
+        Stage {
+            name: "fuji-flute",
+            run: tower_fuji,
+        },
+        Stage {
+            name: "fly-celadon",
+            run: fly_celadon,
+        },
+        Stage {
+            name: "snorlax",
+            run: snorlax,
+        },
+        Stage {
+            name: "cycling-road",
+            run: cycling,
         },
     ]
 }
