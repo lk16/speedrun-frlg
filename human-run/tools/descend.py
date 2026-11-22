@@ -466,6 +466,11 @@ def gen(p):
         sys.path.insert(0, HERE)
         import earlyknobs, fightknobs, manipknobs, midknobs
         cands = fightknobs.candidates(p) + earlyknobs.candidates(p) + manipknobs.candidates(p) + midknobs.candidates(p)
+    elif SET == 'shops':
+        # Shop-stop quantities (marts top-up targets, potion bag, league_heals; model honesty 2, plan 1413+).
+        sys.path.insert(0, HERE)
+        import shopknobs
+        cands = shopknobs.candidates(p)
     elif SET == 'fights':
         # Optional trainers per segment (fight_lists, plan 1253+): the exp-vs-time trade-off.
         sys.path.insert(0, HERE)
