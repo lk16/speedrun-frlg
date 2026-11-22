@@ -45,3 +45,12 @@ fn fight_lists_replace_and_insert() {
     assert!(at("cycling-road+fights") > at("cycling-road"));
     assert!(at("cycling-road+fights") < at("snorlax"));
 }
+
+#[test]
+fn empty_list_drops_a_single_trainer() {
+    let base = plan("\"fight_lists\": {}");
+    assert_eq!(fights(&base, "bond-bridge-nikki"), Some(usize::MAX));
+    let p = plan("\"fight_lists\": {\"bond-bridge-nikki\": []}");
+    assert_eq!(fights(&p, "bond-bridge-nikki"), Some(0));
+    assert_eq!(fights(&p, "bond-bridge-nikki+fights"), None);
+}

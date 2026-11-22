@@ -286,7 +286,8 @@ impl<'a> B<'a> {
     }
 
     /// `Params::fight_lists`: replace a `Parties`/`Group` segment's fights with the given trainer ids, or
-    /// insert them as a new `<seg>+fights` segment after any other segment.
+    /// insert them as a new `<seg>+fights` segment after any other segment. An empty list on a `Trainer`
+    /// segment removes that fight.
     pub(crate) fn apply_fight_lists(
         &mut self,
         lists: &std::collections::BTreeMap<String, Vec<String>>,
@@ -314,7 +315,12 @@ impl<'a> B<'a> {
                 ais: fights.iter().map(|f| f.ai).collect(),
                 fulls: fights.into_iter().map(|f| f.full).collect(),
             };
-            if matches!(self.segs[i].kind, Kind::Parties { .. } | Kind::Group { .. }) {
+            // An empty list on a single-trainer segment drops that fight (a trainer the runner walks
+            // around, e.g. Aroma Lady Nikki on the Bond Bridge in the WR video).
+            let drop_trainer = n == 0 && matches!(self.segs[i].kind, Kind::Trainer { .. });
+            if drop_trainer
+                || matches!(self.segs[i].kind, Kind::Parties { .. } | Kind::Group { .. })
+            {
                 self.segs[i].kind = kind;
                 self.segs[i].inputs = 6 * n;
             } else {
