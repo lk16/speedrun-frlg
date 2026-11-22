@@ -419,6 +419,10 @@ pub fn build(input: &OverlayInput) -> Overlay {
         if chat_lines.len() > CHAT_LINES {
             let drop = chat_lines.len() - CHAT_LINES;
             chat_lines.drain(..drop);
+            // A message scrolls off whole: no orphaned continuation lines
+            // at the top of the column.
+            let orphans = chat_lines.iter().take_while(|l| l.contains("}\\h")).count();
+            chat_lines.drain(..orphans);
         }
         chat.set(
             at,

@@ -249,11 +249,13 @@ Work through these in order. Each step ends with a commit, a journal entry and a
 here (`[ ]` → `[x]`, with the commit). A step is done only when its check passes. Measured segment
 times go into `calibration.md` and, as a labelled MODEL CHANGE, into the model.
 
-- [ ] **S0. Plumbing check.** In the sandbox: ffmpeg with libx264 and libass, a monospace font
+- [x] **S0. Plumbing check.** (3c199775; ffmpeg 8.0.1 has libx264, libass, drawtext; DejaVu Sans
+  Mono present; test clip `$FRLG_ARTIFACTS/videos/s0-plumbing-test.mp4` from the 11-21 sandbox) In the sandbox: ffmpeg with libx264 and libass, a monospace font
   visible to fontconfig, `$FRLG_ARTIFACTS/videos/` writable, the gc cap added. *Check:* a 10 s
   test clip from the existing `defeat-brock` log, with a dummy ASS panel, renders and plays on
   the host. If something is missing, name the package for `IMAGE_PKGS` in `tools/host-prep.sh`.
-- [ ] **S1. Overlay renderer.** `frlg video --overlay events.jsonl --plan <plan>` (layout above),
+- [x] **S1. Overlay renderer.** (34cd72c4, 2d726074; checked on the real 1122-lgdescent-s11 run
+  instead of a hand-written log, `journal/2026-11-22-12-45-overlay-renderer.md`, `VIDEO.md`) `frlg video --overlay events.jsonl --plan <plan>` (layout above),
   driven by a hand-written `events.jsonl` over the `defeat-brock` TAS log. *Check:* timer, splits,
   dex bar and scrolling chat look right. Lines never overflow at a 38-column worst case. Timestamps
   match the timer.

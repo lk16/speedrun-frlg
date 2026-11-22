@@ -1251,6 +1251,12 @@ fn main() {
                 println!("P(total >= {min}) = {pass:.4}");
             }
         }
+        Some("dex-test" | "shop-test") => {
+            if let Err(e) = frlg_human::play::dex_test::main(dex(), &args[1..]) {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
         Some("battle-test") => {
             if let Err(e) = frlg_human::play::battle_test::run(dex(), &args[1..]) {
                 eprintln!("{e}");

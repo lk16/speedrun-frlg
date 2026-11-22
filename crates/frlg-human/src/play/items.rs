@@ -141,8 +141,7 @@ pub fn bag_use(s: &mut Session, item: u16, row: i8) -> PResult<()> {
         s.hf.idle(2)?;
     }
     list_goto(s, idx as u16)?;
-    // A press while the list is still scrolling or the pocket still sliding in is dropped: press
-    // until the context menu opens.
+    // A until the context menu opens (a press on a frame the list skips is lost).
     super::prims::press_until(s, "the item's context menu", keys::A, 300, |s| {
         menu::task(s, "Task_FieldItemContextMenuHandleInput")
     })?;

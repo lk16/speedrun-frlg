@@ -46,8 +46,10 @@ orange, reset-verdict magenta, rollback red, model-vs-actual violet.
 
 x264 CRF 20, preset `faster`, yuv420p, AAC 160k, `+faststart`. The canvas is built with `pad`
 filters (panel boxes included) rather than drawn: an ASS or `drawbox` fill of the panels is a
-blend over ~1 M pixels per frame and halved the rate. Measured on 16 cores with the real 1122 run:
-see the journal entry `journal/2026-11-22-*-overlay-renderer.md` for time and size.
+blend over ~1 M pixels per frame and halved the rate. Measured on 16 cores with the real 1122 run
+(331053 frames, 1:32:25 of video): 3384 s wall for both replays and the encode (~98 fps overall),
+854 MiB, panels 1.9 MB (`journal/2026-11-22-12-45-overlay-renderer.md`). A four-hour run should
+come to ~2.5 h and ~2.2 GB.
 
 Needs ffmpeg with libx264, libass and drawtext (libfreetype), and DejaVu Sans Mono (the timer
 uses `/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf` directly). Check with
