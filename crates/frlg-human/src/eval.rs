@@ -180,6 +180,21 @@ impl Plan {
                 }
                 v
             },
+            potion_hp: if self.params.potion_tiers.is_empty() {
+                vec![]
+            } else {
+                // A tier counts from the segment after its anchor (the mart stop) on.
+                let mut v = vec![20; n];
+                for t in &self.params.potion_tiers {
+                    if let Some(i) = seg_index(&self.segs, &t.after) {
+                        for x in v.iter_mut().skip(i + 1) {
+                            *x = t.hp;
+                        }
+                    }
+                }
+                v
+            },
+            ball_shop_from: seg_index(&self.segs, &self.params.ball_shop_from),
             aggr: self
                 .segs
                 .iter()

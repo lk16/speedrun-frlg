@@ -875,6 +875,17 @@ pub struct Tactics {
     /// Value factor of a scarce-PP move (Blizzard, Fire Blast) unless it kills (`Params::scarce_factor`;
     /// 1.0 = no rationing).
     pub scarce: f64,
+    /// MODEL CHANGE (`Params::sleep_no_potion`, battle bridge 2026-11-22): no potion while the fighter
+    /// is asleep. Using an item does not run the sleeper's move attempt, so the sleep counter does not
+    /// tick (`decompiled/src/battle_util.c` `AtkCanceller_UnableToUseMove`, `CANCELLER_ASLEEP` decrements
+    /// only on a move attempt): the potion buys one foe hit and leaves the fighter just as asleep (s13 on
+    /// the S.S. Anne rival state healed twice asleep and fainted). Unless the potion outheals the foe's best
+    /// hit (a Super Potion against Razor Leaf: alternate turns still gain HP). A Full Restore still goes.
+    pub sleep_no_potion: bool,
+    /// Awakenings in the bag (MODEL CHANGE `Params::awakenings`, bought at the Cerulean mart,
+    /// `CeruleanCity_Mart/scripts.inc:30`): a sleeping fighter is woken with one at once (the human
+    /// cannot see the sleep counter; the expected sleep is 2.5 lost turns for one item turn).
+    pub awakenings: u32,
 }
 
 impl Default for Tactics {
@@ -896,6 +907,8 @@ impl Default for Tactics {
             setup_min: 1,
             menu_slip: 0.0,
             scarce: SCARCE_FACTOR,
+            sleep_no_potion: false,
+            awakenings: 0,
         }
     }
 }
@@ -955,6 +968,7 @@ pub struct Outcome {
     pub x_used: u32,
     pub heals_used: u32,
     pub full_restores_used: u32,
+    pub awakenings_used: u32,
     /// Sacrificial faints spent (each costs a faint animation and a send-out).
     pub sacs_used: u32,
     /// Sacrifices whose helper survived the hit (see `Tactics::helper_hp`): two switch turns, no faint.
@@ -968,14 +982,18 @@ pub struct Outcome {
     pub dragged: u32,
 }
 
-#[derive(Clone, Copy)]
-enum Action {
+/// One player turn as the policy chooses it (`decide` hands it to the playing controller).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Action {
     Move(usize),
     /// Switch the fighter back in after a drag-out: no attack, the foe's move lands on it.
     Switch,
     XItem(XItem),
     Heal,
     FullRestore,
+    /// Awakening on the sleeping fighter (`Tactics::awakenings`; `ITEM_AWAKENING` cures sleep,
+    /// `item_effects.h`): an item turn, the fighter acts again from the next turn.
+    Awaken,
     /// A teammate eats this turn's hit while the fighter acts freely: uses its next X
     /// item, or simply attacks when no setup is pending.
     Sac(Option<XItem>),
@@ -2840,9 +2858,10 @@ fn ai_wants_item(total: u32, left: u32, valid: u32, e: &Mon) -> bool {
     used == 0 || valid <= total - used + 1
 }
 
-/// Mutable state of one fight that a rollout must be able to copy.
+/// Mutable state of one fight that a rollout must be able to copy. Public so the playing
+/// controller can carry it across the turns of a real fight ([`Fs::new`], [`decide`], [`note`]).
 #[derive(Clone)]
-struct Fs {
+pub struct Fs {
     scarce: f64,
     my_side: Side,
     en_side: Side,
@@ -2851,6 +2870,7 @@ struct Fs {
     /// After a Roar/Whirlwind the fighter's next turn is spent switching back in.
     must_switch: bool,
     heals_left: u32,
+    awakenings_left: u32,
     last_heal: bool,
     /// Full Restores the trainer still holds.
     ai_heals: u32,
@@ -2862,10 +2882,73 @@ struct Fs {
 }
 
 /// What the human saw when choosing: the foe's best-move damage and whether a sure kill exists.
-struct Read {
-    danger: i32,
-    sure_kill: bool,
-    stalled: bool,
+#[derive(Clone, Copy, Debug)]
+pub struct Read {
+    pub danger: i32,
+    pub sure_kill: bool,
+    pub stalled: bool,
+}
+
+impl Fs {
+    /// The state at the start of a fight, exactly as [`fight`] sets it up.
+    pub fn new(tac: &Tactics, ai_heals: u32) -> Fs {
+        Fs {
+            my_side: Side::default(),
+            en_side: Side::default(),
+            setup_idx: 0,
+            sacs_left: tac.sacs,
+            must_switch: false,
+            heals_left: tac.heal_stock,
+            awakenings_left: tac.awakenings,
+            last_heal: false,
+            ai_heals,
+            others_alive: tac.others_alive,
+            stalls: 0,
+            last_move: None,
+            scarce: tac.scarce,
+        }
+    }
+
+    /// X items / set-up moves of `Tactics::x_items` already used.
+    pub fn setup_idx(&self) -> usize {
+        self.setup_idx
+    }
+
+    /// Heal items the fighter may still spend, and sacrifices left.
+    pub fn heals_left(&self) -> u32 {
+        self.heals_left
+    }
+
+    pub fn sacs_left(&self) -> u32 {
+        self.sacs_left
+    }
+
+    /// Living teammates besides the fighter (the controller re-reads them from the party).
+    pub fn set_others_alive(&mut self, n: u32) {
+        self.others_alive = n;
+    }
+
+    /// The last move either side used (`gCurrentMove`), which the trainer's choice of its next mon reads.
+    pub fn set_last_move(&mut self, mv: Option<usize>) {
+        self.last_move = mv;
+    }
+
+    /// Screens up on either side as (Reflect, Light Screen) turns left (`gSideTimers`).
+    pub fn set_screens(&mut self, mine: (u8, u8), theirs: (u8, u8)) {
+        self.my_side.reflect = mine.0;
+        self.my_side.light_screen = mine.1;
+        self.en_side.reflect = theirs.0;
+        self.en_side.light_screen = theirs.1;
+    }
+}
+
+/// One choice of the policy, with the numbers behind it.
+#[derive(Clone, Debug)]
+pub struct Decision {
+    pub action: Action,
+    pub read: Read,
+    /// The lookahead ran: each candidate action with its wins out of `Tactics::rollouts`.
+    pub rollouts: Vec<(Action, u32)>,
 }
 
 /// Fights the trainer's party (or one wild mon) in order. `me` carries its state in and
@@ -2889,20 +2972,7 @@ pub fn fight(
     wild: bool,
     rng: &mut GameRng,
 ) -> Outcome {
-    let mut fs = Fs {
-        my_side: Side::default(),
-        en_side: Side::default(),
-        setup_idx: 0,
-        sacs_left: tac.sacs,
-        must_switch: false,
-        heals_left: tac.heal_stock,
-        last_heal: false,
-        ai_heals,
-        others_alive: tac.others_alive,
-        stalls: 0,
-        last_move: None,
-        scarce: tac.scarce,
-    };
+    let mut fs = Fs::new(tac, ai_heals);
     // Party slots, so that a mon the AI switches out returns to its place on the bench.
     let numbered: Vec<Mon> = foes
         .iter()
@@ -3038,7 +3108,10 @@ fn greedy_action(
             || (prep_heal && heal_ok))
     {
         Action::FullRestore
+    } else if fs.awakenings_left > 0 && matches!(me.status, Status1::Sleep(_)) && danger > 0 {
+        Action::Awaken
     } else if fs.heals_left > 0
+        && !(tac.sleep_no_potion && matches!(me.status, Status1::Sleep(_)) && tac.heal <= danger)
         && ((my_frac < tac.heal_below
             && me.hp <= 2 * danger
             && tac.heal as f64 + me.hp as f64 > danger as f64)
@@ -3193,6 +3266,7 @@ fn commit(fs: &mut Fs, action: Action, out: &mut Outcome) {
         Action::Switch => fs.must_switch = false,
         Action::XItem(_) => fs.setup_idx += 1,
         Action::Heal | Action::FullRestore => fs.heals_left = fs.heals_left.saturating_sub(1),
+        Action::Awaken => fs.awakenings_left = fs.awakenings_left.saturating_sub(1),
         Action::Sac(x) => {
             fs.sacs_left -= 1;
             fs.others_alive = fs.others_alive.saturating_sub(1);
@@ -3262,41 +3336,24 @@ fn run(
             let (hp_turn0, up_turn0) = (me.hp, out.hp_up);
 
             // --- player action. The human knows the lineup, hence the next mon the trainer will pick.
-            let next_foe = (!bench.is_empty())
-                .then(|| &bench[most_suitable(dex, me, &e, fs.last_move, &fs.my_side, &bench)]);
-            let (mut my_action, read) =
-                greedy_action(dex, me, &e, tac, fs, wild, next_foe, &mut out);
+            let (mut my_action, read, _) = choose(
+                dex,
+                me,
+                &e,
+                &bench,
+                tac,
+                fs,
+                ai_flags,
+                ai_items_total,
+                wild,
+                rng,
+                depth,
+                forced_first.take(),
+                &mut out,
+            );
             let danger = read.danger;
             let sure_kill = read.sure_kill;
             let mut stalled = read.stalled;
-            if let Some(a) = forced_first.take() {
-                my_action = a;
-                stalled = false;
-            } else if depth == 0
-                && tac.rollouts > 0
-                && !wild
-                && !fs.must_switch
-                && !(me.recharging || me.charging.is_some() || me.rampage > 0)
-                && (me.hp as f64 <= 1.6 * danger as f64 || me.hp * 2 < me.max_hp)
-            {
-                let rest: Vec<Mon> = std::iter::once(e.clone())
-                    .chain(bench.iter().cloned())
-                    .collect();
-                my_action = choose_by_rollouts(
-                    dex,
-                    me,
-                    &e,
-                    tac,
-                    fs,
-                    &rest,
-                    ai_flags,
-                    ai_items_total,
-                    wild,
-                    rng,
-                    my_action,
-                );
-                stalled = false;
-            }
             if tac.menu_slip > 0.0
                 && depth == 0
                 && me.moves.len() > 1
@@ -3317,18 +3374,7 @@ fn run(
                     }
                 }
             }
-            if stalled {
-                fs.stalls += 1;
-            }
-            commit(fs, my_action, &mut out);
-            // A helper that the foe's hit cannot faint stays on the field: the fighter must be switched back
-            // in next turn (`must_switch`: a turn in which the foe's move lands on the fighter).
-            let helper_lives = matches!(my_action, Action::Sac(_)) && tac.helper_hp > danger;
-            if helper_lives {
-                fs.others_alive += 1;
-                out.others_alive = fs.others_alive;
-                fs.must_switch = true;
-            }
+            let helper_lives = after_choice(fs, tac, my_action, danger, stalled, &mut out);
 
             // --- enemy action. `AI_TrySwitchOrUseItem` first asks `ShouldSwitch`; a forced move (recharge,
             // two-turn, rampage) never reaches the controller.
@@ -3460,6 +3506,13 @@ fn run(
                         me.hp = (me.hp + tac.heal).min(me.max_hp);
                         out.hp_up += me.hp - before;
                     }
+                    Action::Awaken => {
+                        out.item_turns += 1;
+                        out.awakenings_used += 1;
+                        if matches!(me.status, Status1::Sleep(_)) {
+                            me.status = Status1::None;
+                        }
+                    }
                     Action::FullRestore => {
                         out.item_turns += 1;
                         out.full_restores_used += 1;
@@ -3558,6 +3611,7 @@ fn run(
                     Action::XItem(x) => format!("X{x:?}"),
                     Action::Heal => "Heal".into(),
                     Action::FullRestore => "FullRestore".into(),
+                    Action::Awaken => "Awaken".into(),
                     Action::Sac(x) => format!("Sac {x:?}"),
                 };
                 eprintln!(
@@ -3704,6 +3758,218 @@ fn run(
     out
 }
 
+/// The player's choice for one turn: the greedy policy ([`greedy_action`]), replaced by the
+/// lookahead ([`choose_by_rollouts`]) when the fight is contested, or by `forced` (a rollout's first
+/// turn). Shared by the simulator ([`run`]) and the playing controller ([`decide`]); the third value
+/// lists the lookahead's candidates with their wins when it ran.
+#[allow(clippy::too_many_arguments)]
+fn choose(
+    dex: &Dex,
+    me: &Mon,
+    e: &Mon,
+    bench: &[Mon],
+    tac: &Tactics,
+    fs: &Fs,
+    ai_flags: u32,
+    ai_items_total: u32,
+    wild: bool,
+    rng: &mut GameRng,
+    depth: u8,
+    forced: Option<Action>,
+    out: &mut Outcome,
+) -> (Action, Read, Vec<(Action, u32)>) {
+    let next_foe = (!bench.is_empty())
+        .then(|| &bench[most_suitable(dex, me, e, fs.last_move, &fs.my_side, bench)]);
+    let (mut my_action, mut read) = greedy_action(dex, me, e, tac, fs, wild, next_foe, out);
+    let mut wins = vec![];
+    if let Some(a) = forced {
+        my_action = a;
+        read.stalled = false;
+    } else if depth == 0
+        && tac.rollouts > 0
+        && !wild
+        && !fs.must_switch
+        && !(me.recharging || me.charging.is_some() || me.rampage > 0)
+        && (me.hp as f64 <= 1.6 * read.danger as f64 || me.hp * 2 < me.max_hp)
+    {
+        let rest: Vec<Mon> = std::iter::once(e.clone())
+            .chain(bench.iter().cloned())
+            .collect();
+        let (a, w) = choose_by_rollouts(
+            dex,
+            me,
+            e,
+            tac,
+            fs,
+            &rest,
+            ai_flags,
+            ai_items_total,
+            wild,
+            rng,
+            my_action,
+        );
+        my_action = a;
+        wins = w;
+        read.stalled = false;
+    }
+    (my_action, read, wins)
+}
+
+/// Book-keeping after the player's choice: stall turns, items and teammates spent ([`commit`]), and
+/// a sacrificed helper that survives the hit (the fighter has to be switched back in next turn).
+fn after_choice(
+    fs: &mut Fs,
+    tac: &Tactics,
+    action: Action,
+    danger: i32,
+    stalled: bool,
+    out: &mut Outcome,
+) -> bool {
+    if stalled {
+        fs.stalls += 1;
+    }
+    commit(fs, action, out);
+    // A helper that the foe's hit cannot faint stays on the field: the fighter must be switched back
+    // in next turn (`must_switch`: a turn in which the foe's move lands on the fighter).
+    let helper_lives = matches!(action, Action::Sac(_)) && tac.helper_hp > danger;
+    if helper_lives {
+        fs.others_alive += 1;
+        out.others_alive = fs.others_alive;
+        fs.must_switch = true;
+    }
+    helper_lives
+}
+
+/// The simulator's own choice for one turn of a real fight: the playing controller's entry point.
+/// `me` is the fighter on the field, `e` the foe on the field, `bench` the trainer's mons not yet
+/// fainted and not on the field (empty for a wild mon), all built from the game's RAM; `fs` is the
+/// fight state the controller carries from turn to turn ([`Fs::new`] at the start, [`note`] after
+/// each choice). `rng` feeds only the lookahead's rollouts (the human's own imagination, never the
+/// game's stream). Nothing is committed: call [`note`] with the action actually taken.
+#[allow(clippy::too_many_arguments)]
+pub fn decide(
+    dex: &Dex,
+    me: &Mon,
+    e: &Mon,
+    bench: &[Mon],
+    tac: &Tactics,
+    fs: &Fs,
+    ai_flags: u32,
+    ai_items_total: u32,
+    wild: bool,
+    rng: &mut GameRng,
+) -> Decision {
+    let mut out = Outcome::default();
+    let (action, read, rollouts) = choose(
+        dex,
+        me,
+        e,
+        bench,
+        tac,
+        fs,
+        ai_flags,
+        ai_items_total,
+        wild,
+        rng,
+        0,
+        None,
+        &mut out,
+    );
+    Decision {
+        action,
+        read,
+        rollouts,
+    }
+}
+
+/// Commit the action the controller took (same book-keeping as the simulator's turn).
+pub fn note(fs: &mut Fs, tac: &Tactics, d: &Decision, taken: Action) {
+    let mut out = Outcome::default();
+    let stalled = d.read.stalled && taken == d.action;
+    after_choice(fs, tac, taken, d.read.danger, stalled, &mut out);
+}
+
+/// The model's outlook from a real mid-fight state: `n` greedy continuations of the fight (the
+/// simulator's [`run`] resumed with `e` on the field and `bench` behind it), each with its own
+/// random stream from `seed`. Returns (wins / n, mean player turns, mean HP fraction left on a win).
+#[allow(clippy::too_many_arguments)]
+pub fn outlook(
+    dex: &Dex,
+    me: &Mon,
+    e: &Mon,
+    bench: &[Mon],
+    tac: &Tactics,
+    fs: &Fs,
+    ai_flags: u32,
+    ai_items_total: u32,
+    wild: bool,
+    n: u32,
+    seed: u32,
+) -> (f64, f64, f64) {
+    let foes: Vec<Mon> = std::iter::once(e.clone())
+        .chain(bench.iter().cloned())
+        .collect();
+    let (mut wins, mut turns, mut hp) = (0u32, 0u64, 0.0);
+    for k in 0..n.max(1) {
+        let mut me2 = me.clone();
+        let mut fs2 = fs.clone();
+        let mut r = GameRng::from_u32(seed.wrapping_add(k.wrapping_mul(0x9E37_79B1)));
+        let res = run(
+            dex,
+            &mut me2,
+            tac,
+            &foes,
+            ai_flags,
+            ai_items_total,
+            wild,
+            &mut r,
+            &mut fs2,
+            Some(e.clone()),
+            None,
+            1,
+        );
+        wins += res.won as u32;
+        turns += res.turns as u64;
+        if res.won {
+            hp += res.hp_frac;
+        }
+    }
+    let n = n.max(1) as f64;
+    (
+        wins as f64 / n,
+        turns as f64 / n,
+        if wins > 0 { hp / wins as f64 } else { 0.0 },
+    )
+}
+
+/// The trainer's next mon after `fainted` went down, as the model predicts it ([`most_suitable`]):
+/// an index into `bench` (party order). The playing controller checks it against the game.
+pub fn predict_next(dex: &Dex, me: &Mon, fainted: &Mon, fs: &Fs, bench: &[Mon]) -> usize {
+    most_suitable(dex, me, fainted, fs.last_move, &fs.my_side, bench)
+}
+
+/// Weakening a wild mon before a throw. The simulator abstracts it (`Params::weaken`: one or two
+/// turns that leave `weaken_hp` of the HP, `weaken_ko` risk); the playing controller needs a move:
+/// the best expected damage ([`player_score`]) among the moves whose max roll leaves the foe at
+/// least 1 HP, a crit included (x2, `Cmd_damagecalc`) when any move is that gentle, else without
+/// the crit. `None` when no damaging move is gentle enough.
+pub fn weaken_move(dex: &Dex, me: &Mon, e: &Mon) -> Option<usize> {
+    let gentle = |crit: bool| {
+        me.moves
+            .iter()
+            .filter(|&&mv| me.has_pp(mv))
+            .filter_map(|&mv| {
+                let (_, hi) = damage_range(dex, me, e, mv);
+                let hi = if crit { 2 * hi } else { hi };
+                let s = player_score(dex, me, e, mv, &Side::default());
+                (s > 0.0 && hi > 0 && hi < e.hp).then_some((mv, s))
+            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .map(|(mv, _)| mv)
+    };
+    gentle(true).or_else(|| gentle(false))
+}
+
 /// The lookahead human: try the sensible actions and keep the one that wins most often in
 /// `tac.rollouts` simulated continuations (the greedy action wins ties).
 #[allow(clippy::too_many_arguments)]
@@ -3719,7 +3985,7 @@ fn choose_by_rollouts(
     wild: bool,
     rng: &mut GameRng,
     greedy: Action,
-) -> Action {
+) -> (Action, Vec<(Action, u32)>) {
     let mut cands: Vec<Action> = vec![greedy];
     let add = |a: Action, cands: &mut Vec<Action>| {
         if !cands.iter().any(|c| same_action(c, &a)) {
@@ -3750,7 +4016,7 @@ fn choose_by_rollouts(
         );
     }
     if cands.len() < 2 {
-        return greedy;
+        return (greedy, vec![]);
     }
     let n = tac.rollouts;
     let base = (rng.roll() as u32) << 16 | rng.roll() as u32;
@@ -3786,10 +4052,11 @@ fn choose_by_rollouts(
         .map(|(i, w)| (i, *w))
         .unwrap();
     // Noise guard: leave the greedy action unless the alternative is clearly better.
+    let table = cands.iter().copied().zip(wins.iter().copied()).collect();
     if bw >= wins[0] + (n / 8).max(1) {
-        cands[bi]
+        (cands[bi], table)
     } else {
-        greedy
+        (greedy, table)
     }
 }
 
@@ -4134,6 +4401,8 @@ mod tests {
                 setup_min: 1,
                 menu_slip: 0.0,
                 scarce: SCARCE_FACTOR,
+                sleep_no_potion: false,
+                awakenings: 0,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
@@ -4946,5 +5215,74 @@ mod tests {
         me.hp = me.max_hp - 1;
         end_of_turn(&mut me, &mut foe, &mut side, &mut out, true, &mut g);
         assert_eq!(me.hp, me.max_hp);
+    }
+
+    /// MODEL CHANGE `sleep_no_potion` / `awakenings` (battle bridge 2026-11-22): a sleeping fighter in KO range
+    /// drinks no Potion that the foe's hit out-damages (the item turn does not tick the sleep counter), still
+    /// drinks one that outheals the hit, and with an Awakening in the bag wakes up first.
+    #[test]
+    fn sleeping_fighter_wakes_or_attacks_instead_of_a_losing_potion() {
+        let dex = Dex::load();
+        let mut me = make_mon(&dex, dex.id("SPECIES_WARTORTLE"), 27, [20; 6], [0; 6], 0, 0);
+        me.moves = vec![dex.move_id("MOVE_BITE"), dex.move_id("MOVE_WATER_GUN")];
+        me.pp = vec![];
+        let mut foe = make_mon(&dex, dex.id("SPECIES_IVYSAUR"), 20, [20; 6], [0; 6], 0, 0);
+        foe.moves = vec![dex.move_id("MOVE_RAZOR_LEAF")];
+        foe.pp = vec![];
+        let danger = calc_damage(
+            &dex,
+            &foe,
+            &me,
+            foe.moves[0],
+            0,
+            false,
+            &Side::default(),
+            None,
+        );
+        assert!(danger > 20 && danger < 60, "danger {danger}");
+        me.hp = danger;
+        me.status = Status1::Sleep(3);
+        let pick = |tac: &Tactics| {
+            let fs = Fs::new(tac, 0);
+            greedy_action(
+                &dex,
+                &me,
+                &foe,
+                tac,
+                &fs,
+                false,
+                None,
+                &mut Outcome::default(),
+            )
+            .0
+        };
+        let old = Tactics {
+            heal: 20,
+            heal_below: 0.6,
+            heal_stock: 4,
+            ..Default::default()
+        };
+        assert!(
+            matches!(pick(&old), Action::Heal),
+            "old policy heals asleep"
+        );
+        let new = Tactics {
+            sleep_no_potion: true,
+            ..old.clone()
+        };
+        assert!(matches!(pick(&new), Action::Move(_)), "{:?}", pick(&new));
+        let big = Tactics {
+            heal: 60,
+            ..new.clone()
+        };
+        assert!(
+            matches!(pick(&big), Action::Heal),
+            "a potion that outheals the hit"
+        );
+        let wake = Tactics {
+            awakenings: 1,
+            ..new.clone()
+        };
+        assert!(matches!(pick(&wake), Action::Awaken));
     }
 }

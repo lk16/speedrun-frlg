@@ -49,7 +49,10 @@ fn usage() -> ! {
          \x20 report  <plan> --rung <r> [--R n]                 per-segment mean, spread, resets, time by source\n\
          \x20 starter-phase <plan> [--R n]                     manip starter phase: attempts and wall time to a good starter\n\
          \x20 dist    <plan> [--R n]                            run-time distribution with no resets\n\
-         \x20 starter [--min n]                                 level-5 stat-total distribution of a Squirtle"
+         \x20 battle-test --state X --seg S [--wild flee|catch|fight] [--seed n]   play one battle (S4)\n\
+         \x20 starter [--min n]                              level-5 stat-total distribution of a Squirtle\n\
+         \x20{}",
+        frlg_human::play::cli::usage()
     );
     std::process::exit(2)
 }
@@ -58,6 +61,9 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let seed: u64 = arg(&args, "--seed", 1);
     match args.first().map(String::as_str) {
+        Some(c @ ("play" | "play-verify" | "play-inspect")) => {
+            frlg_human::play::cli::main(c, &args, dex());
+        }
         Some("ladder") => {
             let plan = load(&args[1]);
             let ctx = plan.ctx();
@@ -735,7 +741,8 @@ fn main() {
         Some("battle") => {
             // battle <TRAINER_ID> <carry level> [--n 2000] [--iv 20] [--badges mask]
             //   [--species SPECIES_X] [--moves MOVE_A,MOVE_B] [--add MOVE_C,...]
-            //   [--x defend,attack,...] [--heal-below 0.4] [--league]
+            //   [--x defend,attack,...] [--heal-below 0.4] [--league] [--heal hp] [--heals n] [--hp frac]
+            //   [--awakenings n] [--sleep-fix] [--ivs a,b,c,d,e,f] [--evs ...] [--nature n] [--print-stats]
             use frlg_human::battle::{enemy_mon, fight, heal_amount, make_mon, Tactics, XItem};
             let id = &args[1];
             let level: u32 = args[2].parse().unwrap();
@@ -851,7 +858,7 @@ fn main() {
                 let tac = Tactics {
                     x_items: xs.clone(),
                     heal_below: arg(&args, "--heal-below", 0.4),
-                    heal: heal_amount(level, league),
+                    heal: arg(&args, "--heal", heal_amount(level, league)),
                     full_restore: league,
                     sacs: arg(&args, "--sacs", 0u32),
                     sac_free: !args.iter().any(|a| a == "--sac-honest"),
@@ -865,6 +872,8 @@ fn main() {
                     setup_min: arg(&args, "--setup-min", 1u32),
                     menu_slip: arg(&args, "--menu-slip", 0.0f64),
                     scarce: arg(&args, "--scarce", 0.6f64),
+                    awakenings: arg(&args, "--awakenings", 0u32),
+                    sleep_no_potion: args.iter().any(|a| a == "--sleep-fix"),
                 };
                 let mut g = frlg_human::rng::GameRng::from_u32(
                     (seed as u32).wrapping_mul(2654435761) ^ (i as u32).wrapping_mul(0x9E3779B9),
@@ -1243,6 +1252,12 @@ fn main() {
                 let pass =
                     totals.iter().filter(|&&t| t >= min).count() as f64 / totals.len() as f64;
                 println!("P(total >= {min}) = {pass:.4}");
+            }
+        }
+        Some("battle-test") => {
+            if let Err(e) = frlg_human::play::battle_test::run(dex(), &args[1..]) {
+                eprintln!("{e}");
+                std::process::exit(1);
             }
         }
         _ => usage(),

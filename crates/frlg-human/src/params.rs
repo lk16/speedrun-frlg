@@ -877,6 +877,34 @@ pub struct Params {
     /// damage stays under it does not faint the helper and the fighter takes the hit on the switch back
     /// (`Tactics::helper_hp`). 0 = every helper faints.
     pub helper_hp: i32,
+    /// MODEL CHANGE (battle bridge, journal 2026-11-22 model-honesty): the policy drinks no potion while
+    /// the fighter is asleep unless it outheals the foe's best hit (`Tactics::sleep_no_potion`). Off = the
+    /// old policy.
+    pub sleep_no_potion: bool,
+    /// MODEL CHANGE (same journal): the potion tier the bag really holds. Non-empty: the heal per potion use
+    /// outside the League's items is the level tier of `battle::heal_amount` capped by the best tier bought so
+    /// far: a Potion (20 HP) from the start, each entry's `hp` from the segment after its `after` mart stop on
+    /// (Super Potion 50 first sold at Cerulean, `CeruleanCity_Mart/scripts.inc:26`; Hyper Potion 200 first at
+    /// Cinnabar on this route, `CinnabarIsland_Mart/scripts.inc`, or Saffron). Empty = the level tiers alone
+    /// (Super Potion from L15 and Hyper from L30 wherever the carry is: the old model).
+    pub potion_tiers: Vec<PotionTier>,
+    /// MODEL CHANGE (same journal): balls cannot be bought on demand before the segment `ball_shop_from`
+    /// (inside Viridian Forest, Route 3, Mt. Moon, Route 4 no mart is on the way). The bag then holds the
+    /// `early_balls` Poke Balls bought at the Viridian mart after the parcel (`ViridianCity_Mart/scripts.inc`),
+    /// paid out of the purse there. Empty = the old on-demand buying everywhere.
+    pub ball_shop_from: String,
+    pub early_balls: u32,
+    /// PLAN (with the `sleep_no_potion` model): Awakenings bought at the Cerulean mart stop
+    /// (`persim-and-potions`), 250 each; the policy wakes a sleeping fighter with one (`Action::Awaken`).
+    pub awakenings: u32,
+}
+
+/// One step of `Params::potion_tiers`.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct PotionTier {
+    pub after: String,
+    pub hp: i32,
 }
 
 impl Default for Params {
@@ -1059,6 +1087,11 @@ impl Default for Params {
             sac_honest: false,
             sac_honest_league: false,
             helper_hp: 0,
+            sleep_no_potion: false,
+            potion_tiers: vec![],
+            ball_shop_from: String::new(),
+            early_balls: 0,
+            awakenings: 0,
         }
     }
 }

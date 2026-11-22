@@ -121,6 +121,19 @@ pub struct Ctx<'a> {
     /// Per segment: skipped when the attempt is more than this many seconds behind the WR at the last
     /// split it passed (`Params::cond_skips`); infinity = never.
     pub cond_skip: Vec<f64>,
+    /// MODEL CHANGE `Params::potion_tiers`: HP of one potion use per segment (empty = level tiers).
+    pub potion_hp: Vec<i32>,
+    /// MODEL CHANGE `Params::ball_shop_from`: first segment where balls can be bought on demand.
+    pub ball_shop_from: Option<usize>,
+}
+
+/// HP one potion use restores at segment `seg_i`: the level tier (`battle::heal_amount`: the human buys the tier the
+/// level needs) capped by the best tier the plan has bought so far (`Params::potion_tiers`). Full Restores unchanged.
+pub fn potion_hp(ctx: &Ctx, seg_i: usize, level: u32, league_items: bool) -> i32 {
+    match ctx.potion_hp.get(seg_i) {
+        Some(&hp) if !league_items => hp.min(crate::battle::heal_amount(level, false)),
+        _ => crate::battle::heal_amount(level, league_items),
+    }
 }
 
 #[derive(Default, Clone)]
@@ -283,6 +296,8 @@ struct State {
     /// Repel steps left, and whether a mart on the route has sold them yet.
     repel_left: u32,
     repel_ok: bool,
+    /// MODEL CHANGE `Params::awakenings`: Awakenings in the bag.
+    awakenings: u32,
     /// Battle simulation: the carry's IVs and nature (rolled at the starter), effort values earned,
     /// HP as a fraction, badges (bit 0 Boulder, 4 Soul, 6 Volcano) and whether Surf is known.
     ivs: [u32; 6],
@@ -600,9 +615,9 @@ fn effective_level(st: &State, p: &Params) -> f64 {
     (st.carry as f64 * p.team_bonus).max(st.power)
 }
 
-/// A move slot's worth when something has to go: damage against a neutral dummy with
-/// STAB for the current stage; keep-listed moves are effectively permanent.
-fn slot_utility(ctx: &Ctx, st: &State, mv: usize) -> f64 {
+/// A move slot's worth to a mon of `species` when something has to go: damage against a neutral
+/// dummy with STAB; keep-listed moves are effectively permanent.
+pub fn move_utility(ctx: &Ctx, species: usize, mv: usize) -> f64 {
     if let Some(pos) = ctx.keep_ids.iter().position(|&k| k == mv) {
         return 1_000_000.0 - pos as f64;
     }
@@ -610,7 +625,7 @@ fn slot_utility(ctx: &Ctx, st: &State, mv: usize) -> f64 {
     if m.power == 0 {
         return 0.0;
     }
-    let types = ctx.dex.species[carry_species(ctx, st.carry)].types;
+    let types = ctx.dex.species[species].types;
     let stab = if types.0 == m.mtype || types.1 == m.mtype {
         1.5
     } else {
@@ -631,18 +646,29 @@ fn offer_move(ctx: &Ctx, st: &mut State, mv: usize, forced: bool) {
         st.slot_pp.push(ctx.dex.moves[mv].pp as i32);
         return;
     }
-    let (worst_i, worst_u) = st
-        .slots
-        .iter()
-        .enumerate()
-        .map(|(i, &s)| (i, slot_utility(ctx, st, s)))
-        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
-        .unwrap();
-    let new_u = slot_utility(ctx, st, mv);
-    if forced || new_u > worst_u {
+    if let Some(worst_i) = replace_slot(ctx, carry_species(ctx, st.carry), &st.slots, mv, forced) {
         st.slots[worst_i] = mv;
         st.slot_pp[worst_i] = ctx.dex.moves[mv].pp as i32;
     }
+}
+
+/// The slot a full set of four gives up for `mv` ([`move_utility`]: the lowest-worth slot, if the
+/// newcomer is worth more or the teach is `forced`), `None` = keep the four. The simulator's
+/// [`offer_move`] and the playing controller's "delete a move?" answer.
+pub fn replace_slot(
+    ctx: &Ctx,
+    species: usize,
+    slots: &[usize],
+    mv: usize,
+    forced: bool,
+) -> Option<usize> {
+    let (worst_i, worst_u) = slots
+        .iter()
+        .enumerate()
+        .map(|(i, &s)| (i, move_utility(ctx, species, s)))
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())?;
+    let new_u = move_utility(ctx, species, mv);
+    (forced || new_u > worst_u).then_some(worst_i)
 }
 
 /// Offer every level-up move between the last processed level and the current one,
@@ -895,7 +921,7 @@ fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Spec
 
 /// Mart prices, `decompiled/src/data/items.json`.
 const BALL_PRICE: [u32; 3] = [200, 600, 1200];
-const BALL_MULT: [u32; 3] = [10, 15, 20];
+pub const BALL_MULT: [u32; 3] = [10, 15, 20];
 /// Walking into a mart, buying, walking out. guess.
 const MART: u32 = 900;
 
@@ -911,7 +937,7 @@ fn plan_tier(p: &Params) -> usize {
 /// The ball tier thrown at a species of this catch rate (`species_info.h` `catchRate`): the plan's
 /// ball rule (`poke_from`, `ultra_below`) or its single `ball`. A Poke Ball is as good as a Great Ball
 /// on a rate-255 mon and costs a third (`items.json`: 200 / 600 / 1200).
-fn ball_tier(ctx: &Ctx, catch_rate: u32) -> usize {
+pub fn ball_tier(ctx: &Ctx, catch_rate: u32) -> usize {
     let p = ctx.p;
     if p.poke_from > 0 && catch_rate >= p.poke_from {
         0
@@ -937,15 +963,22 @@ fn take_ball(ctx: &Ctx, st: &mut State) -> Option<u32> {
             st.balls[t] -= 1;
             return Some(BALL_MULT[t]);
         }
-        if !ctx.p.marts.is_empty() {
-            // Scheduled mart stops only: use whatever is in the bag.
-            if t == 0 {
+        if !ctx.p.marts.is_empty() || ctx.ball_shop_from.is_some_and(|f| st.seg_i < f) {
+            // Scheduled mart stops only (or, MODEL CHANGE `ball_shop_from`, no mart on the way yet):
+            // use whatever is in the bag.
+            let Some(t) = bag_ball(t, st.balls) else {
+                if std::env::var_os("FRLG_BALL_TRACE").is_some() {
+                    eprintln!("ball-empty seg {}", st.seg_i);
+                }
                 return None;
-            }
-            t -= 1;
-            continue;
+            };
+            st.balls[t] -= 1;
+            return Some(BALL_MULT[t]);
         }
         let qty = (st.money / BALL_PRICE[t]).min(ctx.p.ball_batch);
+        if std::env::var_os("FRLG_BALL_TRACE").is_some() {
+            eprintln!("ball-buy seg {} tier {t} qty {qty}", st.seg_i);
+        }
         if qty > 0 {
             st.money -= qty * BALL_PRICE[t];
             st.balls[t] += qty;
@@ -957,6 +990,37 @@ fn take_ball(ctx: &Ctx, st: &mut State) -> Option<u32> {
         }
         t -= 1;
     }
+}
+
+/// The ball actually thrown when the plan wants tier `want` (0 Poke, 1 Great, 2 Ultra) and the bag
+/// holds `have`: that tier, else the next cheaper one in the bag (`take_ball` with scheduled marts;
+/// the playing controller, whose bag is the real one). `None` = no ball at all.
+pub fn bag_ball(want: usize, have: [u32; 3]) -> Option<usize> {
+    (0..=want.min(2)).rev().find(|&t| have[t] > 0)
+}
+
+/// Patience: throws at one wild mon before the human gives up on it (`throw_balls`' cap).
+pub const MAX_THROWS: u32 = 8;
+
+/// The catch odds of `Cmd_handleballthrow` (`decompiled/src/battle_script_commands.c:9549-9556`):
+/// `catchRate * ball / 10 * (3 maxHP - 2 hp) / (3 maxHP)`, then the status bonus.
+pub fn catch_odds(catch_rate: u32, ball_mult: u32, hp: u32, max_hp: u32, status: Status1) -> u32 {
+    let max_hp = max_hp.max(1);
+    status_odds(
+        (catch_rate * ball_mult / 10) * (max_hp * 3 - hp.min(max_hp) * 2) / (3 * max_hp),
+        status,
+    )
+}
+
+/// Probability that one ball with these odds catches: four shakes, each passing with
+/// `thr / 65536` ([`shakes_catch`]).
+pub fn catch_prob(odds: u32) -> f64 {
+    if odds > 254 {
+        return 1.0;
+    }
+    let s = isqrt(isqrt(16_711_680 / odds.max(1))).max(1);
+    let thr = (1_048_560 / s).min(65536) as f64 / 65536.0;
+    thr.powi(4)
 }
 
 /// Throws until caught or patience (8 throws) runs out. Formula:
@@ -982,10 +1046,7 @@ fn throw_balls(
                 None => return false,
             },
         };
-        let odds = status_odds(
-            (catch_rate * b / 10) * (max_hp * 3 - hp * 2) / (3 * max_hp),
-            status,
-        );
+        let odds = catch_odds(catch_rate, b, hp, max_hp, status);
         bump(st, ctx.throw_cost());
         let mut g = st.game;
         let caught = shakes_catch(&mut g, odds);
@@ -1033,7 +1094,16 @@ fn encounter(
         let tier = ball_tier(ctx, sp.catch_rate);
         st.ball_tier = Some(tier);
         let ball = (!ctx.p.money_model).then(|| BALL_MULT[tier]);
-        let ok = throw_balls(ctx, st, rng, sp.catch_rate, hp, Status1::None, ball, 8);
+        let ok = throw_balls(
+            ctx,
+            st,
+            rng,
+            sp.catch_rate,
+            hp,
+            Status1::None,
+            ball,
+            MAX_THROWS,
+        );
         st.ball_tier = None;
         if ok {
             got(st, sp.dex, level);
@@ -1413,6 +1483,91 @@ fn carry_species(ctx: &Ctx, level: u32) -> usize {
 }
 
 /// One `battle_sim` fight, described.
+/// The Torrent phase of the plan (`Params::torrent_until`) is on at segment `seg_i`, unless a heal took
+/// the carry out of the window (`State::torrent_lost`).
+pub fn in_torrent_phase(ctx: &Ctx, seg_i: usize, torrent_lost: bool) -> bool {
+    ctx.torrent_end.is_some_and(|e| seg_i <= e) && !torrent_lost
+}
+
+/// What a fight's tactics depend on besides the plan: the simulator's attempt state, or the real
+/// game's party and bag in the playing controller (`play/battle.rs`).
+pub struct TacIn<'a> {
+    /// Index of the segment the fight belongs to (`Ctx::segs`), for the Torrent phase.
+    pub seg_i: usize,
+    pub torrent_lost: bool,
+    /// The fighter's level and known moves (set-up moves are queued only when known).
+    pub level: u32,
+    pub moves: &'a [usize],
+    /// Full Restores are the heal item (Indigo Plateau reached).
+    pub league_items: bool,
+    /// X items in the bag: Attack, Defend, Speed, Special, Dire Hit, Accuracy, Guard Spec.
+    pub x_stock: [u32; 7],
+    /// Living expendable teammates now, and when the fight began (the sacrifice budget is capped by
+    /// the latter; the simulator retries a fight after a whiteout with the same cap).
+    pub fodder: u32,
+    pub fodder_at_start: u32,
+    /// Heal items for the League round in progress.
+    pub heal_items: u32,
+    pub mewtwo_now: bool,
+    /// Awakenings in the bag (`Tactics::awakenings`).
+    pub awakenings: u32,
+}
+
+/// The [`Tactics`] of the fight named `name` (`Params::fight_tactics`, the global knobs): the one
+/// place the simulator ([`sim_battle`]) and the playing controller build them.
+pub fn fight_tactics(ctx: &Ctx, name: &str, league: bool, t: &TacIn) -> crate::battle::Tactics {
+    let cfg = ctx.tactics.get(name).cloned().unwrap_or_default();
+    let in_torrent = in_torrent_phase(ctx, t.seg_i, t.torrent_lost);
+    let torrent = cfg.torrent || in_torrent;
+    let heal_below = if cfg.heal_below >= 0.0 {
+        cfg.heal_below
+    } else if in_torrent {
+        ctx.p.torrent_heal_below
+    } else {
+        ctx.p.heal_below
+    };
+    // X items limited by the bag.
+    let mut stock = t.x_stock;
+    let xs: Vec<XItem> = cfg
+        .x
+        .iter()
+        .filter(|&&x| {
+            if let Some(m) = x.setup_move(ctx.dex) {
+                // A move, not stock: queued only for a fighter that knows it.
+                return t.moves.contains(&m);
+            }
+            let i = x_index(x);
+            if stock[i] > 0 {
+                stock[i] -= 1;
+                true
+            } else {
+                false
+            }
+        })
+        .copied()
+        .collect();
+    crate::battle::Tactics {
+        x_items: xs,
+        heal_below,
+        heal: potion_hp(ctx, t.seg_i, t.level, t.league_items),
+        full_restore: t.league_items,
+        sacs: cfg.sacs.min(t.fodder_at_start),
+        sac_free: !(ctx.p.sac_honest && (!league || ctx.p.sac_honest_league)),
+        helper_hp: ctx.p.helper_hp,
+        torrent: (torrent || (league && ctx.p.league_torrent)) && !t.mewtwo_now,
+        torrent_stall: ctx.p.torrent_stall,
+        torrent_early: ctx.p.torrent_early,
+        others_alive: t.fodder,
+        heal_stock: if league { t.heal_items } else { u32::MAX },
+        rollouts: if league { ctx.p.league_rollouts } else { 0 },
+        setup_min: ctx.p.setup_min_turns,
+        menu_slip: ctx.p.menu_slip,
+        scarce: ctx.p.scarce_factor,
+        sleep_no_potion: ctx.p.sleep_no_potion,
+        awakenings: t.awakenings,
+    }
+}
+
 struct BattleArgs<'a> {
     /// Segment name, for the per-fight tactics lookup.
     name: &'a str,
@@ -1432,7 +1587,7 @@ struct BattleArgs<'a> {
 /// human gives up (three whiteouts, or one in the League where a loss means walking the
 /// rooms again).
 fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool {
-    use crate::battle::{fight, heal_amount, make_mon, Status1, Tactics};
+    use crate::battle::{fight, make_mon, Status1};
     let dex = ctx.dex;
     let t0 = st.clock;
     if a.trainer && hazard_death(ctx, st, rng, a.name) {
@@ -1449,8 +1604,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         bump(st, jitter(ctx, rng, 8) as f64);
     }
     let cfg = ctx.tactics.get(a.name).cloned().unwrap_or_default();
-    let (x_plan, heal_override, sacs) = (cfg.x.clone(), cfg.heal_below, cfg.sacs);
-    let in_torrent = ctx.torrent_end.is_some_and(|e| st.seg_i <= e) && !st.torrent_lost;
+    let sacs = cfg.sacs;
+    let in_torrent = in_torrent_phase(ctx, st.seg_i, st.torrent_lost);
     let torrent = cfg.torrent || in_torrent;
     // Sacrifices burn real party members; the budget spans a Centre-less chain, with
     // Revives (bag trip each) bringing fodder back between fights.
@@ -1471,7 +1626,6 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             .saturating_sub(1);
         st.fodder = alive.saturating_sub(st.helpers_dead);
     }
-    let sacs = sacs.min(st.fodder);
     // League round start: the heal items come out of the purse (Indigo Plateau mart, 600
     // frames of menus; guess).
     if a.league && (a.name == "lorelei" || a.name == "lorelei-2") {
@@ -1570,13 +1724,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             use_ether(ctx, st);
         }
     }
-    let heal_below = if heal_override >= 0.0 {
-        heal_override
-    } else if in_torrent {
-        ctx.p.torrent_heal_below
-    } else {
-        ctx.p.heal_below
-    };
+    let fodder_at_start = st.fodder;
     let mut tries = 0;
     loop {
         // Mewtwo takes over once it is caught; otherwise the starter line carries.
@@ -1651,7 +1799,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             let lo = (crate::battle::entry_floor(dex, &me, a.foes) as f64 * hits).ceil() as i32 + 1;
             let cur = (me.max_hp as f64 * st.hp_frac).round() as i32;
             if cur < lo {
-                let per = heal_amount(me.level, st.league_items);
+                let per = potion_hp(ctx, st.seg_i, me.level, st.league_items);
                 let uses = (lo - cur + per - 1) / per;
                 bump(st, uses as f64 * ctx.turn());
                 let before = st.hp_frac;
@@ -1661,7 +1809,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             }
         } else if st.hp_frac < ctx.p.preheal_below && !mewtwo_now && !torrent {
             let uses = (((0.85 - st.hp_frac) * me.max_hp as f64)
-                / heal_amount(me.level, st.league_items) as f64)
+                / potion_hp(ctx, st.seg_i, me.level, st.league_items) as f64)
                 .ceil();
             bump(st, uses * ctx.turn());
             st.risk_real += 0.85 - st.hp_frac;
@@ -1693,54 +1841,40 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         let start_frac = if mewtwo_now { st.mewtwo_hp } else { st.hp_frac };
         me.hp = ((me.max_hp as f64 * start_frac).round() as i32).clamp(1, me.max_hp);
-        // X items limited by the bag.
-        let mut stock = st.x_stock;
-        let xs: Vec<XItem> = x_plan
-            .iter()
-            .filter(|&&x| {
-                if let Some(m) = x.setup_move(dex) {
-                    // A move, not stock: queued only for a fighter that knows it.
-                    return me.moves.contains(&m);
-                }
-                let i = x_index(x);
-                if stock[i] > 0 {
-                    stock[i] -= 1;
-                    true
-                } else {
-                    false
-                }
-            })
-            .copied()
-            .collect();
-        let tac = Tactics {
-            x_items: xs.clone(),
-            heal_below,
-            heal: heal_amount(me.level, st.league_items),
-            full_restore: st.league_items,
-            sacs,
-            sac_free: !(ctx.p.sac_honest && (!a.league || ctx.p.sac_honest_league)),
-            helper_hp: ctx.p.helper_hp,
-            torrent: (torrent || (a.league && ctx.p.league_torrent)) && !mewtwo_now,
-            torrent_stall: ctx.p.torrent_stall,
-            torrent_early: ctx.p.torrent_early,
-            others_alive: st.fodder,
-            heal_stock: if a.league { st.heal_items } else { u32::MAX },
-            rollouts: if a.league { ctx.p.league_rollouts } else { 0 },
-            setup_min: ctx.p.setup_min_turns,
-            menu_slip: ctx.p.menu_slip,
-            scarce: ctx.p.scarce_factor,
-        };
+        let tac = fight_tactics(
+            ctx,
+            a.name,
+            a.league,
+            &TacIn {
+                seg_i: st.seg_i,
+                torrent_lost: st.torrent_lost,
+                level: me.level,
+                league_items: st.league_items,
+                x_stock: st.x_stock,
+                moves: &me.moves,
+                fodder: st.fodder,
+                fodder_at_start,
+                heal_items: st.heal_items,
+                mewtwo_now,
+                awakenings: st.awakenings,
+            },
+        );
+        let xs = tac.x_items.clone();
         // Risk lane: the honest copy of this fight decides whether the attempt survives it.
         let mut risk_healed = false;
-        let risk_lost =
-            !mewtwo_now && !a.league && ctx.risk_end.is_some_and(|e| st.seg_i <= e) && {
-                let (lost, healed) = risk_fight(ctx, st, rng, a, &tac, &cfg, in_torrent);
-                risk_healed = healed;
-                lost
-            };
+        let in_lane = !mewtwo_now && !a.league && ctx.risk_end.is_some_and(|e| st.seg_i <= e);
+        let risk_lost = in_lane && {
+            let (lost, healed) = risk_fight(ctx, st, rng, a, &tac, &cfg, in_torrent);
+            risk_healed = healed;
+            lost
+        };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
+        // Awakenings: the honest lane spent its own (in `risk_fight`); outside it, this fight's.
+        if !in_lane {
+            st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
+        }
         if a.trainer && st.log_fights {
             st.fight_log
                 .push((a.name.to_string(), out.turns, out.won, 0.0));
@@ -1748,7 +1882,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
             eprintln!(
                 "fight {} L{} hp{:.2} hi{} mhp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {} kos {} heals {} frs {} end_hp {:.2} stats {:?}/{}",
-                a.name, me.level, st.hp_frac, st.heal_items, st.mewtwo_hp, stock, sacs, me.pp,
+                a.name, me.level, st.hp_frac, st.heal_items, st.mewtwo_hp, st.x_stock, tac.sacs, me.pp,
                 me.moves.iter().map(|&m| dex.moves[m].name.trim_start_matches("MOVE_").to_string()).collect::<Vec<_>>(),
                 out.won, out.turns, out.x_used, out.sacs_used, out.kos.len(), out.heals_used, out.full_restores_used, out.hp_frac, me.stat, me.max_hp
             );
@@ -1972,7 +2106,7 @@ fn risk_fight(
     cfg: &TacCfg,
     in_torrent: bool,
 ) -> (bool, bool) {
-    use crate::battle::{entry_floor, fight, heal_amount, make_mon};
+    use crate::battle::{entry_floor, fight, make_mon};
     let dex = ctx.dex;
     let mut me = make_mon(
         dex,
@@ -2038,7 +2172,7 @@ fn risk_fight(
     };
     // Potions are paid for (Potion 300, Super Potion 700, Hyper Potion 1200 at the heal tier of the level:
     // `items.json`) out of the purse and each use is a bag turn: no free lunch in healing.
-    let per = heal_amount(st.carry, st.league_items);
+    let per = potion_hp(ctx, st.seg_i, st.carry, st.league_items);
     let price = match per {
         20 => 300,
         50 => 700,
@@ -2055,7 +2189,7 @@ fn risk_fight(
         let lo = (entry_floor(dex, &me, &foes) as f64 * hits).ceil() as i32 + 1;
         let cur = (me.max_hp as f64 * st.risk_hp).round() as i32;
         if cur < lo {
-            let per = heal_amount(me.level, st.league_items);
+            let per = potion_hp(ctx, st.seg_i, me.level, st.league_items);
             let uses = (((lo - cur + per - 1) / per).max(1) as u32).min(potions);
             potions -= uses;
             healed = true;
@@ -2073,6 +2207,7 @@ fn risk_fight(
     t2.rollouts = 0;
     let mut g = crate::rng::GameRng::from_u32(rng.next_u64() as u32);
     let out = fight(dex, &mut me, &t2, &foes, a.ai, a.heals, a.wild, &mut g);
+    st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
     healed |= out.heals_used > 0;
     if pay {
         let n = out.heals_used.min(potions);
@@ -2185,7 +2320,7 @@ fn hazard_death(ctx: &Ctx, st: &mut State, rng: &mut Rng, name: &str) -> bool {
     false
 }
 
-fn is_league(name: &str) -> bool {
+pub fn is_league(name: &str) -> bool {
     let n = name.trim_end_matches("-2");
     matches!(n, "lorelei" | "bruno" | "agatha" | "lance" | "champion")
 }
@@ -2677,6 +2812,7 @@ pub fn attempt(
         max_tier: 0,
         repel_left: 0,
         repel_ok: false,
+        awakenings: 0,
         ivs: [15; 6],
         nature: 0,
         quiet_hits_left: u32::MAX,
@@ -3509,6 +3645,36 @@ pub fn attempt(
             }
             match seg.name.as_str() {
                 "black-glasses-swap" => st.glasses = true,
+                // MODEL CHANGE `awakenings`: bought in the Cerulean mart menus of this segment
+                // (`CeruleanCity_Mart/scripts.inc:30`, 250 each `items.json`); the WR bag at Cerulean
+                // holds three (`video-analysis/stream-2026-11-14-main97.md`). No extra frames: the
+                // segment is the runner's measured potion/Persim menu time.
+                "persim-and-potions" if ctx.p.awakenings > 0 => {
+                    let n = if ctx.p.money_model {
+                        ctx.p.awakenings.min(st.money / 250)
+                    } else {
+                        ctx.p.awakenings
+                    };
+                    if ctx.p.money_model {
+                        st.money -= n * 250;
+                    }
+                    st.awakenings += n;
+                }
+                // MODEL CHANGE `ball_shop_from`: the early balls are bought at the Viridian mart once
+                // the parcel is delivered (`ViridianCity_Mart/scripts.inc`: Poke Ball), the last shop
+                // before Cerulean on this route.
+                "deliver" if ctx.ball_shop_from.is_some() && ctx.p.early_balls > 0 => {
+                    let qty = if ctx.p.money_model {
+                        ctx.p.early_balls.min(st.money / BALL_PRICE[0])
+                    } else {
+                        ctx.p.early_balls
+                    };
+                    if ctx.p.money_model {
+                        st.money -= qty * BALL_PRICE[0];
+                    }
+                    st.balls[0] += qty;
+                    bump(&mut st, MART as f64 * ctx.p.text_factor);
+                }
                 "brock" => {
                     st.repel_ok = true;
                     st.badges |= 1;

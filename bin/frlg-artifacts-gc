@@ -19,8 +19,9 @@ set -euo pipefail
 #   runs           per-run dirs: input logs, RAM signature traces, divergence reports
 #   rom            built ROM + .map + .sym, per version/revision
 #   scratch        wiped at the start of every sandbox anyway
-declare -A CAP=( [cache/sccache]=4 [states]=3 [runs]=4 [rom]=1 [scratch]=2 )
-HARD=20
+#   videos         lossy review videos (x264) and their .ass panels; human-run/VIDEO.md
+declare -A CAP=( [cache/sccache]=4 [states]=3 [runs]=4 [rom]=1 [scratch]=2 [videos]=8 )
+HARD=28
 
 ART="${FRLG_ARTIFACTS:-}"
 [ -n "$ART" ] || { echo "FRLG_ARTIFACTS is not set (is /etc/profile.d/10-frlg.sh sourced?)" >&2; exit 1; }

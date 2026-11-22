@@ -99,3 +99,27 @@ model's *core* seconds (intro to the last faint) next to them, and the full segm
 model 60 s with 5.1 actions (video 6-8). Torrent figures: Brock at 10/32 HP, Lv11, 97% win, ~2 actions per foe (unit test); at full
 HP the same fight takes 3.9 actions. Field poison: 1 HP per 5 steps (`field_control_avatar.c:710-733`), the 70 frames per HP is a guess.
 Not measured on tier 1: the Torrent-window potion trips (priced as a battle turn each) and the Antidote trip (400 frames).
+
+## Played segments after Giovanni 1, seed 11, LeafGreen, tier 1 (2026-11-22, controller)
+
+Measured on libmgba by the playing controller (`frlg-human play`, `human-run/journal/2026-11-22-12-30-controller.md`),
+first-survivor branches of seed 11, human input model of the plan (jitter U{0..4}, reaction U{15..30}). One sample
+each; frames between consecutive checkpoints. Model column: mean seconds from `frlg-human report` (WR+160m, R 2000).
+
+| played stage | frames | s | model segments | model s | note |
+| --- | --- | --- | --- | --- | --- |
+| hideout-out | 6878 | 115 | scope-and-dig | 32 | elevator to B1F; two B1F Rockets fought on the way (68 s) |
+| hm02-trip | 2276 | 38 | hm02-trip | 24 | on foot (Bicycle not yet registered), one Cut tree |
+| hm02 | 1334 | 22 | hm02-fly | 14 | talk + teach HM02 through the TM case |
+| to-vermilion | 6486 | 109 | (fly-vermilion, surge-walk) | 12 + 18 | walk Celadon -> Saffron -> Vermilion: Fly needs the Thunder Badge |
+| surge-cans | 11881 | 199 | -- | 0 | 53 trash cans, two gym trainers met on the way |
+| surge | 9540 | 160 | surge-gym-trainers, surge, surge-badge | 25 + 54 + 10 | Tucker + Surge (7 turns, one potion) |
+| fly-lavender | 1167 | 20 | fly-lavender | 12 | incl. walking out of the gym |
+| lavender-heal | 1295 | 22 | -- | 0 | center heal + options (battle style SET); not in the model |
+| tower-rival | 7080 | 119 | tower-walk, rival-tower | 24 + 102 | rival 5 mons |
+
+Canonical pass of the same stretch (one pass, verified from boot, `run.ilog` sha1 bd99f705...), seconds per stage:
+hideout-out 110, hm02-trip 25, hm02 22, to-vermilion 70, surge-cans 117 (13 cans), surge 182, fly-lavender 20,
+lavender-heal 19, tower-rival 121, tower-marowak 362, fuji-flute 178, fly-celadon 15, snorlax 32, cycling-road 69,
+safari-trip 25, safari-walk 293 (3 catches), warden 24, koga 322 (with a center heal). Splits: Surge 6058 s,
+Snorlax 6874 s, Koga 7538 s (model p50 4364 / 4470 / 5103).

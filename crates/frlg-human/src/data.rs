@@ -553,6 +553,11 @@ impl Dex {
         dex
     }
 
+    /// [`Dex::move_id`] without the panic.
+    pub fn move_index(&self, name: &str) -> Option<&usize> {
+        self.move_by_name.get(name)
+    }
+
     pub fn move_id(&self, name: &str) -> usize {
         *self
             .move_by_name
@@ -586,6 +591,14 @@ impl Dex {
             ai,
             heals,
         }
+    }
+
+    pub fn has_species(&self, name: &str) -> bool {
+        self.by_name.contains_key(name)
+    }
+
+    pub fn has_move(&self, name: &str) -> bool {
+        self.move_by_name.contains_key(name)
     }
 
     pub fn id(&self, name: &str) -> usize {

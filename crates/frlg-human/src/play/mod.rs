@@ -8,8 +8,24 @@
 //!
 //! Every decision goes through the simulator's own policy code (`battle.rs`, `sim.rs`); nothing
 //! here re-implements a choice the model makes.
+pub mod battle;
+pub mod battle_ram;
+pub mod battle_test;
+pub mod cli;
 pub mod events;
+pub mod fallback_battle;
 pub mod human;
+pub mod ids;
+pub mod inspect;
+pub mod items;
+pub mod legs;
+pub mod menu;
+pub mod model;
+pub mod names;
+pub mod prims;
+pub mod ram;
+pub mod session;
+pub mod walk;
 
 /// GBA frames per second (`human-run/PROMPT.md`, *The target*).
 pub const FPS: f64 = 59.7275;

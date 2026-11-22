@@ -15,6 +15,7 @@ pub mod brock;
 pub mod ledger;
 pub mod nav;
 pub mod observe;
+pub mod overlay;
 pub mod plan;
 pub mod publish;
 pub mod record;

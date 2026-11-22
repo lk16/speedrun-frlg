@@ -110,6 +110,10 @@ commit that *introduced* that verdict rather than whatever HEAD happens to be
 `--preview-frames N` encodes only the first N frames and writes no description; it is for checking
 the pipeline, not for publishing.
 
+`frlg video --overlay events.jsonl --input run.ilog` is the other mode: a lossy (x264 + AAC)
+1920x1080 *review* video of a human-run attempt with its decision log burned in as panels. It skips
+the gate and writes to `$FRLG_ARTIFACTS/videos/`; see `human-run/VIDEO.md`.
+
 ## The divergence fingerprint
 
 `--ram-hash` is sha1 over EWRAM (`0x02000000`, 256K) then IWRAM (`0x03000000`, 32K), read straight
