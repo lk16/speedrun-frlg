@@ -257,7 +257,7 @@ times go into `calibration.md` and, as a labelled MODEL CHANGE, into the model.
   driven by a hand-written `events.jsonl` over the `defeat-brock` TAS log. *Check:* timer, splits,
   dex bar and scrolling chat look right. Lines never overflow at a 38-column worst case. Timestamps
   match the timer.
-- [ ] **S2. Controller skeleton.** `frlg-human play <plan> --seed S --until <split>`: an emulator
+- [x] **S2. Controller skeleton.** (41dcaa0c..b137c798, branch `human-run-play`; journal `2026-11-22-12-30-controller.md`) `frlg-human play <plan> --seed S --until <split>`: an emulator
   loop with the human input model, `.ilog` + `events.jsonl` output, savestate checkpoints, and
   replay-from-boot verification, plus rollback to the last checkpoint with a fresh human seed.
   *Check:* the same seed gives a byte-identical `.ilog`; the replay matches the checkpoint RAM
