@@ -2104,11 +2104,12 @@ fn league2_entry(s: &mut Session) -> PResult<()> {
             json!({"money": got}),
         );
     }
-    super::legs2::indigo_mart(s)?;
-    // Revives for the second fighter (`IndigoPlateau_PokemonCenter_1F/scripts.inc` sells them):
-    // Mewtwo's 25 attacks do not cover the round (see `pp_lead`), so Blastoise fights twice.
+    // Revives for the second fighter first (`IndigoPlateau_PokemonCenter_1F/scripts.inc` sells
+    // them), then Full Restores with the rest: with the canonical money (¥30 462 after the
+    // Nugget) Full Restores first left nothing for a Revive, and every Champion-2 branch was
+    // Mewtwo alone after Blastoise fell at Lance (dev `pg-dev-fin15`).
     let money = Ram::new(&s.obs).money(s.hf.rec.emu());
-    let n = (money / 1500).min(3) as u16;
+    let n = (money / 1500).min(2) as u16;
     if n > 0 {
         super::shop::buy(
             s,
@@ -2117,6 +2118,7 @@ fn league2_entry(s: &mut Session) -> PResult<()> {
             &[("ITEM_REVIVE", n)],
         )?;
     }
+    super::legs2::indigo_mart(s)?;
     mva(s, "to the League", t0, "mewtwo", "league-entry");
     Ok(())
 }
@@ -2144,7 +2146,9 @@ fn pp_lead(s: &mut Session) -> PResult<()> {
     // A fainted fighter (level >= 40) gets a Revive between rooms, if the bag has one.
     let party = Ram::new(&s.obs).party(s.hf.rec.emu());
     for (i, m) in party.iter().enumerate() {
-        if m.hp == 0 && m.level >= 40 && have(s, "ITEM_REVIVE") > 0 {
+        // One Revive stays for the Champion (the rooms before it revive only above that).
+        let keep = if s.seg.starts_with("champion") { 0 } else { 1 };
+        if m.hp == 0 && m.level >= 40 && have(s, "ITEM_REVIVE") > keep {
             super::shop::use_item_on(s, "ITEM_REVIVE", i)?;
             s.event(
                 "model-vs-actual",
@@ -2304,13 +2308,18 @@ fn champion2(s: &mut Session) -> PResult<()> {
                 );
             }
         }
-        if m.hp > 0 && m.hp * 10 < m.max_hp * 6 && have(s, "ITEM_HYPER_POTION") > 0 {
-            super::shop::use_item_on(s, "ITEM_HYPER_POTION", b)?;
+        let potion = ["ITEM_HYPER_POTION", "ITEM_MAX_POTION"]
+            .into_iter()
+            .find(|it| have(s, it) > 0);
+        if let (true, Some(it)) = (m.hp > 0 && m.hp * 10 < m.max_hp * 6, potion) {
+            super::shop::use_item_on(s, it, b)?;
             s.event(
                 "model-vs-actual",
                 format!(
-                    "Hyper Potion on Blastoise before the Champion ({}/{} HP)",
-                    m.hp, m.max_hp
+                    "{} on Blastoise before the Champion ({}/{} HP)",
+                    it.trim_start_matches("ITEM_"),
+                    m.hp,
+                    m.max_hp
                 ),
                 json!({"hp": m.hp}),
             );
