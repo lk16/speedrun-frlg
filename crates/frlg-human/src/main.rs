@@ -1216,8 +1216,19 @@ fn main() {
             }
             // `--all`: every segment in route order with its index.
             if args.iter().any(|a| a == "--all") {
+                // `--floor`: also the segment's kind and its base frames (`floor_frames`: text lump, walk
+                // tiles, trainer formula; 0 for kinds priced in the sim), for the non-fight window audit.
+                let floor = args.iter().any(|a| a == "--floor");
+                let ctx = floor.then(|| plan.ctx());
                 for (i, sg) in plan.segs.iter().enumerate() {
-                    println!("{i} {}", sg.name);
+                    match &ctx {
+                        Some(c) => {
+                            let k = format!("{:?}", sg.kind);
+                            let k = k.split([' ', '{', '(']).next().unwrap_or("").to_string();
+                            println!("{i} {} {k} {:.0}", sg.name, c.floor_frames(sg));
+                        }
+                        None => println!("{i} {}", sg.name),
+                    }
                 }
                 return;
             }

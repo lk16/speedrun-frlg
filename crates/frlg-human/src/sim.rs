@@ -517,6 +517,12 @@ impl Ctx<'_> {
 
     pub fn floor_frames(&self, seg: &Seg) -> f64 {
         let p = self.p;
+        // MODEL CHANGE `vod_frames`: a WR-VOD-measured lump replaces the guessed text / walk frames.
+        if matches!(seg.kind, Kind::Text { .. } | Kind::Walk { .. }) {
+            if let Some(&f) = p.vod_frames.get(&seg.name) {
+                return f;
+            }
+        }
         match &seg.kind {
             // MODEL CHANGE `fly_frames`: a played Fly, menu to control on arrival (calibration 2026-11-22).
             Kind::Text { .. } if p.fly_frames > 0 && seg.name.starts_with("fly-") => {
@@ -2838,7 +2844,11 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
     match evo.via.as_str() {
         "stone" => {
             if frames == 0 {
-                frames = EVO_STONE;
+                frames = if ctx.p.evo_stone_frames > 0 {
+                    ctx.p.evo_stone_frames
+                } else {
+                    EVO_STONE
+                };
             }
             let have = stone_ix(&evo.item).filter(|&ix| st.stones[ix] > 0);
             if let Some(ix) = have {
@@ -2882,7 +2892,12 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
             }
             st.candies -= need;
             if frames == 0 {
-                frames = EVO_CANDY + EVO_CANDY_EACH * need;
+                let base = if ctx.p.evo_candy_frames > 0 {
+                    ctx.p.evo_candy_frames
+                } else {
+                    EVO_CANDY
+                };
+                frames = base + EVO_CANDY_EACH * need;
             }
         }
         _ => {
@@ -3442,10 +3457,8 @@ pub fn attempt(
                     bump(&mut st, mistakes(ctx, &mut rng, seg.inputs as f64 / 100.0));
                 }
                 Kind::Walk { tiles, era, enc } => {
-                    bump(
-                        &mut st,
-                        *tiles as f64 * era.frames_per_tile() * ctx.p.path_overhead,
-                    );
+                    // `floor_frames`: tiles x frames per tile x `path_overhead`, or a MODEL CHANGE `vod_frames`.
+                    bump(&mut st, ctx.floor_frames(seg));
                     bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                     bump(&mut st, mistakes(ctx, &mut rng, *tiles as f64 / 100.0));
                     if let Some(e) = enc {
@@ -3858,6 +3871,9 @@ pub fn attempt(
                     // Abra is national dex 63.
                     if st.caught.has(63) {
                         bump(&mut st, *frames as f64 * ctx.p.text_factor);
+                    } else if let Some(&f) = ctx.p.vod_frames.get(&seg.name) {
+                        // MODEL CHANGE `vod_frames`: the walk as the WR VOD times it (no Abra yet).
+                        bump(&mut st, f);
                     } else {
                         bump(
                             &mut st,
