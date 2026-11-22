@@ -62,14 +62,15 @@ WR 335.4 h; **1211-cerulean-potions** (plan response: 3 potions, heal below .35 
 2. Koga's Muk: engine 35% vs emulator 15/20 at identical stats; the 1.35 window stands in for an engine bug.
 3. The 0.773 Blaine/Sevii window is deadlier than the honest engine (-21 h at 1.0); refit windows under 1211.
 
-## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1132-standin-fheal
+## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1300-runner-potkoga
 
 | plan | what | WR+2m | WR | model |
 | --- | --- | --- | --- | --- |
 | 1127-fheal1 | 1122 + League heal_below bundle (bruno .65, champion .35, champion-2 .5, lance-2 0) | 79.3-80.2 | 103.4-104.5 | old (fitted League) |
 | 1130-honest-fheal | 1200 + the bundle | 125.3-126.0 | 166.3-169.9 | honest 1200 |
 | 1131-honest-fheal | 1202 + the bundle | 152.0 (-9.8 / -12.5 vs 1202) | 241.8-243.7 | controller model |
-| **1132-standin-fheal (CURRENT)** | **1211 + the bundle** | **184.1 / 187.2 (R 3.2M, seeds 7541/7542; -13.0 / -15.6 vs 1211)** | **291.3 / 294.7 (-24.8 / -26.5)** | **stand-in audit model** |
+| 1132-standin-fheal | 1211 + the bundle | 184.1 / 187.2 (-13.0 / -15.6 vs 1211) | 291.3 / 294.7 | stand-in audit model |
+| **1300-runner-potkoga (CURRENT)** | **1253 (runner fights, has the bundle) + Mt. Moon Miguel potions 5 + Koga heal_below .55** | **269.9 / 283.4 (R 3.2M, seeds 7551/7552; -15.3 / -11.6 vs 1253)** | **477.2 / 487.1 (-29.1 / -22.5)** | **1253 model** |
 
 * League pass finished (lance-2 / champion-2 queues, pp floor, every per-fight heal_below); 1120 and 1114 confirmed
   by undoing them on 1127 (R 3.2M two seeds both rungs + corners). Mewtwo teaches stay dropped (0.001 h).
@@ -79,8 +80,10 @@ WR 335.4 h; **1211-cerulean-potions** (plan response: 3 potions, heal below .35 
   CI (only forest-brock .589 vs [.30, .54] outside, independent of powers). The refit saturates the first window at the
   4.5 cap (it also governs Brock / Mt Moon, standin-audit finding 6) and gives the Blaine/Sevii window 0.766 again (the
   shrunk runner target .724 asks for it). **Not adopted**; capping that window at 1.0 (-21 h) is a modelling call, not a fit.
-* Pointer `plans/CURRENT-OPT` is the descent pointer (descend.py `--pointer CURRENT-OPT`). Running: `--set earlymid`
-  from 1132 (304 candidates).
+* Optional-trainer dimension: `tools/fightknobs.py` (`descend.py --set fights`; first in `earlymid`, also in `all`).
+* Pointer `plans/CURRENT-OPT` is the descent pointer (`descend.py --pointer CURRENT-OPT --num-from 1300`). Running:
+  `--set earlymid` from 1300 (fights first). Next: `--set league` second pass from the 1300 line (League under the
+  runner levels), then `--set all` / `pp` / `dex`, fill/hunt orders.
 
 ## 2026-11-22 model honesty: later descents must use the new model
 
