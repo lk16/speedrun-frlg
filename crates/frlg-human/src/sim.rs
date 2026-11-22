@@ -845,11 +845,11 @@ fn status_odds(odds: u32, status: Status1) -> u32 {
 /// counter runs down once per enemy turn, then the catch factor resets), a ball uses the current
 /// factor (`decompiled/src/battle_main.c:4339-4408`, `battle_ai_script_commands.c:1715-1732`,
 /// `battle_script_commands.c:9497`, ball multiplier 15 at `:808-814`). The throw order is
-/// [`SafariMon::next`], shared with the playing controller (`play/dex.rs`).
+/// [`SafariMon::next_act`], shared with the playing controller (`play/dex.rs`).
 fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Species) -> bool {
     let mut m = SafariMon::new(ctx, sp);
     loop {
-        match m.next() {
+        match m.next_act() {
             SafariAct::Bait => {
                 m.bait = (m.bait + rng.range(2, 6)).min(6);
                 m.counter = 0;
@@ -933,7 +933,7 @@ impl SafariMon {
     }
 
     /// The plan's next throw: the bait (once), then the rocks, then balls.
-    pub fn next(&mut self) -> SafariAct {
+    pub fn next_act(&mut self) -> SafariAct {
         if self.bait_pending {
             self.bait_pending = false;
             SafariAct::Bait

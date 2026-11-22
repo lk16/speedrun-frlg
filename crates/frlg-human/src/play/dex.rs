@@ -5,7 +5,7 @@
 //! | --- | --- |
 //! | catch or run on a wild encounter | [`sim::wants_catch`] with [`sim::hunt_skip`]; owned = Pokédex flags in RAM |
 //! | leave the site | [`sim::site_done`], [`sim::hunt_stop_new`] (`stop_after`, `safari_stop`), the step budget |
-//! | Safari throw order | [`sim::SafariMon::next`] (bait / rocks / balls) |
+//! | Safari throw order | [`sim::SafariMon::next_act`] (bait / rocks / balls) |
 //! | ball, weaken, throws | `play::battle::fight` with `WildPlan::Catch` ([`sim::ball_tier`], [`sim::bag_ball`], ...) |
 //! | which mon evolves | [`sim::evo_source`] |
 //!
@@ -327,7 +327,7 @@ fn safari_pick(s: &mut Session, want: u8) -> PResult<()> {
     super::prims::press_until(s, "the Safari choice", keys::A, 120, |s| !safari_menu(s))
 }
 
-/// A Safari Zone battle (`catch`: the plan wants it, else RUN): the throw order of [`sim::SafariMon::next`] on
+/// A Safari Zone battle (`catch`: the plan wants it, else RUN): the throw order of [`sim::SafariMon::next_act`] on
 /// the BALL / BAIT / ROCK / RUN menu (`gActionSelectionCursor`, 2 x 2,
 /// `decompiled/src/battle_controller_safari.c:162-220`), text advanced with B (B answers NO to
 /// the nickname prompt). Each throw is logged with the real factors from RAM.
@@ -369,7 +369,7 @@ pub fn safari_battle(s: &mut Session, catch: bool) -> PResult<()> {
                 safari_pick(s, 3)?;
                 continue;
             }
-            let act = m.next();
+            let act = m.next_act();
             let want: u8 = match act {
                 SafariAct::Ball => 0,
                 SafariAct::Bait => 1,
