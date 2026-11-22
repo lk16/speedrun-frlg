@@ -967,6 +967,20 @@ pub struct Params {
     /// Before this the berry was priced (frames) but had no battle effect, and Misty's `risk_power` 2.0
     /// stood in for it among other things. Needs `persim`. Off = the old model.
     pub persim_held: bool,
+    /// MODEL CHANGE (route windows, journal 2026-11-22 route-windows): Cooltrainer Warren (Marowak 37,
+    /// Marowak 37, Rhyhorn 38, Nidorina 39, Nidoqueen 39, `src/data/trainer_parties.h`
+    /// `sParty_CooltrainerWarren`) is fought in the Viridian Gym next to Takashi. `forced.py` treats the
+    /// gym's spin tiles as plain floor (`bin/frlg-mapgraph`), so its "Takashi only" is not a proof; the WR
+    /// fights him (video run time 2:20 Marowak Lv37, 2:21 Warren's Nidoqueen), so do the 2026-11-14 stream
+    /// run and the played controller run (`events.jsonl` of `fwd-main`). Off = Takashi only.
+    pub viridian_warren: bool,
+    /// MODEL CHANGE (route windows): Snorlax is met before the Cycling Road, not after it. Route 16's Snorlax
+    /// stands between Celadon and the Cycling Road gate (`data/maps/Route16/map.json` object
+    /// `Route16_EventScript_Snorlax`), so the road comes after it; the WR's "Snorlax" split is there too
+    /// (video run time: Surge's Voltorb at 1:18:00, split at 1:19:47, Safari grass at 1:21:00: the badge,
+    /// a Fly and Snorlax fit before the split, the road does not). Off = the road before Snorlax (the
+    /// old order; same costs, the road and its pickups counted in the Snorlax window).
+    pub snorlax_first: bool,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1177,6 +1191,8 @@ impl Default for Params {
             fly_frames: 0,
             guess_text_scale: 0.0,
             persim_held: false,
+            viridian_warren: false,
+            snorlax_first: false,
         }
     }
 }

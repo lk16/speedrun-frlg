@@ -792,6 +792,10 @@ pub(crate) fn leg_cycling(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         let e = b.era;
         erika_leg(b, p, e);
     }
+    if p.snorlax_first {
+        // MODEL CHANGE `snorlax_first`: Route 16's Snorlax blocks the way to the road.
+        b.text("snorlax", 1500, Src::Guess);
+    }
     b.walk(
         "cycling-road",
         374,
@@ -799,7 +803,9 @@ pub(crate) fn leg_cycling(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         enc("MAP_ROUTE16", 0, 0, 60),
         Src::Tiles,
     );
-    b.text("snorlax", 1500, Src::Guess);
+    if !p.snorlax_first {
+        b.text("snorlax", 1500, Src::Guess);
+    }
     // The rod's house trip (guess: walking there and back plus the Fishing Guru's text).
     match p.rod.as_str() {
         "old" => {
@@ -1019,11 +1025,15 @@ pub(crate) fn leg_viridian(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let t = indoor(p, 55, 45, Era::Walk, e);
     b.walk("viridian-gym-walk", t, e, None, Src::Tiles);
     if p.audited_forced {
-        b.forced(
-            "viridian-gym-trainers",
-            &["ViridianCity_Gym_EventScript_Takashi"],
-            &[],
-        );
+        let always: &[&str] = if p.viridian_warren {
+            &[
+                "ViridianCity_Gym_EventScript_Takashi",
+                "ViridianCity_Gym_EventScript_Warren",
+            ]
+        } else {
+            &["ViridianCity_Gym_EventScript_Takashi"]
+        };
+        b.forced("viridian-gym-trainers", always, &[]);
     } else {
         b.group("viridian-gym-trainers", 3, 2, 42, 80);
     }

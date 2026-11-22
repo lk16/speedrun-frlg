@@ -37,6 +37,15 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     leg_nugget_bill(b, p, h);
     b.split(); // "Bill"
     leg_bill_return(b, p, h);
+    if p.variant("dig_after_bill") {
+        // Variant: the Cerulean Rocket (`CeruleanCity/scripts.inc` `CeruleanCity_EventScript_Grunt`,
+        // TRAINER_TEAM_ROCKET_GRUNT_5: Machop 17, Drowzee 17) right after Bill, as the WR does (video run
+        // time 0:39:00: a Lv17 Drowzee hit super-effectively, between Bill's ticket at 0:38 and Route 6's
+        // Camper Jeff at 0:40; no other Drowzee Lv17 exists before Silph in `trainer_parties.h` or
+        // `wild_encounters.json`). TM28 is picked up (`GruntDefeated`), not taught. Use with `no_dig`.
+        b.trainer("dig-grunt", "TRAINER_TEAM_ROCKET_GRUNT_5", 600);
+        b.text("tm28-dig", 900, Src::Guess);
+    }
     leg_ssanne(b, p, h);
     if p.variant("surge_early") {
         // Variant: Surge right after the S.S. Anne (Cut is in the bag: `captain-hm01`), in the town
@@ -74,7 +83,14 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         leg_surge(b, p, h);
     }
     leg_cycling(b, p, h);
-    b.split(); // "Snorlax"
+    if p.snorlax_first {
+        // MODEL CHANGE `snorlax_first`: the split (and its reset check) stays on Snorlax, before the road.
+        if let Some(s) = b.segs.iter_mut().rev().find(|s| s.name == "snorlax") {
+            s.split = true;
+        }
+    } else {
+        b.split(); // "Snorlax"
+    }
 
     // Safari, Koga.
     if p.variant("safari_after_koga") {
