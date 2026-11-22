@@ -926,6 +926,12 @@ pub struct Params {
     /// MODEL CHANGE (same run): the Pokemon Tower 6F Marowak ghost is a forced wild battle (Marowak L30,
     /// `PokemonTower_6F/scripts.inc:9`), fought by the sim's engine after the channelers. Off = not modelled.
     pub marowak_fight: bool,
+    /// MODEL CHANGE (stand-in audit 2026-11-22): the Persim Berry of `persim-and-potions` is *held* by the
+    /// carry until `black-glasses-swap` and cures the first confusion right after the move that caused it
+    /// (`HOLD_EFFECT_CURE_CONFUSION`, `decompiled/src/battle_util.c:2766` end of turn and `:2913` move end).
+    /// Before this the berry was priced (frames) but had no battle effect, and Misty's `risk_power` 2.0
+    /// stood in for it among other things. Needs `persim`. Off = the old model.
+    pub persim_held: bool,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1128,6 +1134,7 @@ impl Default for Params {
             cans_fixed: 0,
             played_extra: Default::default(),
             marowak_fight: false,
+            persim_held: false,
         }
     }
 }

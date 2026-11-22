@@ -374,6 +374,9 @@ pub struct Mon {
     pub last_move: Option<usize>,
     /// Holds a Sitrus Berry (`HOLD_EFFECT_RESTORE_HP`, 30 HP at <= 1/2, `battle_util.c:2562`).
     pub sitrus: bool,
+    /// Holds a Persim Berry (`HOLD_EFFECT_CURE_CONFUSION`, `battle_util.c:2766,2913`): the first confusion
+    /// is cured right after the move that caused it, before the holder acts again.
+    pub persim: bool,
     /// Holds Leftovers (`HOLD_EFFECT_LEFTOVERS`, `battle_util.c:2626-2639`): max HP / 16 (at least 1) at the
     /// end of every turn while below max HP.
     pub leftovers: bool,
@@ -480,6 +483,7 @@ pub fn make_mon(
         lock_move: None,
         last_move: None,
         sitrus: false,
+        persim: false,
         leftovers: false,
         boost: None,
         badge: [bb(0), bb(4), bb(2), bb(6), bb(6)],
@@ -494,6 +498,18 @@ pub fn make_mon(
 /// Mon from a trainer's party entry: the party IV applies to every stat, no EVs, neutral
 /// nature (`decompiled/src/battle_main.c`, `CreateNPCTrainerParty`: a fixed personality
 /// per party — the model uses neutral, an approximation worth one stat point either way).
+/// Confuse `m` for `turns` turns, unless it holds a Persim Berry: the berry cures the confusion right
+/// after the move that caused it (`HOLD_EFFECT_CURE_CONFUSION`, `decompiled/src/battle_util.c:2913`
+/// `ITEMEFFECT_MOVE_END`; `:2766` at the end of the turn for the rampage case) and is used up.
+fn confuse(m: &mut Mon, turns: u8) {
+    if m.persim {
+        m.persim = false;
+        m.confusion = 0;
+    } else {
+        m.confusion = turns;
+    }
+}
+
 pub fn enemy_mon(dex: &Dex, m: &PartyMon) -> Mon {
     let mut e = make_mon(dex, m.species, m.level, [m.iv; 6], [0; 6], m.nature, 0);
     e.sitrus = m.sitrus;
@@ -2456,7 +2472,7 @@ fn do_move(
             Effect::Confuse | Effect::Swagger => {
                 if def.confusion == 0 {
                     // 2-5 turns (`battle_script_commands.c:2413`).
-                    def.confusion = ((rng.modn(4)) + 2) as u8;
+                    confuse(def, ((rng.modn(4)) + 2) as u8);
                     if matches!(fx, Effect::Swagger) {
                         apply_stat_change(def, 0, 2, def_side.mist > 0);
                     }
@@ -2637,7 +2653,7 @@ fn do_move(
         Effect::SecStatus(s) if sec_ok && rng.pct(m.chance) => {
             if s == SecStatus::Confusion {
                 if def.confusion == 0 {
-                    def.confusion = ((rng.modn(4)) + 2) as u8;
+                    confuse(def, ((rng.modn(4)) + 2) as u8);
                     if !att_is_player {
                         out.events += 1;
                     }
@@ -2795,7 +2811,7 @@ fn end_of_turn(
         if m.rampage == 0 {
             m.lock_move = None;
             if m.confusion == 0 {
-                m.confusion = (rng.modn(4) + 2) as u8;
+                confuse(m, (rng.modn(4) + 2) as u8);
                 if is_player {
                     out.events += 1;
                 }
@@ -5284,5 +5300,16 @@ mod tests {
             ..new.clone()
         };
         assert!(matches!(pick(&wake), Action::Awaken));
+    }
+
+    #[test]
+    fn a_held_persim_cures_the_first_confusion_only() {
+        let dex = Dex::load();
+        let mut me = make_mon(&dex, dex.id("SPECIES_WARTORTLE"), 20, [20; 6], [0; 6], 0, 0);
+        me.persim = true;
+        confuse(&mut me, 3);
+        assert_eq!((me.confusion, me.persim), (0, false));
+        confuse(&mut me, 3);
+        assert_eq!(me.confusion, 3);
     }
 }
