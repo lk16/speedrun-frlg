@@ -614,6 +614,18 @@ impl Graph {
                 );
             }
         }
+        if found.is_none() && std::env::var_os("FRLG_PLAN_DEBUG").is_some() {
+            let mut per: HashMap<MapId, usize> = HashMap::new();
+            for k in dist.keys() {
+                *per.entry(k.0 .0).or_default() += 1;
+            }
+            for (m, n) in per {
+                eprintln!(
+                    "plan: reached {n} states on {}",
+                    self.maps.get(&m).map_or("?", |x| x.name.as_str())
+                );
+            }
+        }
         let end = found?;
         let mut nodes = vec![end.0];
         let mut moves = vec![];
@@ -752,7 +764,22 @@ pub fn go_to(
             )));
         }
         let v = view(s, &temp_block);
-        let plan = s.graph().plan(&v, cur, goal, opts);
+        let plan = s.graph().plan(&v, cur, goal, opts).or_else(|| {
+            // Which live input closed the way? Try the layout's own collision, then no people.
+            let mut v2 = view(s, &temp_block);
+            v2.cur_live = None;
+            let p = s.graph().plan(&v2, cur, goal, opts);
+            if p.is_some() {
+                eprintln!("walk: {what}: no path on the live grid, one on the layout's");
+                return p;
+            }
+            v2.live.clear();
+            let p = s.graph().plan(&v2, cur, goal, opts);
+            if p.is_some() {
+                eprintln!("walk: {what}: no path around the live objects, one through them");
+            }
+            p
+        });
         let Some(plan) = plan else {
             if !temp_block.is_empty() {
                 temp_block.clear();
