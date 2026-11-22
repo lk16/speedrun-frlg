@@ -1949,25 +1949,19 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
             )?;
         }
         s.seg = "cerulean-cave".into();
-        // 1F's Full Restore (11, 16) and Max Elixir (25, 5) balls (the Nugget at (7, 3) is not
-        // reachable on foot from the way to B1F: the walker gave up after 60 re-plans)
-        // (`CeruleanCave_1F/map.json`, `FLAG_HIDE_CERULEAN_CAVE_1F_*`): the League's PP and heals.
-        for (x, y, f, it) in [
-            (
-                11,
-                16,
-                "FLAG_HIDE_CERULEAN_CAVE_1F_FULL_RESTORE",
-                "ITEM_FULL_RESTORE",
-            ),
-            (
-                25,
-                5,
-                "FLAG_HIDE_CERULEAN_CAVE_1F_MAX_ELIXIR",
-                "ITEM_MAX_ELIXIR",
-            ),
-        ] {
-            pickup(s, "MAP_CERULEAN_CAVE_1F", x, y, f, it)?;
-        }
+        // 1F's Max Elixir ball (25, 5) (`CeruleanCave_1F/map.json`,
+        // `FLAG_HIDE_CERULEAN_CAVE_1F_MAX_ELIXIR`): Mewtwo's PP for the League. Not taken: the
+        // Nugget (7, 3) (the walker found no way to it in 60 re-plans) and the Full Restore
+        // (11, 16), elevation 3 among the Rock Smash rocks at (9, 18), (11, 21): reached only from
+        // a tile of another elevation, where A does not pick it up (4 presses, 3 940 frames, dev).
+        pickup(
+            s,
+            "MAP_CERULEAN_CAVE_1F",
+            25,
+            5,
+            "FLAG_HIDE_CERULEAN_CAVE_1F_MAX_ELIXIR",
+            "ITEM_MAX_ELIXIR",
+        )?;
         go_face(s, "MAP_CERULEAN_CAVE_B1F", 7, 12, &hm_opts())?;
         s.seg = "mewtwo".into();
         s.wild_plan = super::battle::WildPlan::Master;
