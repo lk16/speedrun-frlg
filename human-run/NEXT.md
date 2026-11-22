@@ -1,5 +1,23 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 22:05 non-fight windows (read first; journal `journal/2026-11-22-22-05-nonfight-windows.md`)
+
+The whole WR VOD classified per frame (`video-analysis/data/wr-battle-chains.jsonl`, `tools/nonfight/`), each WR window
+split into trainer fights / wild + evolution battles / field and set against 1423's segments. 18 guessed lumps were
+wrong and are now VOD-timed in the default-off key **`vod_frames`** (gym walks: Misty 3.5 -> 18 s, Viridian 5.6 -> 21.5;
+walk-outs after Koga / Blaine; S.S. Anne captain + departure 25.6 -> 56 s; Vermilion -> Cerulean walk 35.5 -> 54;
+Blaine's quiz gym 46 -> 71; Sevii Bill / Celio / return scenes 136 -> 107; Mt. Moon floors + the fossil text) plus
+**`evo_stone_frames` 1600 / `evo_candy_frames` 1620** (VOD evolution scenes, 18.7 -> 26.8 s). A leader's / rival's
+post-battle speech is inside the fitted fight price (played episodes), so the badge lumps keep only the walk-out.
+**MODEL CHANGE 1444-nonfight-vod: 1704 h, +1249 [963, 1595] vs 1423** (halves: scenes 1445 +649, evolutions 1442
++162). With the constants honest, the model is +125 s over the WR at Giovanni 3 (no-reset): the predecessor's
+"non-fight 150 s under" was constants + plan structure; what remains is plan: Mt. Moon without repels (the model
+flees ~110 s on B2F), Safari East+West, Hitmonlee, Warden + Nido evolutions placed after Koga instead of after Erika,
+Mr. Mime trade + Diglett hunt in the Giovanni 3 window. **PLAN `repel_on` + `mt-moon-b1f` / `mt-moon-b2f`: -963 h
+[-1280, -686] on 1444 (1446, 741 h), -162 h [-199, -128] on 1423 (1447, 293 h).** For the combined model of record:
+add the three keys from `plans/1444-nonfight-vod.md` as one block (no fight / League key touched) and re-score the
+Mt. Moon repels on it (money interacts with 1413's shop stops).
+
 ## 2026-11-22 21:35 boss turns (read first; journal `journal/2026-11-22-21-35-boss-turns.md`)
 
 The sim's short boss fights come from `carry_power` 2.0: the timing lane one-shots every rival / leader mon
