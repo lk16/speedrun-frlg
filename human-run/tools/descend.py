@@ -566,7 +566,7 @@ for ps in range(max_passes):
         for attempt_ in range(8):  # another process may hold the index lock for a moment
             a = subprocess.run(['git', '-C', ROOT, 'add', '-A'], capture_output=True)
             b = subprocess.run(['git', '-C', ROOT, 'commit', '-qm',
-                                f'human-run: plan {pname}: {label}\n\nCo-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>'],
+                                f'human-run: plan {pname}: {label}\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>'],
                                capture_output=True)
             if a.returncode == 0 and b.returncode in (0, 1):
                 break
