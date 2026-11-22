@@ -543,12 +543,18 @@ struct Ctl<'a, 'b> {
     turns: u32,
     throws: u32,
     rng: GameRng,
+    armed: std::cell::Cell<bool>,
 }
 
 impl Ctl<'_, '_> {
     fn point(&self, emu: &mut frlg_emu::Emu) -> Option<Point> {
         let obs = self.obs;
-        if obs.battle_outcome(emu) != 0 {
+        // `gBattleOutcome` is stale from the last battle until `BattleStartClearSetData` zeroes it
+        // (`decompiled/src/battle_main.c`): only an outcome seen after a zero counts.
+        let outcome = obs.battle_outcome(emu);
+        if outcome == 0 {
+            self.armed.set(true);
+        } else if self.armed.get() {
             return Some(Point::Over);
         }
         if obs.battle_controller_is(emu, 0, "HandleInputChooseAction") {
@@ -625,6 +631,7 @@ pub fn fight(
         turns: 0,
         throws: 0,
         rng: GameRng::from_u32(seed),
+        armed: std::cell::Cell::new(false),
     };
     if trainer {
         let id = c.ram.trainer_id(f.emu());

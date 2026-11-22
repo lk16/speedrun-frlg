@@ -147,7 +147,6 @@ pub struct BattleRam {
     g_player_party: u32,
     g_player_party_count: u32,
     g_enemy_party: u32,
-    g_enemy_party_count: u32,
     g_trainer_battle_opponent_a: u32,
     g_side_timers: u32,
     g_side_statuses: u32,
@@ -174,7 +173,6 @@ impl BattleRam {
             g_player_party: addr("gPlayerParty")?,
             g_player_party_count: addr("gPlayerPartyCount")?,
             g_enemy_party: addr("gEnemyParty")?,
-            g_enemy_party_count: addr("gEnemyPartyCount")?,
             g_trainer_battle_opponent_a: addr("gTrainerBattleOpponent_A")?,
             g_side_timers: addr("gSideTimers")?,
             g_side_statuses: addr("gSideStatuses")?,
@@ -261,11 +259,11 @@ impl BattleRam {
             .collect()
     }
 
-    /// `gEnemyParty[0..gEnemyPartyCount]` (`gEnemyPartyCount` is set by the battle setup; a wild
-    /// battle has one).
+    /// `gEnemyParty`, the slots holding a species. `gEnemyPartyCount` is not maintained for a
+    /// trainer battle (it read 1 at Misty's first menu), so all six slots are scanned;
+    /// `CreateNPCTrainerParty` zeroes the party first (`decompiled/src/battle_main.c`).
     pub fn enemy_party(&self, emu: &mut Emu) -> Vec<RawPartyMon> {
-        let n = (emu.read8(self.g_enemy_party_count) as u32).clamp(1, 6);
-        (0..n)
+        (0..6)
             .map(|i| self.party_mon(emu, self.g_enemy_party + i * pmon::SIZE))
             .filter(|m| m.species != 0)
             .collect()
