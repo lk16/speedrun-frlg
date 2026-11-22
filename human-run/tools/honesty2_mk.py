@@ -33,6 +33,12 @@ for st in steps.split(','):
         for x in p['tms']:
             if x['mv'] == 'MOVE_ICE_BEAM':
                 x['prize'] = True
+    elif st.startswith('martsl='):
+        # Lean stops: martsl=STOP:TIER:N/STOP:TIER:N/... (tier poke/great/ultra), all top-ups.
+        p['marts'] = []
+        for x in st[7:].split('/'):
+            a, tier, n = x.split(':')
+            p['marts'].append({'after': a, tier: int(n), 'topup': True})
     elif st.startswith('marts'):
         # MODEL CHANGE + PLAN: balls (and, with potion_bag_from, potions) only at mart stops, topped up to
         # targets. Stocks from decompiled/data/maps/*_Mart/scripts.inc (Cerulean Poke, Celadon 2F Great,
@@ -40,20 +46,21 @@ for st in steps.split(','):
         nb = int(st[5:] or 20)
         p['marts'] = [
             {'after': 'persim-and-potions', 'poke': 10, 'topup': True},   # Cerulean Mart
-            {'after': 'xbuy@celadon-tea', 'great': nb, 'topup': True},    # Celadon Dept. 2F
+            {'after': 'celadon-tea', 'great': nb, 'topup': True},    # Celadon Dept. 2F
             {'after': 'walk-lavender', 'great': nb, 'topup': True},       # Lavender Mart (tower)
             {'after': 'koga-badge', 'great': nb, 'topup': True},          # Fuchsia Mart
             {'after': 'fly-lavender-2', 'great': nb, 'topup': True},      # Lavender Mart before the Power Plant
             {'after': 'surf-cinnabar', 'great': nb, 'topup': True},       # Cinnabar Mart (Mansion, Sevii)
-            {'after': 'xbuy@fly-celadon-2', 'great': nb, 'topup': True},  # Celadon Dept. 2F
+            {'after': 'fly-celadon-2', 'great': nb, 'topup': True},  # Celadon Dept. 2F
             {'after': 'fly-viridian', 'poke': nb, 'topup': True},         # Viridian Mart (Diglett, Routes 22/23, VR)
+            {'after': 'victory-road', 'great': nb, 'topup': True},        # Indigo Plateau counter (the dex fill)
         ]
     elif st.startswith('bag'):
         # MODEL CHANGE: finite potion bag from the Koga badge on, bought at the mart stops (Fuchsia Super,
         # Lavender Super, Cinnabar Hyper, Celadon 2F Super, Saffron Hyper, Viridian Potion). bagN = top-up target.
         n = int(st[3:] or 10)
         p['potion_bag_from'] = 'koga-badge'
-        stops = {'koga-badge', 'fly-lavender-2', 'surf-cinnabar', 'xbuy@fly-celadon-2', 'fly-viridian'}
+        stops = {'koga-badge', 'fly-lavender-2', 'surf-cinnabar', 'fly-celadon-2', 'fly-viridian'}
         for m in p['marts']:
             if m['after'] in stops:
                 m['potions'] = n

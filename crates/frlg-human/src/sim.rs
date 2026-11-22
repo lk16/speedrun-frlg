@@ -1188,6 +1188,9 @@ fn take_ball(ctx: &Ctx, st: &mut State) -> Option<u32> {
         .ball_tier
         .unwrap_or_else(|| plan_tier(ctx.p))
         .min(st.max_tier);
+    if std::env::var_os("FRLG_BALL_TRACE").is_some() {
+        eprintln!("ball-take seg {} tier {t}", st.seg_i);
+    }
     loop {
         if st.balls[t] > 0 {
             st.balls[t] -= 1;
