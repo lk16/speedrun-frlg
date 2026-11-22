@@ -1076,7 +1076,7 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
             "win_prob": win, "exp_turns": exp_turns, "hp_left_on_win": hp_left,
             "rollouts": d.rollouts.iter().map(|(a, w)| format!("{} {w}", describe(dex, &sc, *a))).collect::<Vec<_>>(),
             "bench": sc.bench.len(),
-            "foe_last_move": if foe_last == 0 || foe_last >= 0xFFFF { format!("#{foe_last}") } else { super::names::names().mv(foe_last).trim_start_matches("MOVE_").to_string() },
+            "foe_last_move": if foe_last == 0 || foe_last == u16::MAX { format!("#{foe_last}") } else { super::names::names().mv(foe_last).trim_start_matches("MOVE_").to_string() },
             "my_stages": my_stages, "foe_stages": foe_stages,
         }),
     );
