@@ -498,6 +498,8 @@ fn seagallop(s: &mut Session, from: u8, to: u8) -> PResult<()> {
         super::walk::face(s, keys::DOWN)?;
         s.hf.press(keys::A)?;
     } else {
+        // Surf may be needed to reach the harbor (Four Island's mart and cave side).
+        go_map(s, HARBORS[from as usize], &o)?;
         talk_to(s, HARBORS[from as usize], 2)?;
     }
     // "Where do you want to sail?" is `message` + `waitmessage`: the list opens by itself, and a
@@ -1183,12 +1185,111 @@ fn icefall(s: &mut Session) -> PResult<()> {
     split(s, "Icefall", "icefall-cave")
 }
 
+/// Not in the model (`route_wr.rs` goes from Icefall straight to the Five Island Meadow): the
+/// warehouse door opens only with `FLAG_LEARNED_YES_NAH_CHANSEY`
+/// (`FiveIsland_Meadow_EventScript_WarehouseDoor`, `decompiled/data/maps/FiveIsland_Meadow/scripts.inc:9-26`),
+/// set by the thief's scene when the Sapphire is found in the Dotted Hole
+/// (`SixIsland_DottedHole_SapphireRoom_EventScript_Sapphire`, the same flag). The Dotted Hole's door
+/// in Ruin Valley opens with Cut used from (24, 25) facing north (`CutMoveRuinValleyCheck`,
+/// `decompiled/src/field_specials.c:2296-2316`); the scientist who stood there left after
+/// Lorelei's scene. The hole's floors are plain warps (`SixIsland_DottedHole_*/map.json`).
+fn dotted_hole(s: &mut Session) -> PResult<()> {
+    s.seg = "sapphire-and-sail-back".into();
+    let t0 = s.timer().unwrap_or(0.0);
+    seagallop(s, 4, 6)?;
+    s.event(
+        "model-vs-actual",
+        "the Rocket Warehouse needs the thief's password from the Dotted Hole (Six Island) \
+         first; the model has no Six Island trip before the warehouse",
+        json!({"cite": "decompiled/data/maps/FiveIsland_Meadow/scripts.inc:9-26"}),
+    );
+    if !flag(s, "FLAG_USED_CUT_ON_RUIN_VALLEY_BRAILLE") {
+        go(s, "MAP_SIX_ISLAND_RUIN_VALLEY", 24, 25, &hm_opts())?;
+        super::walk::face(s, keys::UP)?;
+        super::items::use_field_move(s, "MOVE_CUT")?;
+        settle(s)?;
+        if !flag(s, "FLAG_USED_CUT_ON_RUIN_VALLEY_BRAILLE") {
+            return Err(PlayError::Fatal("the Dotted Hole door did not open".into()));
+        }
+        s.event(
+            "decision",
+            "Cut on the Ruin Valley braille: the Dotted Hole opened",
+            json!({}),
+        );
+    }
+    // The door's open metatile is set by the script (`CutMoveOpenDottedHoleDoor`); the planner
+    // reads the layout's closed door: walk in by hand.
+    take_warp(s, "MAP_SIX_ISLAND_RUIN_VALLEY", 24, 25, keys::UP)?;
+    go_face(
+        s,
+        "MAP_SIX_ISLAND_DOTTED_HOLE_SAPPHIRE_ROOM",
+        7,
+        7,
+        &hm_opts(),
+    )?;
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    if !flag(s, "FLAG_LEARNED_YES_NAH_CHANSEY") {
+        return Err(PlayError::Fatal(
+            "no warehouse password after the Sapphire scene".into(),
+        ));
+    }
+    s.event(
+        "decision",
+        "Dotted Hole: the thief took the Sapphire and gave the password away",
+        json!({}),
+    );
+    escape_rope(s, "MAP_SIX_ISLAND_RUIN_VALLEY")?;
+    fly_to(s, "MAPSEC_SIX_ISLAND")?;
+    mva(
+        s,
+        "Six Island and the Dotted Hole (not in the model)",
+        t0,
+        "icefall-cave",
+        "icefall-cave",
+    );
+    Ok(())
+}
+
+/// "five-island-approach", "meadow-grunt", "five-island-resort", the warehouse fights,
+/// "warehouse-gideon": Seagallop to Five Island, the Meadow, the door at (12, 21) (the password
+/// opens it: `FLAG_UNLOCKED_ROCKET_WAREHOUSE`), then Gideon at (27, 4); the admins and grunts on the
+/// way fight where their sight lines or the coord trigger (row y 11, `Admin2Trigger`) force them.
+/// Beating Gideon gives the Sapphire (`FiveIsland_RocketWarehouse_EventScript_DefeatedGideon`:
+/// `FLAG_RECOVERED_SAPPHIRE`, `decompiled/data/maps/FiveIsland_RocketWarehouse/scripts.inc`).
+fn warehouse(s: &mut Session) -> PResult<()> {
+    s.seg = "five-island-approach".into();
+    let t0 = s.timer().unwrap_or(0.0);
+    seagallop(s, 6, 5)?;
+    if !flag(s, "FLAG_UNLOCKED_ROCKET_WAREHOUSE") {
+        go_face(s, "MAP_FIVE_ISLAND_MEADOW", 12, 21, &hm_opts())?;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        if !flag(s, "FLAG_UNLOCKED_ROCKET_WAREHOUSE") {
+            return Err(PlayError::Fatal("the warehouse door stayed shut".into()));
+        }
+    }
+    s.seg = "warehouse-interior".into();
+    take_warp(s, "MAP_FIVE_ISLAND_MEADOW", 12, 22, keys::UP)?;
+    s.seg = "warehouse-gideon".into();
+    talk_script(s, "MAP_FIVE_ISLAND_ROCKET_WAREHOUSE", "EventScript_Gideon")?;
+    if !flag(s, "FLAG_RECOVERED_SAPPHIRE") {
+        return Err(PlayError::Fatal("no Sapphire after Gideon".into()));
+    }
+    s.event("decision", "beat Gideon: the Sapphire", json!({}));
+    mva(
+        s,
+        "Five Island and the warehouse",
+        t0,
+        "icefall-cave",
+        "warehouse-gideon",
+    );
+    split(s, "Warehouse", "warehouse-gideon")
+}
+
 #[allow(dead_code)]
-fn unused(s: &mut Session) -> PResult<()> {
-    let _ = go as fn(&mut Session, &str, i16, i16, &Opts) -> PResult<()>;
-    let _ = (center_heal, take_warp);
-    let _ = go_to;
-    let _: Option<Node> = None;
+fn unused(_s: &mut Session) -> PResult<()> {
+    let _ = (center_heal, go_to);
     Ok(())
 }
 
@@ -1217,6 +1318,14 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "icefall",
             run: icefall,
+        },
+        Stage {
+            name: "dotted-hole",
+            run: dotted_hole,
+        },
+        Stage {
+            name: "warehouse",
+            run: warehouse,
         },
     ]
 }
