@@ -180,6 +180,21 @@ impl Plan {
                 }
                 v
             },
+            potion_hp: if self.params.potion_tiers.is_empty() {
+                vec![]
+            } else {
+                // A tier counts from the segment after its anchor (the mart stop) on.
+                let mut v = vec![20; n];
+                for t in &self.params.potion_tiers {
+                    if let Some(i) = seg_index(&self.segs, &t.after) {
+                        for x in v.iter_mut().skip(i + 1) {
+                            *x = t.hp;
+                        }
+                    }
+                }
+                v
+            },
+            ball_shop_from: seg_index(&self.segs, &self.params.ball_shop_from),
             aggr: self
                 .segs
                 .iter()
@@ -525,6 +540,20 @@ mod tests {
  {"site":"MAP_POWER_PLANT","steps":250},{"site":"MAP_SEAFOAM_ISLANDS_B4F","steps":250},
  {"site":"MAP_CERULEAN_CAVE_B1F","steps":300}]}
 ```"#;
+
+    /// MODEL CHANGE `trash_cans`: the in-order search with one neighbour guess needs about 25 checks on
+    /// average (first switch ~8, success per guess ~0.36: 2.8 rounds); the played branches needed 13 and 53.
+    #[test]
+    fn trash_can_checks_average_about_25() {
+        let mut r = crate::rng::Rng::new(3, 0, 7);
+        let n = 20_000;
+        let v: Vec<u32> = (0..n)
+            .map(|_| crate::sim::trash_can_checks(&mut r))
+            .collect();
+        let mean = v.iter().sum::<u32>() as f64 / n as f64;
+        assert!(mean > 20.0 && mean < 30.0, "mean {mean}");
+        assert!(*v.iter().min().unwrap() >= 2);
+    }
 
     #[test]
     fn same_seed_same_score() {
