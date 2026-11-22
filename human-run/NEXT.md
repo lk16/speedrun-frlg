@@ -179,9 +179,9 @@ WR 335.4 h; **1211-cerulean-potions** (plan response: 3 potions, heal below .35 
 2. Koga's Muk: engine 35% vs emulator 15/20 at identical stats; the 1.35 window stands in for an engine bug.
 3. The 0.773 Blaine/Sevii window is deadlier than the honest engine (-21 h at 1.0); refit windows under 1211.
 
-## 2026-11-22 optimisation / combined honest model (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1311-honest-mtmoon-repel
+## 2026-11-22 optimisation / combined honest model (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1312-honest-nolee
 
-**1311 = 1423 fight clock + 1444 non-fight VOD block + 1413 honest shop stops + the WR-level League refit + candies eaten
+**1312 = 1311 without Hitmonlee; 1311 = 1423 fight clock + 1444 non-fight VOD block + 1413 honest shop stops + the WR-level League refit + candies eaten
 at Indigo + tactics + Mt. Moon B1F/B2F Repels.** It is the honest model of record; it is worse than the partial models
 because each block made the model more honest, not because a plan step lost.
 
@@ -190,7 +190,8 @@ because each block made the model more honest, not because a plan step lost.
 | 1304-e4level-lgfit | 1280 + League at the WR level (candies held) + refit lp 1.2 / mp 1.15 / fatal | 1785 (vs 1280 999) | 5263 |
 | 1309-honest-e4fit-candies | 1413 stops + 1423 clock + refit + candies eaten + Miguel 5 / Koga .55 | 715 / 741 (vs 1423 450 / 472) | 1752 / 1716 |
 | 1310-honest-vod | 1309 + 1444 VOD block | 3606 / 3337 (vs 1444 2040 / 1795) | 15104 / 13200 |
-| **1311-honest-mtmoon-repel (CURRENT)** | **1310 + Mt. Moon Repels** | **1326 / 1269 (seeds 7781/7782; -2280 / -2068 vs 1310)** | **4171 / 4015** |
+| 1311-honest-mtmoon-repel | 1310 + Mt. Moon Repels | 1326 / 1269 (seeds 7781/7782; -2280 / -2068 vs 1310) | 4171 / 4015 |
+| **1312-honest-nolee (CURRENT)** | **1311 without the Hitmonlee gift (WR choice)** | **1130 / 1104 (seeds 7791/7792; -184 / -154 vs 1311)** | **3222 / 3039 (-583 / -844)** |
 
 * **League refit at the WR's League level** (`tools/league_fit_grid.py`, data `data/league-fit-wr-level-2026-11-22.jsonl`):
   at Lv55 (candies eaten) the grid reproduces the old fit (lp 1.0, mp 1.3); at the WR's Lv51 **lp 1.2 [~1.1, 1.3], mp 1.15
@@ -207,10 +208,13 @@ because each block made the model more honest, not because a plan step lost.
   heal_below .55. Earlier: all optional-trainer drops refuted on 1300 (exp outweighs fight time), reset_table refit
   not adopted (and now below the 2000-finish noise floor: ~550 finishes per 3.2M at WR+2m).
 * New descent sets: `--set fights` (fightknobs.py), `--set shops` (shopknobs.py: mart top-up targets, potion bag,
-  league_heals). Next: post-game MODEL CHANGE block (Fly between regions, Six Island trip, Five Island fights, post-game
-  segment times, PP pickups), then the WR structural choices on the honest base (warden after Erika + evolutions, no
-  Hitmonlee, no Mr. Mime / Diglett, Safari North+West, Routes 3/4 catches; candidates built by scratch `opt-struct.py`
-  from `tools/wr_faithful_mk.py`), then `--set shops`, `--set league` from the new base.
+  league_heals). WR structural choices on 1311 (screen R 1.6M / 3.2M): **no Hitmonlee accepted and confirmed (1312)**; refuted:
+  Warden after Erika +353 h, Warden + evolutions after it +32 (n.s.), Routes 3/4 catches +3125, Safari North+West
+  +744, no Diglett hunt +289, no Mr. Mime -72 [-146, +7] (n.s.; retest on 1312), no Mime + no Diglett +319, all
+  together +3834. Post-game bugs: no MODEL CHANGE made (the model already matches the WR's post-game windows within ~1
+  min; adding the controller's slower stretch times would double count; the Mewtwo PP items are in the plan and
+  reachable, the controller does not collect them; journal round 6). Running: `--set shops` from 1312; then
+  `--set league`, no-Mr.-Mime retest, `--set earlymid --notkinds fights`.
 * Pointer `plans/CURRENT-OPT` is the descent pointer (`descend.py --pointer CURRENT-OPT --num-from 1300`).
 
 
