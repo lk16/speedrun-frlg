@@ -1345,7 +1345,30 @@ fn party_swap(s: &mut Session, a: usize, b: usize) -> PResult<()> {
         menu::task(s, "Task_HandleSelectionMenuInput")
     })?;
     menu::choose(s, switch_row)?;
-    super::items::party_choose(s, b as i8)?;
+    // Switch mode moves the second cursor, `gPartyMenu.slotId2` (`struct PartyMenu`,
+    // `decompiled/include/party_menu.h:8-20`: offset 10).
+    wait_until(s, "the switch cursor", 200, |s| {
+        menu::task(s, "Task_HandleChooseMonInput")
+    })?;
+    let pm = s.sym("gPartyMenu");
+    let mut moved = false;
+    for _ in 0..12 {
+        let cur = s.hf.rec.emu().read8(pm + 10) as i8;
+        if cur == b as i8 {
+            s.hf.press(keys::A)?;
+            moved = true;
+            break;
+        }
+        s.hf.press(if (b as i8) > cur {
+            keys::DOWN
+        } else {
+            keys::UP
+        })?;
+        s.hf.idle(1)?;
+    }
+    if !moved {
+        return Err(PlayError::Death("soft-lock: the switch cursor".into()));
+    }
     let sp = mon.species;
     wait_until(s, "the switch", 300, move |s| {
         Ram::new(&s.obs).party(s.hf.rec.emu())[b].species == sp
