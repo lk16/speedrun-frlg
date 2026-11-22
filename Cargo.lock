@@ -405,8 +405,10 @@ dependencies = [
 name = "frlg-human"
 version = "0.1.0"
 dependencies = [
+ "frlg-emu",
  "frlg-mon",
  "frlg-rng",
+ "frlg-route",
  "rayon",
  "serde",
  "serde_json",

@@ -5,6 +5,7 @@ pub mod eval;
 pub mod manip;
 pub mod optstop;
 pub mod params;
+pub mod play;
 pub mod rng;
 pub mod route;
 pub mod route_wr;

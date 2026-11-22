@@ -5,7 +5,9 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+frlg-emu = { path = "../frlg-emu" }
 frlg-mon = { path = "../frlg-mon" }
+frlg-route = { path = "../frlg-route" }
 frlg-rng = { path = "../frlg-rng" }
 rayon.workspace = true
 serde = { workspace = true, features = ["derive"] }
