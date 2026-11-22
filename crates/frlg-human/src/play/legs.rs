@@ -542,6 +542,33 @@ fn koga(s: &mut Session) -> PResult<()> {
     split(s, "Koga", "koga-badge")
 }
 
+/// The dex module's hook: plan hunts, specials (gifts, trades, statics, buys) and evolutions
+/// anchored `after` the model segment `anchor` (`hunts`, `specials`, `evolutions` in the plan; the
+/// model's segment names `hunt-*@anchor`, `evo-*@anchor`, ...). Until `play/dex.rs` merges it only
+/// logs each one as deferred.
+pub fn dex_hook(s: &mut Session, anchor: &str) {
+    let suffix = format!("@{anchor}");
+    let segs: Vec<String> = s
+        .model
+        .names
+        .iter()
+        .filter(|n| {
+            n.ends_with(&suffix)
+                && ["hunt-", "evo-", "trade-", "gift-", "static-", "buy-"]
+                    .iter()
+                    .any(|p| n.starts_with(p))
+        })
+        .cloned()
+        .collect();
+    for n in segs {
+        s.event(
+            "model-vs-actual",
+            format!("{n} deferred (the dex-fill executor is not merged yet)"),
+            json!({"segment": n, "anchor": anchor, "deferred": true}),
+        );
+    }
+}
+
 fn fly_lavender(s: &mut Session) -> PResult<()> {
     // Fly works outdoors only ("Can't use that here."): out of the gym first.
     go_map(s, "MAP_VERMILION_CITY", &Opts::default())?;
@@ -627,4 +654,7 @@ pub fn stages() -> Vec<Stage> {
             run: koga,
         },
     ]
+    .into_iter()
+    .chain(super::legs2::stages())
+    .collect()
 }

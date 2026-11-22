@@ -275,9 +275,12 @@ pub struct Opts {
     /// Tiles a script has opened since the layout was drawn (`setmetatile` barriers: gym beams,
     /// doors), as (map, x, y): walkable floor whatever the layout says.
     pub open: Vec<(&'static str, i16, i16)>,
+    /// Collision of other maps as a script will have left it when the player gets there (the
+    /// Mansion's switch doors): (map, x, y, blocked). The current map's live grid wins.
+    pub patch: Vec<(&'static str, i16, i16, bool)>,
 }
 
-type Node = (MapId, i16, i16);
+pub type Node = (MapId, i16, i16);
 
 /// What the planner knows of the live world when it plans.
 struct View {
@@ -430,6 +433,23 @@ impl Graph {
             .iter()
             .filter_map(|(m, x, y)| self.by_id.get(*m).map(|id| (*id, *x, *y)))
             .collect();
+        let mut patched: HashMap<MapId, MapInfo> = HashMap::new();
+        for &(pm, x, y, b) in &opts.patch {
+            let Some(&id) = self.by_id.get(pm) else {
+                continue;
+            };
+            if id == view.cur_map && view.cur_live.is_some() {
+                continue;
+            }
+            let Some(base) = self.maps.get(&id) else {
+                continue;
+            };
+            let m = patched.entry(id).or_insert_with(|| base.clone());
+            if x >= 0 && y >= 0 && x < m.w && y < m.h {
+                let w = m.w;
+                m.tiles[(x + y * w) as usize].collision = u8::from(b);
+            }
+        }
         // state: node + last direction index (4 = none) + surfing
         type St = (Node, u8, bool);
         let mut dist: HashMap<St, u32> = HashMap::new();
@@ -465,6 +485,7 @@ impl Graph {
             } else {
                 None
             })
+            .or_else(|| patched.get(&mid))
             .or_else(|| self.maps.get(&mid)) else {
                 continue;
             };
@@ -817,6 +838,24 @@ pub fn go_to(
     }
     let _ = start_frame;
     Ok(())
+}
+
+/// Length in steps of the path the planner would take now from where the player stands to a node
+/// satisfying `goal` (no input fed), or from `from` if given (then the live view of the current
+/// map still applies to the current map only).
+pub fn plan_len(
+    s: &mut Session,
+    from: Option<Node>,
+    goal: &dyn Fn(&Node) -> bool,
+    opts: &Opts,
+) -> Option<usize> {
+    let cur = from.or_else(|| here(s))?;
+    let mut v = view(s, &HashSet::new());
+    if from.is_some() {
+        // A hypothetical start: the current map as `opts.patch` will leave it, not as it is now.
+        v.cur_live = None;
+    }
+    s.graph().plan(&v, cur, goal, opts).map(|p| p.moves.len())
 }
 
 /// Walk to `(map, x, y)`.

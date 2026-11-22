@@ -141,8 +141,9 @@ pub fn bag_use(s: &mut Session, item: u16, row: i8) -> PResult<()> {
         s.hf.idle(2)?;
     }
     list_goto(s, idx as u16)?;
-    s.hf.press(keys::A)?;
-    wait_until(s, "the item's context menu", 120, |s| {
+    // A press while the list is still scrolling or the pocket still sliding in is dropped: press
+    // until the context menu opens.
+    super::prims::press_until(s, "the item's context menu", keys::A, 300, |s| {
         menu::task(s, "Task_FieldItemContextMenuHandleInput")
     })?;
     menu::choose(s, row)
@@ -301,8 +302,8 @@ pub fn teach_tmhm(s: &mut Session, item: &str, slot: usize) -> PResult<()> {
     })?;
     s.hf.idle(4)?;
     list_goto(s, row as u16)?;
-    s.hf.press(keys::A)?;
-    wait_until(s, "the TM context menu", 200, |s| {
+    // The list ignores A while it is still drawing: press until the context menu opens.
+    super::prims::press_until(s, "the TM context menu", keys::A, 300, |s| {
         menu::task(s, "Task_SelectedTMHM_Field")
     })?;
     menu::choose(s, 0)?; // USE
@@ -319,16 +320,37 @@ pub fn teach_tmhm(s: &mut Session, item: &str, slot: usize) -> PResult<()> {
         s.hf.idle(2)?;
     }
     party_choose(s, slot as i8)?;
-    // "X learned Y!" and back to the TM case, then out.
+    // "X learned Y!" and back to the TM case, then out. A mon with four moves asks "Delete an older
+    // move?" (YES is the default) and opens the summary screen's forget list
+    // (`Task_InputHandler_SelectOrForgetMove`, `decompiled/src/pokemon_summary_screen.c`): the slot
+    // is the sim's `replace_slot` with the teach forced (the plan teaches it).
     let start = s.hf.fed();
+    let mut forgot = false;
+    let mv = tm_move(it);
     loop {
         if menu::task(s, "Task_HandleListInput") && list_index(s).is_some() {
             break;
         }
+        // Learned, and the text is done (the TM case is back, or the party menu waits): stop
+        // mashing A, which would pick the TM again.
+        let knows = mv.is_some_and(|m| {
+            Ram::new(&s.obs).party(s.hf.rec.emu())[slot]
+                .knows(m)
+                .is_some()
+        });
+        if knows && (party_input(s) || menu::task(s, "Task_HandleListInput")) {
+            break;
+        }
+        if !forgot && menu::task(s, "Task_InputHandler_SelectOrForgetMove") {
+            forget_for_teach(s, it, slot)?;
+            forgot = true;
+            continue;
+        }
         if s.hf.fed() - start > 3000 {
             return Err(PlayError::Death("soft-lock: after teaching".into()));
         }
-        s.hf.press(keys::A)?;
+        // Once learned, B: it ends the text as well and never re-selects the TM.
+        s.hf.press(if knows { keys::B } else { keys::A })?;
         s.hf.idle(2)?;
     }
     close_to_field(s)?;
@@ -343,6 +365,129 @@ pub fn teach_tmhm(s: &mut Session, item: &str, slot: usize) -> PResult<()> {
         ),
         json!({"item": item, "slot": slot, "moves": mon.moves.iter().map(|m| names().mv(*m)).collect::<Vec<_>>()}),
     );
+    Ok(())
+}
+
+/// The tm item's move (`ITEM_TM01` + i -> `sTMHMMoves[i]`, `decompiled/src/data/party_menu.h:1197`), by the
+/// item's name: TMs map through the move constants the TM case shows.
+fn tm_move(item: u16) -> Option<u16> {
+    let nm = names().item(item);
+    let n = names();
+    // HM/TM names in the decomp's item list are ITEM_TMxx / ITEM_HMxx; the move list is in
+    // `sTMHMMoves` order (TM01..TM50, HM01..HM08).
+    const HMS: [&str; 8] = [
+        "MOVE_CUT",
+        "MOVE_FLY",
+        "MOVE_SURF",
+        "MOVE_STRENGTH",
+        "MOVE_FLASH",
+        "MOVE_ROCK_SMASH",
+        "MOVE_WATERFALL",
+        "MOVE_DIVE",
+    ];
+    if let Some(h) = nm.strip_prefix("ITEM_HM") {
+        let i: usize = h.parse().ok()?;
+        return n.get(HMS.get(i.checked_sub(1)?)?);
+    }
+    let i: usize = nm.strip_prefix("ITEM_TM")?.parse().ok()?;
+    TM_MOVES.get(i.checked_sub(1)?).and_then(|m| n.get(m))
+}
+
+/// `sTMHMMoves` TM01..TM50 (`decompiled/src/data/party_menu.h:1197`).
+const TM_MOVES: [&str; 50] = [
+    "MOVE_FOCUS_PUNCH",
+    "MOVE_DRAGON_CLAW",
+    "MOVE_WATER_PULSE",
+    "MOVE_CALM_MIND",
+    "MOVE_ROAR",
+    "MOVE_TOXIC",
+    "MOVE_HAIL",
+    "MOVE_BULK_UP",
+    "MOVE_BULLET_SEED",
+    "MOVE_HIDDEN_POWER",
+    "MOVE_SUNNY_DAY",
+    "MOVE_TAUNT",
+    "MOVE_ICE_BEAM",
+    "MOVE_BLIZZARD",
+    "MOVE_HYPER_BEAM",
+    "MOVE_LIGHT_SCREEN",
+    "MOVE_PROTECT",
+    "MOVE_RAIN_DANCE",
+    "MOVE_GIGA_DRAIN",
+    "MOVE_SAFEGUARD",
+    "MOVE_FRUSTRATION",
+    "MOVE_SOLAR_BEAM",
+    "MOVE_IRON_TAIL",
+    "MOVE_THUNDERBOLT",
+    "MOVE_THUNDER",
+    "MOVE_EARTHQUAKE",
+    "MOVE_RETURN",
+    "MOVE_DIG",
+    "MOVE_PSYCHIC",
+    "MOVE_SHADOW_BALL",
+    "MOVE_BRICK_BREAK",
+    "MOVE_DOUBLE_TEAM",
+    "MOVE_REFLECT",
+    "MOVE_SHOCK_WAVE",
+    "MOVE_FLAMETHROWER",
+    "MOVE_SLUDGE_BOMB",
+    "MOVE_SANDSTORM",
+    "MOVE_FIRE_BLAST",
+    "MOVE_ROCK_TOMB",
+    "MOVE_AERIAL_ACE",
+    "MOVE_TORMENT",
+    "MOVE_FACADE",
+    "MOVE_SECRET_POWER",
+    "MOVE_REST",
+    "MOVE_ATTRACT",
+    "MOVE_THIEF",
+    "MOVE_STEEL_WING",
+    "MOVE_SKILL_SWAP",
+    "MOVE_SNATCH",
+    "MOVE_OVERHEAT",
+];
+
+/// The forget list while teaching `item` to party slot `slot`: the sim's `replace_slot` (forced)
+/// picks the move, the cursor (`sMoveSelectionCursorPos`, 0-3 known moves, 4 the new one) goes
+/// there, A.
+fn forget_for_teach(s: &mut Session, item: u16, slot: usize) -> PResult<()> {
+    use super::battle::{move_index, moves_of, species_index};
+    let mon = Ram::new(&s.obs).party(s.hf.rec.emu())[slot].clone();
+    let dex = s.ctx.dex;
+    let mv = tm_move(item).and_then(|m| move_index(dex, m));
+    let sp = species_index(dex, mon.species);
+    let pick = match (mv, sp, moves_of(dex, &mon.moves, &mon.pp)) {
+        (Some(mv), Some(sp), Some((slots, _))) => {
+            crate::sim::replace_slot(&s.ctx, sp, &slots, mv, true)
+        }
+        _ => None,
+    };
+    let target = pick.unwrap_or(4) as u8;
+    s.event(
+        "decision",
+        format!(
+            "{} forgets {} for {}",
+            names().species(mon.species).trim_start_matches("SPECIES_"),
+            pick.map_or("nothing".to_string(), |i| names()
+                .mv(mon.moves[i])
+                .trim_start_matches("MOVE_")
+                .to_string()),
+            names().item(item).trim_start_matches("ITEM_")
+        ),
+        json!({"slot": pick, "moves": mon.moves.iter().map(|m| names().mv(*m)).collect::<Vec<_>>()}),
+    );
+    let cur_addr = s.sym("sMoveSelectionCursorPos");
+    s.hf.idle(10)?;
+    for _ in 0..10 {
+        let cur = s.hf.rec.emu().read8(cur_addr);
+        if cur == target {
+            break;
+        }
+        s.hf.press(if target > cur { keys::DOWN } else { keys::UP })?;
+        s.hf.idle(6)?;
+    }
+    s.hf.press(keys::A)?;
+    s.hf.idle(4)?;
     Ok(())
 }
 
