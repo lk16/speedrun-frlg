@@ -180,6 +180,19 @@ fn national_dex(s: &mut Session) -> PResult<()> {
             json!({"caught": n}),
         );
         if std::env::var_os("FRLG_PG_DEV_DEX").is_some() {
+            // Never in a run of record: only into an output directory named `dev-*` / `*-dev*`.
+            let out = s
+                .cfg
+                .out_dir
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if !(out.starts_with("dev") || out.contains("-dev")) {
+                return Err(PlayError::Fatal(format!(
+                    "FRLG_PG_DEV_DEX is a development poke: refused for output directory {out} \
+                     (allowed only for dev-* / *-dev* directories)"
+                )));
+            }
             dev_poke_dex(s, 60);
         }
         fill_to_60(s)?;
