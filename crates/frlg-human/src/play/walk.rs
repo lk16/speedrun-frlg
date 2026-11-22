@@ -222,7 +222,13 @@ impl Graph {
                     ObjInfo {
                         x: int(&o["x"]) as i16,
                         y: int(&o["y"]) as i16,
-                        local_id: o.get("local_id").map(int).unwrap_or(i as i64 + 1) as u8,
+                        // A named `local_id` (`LOCALID_*`) is `#define`d to the object's index + 1
+                        // (`decompiled/tools/mapjson/mapjson.cpp:415-416`), like an unnamed one.
+                        local_id: o
+                            .get("local_id")
+                            .map(int)
+                            .filter(|&v| v > 0)
+                            .unwrap_or(i as i64 + 1) as u8,
                         movement: s("movement_type"),
                         script: s("script"),
                         graphics: s("graphics_id"),

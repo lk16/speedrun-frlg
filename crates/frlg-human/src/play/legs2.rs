@@ -4,9 +4,10 @@
 //! (`leg_sevii`) -> "Sevii", Silph and Sabrina (`leg_silph`), Erika (`erika_leg`), Giovanni
 //! (`leg_viridian`), `leg_league_approach`, the first League up to the first Hall of Fame.
 use frlg_emu::keys;
+use frlg_route::Feed;
 use serde_json::json;
 
-use super::legs::{center_heal, dex_hook, split};
+use super::legs::{center_heal, dex_hook, split, talk_to};
 use super::names::{id, names};
 use super::prims::settle;
 use super::ram::Ram;
@@ -462,6 +463,203 @@ fn blaine(s: &mut Session) -> PResult<()> {
     split(s, "Blaine", "blaine-badge")
 }
 
+pub fn var(s: &mut Session, name: &str) -> u16 {
+    let v = names().get(name).unwrap_or_else(|| panic!("no var {name}"));
+    s.obs.var(s.hf.rec.emu(), v).unwrap_or(0)
+}
+
+/// Settle, and keep settling (a free frame between two map scripts is not the end of a chain of
+/// scenes) until `done` holds; `budget` frames.
+pub fn settle_until(
+    s: &mut Session,
+    what: &str,
+    budget: u64,
+    done: impl Fn(&mut Session) -> bool,
+) -> PResult<()> {
+    let start = s.frame();
+    loop {
+        settle(s)?;
+        if done(s) {
+            return Ok(());
+        }
+        if s.frame() - start > budget {
+            return Err(PlayError::Death(format!(
+                "soft-lock: {what} not reached in {budget} frames"
+            )));
+        }
+        s.hf.step(0)?;
+    }
+}
+
+/// Talk to the Seagallop sailor of `harbor` (object 2 at (8, 6), `*_Harbor/map.json`) and pick
+/// row `row` of the destination list (`decompiled/data/scripts/seagallop.inc`
+/// `EventScript_ChooseDestFrom*`: before the Rainbow Pass, One Island lists Two, Three; Two Island
+/// lists One, Three), then ride to the destination harbor.
+fn sail(s: &mut Session, harbor: &str, row: i8, dest: &str) -> PResult<()> {
+    talk_to(s, harbor, 2)?;
+    super::menu::text_until_multichoice(s)?;
+    super::menu::choose(s, row)?;
+    let d = s.graph().id(dest);
+    settle_until(s, &format!("the Seagallop to {dest}"), 6000, move |s| {
+        here(s).is_some_and(|n| n.0 == d)
+    })?;
+    s.event(
+        "decision",
+        format!(
+            "sailed to {}",
+            dest.trim_start_matches("MAP_").trim_end_matches("_HARBOR")
+        ),
+        json!({"from": harbor, "to": dest}),
+    );
+    Ok(())
+}
+
+/// `leg_sevii` "sevii-bill-boat" + "celio-tri-pass": out of the gym, Bill's scene on Cinnabar
+/// (`CinnabarIsland/scripts.inc` `BillScene`, set by Blaine's script `VAR_MAP_SCENE_CINNABAR_ISLAND`
+/// 1; the yes/no defaults to YES), the boat, the One Island harbor and town scenes, and Celio's
+/// scene in the Pokémon Center (`OneIsland_PokemonCenter_1F/scripts.inc` `MeetCelioScene`: the
+/// Meteorite and the Tri-Pass; `VAR_MAP_SCENE_ONE_ISLAND_POKEMON_CENTER_1F` 1 when done).
+fn sevii_boat(s: &mut Session) -> PResult<()> {
+    dex_hook(s, "blaine-badge");
+    s.seg = "sevii-bill-boat".into();
+    // Out of the gym; the scene takes over on the doorstep (the walk ends wherever it leaves us).
+    let gym = s.graph().id("MAP_CINNABAR_ISLAND_GYM");
+    go_to(
+        s,
+        "out of the gym",
+        &move |n: &Node| n.0 != gym,
+        &Opts::default(),
+    )?;
+    settle_until(s, "Celio's scene", 12_000, |s| {
+        var(s, "VAR_MAP_SCENE_ONE_ISLAND_POKEMON_CENTER_1F") >= 1
+    })?;
+    let (met, pass) = (have(s, "ITEM_METEORITE"), have(s, "ITEM_TRI_PASS"));
+    s.event(
+        "decision",
+        "One Island: met Celio; Meteorite and Tri-Pass",
+        json!({"meteorite": met, "tri_pass": pass}),
+    );
+    if pass == 0 {
+        return Err(PlayError::Fatal("no Tri-Pass after Celio's scene".into()));
+    }
+    Ok(())
+}
+
+/// "one-island-out", "sail-to-two", "two-island-in", "corner-lostelle-scene": the Joyful Game
+/// Corner's first-visit scene (`TwoIsland_JoyfulGameCorner/scripts.inc` `HelpFindLostelleScene`)
+/// sends the biker off and opens the Three Island biker wall (`VAR_MAP_SCENE_THREE_ISLAND` 2).
+fn two_island(s: &mut Session) -> PResult<()> {
+    s.seg = "one-island-out".into();
+    sail(s, "MAP_ONE_ISLAND_HARBOR", 0, "MAP_TWO_ISLAND_HARBOR")?;
+    s.seg = "two-island-in".into();
+    go_map(s, "MAP_TWO_ISLAND_JOYFUL_GAME_CORNER", &Opts::default())?;
+    s.seg = "corner-lostelle-scene".into();
+    settle_until(s, "the Game Corner scene", 6000, |s| {
+        var(s, "VAR_MAP_SCENE_TWO_ISLAND_JOYFUL_GAME_CORNER") >= 1
+    })
+}
+
+/// "two-island-out", "sail-to-three", "three-island-town", the four forced fights: the boss's intro
+/// on the coord row y 27 (`BikerBossIntroTrigger`, `VAR_MAP_SCENE_THREE_ISLAND` 2 -> 3), then the
+/// fights on row y 26 (`BattleBikersScene`: Goon 1-3 and Paxton; the yes/no defaults to YES;
+/// `VAR_MAP_SCENE_THREE_ISLAND` 4 after) (`ThreeIsland/map.json` coord events,
+/// `ThreeIsland/scripts.inc`).
+fn three_island(s: &mut Session) -> PResult<()> {
+    s.seg = "two-island-out".into();
+    sail(s, "MAP_TWO_ISLAND_HARBOR", 1, "MAP_THREE_ISLAND_HARBOR")?;
+    s.seg = "three-island-town".into();
+    for (row, want) in [(27, 3), (26, 4)] {
+        if var(s, "VAR_MAP_SCENE_THREE_ISLAND") >= want {
+            continue;
+        }
+        let mid = s.graph().id("MAP_THREE_ISLAND");
+        go_to(
+            s,
+            &format!("Three Island row {row}"),
+            &move |n: &Node| n.0 == mid && n.2 == row && (7..=11).contains(&n.1),
+            &Opts::default(),
+        )?;
+        if want == 4 {
+            s.seg = "three-island-goon-1".into();
+        }
+        settle_until(s, "the biker scene", 30_000, move |s| {
+            var(s, "VAR_MAP_SCENE_THREE_ISLAND") >= want
+        })?;
+    }
+    s.event("decision", "Three Island: biker wall cleared", json!({}));
+    Ok(())
+}
+
+/// "bond-bridge" (the plan's hunt there is the dex module's), the two Aroma Ladies in sight
+/// (`ThreeIsland_BondBridge/map.json`: Nikki sight 5, Violet sight 2), "berry-forest" to Lostelle
+/// at (4, 8) (`ThreeIsland_BerryForest/map.json`), her forced wild Hypno Lv30
+/// (`ThreeIsland_BerryForest/scripts.inc` `Lostelle`: `setwildbattle SPECIES_HYPNO, 30`), fled as
+/// the model has it ("lostelle-hypno"), and the warp back to the Game Corner.
+fn berry_forest(s: &mut Session) -> PResult<()> {
+    s.seg = "bond-bridge".into();
+    go_map(s, "MAP_THREE_ISLAND_BOND_BRIDGE", &hm_opts())?;
+    dex_hook(s, "bond-bridge");
+    s.seg = "berry-forest".into();
+    go_face(s, "MAP_THREE_ISLAND_BERRY_FOREST", 4, 8, &hm_opts())?;
+    dex_hook(s, "berry-forest");
+    s.seg = "lostelle-hypno".into();
+    s.hf.press(keys::A)?;
+    settle_until(s, "Lostelle's rescue", 8000, |s| {
+        flag(s, "FLAG_RESCUED_LOSTELLE")
+            && here(s).is_some_and(|n| {
+                let g = s.graph();
+                n.0 == g.id("MAP_TWO_ISLAND_JOYFUL_GAME_CORNER")
+            })
+    })?;
+    settle_until(s, "the found-Lostelle scene", 4000, |s| {
+        var(s, "VAR_MAP_SCENE_TWO_ISLAND_JOYFUL_GAME_CORNER") >= 3
+    })?;
+    s.event(
+        "decision",
+        "Berry Forest: Lostelle rescued (Hypno fled)",
+        json!({}),
+    );
+    Ok(())
+}
+
+/// "deliver-meteorite": Lostelle's daddy at (5, 5) takes the Meteorite and gives the Moon Stone
+/// (`TwoIsland_JoyfulGameCorner/scripts.inc` `GiveDaddyMeteorite`;
+/// `VAR_MAP_SCENE_ONE_ISLAND_POKEMON_CENTER_1F` 2), then "two-island-out-2", "sail-to-one",
+/// "one-island-in" and Bill's leave scene on the coord column x 12 of the One Island center
+/// (`LeaveOneIslandScene`: the Seagallop home, `VAR_MAP_SCENE_CINNABAR_ISLAND` 3, and the return
+/// scene on Cinnabar) -> the "Sevii" split.
+fn sevii_return(s: &mut Session) -> PResult<()> {
+    s.seg = "deliver-meteorite".into();
+    talk_to(s, "MAP_TWO_ISLAND_JOYFUL_GAME_CORNER", 1)?;
+    settle(s)?;
+    if var(s, "VAR_MAP_SCENE_ONE_ISLAND_POKEMON_CENTER_1F") < 2 {
+        return Err(PlayError::Fatal("the Meteorite was not delivered".into()));
+    }
+    let moon = have(s, "ITEM_MOON_STONE");
+    s.event(
+        "decision",
+        "delivered the Meteorite (Moon Stone)",
+        json!({"moon_stones": moon}),
+    );
+    dex_hook(s, "deliver-meteorite");
+    s.seg = "two-island-out-2".into();
+    sail(s, "MAP_TWO_ISLAND_HARBOR", 0, "MAP_ONE_ISLAND_HARBOR")?;
+    s.seg = "one-island-in".into();
+    let pc = s.graph().id("MAP_ONE_ISLAND_POKEMON_CENTER_1F");
+    go_to(
+        s,
+        "the One Island center's x 12 column",
+        &move |n: &Node| n.0 == pc && n.1 == 12 && (6..=9).contains(&n.2),
+        &Opts::default(),
+    )?;
+    s.seg = "blaine-badge-and-sevii-scene".into();
+    let cin = s.graph().id("MAP_CINNABAR_ISLAND");
+    settle_until(s, "back on Cinnabar", 12_000, move |s| {
+        here(s).is_some_and(|n| n.0 == cin) && var(s, "VAR_MAP_SCENE_CINNABAR_ISLAND") >= 4
+    })?;
+    split(s, "Sevii", "blaine-badge-and-sevii-scene")
+}
+
 pub fn stages() -> Vec<Stage> {
     vec![
         Stage {
@@ -487,6 +685,26 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "blaine",
             run: blaine,
+        },
+        Stage {
+            name: "sevii-boat",
+            run: sevii_boat,
+        },
+        Stage {
+            name: "two-island",
+            run: two_island,
+        },
+        Stage {
+            name: "three-island",
+            run: three_island,
+        },
+        Stage {
+            name: "berry-forest",
+            run: berry_forest,
+        },
+        Stage {
+            name: "sevii",
+            run: sevii_return,
         },
     ]
 }
