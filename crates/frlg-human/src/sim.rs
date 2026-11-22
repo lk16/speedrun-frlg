@@ -317,6 +317,9 @@ struct State {
     mewtwo_evs_real: [u32; 6],
     /// Black Glasses equipped (`Params::black_glasses`).
     glasses: bool,
+    /// MODEL CHANGE `persim_held`: the carry holds the Persim Berry (from `persim-and-potions` until it is
+    /// eaten or swapped for the glasses at `black-glasses-swap`).
+    persim: bool,
     /// Never-Melt Ice held (pickup kind `neverice`): Ice moves x1.1, instead of the glasses.
     ice: bool,
     /// Leftovers held (pickup kind `leftovers`): 1/16 HP per turn, instead of the glasses.
@@ -1953,6 +1956,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 m.ability = crate::data::Ability::None;
             }
             m.force_torrent = cfg.free_torrent;
+            m.persim = st.persim;
             if st.mystic {
                 m.boost = Some((11, 10));
             } else if st.ice {
@@ -2059,6 +2063,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
+        if !mewtwo_now {
+            st.persim &= me.persim;
+        }
         // Awakenings: the honest lane spent its own (in `risk_fight`); outside it, this fight's.
         if !in_lane {
             st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
@@ -2316,6 +2323,7 @@ fn risk_fight(
         me.boost = Some((17, 10));
     }
     me.leftovers = st.leftovers;
+    me.persim = st.persim;
     let win = ctx
         .risk_win
         .get(st.seg_i)
@@ -2395,6 +2403,8 @@ fn risk_fight(
     t2.rollouts = 0;
     let mut g = crate::rng::GameRng::from_u32(rng.next_u64() as u32);
     let out = fight(dex, &mut me, &t2, &foes, a.ai, a.heals, a.wild, &mut g);
+    // A berry eaten in either lane is gone.
+    st.persim &= me.persim;
     st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
     healed |= out.heals_used > 0;
     if pay {
@@ -3010,6 +3020,7 @@ pub fn attempt(
         mewtwo_evs: [0; 6],
         mewtwo_evs_real: [0; 6],
         glasses: false,
+        persim: false,
         ice: false,
         leftovers: false,
         itemfinder: false,
@@ -3877,12 +3888,17 @@ pub fn attempt(
                 bump(&mut st, x);
             }
             match seg.name.as_str() {
-                "black-glasses-swap" => st.glasses = true,
+                "black-glasses-swap" => {
+                    st.glasses = true;
+                    st.persim = false;
+                }
                 // MODEL CHANGE `awakenings`: bought in the Cerulean mart menus of this segment
                 // (`CeruleanCity_Mart/scripts.inc:30`, 250 each `items.json`); the WR bag at Cerulean
                 // holds three (`video-analysis/stream-2026-11-14-main97.md`). No extra frames: the
                 // segment is the runner's measured potion/Persim menu time.
-                "persim-and-potions" if ctx.p.awakenings > 0 => {
+                "persim-and-potions" if ctx.p.awakenings > 0 || ctx.p.persim_held => {
+                    // MODEL CHANGE `persim_held`: the berry fetched in this segment is held from here on.
+                    st.persim = ctx.p.persim_held && ctx.p.persim && ctx.p.item_swaps;
                     let n = if ctx.p.money_model {
                         ctx.p.awakenings.min(st.money / 250)
                     } else {

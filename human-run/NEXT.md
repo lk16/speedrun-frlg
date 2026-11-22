@@ -1,6 +1,33 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
-## 2026-11-22 model honesty: later descents must use the new model (read first)
+## 2026-11-22 stand-in audit: descend from 1211 (read first)
+
+Journal `journal/2026-11-22-14-30-standin-audit.md` (per-fight table: sim rate, engine at real stats, emulator).
+**1210-standin-audit** (MODEL CHANGE: `persim_held`, Misty and Cerulean rival `risk_power` 1.0) WR+2m 210.6 h /
+WR 335.4 h; **1211-cerulean-potions** (plan response: 3 potions, heal below .35 at the Cerulean rival)
+**199.4 h / 323.5 h** (seed 7402 / 7401, R 1.6M). Descents start from 1211. Open, ranked:
+
+1. Exp economy: the sim's carry is 4-5 levels behind the played s11 run on the same route (L32/33/37 vs 36/38/42 at
+   Giovanni 1 / tower rival / Koga). The 2.565 window stands in for it (emulator 40/40 at s11 levels).
+2. Koga's Muk: engine 35% vs emulator 15/20 at identical stats; the 1.35 window stands in for an engine bug.
+3. The 0.773 Blaine/Sevii window is deadlier than the honest engine (-21 h at 1.0); refit windows under 1211.
+
+## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1131-honest-fheal
+
+| plan | what | WR+2m | WR | model |
+| --- | --- | --- | --- | --- |
+| 1127-fheal1 | 1122 + League heal_below bundle (bruno .65, champion .35, champion-2 .5, lance-2 0) | 79.3-80.2 | 103.4-104.5 | old (fitted League) |
+| 1130-honest-fheal | 1200 + the bundle | 125.3-126.0 | 166.3-169.9 | honest 1200 |
+| **1131-honest-fheal (CURRENT)** | **1202 + the bundle** | **152.0 (R 3.2M, seeds 7521/7522; -9.8 / -12.5 vs 1202)** | **241.8-243.7 (-18.4 / -20.3)** | **honest controller model** |
+
+* NEXT item 1 done: the League pass is finished (tail: lance-2 / champion-2 queues, pp floor, all per-fight
+  heal_below); 1120 and 1114 confirmed by undoing them on 1127 (R 3.2M two seeds both rungs + corners).
+* NEXT item 2: reset_table refit on 1131 (train 3M, eval 1.6M, seed 7611): WR+2m -0.4 h [-0.9, +0.1] n.s., WR table
+  unchanged by the best-iterate guard: not adopted, the table is at its optimum. `fit_post_evidence.py` /
+  `fit_lane.py --check` not re-run under the honest model (the honesty agent owns the stand-ins).
+* Pointer `plans/CURRENT-OPT` is the descent pointer (descend.py `--pointer CURRENT-OPT`).
+
+## 2026-11-22 model honesty: later descents must use the new model
 
 Journal `journal/2026-11-22-13-00-model-honesty.md`. The battle bridge and the controller's played run
 showed stand-ins and route steps the model got wrong. Fixed as labelled MODEL CHANGE keys (all default off
