@@ -405,9 +405,42 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
             mewtwo_now: sc.me.species == mewtwo,
         },
     );
-    // The real bag rations the heals (the sim leaves them unlimited outside the League).
+    // The real bag rations the heals (the sim leaves them unlimited outside the League), and the
+    // potion it holds is the one the policy can count on.
     tac.heal_stock = tac.heal_stock.min(heal_count(&sc.items));
+    if let (_, Some(id)) = heal_pick(&sc.items, sc.me.level, false) {
+        tac.heal = item_hp(id);
+    }
     tac
+}
+
+/// HP an item restores: Potion 20, Super Potion 50, Hyper Potion 200, Max Potion / Full Restore
+/// all (`decompiled/src/data/pokemon/item_effects.h`; the sim's `heal_amount` tiers).
+fn item_hp(id: u16) -> i32 {
+    match id {
+        ITEM_POTION => 20,
+        ITEM_SUPER_POTION => 50,
+        ITEM_HYPER_POTION => 200,
+        _ => 999,
+    }
+}
+
+/// The heal item the model means (`heal_amount`'s tier for this level, or a Full Restore), and the
+/// one the bag can pay: that tier, else the nearest other.
+fn heal_pick(items: &[(u16, u16)], level: u32, full: bool) -> (u16, Option<u16>) {
+    let want: [u16; 3] = if full {
+        [ITEM_FULL_RESTORE, ITEM_MAX_POTION, ITEM_HYPER_POTION]
+    } else {
+        match sim_battle::heal_amount(level, false) {
+            20 => [ITEM_POTION, ITEM_SUPER_POTION, ITEM_HYPER_POTION],
+            50 => [ITEM_SUPER_POTION, ITEM_HYPER_POTION, ITEM_POTION],
+            _ => [ITEM_HYPER_POTION, ITEM_SUPER_POTION, ITEM_POTION],
+        }
+    };
+    (
+        want[0],
+        want.iter().copied().find(|&id| count(items, id) > 0),
+    )
 }
 
 /// One frame-by-frame human mash whose key depends on the state: `key(emu)` is pressed, each
@@ -544,6 +577,9 @@ struct Ctl<'a, 'b> {
     throws: u32,
     rng: GameRng,
     armed: std::cell::Cell<bool>,
+    /// HP of both sides at the last action menu (fighter slot, HP, foe slot, foe HP), for the
+    /// turn-result note of the next line.
+    last: Option<(usize, i32, usize, i32)>,
 }
 
 impl Ctl<'_, '_> {
@@ -632,6 +668,7 @@ pub fn fight(
         throws: 0,
         rng: GameRng::from_u32(seed),
         armed: std::cell::Cell::new(false),
+        last: None,
     };
     if trainer {
         let id = c.ram.trainer_id(f.emu());
@@ -879,20 +916,37 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
             .map(|i| sc.me.pp[i]),
         _ => None,
     };
+    // What the last turn did, as the human saw it: HP lost on both sides (same mons only).
+    let (dealt, took) = match c.last {
+        Some((ms, mh, fs_, fh)) => (
+            (fs_ == sc.foe.slot).then_some(fh - sc.foe.hp),
+            (ms == sc.active).then_some(mh - sc.me.hp),
+        ),
+        None => (None, None),
+    };
+    c.last = Some((sc.active, sc.me.hp, sc.foe.slot, sc.foe.hp));
+    let st = |m: &Mon| match m.status {
+        Status1::None => String::new(),
+        s => format!(" [{s:?}]"),
+    };
     log.push(
         f.frame(),
         "battle",
         format!(
-            "turn {}: {what} vs {} {}/{} (danger {}{}, win {:.0}%)",
+            "turn {}: {what}{} vs {} {}/{}{} (danger {}{}, win {:.0}%)",
             c.turns,
+            st(&sc.me),
             species_name(dex, sc.foe.species),
             sc.foe.hp,
             sc.foe.max_hp,
+            st(&sc.foe),
             d.read.danger,
             if d.read.sure_kill { ", sure kill" } else { "" },
             win * 100.0
         ),
         json!({
+            "dealt_last": dealt, "took_last": took,
+            "my_status": format!("{:?}", sc.me.status), "enemy_status": format!("{:?}", sc.foe.status),
             "turn": c.turns, "action": what, "policy": format!("{:?}", d.action),
             "enemy": species_name(dex, sc.foe.species), "enemy_hp": sc.foe.hp, "enemy_max_hp": sc.foe.max_hp,
             "my_hp": sc.me.hp, "my_max_hp": sc.me.max_hp, "pp_left": mv_pp,
@@ -949,23 +1003,15 @@ fn execute(
             Ok(a)
         }
         Action::Heal | Action::FullRestore => {
-            let want = if a == Action::FullRestore {
-                vec![ITEM_FULL_RESTORE, ITEM_MAX_POTION, ITEM_HYPER_POTION]
-            } else {
-                match sim_battle::heal_amount(sc.me.level, false) {
-                    20 => vec![ITEM_POTION, ITEM_SUPER_POTION, ITEM_HYPER_POTION],
-                    50 => vec![ITEM_SUPER_POTION, ITEM_HYPER_POTION, ITEM_POTION],
-                    _ => vec![ITEM_HYPER_POTION, ITEM_SUPER_POTION, ITEM_POTION],
-                }
-            };
-            match want.iter().find(|&&id| count(&sc.items, id) > 0) {
-                Some(&id) => {
-                    if id != want[0] {
+            let (model, pick) = heal_pick(&sc.items, sc.me.level, a == Action::FullRestore);
+            match pick {
+                Some(id) => {
+                    if id != model {
                         log.push(
                             f.frame(),
                             "model-vs-actual",
-                            format!("heal: item {} instead of {} (bag)", id, want[0]),
-                            json!({"item": id, "model": want[0]}),
+                            format!("heal: item {id} instead of {model} (bag)"),
+                            json!({"item": id, "model": model}),
                         );
                     }
                     use_item(f, c, sc, battle_ram::POCKET_ITEMS, id, true)?;
@@ -1095,7 +1141,8 @@ fn use_item(
         f.wait_until("the party menu for the item", 600, |e| {
             obs.task_active(e, "Task_HandleChooseMonInput")
         })?;
-        party_nav(f, c, sc.active as i8)?;
+        let slot = c.ram.menu_slot_of(f.emu(), sc.active);
+        party_nav(f, c, slot as i8)?;
         press_until(f, "the item used", keys::A, 4, 30, |e| {
             !obs.task_active(e, "Task_HandleChooseMonInput")
         })?;
@@ -1127,8 +1174,8 @@ fn party_nav(f: &mut HumanFeed, c: &Ctl, slot: i8) -> Result<(), RouteError> {
     })
 }
 
-/// POKEMON, the slot, A, SHIFT.
-fn switch_to(f: &mut HumanFeed, c: &Ctl, slot: usize) -> Result<(), RouteError> {
+/// POKEMON, the mon at field party index `field`, A, SHIFT.
+fn switch_to(f: &mut HumanFeed, c: &Ctl, field: usize) -> Result<(), RouteError> {
     let obs = c.obs;
     nav_2x2(f, "action cursor on POKEMON", 2, |e| {
         obs.action_cursor(e, 0)
@@ -1136,11 +1183,12 @@ fn switch_to(f: &mut HumanFeed, c: &Ctl, slot: usize) -> Result<(), RouteError> 
     press_until(f, "the party menu", keys::A, 4, 120, |e| {
         obs.task_active(e, "Task_HandleChooseMonInput")
     })?;
+    let slot = c.ram.menu_slot_of(f.emu(), field);
     pick_party(f, c, slot)
 }
 
-/// In the party menu: steer to `slot`, A, then A on the first entry of the selection menu
-/// (SHIFT / SEND OUT; `party_menu.c` `Task_HandleSelectionMenuInput`).
+/// In the party menu: steer to menu `slot` (battle order), A, then A on the first entry of the
+/// selection menu (SHIFT / SEND OUT; `party_menu.c` `Task_HandleSelectionMenuInput`).
 fn pick_party(f: &mut HumanFeed, c: &Ctl, slot: usize) -> Result<(), RouteError> {
     let obs = c.obs;
     party_nav(f, c, slot as i8)?;
@@ -1262,8 +1310,10 @@ fn wild_turn(
 /// wins; a lost lead is a model-vs-actual), or the SHIFT-style prompt (cancelled).
 fn party_choice(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteError> {
     let dex = c.dex;
+    // The menu is open: `gPlayerParty` is in battle order, the mon on the field at its slot.
     let party = c.ram.player_party(f.emu());
-    let active = c.ram.party_index(f.emu(), 0);
+    let field_active = c.ram.party_index(f.emu(), 0);
+    let active = c.ram.menu_slot_of(f.emu(), field_active);
     let active_alive = party.get(active).is_some_and(|m| m.hp > 0);
     if active_alive {
         // Not forced: SHIFT style's "Will you change?" answered YES by the mash. Back out.
