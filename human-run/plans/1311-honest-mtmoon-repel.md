@@ -1282,3 +1282,12 @@ the WR (`repel_on` + mt-moon-b1f, mt-moon-b2f). Journal `2026-11-22-12-00-optimi
  "evo_candy_frames": 1620
 }
 ```
+
+## Score (combined honest model of record; paired, child - parent, negative = child better)
+
+Mt. Moon Repels vs 1310 (seeds 7781/7782, R 3.2M): WR+2m **1326.1 / 1269.0 vs 3606.4 / 3336.7 (-2280 [-2824, -1881] /
+-2068 [-2570, -1714])**; WR 4171 / 4015 vs 15104 / 13200 (-10933 / -9184); corners (R 1.6M) lp1.0 -1579, lp1.4 -975,
+mp1.0 -4630, mp1.3 -2054, door .10 -4234: better everywhere. Model reference: 1310 vs 1444 (seeds 7781/7782) +1566 /
++1542 h WR+2m, +7626 / +7361 h WR (the honest shop stops and the WR-level League); 1444 itself is +1249 h on 1423.
+Fight-price sensitivity of the base (1309, seed 7771, R 1.6M): WR factor 0.904 / plan / 0.981 = 317 / 718 / 3396 h
+(WR+2m), 547 / 1666 / 13613 h (WR).
