@@ -125,6 +125,10 @@ pub struct Ctx<'a> {
     pub potion_hp: Vec<i32>,
     /// MODEL CHANGE `Params::ball_shop_from`: first segment where balls can be bought on demand.
     pub ball_shop_from: Option<usize>,
+    /// MODEL CHANGE `Params::potion_bag_from`: first segment of the finite potion bag.
+    pub potion_bag_from: Option<usize>,
+    /// MODEL CHANGE `Params::stone_shops`: first segment in the Celadon Department Store.
+    pub stone_shop_from: Option<usize>,
 }
 
 /// HP one potion use restores at segment `seg_i`: the level tier (`battle::heal_amount`: the human buys the tier the
@@ -377,6 +381,13 @@ struct State {
     pc_paid: u64,
     safari_new: u32,
     safari_done: bool,
+    /// MODEL CHANGE `Params::potion_bag_from`: potions in the bag.
+    potions: u32,
+    /// The segment of the last PC visit paid (`pc_visit`) and `catch_n` then (`strength_carrier`).
+    pc_seg: Option<usize>,
+    pc_catch_n: u16,
+    /// MODEL CHANGE `Params::carry_pp_ups`: PP Ups applied per carry slot (parallel to `slots`).
+    slot_bonus: Vec<i32>,
 }
 
 impl Ctx<'_> {
@@ -585,6 +596,52 @@ fn pc_visit(ctx: &Ctx, st: &mut State, dexes: &[u32], anchor: &str) {
         st.pc_paid = h;
         bump(st, ctx.p.pc_frames as f64 * ctx.p.text_factor);
     }
+    st.pc_seg = Some(st.seg_i);
+    st.pc_catch_n = st.catch_n;
+}
+
+/// MODEL CHANGE `Params::strength_carrier`: before Victory Road's boulders a party mon must know
+/// Strength (`decompiled/data/maps/VictoryRoad_1F/map.json` `EventScript_StrengthBoulder`; HM04 from the
+/// Warden). The carrier is the earliest-obtained living species outside the carry's line that learns HM04
+/// (`src/data/pokemon/tmhm_learnsets.h`): in the party (first six obtained) it costs nothing beyond the
+/// teach in `warden-strength`; in the box it is withdrawn at a Pokemon Center (`pc_frames`), unless a PC
+/// visit the plan already paid came after the Warden and after the carrier was obtained. With no carrier
+/// the carry itself learns it (a forced slot). Returns what was done, for traces and the controller.
+fn strength_carrier(ctx: &Ctx, st: &mut State) -> &'static str {
+    let mv = ctx.dex.move_id("MOVE_STRENGTH");
+    if st.slots.contains(&mv) {
+        return "carry";
+    }
+    let line: Vec<u32> = (1..=100)
+        .map(|l| ctx.dex.species[carry_species(ctx, l)].dex)
+        .collect();
+    let best = (1..=151u32)
+        .filter(|&d| st.bodies[d as usize] > 0 && !line.contains(&d))
+        .filter(|&d| {
+            ctx.dex
+                .species
+                .iter()
+                .position(|sp| sp.dex == d)
+                .is_some_and(|id| can_learn(ctx, id, mv))
+        })
+        .min_by_key(|&d| st.catch_seq[d as usize]);
+    let Some(d) = best else {
+        offer_move(ctx, st, mv, true);
+        return "carry-forced";
+    };
+    let seq = st.catch_seq[d as usize];
+    if seq <= 6 {
+        return "party";
+    }
+    let warden = ctx.segs.iter().position(|s| s.name == "warden-strength");
+    let rode = st.pc_seg.is_some_and(|p| warden.is_some_and(|w| p > w)) && st.pc_catch_n >= seq;
+    if rode {
+        return "box-rode";
+    }
+    bump(st, ctx.p.pc_frames as f64 * ctx.p.text_factor);
+    st.pc_seg = Some(st.seg_i);
+    st.pc_catch_n = st.catch_n;
+    "box"
 }
 
 fn bump(st: &mut State, f: f64) {
@@ -657,14 +714,52 @@ fn offer_move(ctx: &Ctx, st: &mut State, mv: usize, forced: bool) {
     if st.slots.contains(&mv) {
         return;
     }
+    st.slot_bonus.resize(st.slots.len(), 0);
     if st.slots.len() < 4 {
         st.slots.push(mv);
         st.slot_pp.push(ctx.dex.moves[mv].pp as i32);
+        st.slot_bonus.push(0);
+        apply_carry_pp_ups(ctx, st);
         return;
     }
     if let Some(worst_i) = replace_slot(ctx, carry_species(ctx, st.carry), &st.slots, mv, forced) {
         st.slots[worst_i] = mv;
         st.slot_pp[worst_i] = ctx.dex.moves[mv].pp as i32;
+        st.slot_bonus[worst_i] = 0;
+        apply_carry_pp_ups(ctx, st);
+    }
+}
+
+/// Max PP of carry slot `k` with its PP Ups (`decompiled/src/pokemon.c` `CalculatePPWithBonus`:
+/// base + base * 20 * ups / 100).
+fn carry_full_pp(ctx: &Ctx, st: &State, k: usize) -> i32 {
+    let base = ctx.dex.moves[st.slots[k]].pp as i32;
+    let ups = st.slot_bonus.get(k).copied().unwrap_or(0);
+    base + base * 20 * ups / 100
+}
+
+/// MODEL CHANGE `Params::carry_pp_ups`: the PP Ups in the bag go to the carry's listed moves, in the
+/// plan's order, at most 3 per move (`pokemon.c` `PP_UP_SHIFTS`); a PP Up also adds the PP it grants.
+/// Those not usable yet (the move not known) stay in the bag. 350 frames each (bag, party, move).
+fn apply_carry_pp_ups(ctx: &Ctx, st: &mut State) {
+    if ctx.p.carry_pp_ups.is_empty() {
+        return;
+    }
+    st.slot_bonus.resize(st.slots.len(), 0);
+    while st.pp_ups > 0 {
+        let slot = ctx.p.carry_pp_ups.iter().find_map(|n| {
+            let m = ctx.dex.move_id(n);
+            st.slots
+                .iter()
+                .position(|&x| x == m)
+                .filter(|&k| st.slot_bonus[k] < 3)
+        });
+        let Some(k) = slot else { break };
+        let before = carry_full_pp(ctx, st, k);
+        st.slot_bonus[k] += 1;
+        st.slot_pp[k] += carry_full_pp(ctx, st, k) - before;
+        st.pp_ups -= 1;
+        bump(st, 350.0 * ctx.p.text_factor);
     }
 }
 
@@ -1898,11 +1993,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         } else if st.max_elixirs > reserve {
             st.max_elixirs -= 1;
             bump(st, 500.0 * ctx.p.text_factor);
-            for (k, &m) in pp_moves.iter().enumerate() {
+            for k in 0..pp_moves.len() {
                 if mw_pp {
                     st.mewtwo_pp[k] = mewtwo_full_pp(ctx, st, k);
                 } else {
-                    st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
+                    st.slot_pp[k] = carry_full_pp(ctx, st, k);
                 }
             }
         } else if st.elixirs
@@ -1914,11 +2009,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         {
             st.elixirs -= 1;
             bump(st, 500.0 * ctx.p.text_factor);
-            for (k, &m) in pp_moves.iter().enumerate() {
+            for k in 0..pp_moves.len() {
                 let full = if mw_pp {
                     mewtwo_full_pp(ctx, st, k)
                 } else {
-                    ctx.dex.moves[m].pp as i32
+                    carry_full_pp(ctx, st, k)
                 };
                 let v = if mw_pp {
                     &mut st.mewtwo_pp[k]
@@ -2257,8 +2352,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         st.hp_frac = 1.0;
         st.carry_status = Status1::None;
         // A whiteout lands at a Pokémon Center: PP comes back too.
-        for (k, &m) in st.slots.clone().iter().enumerate() {
-            st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
+        for k in 0..st.slots.len() {
+            st.slot_pp[k] = carry_full_pp(ctx, st, k);
         }
         restore_mewtwo_pp(ctx, st);
         tries += 1;
@@ -2391,12 +2486,13 @@ fn risk_fight(
     // Potions are paid for (Potion 300, Super Potion 700, Hyper Potion 1200 at the heal tier of the level:
     // `items.json`) out of the purse and each use is a bag turn: no free lunch in healing.
     let per = potion_hp(ctx, st.seg_i, st.carry, st.league_items);
-    let price = match per {
-        20 => 300,
-        50 => 700,
-        _ => 1200,
-    };
-    let pay = ctx.p.risk_pay && ctx.p.money_model;
+    let price = potion_price(per);
+    // MODEL CHANGE `potion_bag_from`: from there on the potions come out of the bag (paid at the stop).
+    let bag = ctx.potion_bag_from.is_some_and(|f| st.seg_i >= f);
+    let pay = ctx.p.risk_pay && ctx.p.money_model && !bag;
+    if bag {
+        potions = potions.min(st.potions);
+    }
     if pay {
         potions = potions.min(st.money / price);
     }
@@ -2411,6 +2507,10 @@ fn risk_fight(
             let uses = (((lo - cur + per - 1) / per).max(1) as u32).min(potions);
             potions -= uses;
             healed = true;
+            if bag {
+                st.potions -= uses;
+                bump(st, uses as f64 * ctx.turn());
+            }
             if pay {
                 st.money -= uses * price;
                 bump(st, uses as f64 * ctx.turn());
@@ -2429,6 +2529,11 @@ fn risk_fight(
     st.persim &= me.persim;
     st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
     healed |= out.heals_used > 0;
+    if bag {
+        let n = out.heals_used.min(potions);
+        st.potions -= n;
+        bump(st, n as f64 * ctx.turn());
+    }
     if pay {
         let n = out.heals_used.min(potions);
         st.money -= n * price;
@@ -2449,6 +2554,16 @@ fn risk_fight(
         }
     }
     (lost, healed)
+}
+
+/// Mart price of the potion that heals `per` HP (`items.json`: Potion 300, Super Potion 700, Hyper
+/// Potion 1200).
+fn potion_price(per: i32) -> u32 {
+    match per {
+        20 => 300,
+        50 => 700,
+        _ => 1200,
+    }
 }
 
 /// Field poison (`field_control_avatar.c:710-733`, `field_poison.c:92-119`: 1 HP per 5 steps, a
@@ -2643,6 +2758,12 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
             if let Some(ix) = have {
                 st.stones[ix] -= 1;
             } else if !evo.buy {
+                return;
+            } else if !ctx.p.stone_shops.is_empty()
+                && (evo.item.eq_ignore_ascii_case("MOON")
+                    || ctx.stone_shop_from.is_none_or(|f| st.seg_i < f))
+            {
+                // MODEL CHANGE `stone_shops`: no Celadon 4F visit yet, or a stone no mart sells.
                 return;
             } else {
                 let price = item
@@ -3094,6 +3215,10 @@ pub fn attempt(
         max_elixirs: 0,
         revives: 0,
         candies: 0,
+        potions: 0,
+        pc_seg: None,
+        pc_catch_n: 0,
+        slot_bonus: vec![],
     };
     let manip = ctx.p.starter_model == "manip";
     let mut draw = crate::manip::AttemptDraw::default();
@@ -3170,6 +3295,12 @@ pub fn attempt(
             }
             if seg.name == "indigo-heal" || seg.name == "league-entry" {
                 st.league_t0 = st.clock;
+            }
+            if ctx.p.strength_carrier && seg.name == "victory-road" {
+                let how = strength_carrier(ctx, &mut st);
+                if std::env::var_os("FRLG_SIM_TRACE").is_some() {
+                    eprintln!("strength-carrier {how}");
+                }
             }
             // The Torrent phase walks past the Pokémon Centers it would have stopped at.
             let skip_heal = seg.name.starts_with("center-heal@")
@@ -3598,6 +3729,33 @@ pub fn attempt(
                 Kind::Evolve { evo } => {
                     evolve(ctx, &mut st, &mut rng, evo, seg);
                 }
+                Kind::Mart { mart } if mart.topup => {
+                    // MODEL CHANGE `Mart::topup`: top the bag up to the stop's targets; the visit is paid
+                    // only when something is bought.
+                    let mut bought = false;
+                    for (t, want) in [(0, mart.poke), (1, mart.great), (2, mart.ultra)] {
+                        let qty = want
+                            .saturating_sub(st.balls[t])
+                            .min(st.money / BALL_PRICE[t]);
+                        st.money -= qty * BALL_PRICE[t];
+                        st.balls[t] += qty;
+                        bought |= qty > 0;
+                    }
+                    if ctx.potion_bag_from.is_some() {
+                        let price = potion_price(potion_hp(ctx, i, st.carry, false));
+                        let qty = mart
+                            .potions
+                            .saturating_sub(st.potions)
+                            .min(st.money / price);
+                        st.money -= qty * price;
+                        st.potions += qty;
+                        bought |= qty > 0;
+                    }
+                    if bought {
+                        bump(&mut st, MART as f64 * ctx.p.text_factor);
+                        bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
+                    }
+                }
                 Kind::Mart { mart } => {
                     bump(&mut st, MART as f64 * ctx.p.text_factor);
                     bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
@@ -3667,7 +3825,15 @@ pub fn attempt(
                     } else {
                         carry_species(ctx, st.carry)
                     };
-                    let affordable = !ctx.p.money_model || st.money >= teach.cost;
+                    // MODEL CHANGE `Teach::prize` with `coin_case_frames`: a Game Corner TM is paid in coins
+                    // bought in whole purchases, and needs the Coin Case.
+                    let prize = teach.prize && ctx.p.coin_case_frames > 0;
+                    let cost = if prize {
+                        buy_cost(ctx, teach.cost)
+                    } else {
+                        teach.cost
+                    };
+                    let affordable = !ctx.p.money_model || st.money >= cost;
                     let is_hm = matches!(
                         ctx.dex.moves[mv].name.as_str(),
                         "MOVE_CUT"
@@ -3684,7 +3850,11 @@ pub fn attempt(
                         && (is_hm || !st.taught_once.contains(&mv));
                     if affordable && possible {
                         if ctx.p.money_model {
-                            st.money -= teach.cost;
+                            st.money -= cost;
+                        }
+                        if prize && !st.coin_case {
+                            st.coin_case = true;
+                            bump(&mut st, ctx.p.coin_case_frames as f64 * ctx.p.text_factor);
                         }
                         if !is_hm {
                             st.taught_once.push(mv);
@@ -3753,6 +3923,7 @@ pub fn attempt(
                         "leftovers" if !st.itemfinder => {}
                         "ppup" | "ppmax" => {
                             st.pp_ups += if pickup.kind == "ppmax" { 3 } else { 1 };
+                            apply_carry_pp_ups(ctx, &mut st);
                             let f = apply_pp_ups(ctx, &mut st);
                             bump(&mut st, f);
                         }
@@ -4025,8 +4196,8 @@ pub fn attempt(
                 st.fodder = if st.carry >= 20 { 5 } else { 2 };
                 st.hp_frac = 1.0;
                 st.carry_status = Status1::None;
-                for (k, &m) in st.slots.clone().iter().enumerate() {
-                    st.slot_pp[k] = ctx.dex.moves[m].pp as i32;
+                for k in 0..st.slots.len() {
+                    st.slot_pp[k] = carry_full_pp(ctx, &st, k);
                 }
                 restore_mewtwo_pp(ctx, &mut st);
             }
