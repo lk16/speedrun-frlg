@@ -49,7 +49,9 @@ fn usage() -> ! {
          \x20 report  <plan> --rung <r> [--R n]                 per-segment mean, spread, resets, time by source\n\
          \x20 starter-phase <plan> [--R n]                     manip starter phase: attempts and wall time to a good starter\n\
          \x20 dist    <plan> [--R n]                            run-time distribution with no resets\n\
-         \x20 starter [--min n]                                 level-5 stat-total distribution of a Squirtle"
+         \x20 starter [--min n]                                 level-5 stat-total distribution of a Squirtle\n\
+         \x20{}",
+        frlg_human::play::cli::usage()
     );
     std::process::exit(2)
 }
@@ -58,6 +60,9 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let seed: u64 = arg(&args, "--seed", 1);
     match args.first().map(String::as_str) {
+        Some(c @ ("play" | "play-verify" | "play-inspect")) => {
+            frlg_human::play::cli::main(c, &args, dex());
+        }
         Some("ladder") => {
             let plan = load(&args[1]);
             let ctx = plan.ctx();

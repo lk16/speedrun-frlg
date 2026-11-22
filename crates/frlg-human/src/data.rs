@@ -553,6 +553,11 @@ impl Dex {
         dex
     }
 
+    /// [`Dex::move_id`] without the panic.
+    pub fn move_index(&self, name: &str) -> Option<&usize> {
+        self.move_by_name.get(name)
+    }
+
     pub fn move_id(&self, name: &str) -> usize {
         *self
             .move_by_name
