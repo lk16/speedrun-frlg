@@ -3911,6 +3911,12 @@ pub fn outlook(
     )
 }
 
+/// The trainer's next mon after `fainted` went down, as the model predicts it ([`most_suitable`]):
+/// an index into `bench` (party order). The playing controller checks it against the game.
+pub fn predict_next(dex: &Dex, me: &Mon, fainted: &Mon, fs: &Fs, bench: &[Mon]) -> usize {
+    most_suitable(dex, me, fainted, fs.last_move, &fs.my_side, bench)
+}
+
 /// Weakening a wild mon before a throw. The simulator abstracts it (`Params::weaken`: one or two
 /// turns that leave `weaken_hp` of the HP, `weaken_ko` risk); the playing controller needs a move:
 /// the best expected damage ([`player_score`]) among the moves whose max roll leaves the foe at
