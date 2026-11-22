@@ -29,7 +29,7 @@ pub type MapId = (u8, u8);
 
 /// Water behaviors a surfer can cross (`decompiled/include/constants/metatile_behaviors.h`
 /// 0x10-0x22 water group; the set `bin/frlg-mapgraph` uses).
-const MB_WATER: [u16; 9] = [0x10, 0x11, 0x12, 0x13, 0x15, 0x19, 0x1A, 0x1B, 0x22];
+pub const MB_WATER: [u16; 9] = [0x10, 0x11, 0x12, 0x13, 0x15, 0x19, 0x1A, 0x1B, 0x22];
 /// Warp tiles are enterable despite their collision bit: `MB_CAVE_DOOR` 0x60 .. 0x6F except
 /// `MB_LAVARIDGE_1F_WARP` 0x68 (`metatile_behaviors.h`).
 fn spin_dir(b: u16) -> Option<(i16, i16)> {
@@ -42,7 +42,7 @@ fn spin_dir(b: u16) -> Option<(i16, i16)> {
     }
 }
 
-fn is_warp_tile(b: u16) -> bool {
+pub fn is_warp_tile(b: u16) -> bool {
     (0x60..0x70).contains(&b) && b != 0x68
 }
 /// `MB_EAST/WEST/NORTH/SOUTH_ARROW_WARP` 0x62-0x65: the warp fires when the player presses the
@@ -60,7 +60,7 @@ fn arrow_dir(b: u16) -> Option<u16> {
     }
 }
 /// Ledges (`MB_JUMP_EAST` .. `MB_JUMP_SOUTH`, 0x38-0x3B): hop direction.
-fn ledge(b: u16) -> Option<(i16, i16)> {
+pub fn ledge(b: u16) -> Option<(i16, i16)> {
     match b {
         0x38 => Some((1, 0)),
         0x39 => Some((-1, 0)),
@@ -131,6 +131,13 @@ impl MapInfo {
             return None;
         }
         Some(self.tiles[(x + y * self.w) as usize])
+    }
+
+    pub fn set_collision(&mut self, x: i16, y: i16, blocked: bool) {
+        if x >= 0 && y >= 0 && x < self.w && y < self.h {
+            let w = self.w;
+            self.tiles[(x + y * w) as usize].collision = u8::from(blocked);
+        }
     }
 }
 
@@ -310,6 +317,8 @@ struct View {
     temp_block: HashSet<Node>,
     /// The current map as the game holds it now (collision patched from `VMap`).
     cur_live: Option<MapInfo>,
+    /// Where the player stands and its `currentElevation`.
+    player: Option<(Node, u8)>,
 }
 
 /// Cost of one step and the human's tie-breakers, in hundredths of a step.
@@ -474,7 +483,19 @@ impl Graph {
         let mut dist: HashMap<St, u32> = HashMap::new();
         let mut prev: HashMap<St, (St, Move)> = HashMap::new();
         let mut q = BinaryHeap::new();
-        let s0: St = (start, 4, view.surfing);
+        // The dir field also carries the player's elevation in its high nibble
+        // (`ObjectEventUpdateElevation` / `IsElevationMismatchAt`, `decompiled/src/event_object_movement.c`):
+        // moving onto a tile of another elevation (not 0, not 15) is blocked on foot.
+        let z0 = self
+            .maps
+            .get(&start.0)
+            .and_then(|m| m.tile(start.1, start.2))
+            .map_or(0, |t| if t.elevation == 15 { 0 } else { t.elevation });
+        let z0 = match view.player {
+            Some((n, z)) if n == start && z % 15 != 0 => z,
+            _ => z0,
+        };
+        let s0: St = (start, 4 | (z0 << 4), view.surfing);
         dist.insert(s0, 0);
         q.push(Reverse((0u32, s0)));
         let dirs = [
@@ -489,7 +510,8 @@ impl Graph {
             if dist.get(&st).is_some_and(|&b| b < d) {
                 continue;
             }
-            let (node, ld, surfing) = st;
+            let (node, ldz, surfing) = st;
+            let (ld, z) = (ldz & 0xF, ldz >> 4);
             if goal(&node) {
                 found = Some(st);
                 break;
@@ -542,17 +564,34 @@ impl Graph {
             {
                 if let Some(dmap) = self.maps.get(&dm) {
                     if let Some(&(dx, dy, _, _)) = dmap.warps.get(wid) {
+                        let wz = dmap.tile(dx, dy).map_or(0, |t| {
+                            if t.elevation == 15 {
+                                0
+                            } else {
+                                t.elevation
+                            }
+                        });
                         push(
                             &mut q,
                             &mut dist,
                             &mut prev,
-                            ((dm, dx, dy), 4, false),
+                            ((dm, dx, dy), 4 | (wz << 4), false),
                             STEP,
                             Move::Warp,
                         );
                     }
                 }
             }
+            let here_e = m.tile(x, y).map_or(0, |t| t.elevation);
+            // Elevation after stepping onto a tile of elevation `e` (unchanged across 15).
+            let nz = |e: u8| -> u8 {
+                if e == 15 || here_e == 15 {
+                    z
+                } else {
+                    e
+                }
+            };
+            let mismatch = |e: u8| z != 0 && e != 0 && e != 15 && e != z;
             for (di, &(key, dx, dy)) in dirs.iter().enumerate() {
                 let turn = if ld != 4 && ld as usize != di {
                     TURN
@@ -580,11 +619,12 @@ impl Graph {
                             _ => (0, y - off),
                         };
                         if let Some(w) = self.passable(o, tx, ty, surfing) {
+                            let e = o.tile(tx, ty).map_or(0, |t| t.elevation);
                             push(
                                 &mut q,
                                 &mut dist,
                                 &mut prev,
-                                ((*om, tx, ty), di as u8, w),
+                                ((*om, tx, ty), di as u8 | (nz(e) << 4), w),
                                 STEP + turn,
                                 Move::Step(key),
                             );
@@ -628,7 +668,7 @@ impl Graph {
                             &mut q,
                             &mut dist,
                             &mut prev,
-                            ((mid, cx, cy), di as u8, false),
+                            ((mid, cx, cy), di as u8 | (z << 4), false),
                             STEP * (1 + n as u32 / 2) + turn,
                             Move::Step(key),
                         );
@@ -641,11 +681,12 @@ impl Graph {
                         if self.passable(m, lx, ly, false) == Some(false)
                             && !blk.contains(&(lx, ly))
                         {
+                            let e = m.tile(lx, ly).map_or(0, |t| t.elevation);
                             push(
                                 &mut q,
                                 &mut dist,
                                 &mut prev,
-                                ((mid, lx, ly), di as u8, false),
+                                ((mid, lx, ly), di as u8 | (nz(e) << 4), false),
                                 2 * STEP + turn,
                                 Move::Step(key),
                             );
@@ -654,12 +695,12 @@ impl Graph {
                     continue;
                 }
                 if trees.contains(&(nx, ny)) {
-                    if opts.cut && !surfing {
+                    if opts.cut && !surfing && !mismatch(t.elevation) {
                         push(
                             &mut q,
                             &mut dist,
                             &mut prev,
-                            ((mid, nx, ny), di as u8, false),
+                            ((mid, nx, ny), di as u8 | (nz(t.elevation) << 4), false),
                             STEP + CUT_COST + turn,
                             Move::Cut(key),
                         );
@@ -675,6 +716,19 @@ impl Graph {
                     .or(opened.then_some(false))
                 else {
                     continue;
+                };
+                // On foot onto land: the elevation has to match. Surfing onto land is a dismount
+                // (`COLLISION_ELEVATION_MISMATCH` -> `COLLISION_STOP_SURFING`,
+                // `decompiled/src/field_player_avatar.c`), and Surf starts from any shore.
+                if !surfing && !water && !opened && mismatch(t.elevation) {
+                    continue;
+                }
+                let new_z = if water {
+                    0
+                } else if surfing {
+                    t.elevation % 15
+                } else {
+                    nz(t.elevation)
                 };
                 let mut cost = STEP + turn;
                 if t.land {
@@ -693,7 +747,7 @@ impl Graph {
                     &mut q,
                     &mut dist,
                     &mut prev,
-                    ((mid, nx, ny), di as u8, water),
+                    ((mid, nx, ny), di as u8 | (new_z << 4), water),
                     cost,
                     mv,
                 );
@@ -769,6 +823,12 @@ fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
         flags,
         temp_block: temp_block.clone(),
         cur_live: live_map(s, cur_map),
+        player: here(s).map(|n| {
+            (
+                n,
+                super::ram::Ram::new(&s.obs).player_elevation(s.hf.rec.emu()),
+            )
+        }),
     }
 }
 
@@ -776,7 +836,7 @@ fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
 /// VMap.Xsize * (y + 7)]`, collision in bits 10-11 (`decompiled/src/fieldmap.c:17,57-59,107-124`,
 /// `struct BackupMapLayout` in `include/global.fieldmap.h:103-108`). Scripts' `setmetatile`
 /// (gym beams, opened doors) write there, so this sees barriers the layout file does not.
-fn live_map(s: &mut Session, cur: MapId) -> Option<MapInfo> {
+pub fn live_map(s: &mut Session, cur: MapId) -> Option<MapInfo> {
     let g = s.graph();
     let mut m = g.maps.get(&cur)?.clone();
     let vmap = s.sym("VMap");
@@ -792,7 +852,9 @@ fn live_map(s: &mut Session, cur: MapId) -> Option<MapInfo> {
         let bytes = emu.read_bytes(a, row);
         for x in 0..m.w {
             let v = u16::from_le_bytes([bytes[x as usize * 2], bytes[x as usize * 2 + 1]]);
-            m.tiles[(x + y * m.w) as usize].collision = ((v >> 10) & 3) as u8;
+            let tile = &mut m.tiles[(x + y * m.w) as usize];
+            tile.collision = ((v >> 10) & 3) as u8;
+            tile.elevation = (v >> 12) as u8;
         }
     }
     Some(m)

@@ -218,6 +218,15 @@ impl<'a> Ram<'a> {
             .collect()
     }
 
+    /// The player object's `currentElevation` (low nibble of byte 0x0B of `struct ObjectEvent`,
+    /// `decompiled/include/global.fieldmap.h`; the player has local id `OBJ_EVENT_ID_PLAYER` 0xFF).
+    pub fn player_elevation(&self, emu: &mut Emu) -> u8 {
+        (0..OBJ_COUNT)
+            .map(|i| self.g_object_events + i * OBJ_SIZE)
+            .find(|&b| emu.read32(b) & 1 != 0 && emu.read8(b + 0x08) == 0xFF)
+            .map_or(0, |b| emu.read8(b + 0x0B) & 0xF)
+    }
+
     /// Active non-player object events, in map coordinates.
     pub fn objects(&self, emu: &mut Emu) -> Vec<LiveObject> {
         (0..OBJ_COUNT)

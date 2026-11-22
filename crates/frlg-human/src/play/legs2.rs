@@ -1116,6 +1116,659 @@ fn giovanni(s: &mut Session) -> PResult<()> {
     dex_hook(s, "giovanni-badge")
 }
 
+/// The floor switches of the current map: the coord events whose script is a `FloorSwitch`
+/// (`VictoryRoad_*F/map.json`), each with the tiles its script opens (`setmetatile x, y, ..., 0`
+/// in that label of the map's `scripts.inc`, e.g. `VictoryRoad_1F/scripts.inc`
+/// `FloorSwitch`: the rock barrier at (12, 14..15)). A boulder pushed onto the switch runs it.
+type FloorSwitch = ((i16, i16), Vec<(i16, i16)>, String);
+type Barrier = (&'static str, Vec<(i16, i16)>, bool);
+
+fn floor_switches(map_name: &str) -> Vec<FloorSwitch> {
+    let root = std::env::var_os("FRLG_DECOMP_RO")
+        .or_else(|| std::env::var_os("FRLG_DECOMP"))
+        .map(std::path::PathBuf::from)
+        .expect("$FRLG_DECOMP");
+    let dir = root.join("data/maps").join(map_name);
+    let Ok(mj) = std::fs::read_to_string(dir.join("map.json")) else {
+        return vec![];
+    };
+    let Ok(j) = serde_json::from_str::<serde_json::Value>(&mj) else {
+        return vec![];
+    };
+    let scripts = std::fs::read_to_string(dir.join("scripts.inc")).unwrap_or_default();
+    let mut out = vec![];
+    for c in j["coord_events"].as_array().into_iter().flatten() {
+        let Some(sc) = c["script"].as_str().filter(|sc| sc.contains("FloorSwitch")) else {
+            continue;
+        };
+        let (Some(x), Some(y)) = (c["x"].as_i64(), c["y"].as_i64()) else {
+            continue;
+        };
+        let mut opens = vec![];
+        let mut var = String::new();
+        let mut inside = false;
+        for line in scripts.lines() {
+            let l = line.trim();
+            if l.ends_with("::") {
+                inside = l.trim_end_matches("::") == sc;
+                continue;
+            }
+            if !inside {
+                continue;
+            }
+            if let Some(v) = l
+                .strip_prefix("setvar ")
+                .and_then(|r| r.strip_suffix(", 100"))
+            {
+                var = v.trim().to_string();
+            }
+            if let Some(args) = l.strip_prefix("setmetatile") {
+                let a: Vec<&str> = args.split(',').map(str::trim).collect();
+                if a.len() == 4 && a[3] == "0" {
+                    if let (Ok(tx), Ok(ty)) = (a[0].parse(), a[1].parse()) {
+                        opens.push((tx, ty));
+                    }
+                }
+            }
+        }
+        out.push(((x as i16, y as i16), opens, var));
+    }
+    out
+}
+
+/// One push of a Strength boulder: the player stands on `stand` and walks `dir`.
+#[derive(Clone, Copy, Debug)]
+struct Push {
+    stand: (i16, i16),
+    dir: (i16, i16),
+}
+
+/// Shortest (in player moves) sequence of pushes on the current map that puts a boulder on a
+/// floor switch whose barrier is still closed. Breadth-first over (player, boulders); a boulder
+/// moves one tile when the player walks into it and the tile behind it is free floor (no wall,
+/// water, ledge, warp, person or boulder); the player stays where he stood
+/// (`decompiled/src/field_player_avatar.c` `TryPushBoulder`).
+fn boulder_plan(
+    m: &super::walk::MapInfo,
+    start: (i16, i16),
+    boulders: Vec<(i16, i16)>,
+    people: &std::collections::HashSet<(i16, i16)>,
+    targets: &[(i16, i16)],
+    z_player: u8,
+) -> Option<Vec<Push>> {
+    use std::collections::{HashMap, VecDeque};
+    // Elevation rules of `ObjectEventUpdateElevation` / `IsElevationMismatchAt`
+    // (`decompiled/src/event_object_movement.c`): 0 and 15 never block, 15 keeps the old value.
+    let elev = |p: (i16, i16)| m.tile(p.0, p.1).map_or(0, |t| t.elevation);
+    let z0 = match z_player % 15 {
+        0 => elev(start) % 15,
+        z => z,
+    };
+    let mismatch = |z: u8, e: u8| z != 0 && e != 0 && e != 15 && e != z;
+    let new_z = |z: u8, from: (i16, i16), e: u8| {
+        if e == 15 || elev(from) == 15 {
+            z
+        } else {
+            e
+        }
+    };
+    // Plain floor a boulder can sit on or the player can walk on.
+    let floor = |x: i16, y: i16| -> bool {
+        m.tile(x, y).is_some_and(|t| {
+            t.collision == 0
+                && !super::walk::MB_WATER.contains(&t.behavior)
+                && super::walk::ledge(t.behavior).is_none()
+                && !super::walk::is_warp_tile(t.behavior)
+        }) && !people.contains(&(x, y))
+    };
+    // (player, player elevation, boulders)
+    type St = ((i16, i16), u8, Vec<(i16, i16)>);
+    let mut b0 = boulders;
+    b0.sort();
+    let s0: St = (start, z0, b0);
+    let mut prev: HashMap<St, Option<(St, Option<Push>)>> = HashMap::new();
+    prev.insert(s0.clone(), None);
+    let mut q = VecDeque::from([s0]);
+    let mut found: Option<St> = None;
+    while let Some(st) = q.pop_front() {
+        if st.2.iter().any(|b| targets.contains(b)) {
+            found = Some(st);
+            break;
+        }
+        if prev.len() > 400_000 {
+            break;
+        }
+        let (p, z, bs) = &st;
+        let (p, z) = (*p, *z);
+        for d in [(0i16, -1i16), (0, 1), (-1, 0), (1, 0)] {
+            let n = (p.0 + d.0, p.1 + d.1);
+            let next: St;
+            let mut push = None;
+            if let Some(k) = bs.iter().position(|&b| b == n) {
+                // A boulder is pushed from the same elevation only.
+                if mismatch(z, elev(n)) {
+                    continue;
+                }
+                let t = (n.0 + d.0, n.1 + d.1);
+                if !(floor(t.0, t.1) || targets.contains(&t)) || bs.contains(&t) {
+                    continue;
+                }
+                let mut nb = bs.clone();
+                nb[k] = t;
+                nb.sort();
+                next = (p, z, nb);
+                push = Some(Push { stand: p, dir: d });
+            } else if m
+                .tile(n.0, n.1)
+                .and_then(|t| super::walk::ledge(t.behavior))
+                == Some(d)
+            {
+                // A ledge in the walking direction: hop over it.
+                let l = (n.0 + d.0, n.1 + d.1);
+                if !floor(l.0, l.1) || bs.contains(&l) {
+                    continue;
+                }
+                let e = elev(l);
+                next = (l, if e % 15 == 0 { z } else { e }, bs.clone());
+            } else {
+                // The player may also stand on an arrow warp (it only fires when its arrow is
+                // pressed: `TryArrowWarp`), e.g. the Victory Road 1F entrance (11, 20).
+                let arrow = m
+                    .tile(n.0, n.1)
+                    .is_some_and(|t| (0x62..=0x65).contains(&t.behavior) && t.collision == 0);
+                if !(floor(n.0, n.1) || (arrow && !people.contains(&n))) {
+                    continue;
+                }
+                let e = elev(n);
+                if mismatch(z, e) {
+                    continue;
+                }
+                next = (n, new_z(z, p, e), bs.clone());
+            }
+            if prev.contains_key(&next) {
+                continue;
+            }
+            prev.insert(next.clone(), Some((st.clone(), push)));
+            q.push_back(next);
+        }
+    }
+    let mut cur = found?;
+    let mut pushes = vec![];
+    while let Some(Some((p, push))) = prev.get(&cur).cloned() {
+        if let Some(x) = push {
+            pushes.push(x);
+        }
+        cur = p;
+    }
+    pushes.reverse();
+    Some(pushes)
+}
+
+const VR: [&str; 3] = ["VictoryRoad_1F", "VictoryRoad_2F", "VictoryRoad_3F"];
+const VR_MAPS: [&str; 3] = [
+    "MAP_VICTORY_ROAD_1F",
+    "MAP_VICTORY_ROAD_2F",
+    "MAP_VICTORY_ROAD_3F",
+];
+
+/// Every Victory Road rock barrier with its state: (map, tiles, closed). A barrier is closed until
+/// its switch's var is 100 (`VictoryRoad_*F/scripts.inc` `OnLoad` / `SetRockBarrier*`).
+fn vr_barriers(s: &mut Session) -> Vec<Barrier> {
+    let mut out = vec![];
+    for (i, fl) in VR.iter().enumerate() {
+        for (_, opens, v) in floor_switches(fl) {
+            let closed = v.is_empty() || var(s, &v) != 100;
+            out.push((VR_MAPS[i], opens, closed));
+        }
+    }
+    out
+}
+
+/// Walk to `goal` through Victory Road, solving the floor-switch boulder puzzles
+/// (`VictoryRoad_1F/2F/3F/map.json`: `EventScript_StrengthBoulder` objects, `FloorSwitch` coord
+/// events): plan with the closed barriers shut; with no way, plan as if they were open, walk to the
+/// floor of the first closed barrier the path crosses, and push a boulder onto that barrier's
+/// switch (shortest push sequence, [`boulder_plan`]). Strength is switched on at the first push
+/// (`FLAG_SYS_USE_STRENGTH`; the boulder's script asks to use it, YES by default).
+fn strength_to(s: &mut Session, what: &str, goal: &dyn Fn(&Node) -> bool) -> PResult<()> {
+    for _ in 0..12 {
+        let bars = vr_barriers(s);
+        let mut shut = hm_opts();
+        let mut open = hm_opts();
+        for (m, tiles, closed) in &bars {
+            for &(x, y) in tiles {
+                shut.patch.push((m, x, y, *closed));
+                open.patch.push((m, x, y, false));
+            }
+        }
+        if plan_len(s, None, goal, &shut).is_some() {
+            return go_to(s, what, goal, &shut);
+        }
+        let cur = here(s).ok_or("no position")?;
+        let g = s.graph();
+        let nodes = super::walk::plan_nodes(s, cur, goal, &open).ok_or_else(|| {
+            PlayError::Fatal(format!("{what}: no way even with the barriers open"))
+        })?;
+        let closed_at = |n: &Node| {
+            bars.iter()
+                .any(|(m, tiles, closed)| *closed && g.id(m) == n.0 && tiles.contains(&(n.1, n.2)))
+        };
+        let Some(i) = nodes.iter().position(closed_at) else {
+            return go_to(s, what, goal, &open);
+        };
+        let bar_map = nodes[i].0;
+        if bar_map != cur.0 {
+            let j = nodes.iter().position(|n| n.0 == bar_map).unwrap_or(i);
+            let to = nodes[j];
+            go_to(
+                s,
+                "the next Victory Road floor",
+                &move |n: &Node| *n == to,
+                &shut,
+            )?;
+            continue;
+        }
+        let minfo = g.maps.get(&cur.0).cloned().ok_or("no map")?;
+        let mut m = super::walk::live_map(s, cur.0).unwrap_or_else(|| minfo.clone());
+        // The barriers as their switches left them (the live grid can lag a map load).
+        for (bm, tiles, closed) in vr_barriers(s) {
+            if s.graph().id(bm) == cur.0 {
+                for (x, y) in tiles {
+                    m.set_collision(x, y, closed);
+                }
+            }
+        }
+        let bar_tile = (nodes[i].1, nodes[i].2);
+        let targets: Vec<(i16, i16)> = floor_switches(&minfo.name)
+            .into_iter()
+            .filter(|(_, opens, _)| opens.contains(&bar_tile))
+            .map(|(sw, _, _)| sw)
+            .collect();
+        let live = Ram::new(&s.obs).objects(s.hf.rec.emu());
+        let is_boulder = |id: u8| {
+            minfo
+                .objects
+                .iter()
+                .any(|o| o.local_id == id && o.is_boulder())
+        };
+        // Objects only spawn near the camera: boulders not loaded now stand where the map puts
+        // them (unless their flag hides them).
+        let mut boulders: Vec<(i16, i16)> = live
+            .iter()
+            .filter(|o| is_boulder(o.local_id))
+            .map(|o| (o.x, o.y))
+            .collect();
+        for o in minfo.objects.iter().filter(|o| o.is_boulder()) {
+            let loaded = live.iter().any(|l| l.local_id == o.local_id);
+            let hidden = o.flag != 0 && s.obs.flag(s.hf.rec.emu(), o.flag).unwrap_or(false);
+            if !loaded && !hidden {
+                boulders.push((o.x, o.y));
+            }
+        }
+        let people: std::collections::HashSet<(i16, i16)> = live
+            .iter()
+            // The player's own object (local id 0xFF, `OBJ_EVENT_ID_PLAYER`) is not an obstacle.
+            .filter(|o| !is_boulder(o.local_id) && o.local_id != 0xFF)
+            .map(|o| (o.x, o.y))
+            .collect();
+        // One boulder moves, the others stay where they are: a search per boulder keeps the
+        // state space at (player, that boulder), and the shortest wins.
+        let zp = Ram::new(&s.obs).player_elevation(s.hf.rec.emu());
+        let mut best: Option<Vec<Push>> = None;
+        for (k, &b) in boulders.iter().enumerate() {
+            let mut fixed = people.clone();
+            for (j, &o) in boulders.iter().enumerate() {
+                if j != k {
+                    fixed.insert(o);
+                }
+            }
+            if let Some(p) = boulder_plan(&m, (cur.1, cur.2), vec![b], &fixed, &targets, zp) {
+                if best.as_ref().is_none_or(|bp| p.len() < bp.len()) {
+                    best = Some(p);
+                }
+            }
+        }
+        let Some(pushes) = best else {
+            // Victory Road 2F's second switch (14, 19) is fed from 3F: the boulder at 3F (33, 18)
+            // pushed into the hole (34, 18) (`MB_FALL_WARP`, a 3F warp to 2F) drops onto 2F and
+            // shows the hidden 2F boulder at (33, 19) (`FLAG_HIDE_VICTORY_ROAD_2F_BOULDER`, the
+            // link is in the 3F object's `trainer_type` field, `VictoryRoad_3F/map.json`).
+            if minfo.name == "VictoryRoad_2F" && flag(s, "FLAG_HIDE_VICTORY_ROAD_2F_BOULDER") {
+                vr_hole(s)?;
+                continue;
+            }
+            return Err(PlayError::Fatal(format!(
+                "{}: no boulder reaches the switch of the barrier at {bar_tile:?}",
+                minfo.name
+            )));
+        };
+        s.event(
+            "decision",
+            format!(
+                "{}: {} Strength pushes onto the floor switch {:?}",
+                minfo.name,
+                pushes.len(),
+                targets
+            ),
+            json!({"pushes": pushes.len(), "switches": targets}),
+        );
+        do_pushes(s, cur.0, &pushes)?;
+    }
+    Err(PlayError::Death(format!(
+        "soft-lock: 12 boulder rounds toward {what}"
+    )))
+}
+
+/// `leg_league_approach` "route22" (the plan's hunt there) and the late rival on the coord column
+/// x 33 of Route 22 (`Route22/map.json`, `LateRivalTrigger*`, `VAR_MAP_SCENE_ROUTE22` 3).
+fn route22(s: &mut Session) -> PResult<()> {
+    s.seg = "route22".into();
+    let _ = super::items::mount_bike(s)?;
+    let r22 = s.graph().id("MAP_ROUTE22");
+    go_to(
+        s,
+        "the Route 22 rival column",
+        &move |n: &Node| n.0 == r22 && n.1 == 33 && (4..=6).contains(&n.2),
+        &hm_opts(),
+    )?;
+    s.seg = "rival-route22".into();
+    settle(s)?;
+    dex_hook(s, "route22")
+}
+
+/// "route23", "badge-gates" (the guards' coord events only talk once the badges are in the bag:
+/// `Route23/map.json`), the plan's Route 23 hunt, "victory-road" with its boulder puzzles, out on
+/// Route 23's north part, Indigo Plateau -> "indigo-heal" and the split.
+fn victory_road(s: &mut Session) -> PResult<()> {
+    s.seg = "route23".into();
+    go_map(s, "MAP_ROUTE23", &hm_opts())?;
+    dex_hook(s, "route23")?;
+    s.seg = "victory-road".into();
+    go_map(s, "MAP_VICTORY_ROAD_1F", &hm_opts())?;
+    let plateau = s.graph().id("MAP_INDIGO_PLATEAU_EXTERIOR");
+    strength_to(s, "Indigo Plateau", &move |n: &Node| n.0 == plateau)?;
+    dex_hook(s, "victory-road")?;
+    dex_hook(s, "dex-fill")?;
+    s.seg = "indigo-heal".into();
+    center_heal(s, "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F")?;
+    split(s, "Victory Road", "indigo-heal")
+}
+
+/// One Elite Four room: walk in from the previous room (or the Indigo center's north door), face
+/// the member and talk; the battle; the door behind them opens (`PokemonLeague_*Room/scripts.inc`).
+/// Positions from `PokemonLeague_*Room/map.json`: Lorelei, Bruno, Agatha at (6, 5), Lance (6, 8).
+fn e4_member(
+    s: &mut Session,
+    map: &str,
+    who: &str,
+    x: i16,
+    y: i16,
+    flag_name: &str,
+) -> PResult<()> {
+    s.seg = format!("e4-transit-{who}");
+    go_face(s, map, x, y, &Opts::default())?;
+    s.seg = who.to_string();
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    if !flag(s, flag_name) {
+        return Err(PlayError::Fatal(format!("{who} not beaten")));
+    }
+    let t = s.timer().unwrap_or(0.0);
+    let p50 = s.model.p50(who);
+    s.event(
+        "split",
+        match p50 {
+            Some(p) => format!("{who}: {t:.0}s vs model p50 {p:.0}s ({:+.0}s)", t - p),
+            None => format!("{who}: {t:.0}s"),
+        },
+        json!({"actual": t, "p50": p50, "name": who, "seg": who}),
+    );
+    Ok(())
+}
+
+fn lorelei(s: &mut Session) -> PResult<()> {
+    e4_member(
+        s,
+        "MAP_POKEMON_LEAGUE_LORELEIS_ROOM",
+        "lorelei",
+        6,
+        5,
+        "FLAG_DEFEATED_LORELEI",
+    )
+}
+
+fn bruno(s: &mut Session) -> PResult<()> {
+    e4_member(
+        s,
+        "MAP_POKEMON_LEAGUE_BRUNOS_ROOM",
+        "bruno",
+        6,
+        5,
+        "FLAG_DEFEATED_BRUNO",
+    )
+}
+
+fn agatha(s: &mut Session) -> PResult<()> {
+    e4_member(
+        s,
+        "MAP_POKEMON_LEAGUE_AGATHAS_ROOM",
+        "agatha",
+        6,
+        5,
+        "FLAG_DEFEATED_AGATHA",
+    )
+}
+
+fn lance(s: &mut Session) -> PResult<()> {
+    e4_member(
+        s,
+        "MAP_POKEMON_LEAGUE_LANCES_ROOM",
+        "lance",
+        6,
+        8,
+        "FLAG_DEFEATED_LANCE",
+    )
+}
+
+/// "champion" and "hall-of-fame-1": the Champion's room runs its scene on entry
+/// (`PokemonLeague_ChampionsRoom/scripts.inc` `EnterRoom`: the rival walks up, the battle, Oak),
+/// then the Hall of Fame room's (`PokemonLeague_HallOfFame/scripts.inc` `EnterRoom`:
+/// `special EnterHallOfFame`). The split is the first frame of `CB2_DoHallOfFameScreen`
+/// (`decompiled/src/hall_of_fame.c:361`), the first Hall of Fame.
+fn champion(s: &mut Session) -> PResult<()> {
+    s.seg = "champion".into();
+    let room = s.graph().id("MAP_POKEMON_LEAGUE_CHAMPIONS_ROOM");
+    go_to(
+        s,
+        "the Champion's room",
+        &move |n: &Node| n.0 == room,
+        &Opts::default(),
+    )?;
+    let start = s.frame();
+    loop {
+        if s.obs.callback2_is(s.hf.rec.emu(), "CB2_DoHallOfFameScreen") {
+            break;
+        }
+        if s.frame() - start > 60_000 {
+            return Err(PlayError::Death(
+                "soft-lock: no Hall of Fame after the Champion".into(),
+            ));
+        }
+        if s.obs.in_battle(s.hf.rec.emu()) {
+            super::fallback_battle::battle(s)?;
+            continue;
+        }
+        if super::prims::is_free(s) {
+            // Free between the scenes (after the battle, before Oak's walk): walk north into the
+            // Hall of Fame (`PokemonLeague_ChampionsRoom/map.json` warp (6, 2)).
+            let hof = s.graph().id("MAP_POKEMON_LEAGUE_HALL_OF_FAME");
+            if here(s).is_some_and(|n| n.0 == room) {
+                go_to(
+                    s,
+                    "the Hall of Fame",
+                    &move |n: &Node| n.0 == hof,
+                    &Opts::default(),
+                )?;
+                continue;
+            }
+            s.hf.step(0)?;
+            continue;
+        }
+        s.hf.late()?;
+        s.hf.step(keys::A)?;
+        s.hf.step(0)?;
+    }
+    split(s, "Hall of Fame", "hall-of-fame-1")
+}
+
+/// Walk to each push's standing tile, face the boulder, (switch Strength on), and walk into it
+/// until it has moved.
+fn do_pushes(s: &mut Session, mid: MapId, pushes: &[Push]) -> PResult<()> {
+    for p in pushes {
+        let stand = p.stand;
+        go_to(
+            s,
+            "a boulder",
+            &move |n: &Node| *n == (mid, stand.0, stand.1),
+            &Opts::default(),
+        )?;
+        let key = match p.dir {
+            (0, -1) => keys::UP,
+            (0, 1) => keys::DOWN,
+            (-1, 0) => keys::LEFT,
+            _ => keys::RIGHT,
+        };
+        super::walk::face(s, key)?;
+        if !flag(s, "FLAG_SYS_USE_STRENGTH") {
+            s.hf.press(keys::A)?;
+            settle(s)?;
+            super::walk::face(s, key)?;
+        }
+        let at = (stand.0 + p.dir.0, stand.1 + p.dir.1);
+        let boulder_at = |s: &mut Session| {
+            Ram::new(&s.obs)
+                .objects(s.hf.rec.emu())
+                .iter()
+                .any(|o| (o.x, o.y) == at)
+        };
+        let mut fed = 0;
+        while boulder_at(s) {
+            if fed > 240 {
+                return Err(PlayError::Death(
+                    "soft-lock: the boulder did not move".into(),
+                ));
+            }
+            let k = if super::prims::is_free(s) { key } else { 0 };
+            s.hf.step(k)?;
+            fed += 1;
+        }
+        settle(s)?;
+    }
+    Ok(())
+}
+
+/// To Victory Road 3F and the 3F boulder (33, 18) into the hole (34, 18) (see `strength_to`);
+/// the 3F floor switch (7, 7) first if its barrier (12, 12..13) is in the way.
+fn vr_hole(s: &mut Session) -> PResult<()> {
+    let f3 = s.graph().id("MAP_VICTORY_ROAD_3F");
+    let bars = vr_barriers(s);
+    let mut shut = hm_opts();
+    for (m, tiles, closed) in &bars {
+        for &(x, y) in tiles {
+            shut.patch.push((m, x, y, *closed));
+        }
+    }
+    go_to(s, "Victory Road 3F", &move |n: &Node| n.0 == f3, &shut)?;
+    // The 3F switch (7, 7) first (its barrier (12, 12..13) closes the way round to the hole
+    // pocket), then the boulder at (33, 18) into the hole.
+    for target in [(7i16, 7i16), (34, 18)] {
+        if !flag(s, "FLAG_HIDE_VICTORY_ROAD_2F_BOULDER") {
+            break;
+        }
+        if target == (7, 7) && var(s, "VAR_MAP_SCENE_VICTORY_ROAD_3F") == 100 {
+            continue;
+        }
+        let cur = here(s).ok_or("no position")?;
+        let g = s.graph();
+        let minfo = g.maps.get(&f3).cloned().ok_or("no map")?;
+        let mut m = super::walk::live_map(s, f3).unwrap_or_else(|| minfo.clone());
+        // The barriers as their switches left them (the live grid can lag a map load).
+        for (bm, tiles, closed) in vr_barriers(s) {
+            if s.graph().id(bm) == f3 {
+                for (x, y) in tiles {
+                    m.set_collision(x, y, closed);
+                }
+            }
+        }
+        let live = Ram::new(&s.obs).objects(s.hf.rec.emu());
+        let is_boulder = |id: u8| {
+            minfo
+                .objects
+                .iter()
+                .any(|o| o.local_id == id && o.is_boulder())
+        };
+        // Objects only spawn near the camera: boulders not loaded now stand where the map puts
+        // them (unless their flag hides them).
+        let mut boulders: Vec<(i16, i16)> = live
+            .iter()
+            .filter(|o| is_boulder(o.local_id))
+            .map(|o| (o.x, o.y))
+            .collect();
+        for o in minfo.objects.iter().filter(|o| o.is_boulder()) {
+            let loaded = live.iter().any(|l| l.local_id == o.local_id);
+            let hidden = o.flag != 0 && s.obs.flag(s.hf.rec.emu(), o.flag).unwrap_or(false);
+            if !loaded && !hidden {
+                boulders.push((o.x, o.y));
+            }
+        }
+        let people: std::collections::HashSet<(i16, i16)> = live
+            .iter()
+            .filter(|o| !is_boulder(o.local_id) && o.local_id != 0xFF)
+            .map(|o| (o.x, o.y))
+            .collect();
+        let zp = Ram::new(&s.obs).player_elevation(s.hf.rec.emu());
+        let mut best: Option<Vec<Push>> = None;
+        for (k, &b) in boulders.iter().enumerate() {
+            let mut fixed = people.clone();
+            for (j, &o) in boulders.iter().enumerate() {
+                if j != k {
+                    fixed.insert(o);
+                }
+            }
+            if let Some(p) = boulder_plan(&m, (cur.1, cur.2), vec![b], &fixed, &[target], zp) {
+                if best.as_ref().is_none_or(|bp| p.len() < bp.len()) {
+                    best = Some(p);
+                }
+            }
+        }
+        let Some(pushes) = best else {
+            eprintln!(
+                "vr_hole: no push to {target:?} from {:?} z {zp}; boulders {boulders:?}; people {people:?}",
+                (cur.1, cur.2)
+            );
+            continue;
+        };
+        s.event(
+            "decision",
+            format!(
+                "VictoryRoad_3F: {} Strength pushes to {target:?} from {:?}: {:?}",
+                pushes.len(),
+                (cur.1, cur.2),
+                pushes.iter().map(|p| (p.stand, p.dir)).collect::<Vec<_>>()
+            ),
+            json!({"pushes": pushes.len(), "target": target, "from": [cur.1, cur.2],
+                   "stands": pushes.iter().map(|p| [p.stand.0, p.stand.1]).collect::<Vec<_>>()}),
+        );
+        do_pushes(s, f3, &pushes)?;
+    }
+    if flag(s, "FLAG_HIDE_VICTORY_ROAD_2F_BOULDER") {
+        return Err(PlayError::Fatal(
+            "VictoryRoad_3F: the boulder did not go down the hole".into(),
+        ));
+    }
+    Ok(())
+}
+
 pub fn stages() -> Vec<Stage> {
     vec![
         Stage {
@@ -1189,6 +1842,34 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "giovanni",
             run: giovanni,
+        },
+        Stage {
+            name: "route22",
+            run: route22,
+        },
+        Stage {
+            name: "victory-road",
+            run: victory_road,
+        },
+        Stage {
+            name: "lorelei",
+            run: lorelei,
+        },
+        Stage {
+            name: "bruno",
+            run: bruno,
+        },
+        Stage {
+            name: "agatha",
+            run: agatha,
+        },
+        Stage {
+            name: "lance",
+            run: lance,
+        },
+        Stage {
+            name: "hall-of-fame",
+            run: champion,
         },
     ]
 }

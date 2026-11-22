@@ -728,7 +728,8 @@ fn hunt_loop(
     let t0 = s.frame();
     let water = area == Area::Water;
     let opts = Opts {
-        surf: water,
+        // Surf on the way when a party mon knows it (Route 23's grass is past water).
+        surf: water || super::items::slot_with_move(s, "MOVE_SURF").is_some(),
         cut: true,
         ..Opts::default()
     };
