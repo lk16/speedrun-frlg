@@ -65,7 +65,7 @@ fn naming_screen(s: &mut Session) -> bool {
 /// free on the field. Text is mashed with A (late by `U{0..N}` per press); battles go to the battle
 /// driver; a nickname prompt that got a yes is confirmed with the default name.
 pub fn settle(s: &mut Session) -> PResult<()> {
-    let start = s.hf.fed();
+    let mut start = s.hf.fed();
     let mut free_run = 0;
     loop {
         if s.hf.fed() - start > SCRIPT_BUDGET {
@@ -76,6 +76,9 @@ pub fn settle(s: &mut Session) -> PResult<()> {
         }
         if s.obs.in_battle(s.hf.rec.emu()) {
             super::fallback_battle::battle(s)?;
+            // A League battle alone can run past the script budget (two dev branches "soft-locked"
+            // in Lorelei-2 after a 20 000-frame fight): the budget restarts after each battle.
+            start = s.hf.fed();
             continue;
         }
         if in_hall_of_fame(s) {
