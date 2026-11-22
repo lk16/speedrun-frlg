@@ -82,6 +82,9 @@ pub struct ObjInfo {
     pub flag: u16,
     pub trainer: bool,
     pub sight: i16,
+    /// The trainer's beaten flag (`TRAINER_FLAGS_START` + its `TRAINER_*` id from the first
+    /// `trainerbattle` of its script), 0 if unknown: a beaten trainer's sight no longer triggers.
+    pub beaten: u16,
 }
 
 impl ObjInfo {
@@ -123,6 +126,8 @@ pub struct MapInfo {
     /// (direction, offset, map).
     pub conns: Vec<(String, i16, MapId)>,
     pub objects: Vec<ObjInfo>,
+    /// `allow_cycling` of the map's `map.json` (the Bicycle can be ridden here).
+    pub bike: bool,
 }
 
 impl MapInfo {
@@ -228,6 +233,29 @@ impl Graph {
                     ))
                 })
                 .collect();
+            let scripts =
+                std::fs::read_to_string(root.join(format!("data/maps/{name}/scripts.inc")))
+                    .unwrap_or_default();
+            let tflags = n.get("TRAINER_FLAGS_START").unwrap_or(0);
+            let beaten_of = |script: &str| -> u16 {
+                let mut inside = false;
+                for line in scripts.lines() {
+                    let l = line.trim();
+                    if let Some(lbl) = l.strip_suffix("::") {
+                        inside = lbl == script;
+                        continue;
+                    }
+                    if inside && l.starts_with("trainerbattle") {
+                        let t = l
+                            .split_whitespace()
+                            .nth(1)
+                            .unwrap_or("")
+                            .trim_end_matches(',');
+                        return n.get(t).map_or(0, |id| tflags + id);
+                    }
+                }
+                0
+            };
             let objects = j["object_events"]
                 .as_array()
                 .into_iter()
@@ -256,6 +284,11 @@ impl Graph {
                         },
                         trainer: s("trainer_type") == "TRAINER_TYPE_NORMAL",
                         sight: int(&o["trainer_sight_or_berry_tree_id"]) as i16,
+                        beaten: if s("trainer_type") == "TRAINER_TYPE_NORMAL" {
+                            beaten_of(&s("script"))
+                        } else {
+                            0
+                        },
                     }
                 })
                 .collect();
@@ -270,6 +303,7 @@ impl Graph {
                     warps,
                     conns,
                     objects,
+                    bike: j["allow_cycling"].as_bool().unwrap_or(false),
                 },
             );
         }
@@ -304,6 +338,9 @@ pub struct Opts {
     /// Fail with a `Death("blocked: ...")` at once when the live view has no path (the caller
     /// knows a way to reset the blocker, e.g. leaving and re-entering the map).
     pub strict: bool,
+    /// Unbeaten trainers' sight lines are walls (the first plan of every walk; the second, if
+    /// the first finds no way, only prices them).
+    pub cone_walls: bool,
 }
 
 pub type Node = (MapId, i16, i16);
@@ -385,7 +422,8 @@ impl Graph {
             if o.stationary() {
                 b.insert((o.x, o.y));
             }
-            if o.trainer && o.sight > 0 {
+            let beaten = o.beaten != 0 && view.flags.get(&o.beaten).copied().unwrap_or(false);
+            if o.trainer && o.sight > 0 && !beaten {
                 let dirs: Vec<(i16, i16)> = match o.facing() {
                     Some(d) => vec![d],
                     None => vec![(0, -1), (0, 1), (-1, 0), (1, 0)],
@@ -735,6 +773,9 @@ impl Graph {
                     cost += GRASS;
                 }
                 if sight.contains(&(nx, ny)) {
+                    if opts.cone_walls {
+                        continue;
+                    }
                     cost += SIGHT;
                 }
                 let mv = if water && !surfing {
@@ -809,7 +850,7 @@ fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
     let fl: Vec<u16> = g
         .maps
         .values()
-        .flat_map(|m| m.objects.iter().map(|o| o.flag))
+        .flat_map(|m| m.objects.iter().flat_map(|o| [o.flag, o.beaten]))
         .filter(|&f| f != 0)
         .collect();
     for f in fl {
@@ -896,6 +937,7 @@ pub fn go_to(
     let mut temp_block: HashSet<Node> = HashSet::new();
     let mut bumps = 0;
     let mut plans = 0;
+    let mut bike_tried: Option<MapId> = None;
     loop {
         settle(s)?;
         let Some(cur) = here(s) else {
@@ -904,6 +946,19 @@ pub fn go_to(
         if goal(&cur) {
             break;
         }
+        // On the bike wherever the map allows it (`allow_cycling`) and the walk is more than a
+        // few tiles: the human gets on with the registered SELECT (once per map per walk).
+        if bike_tried != Some(cur.0)
+            && s.graph().maps.get(&cur.0).is_some_and(|m| m.bike)
+            && super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), names().id("ITEM_BICYCLE")) > 0
+            && s.obs.player_avatar_flags(s.hf.rec.emu())
+                & (AVATAR_MACH_BIKE | AVATAR_ACRO_BIKE | AVATAR_SURFING)
+                == 0
+            && plan_len(s, None, goal, opts).is_some_and(|n| n > 6)
+        {
+            bike_tried = Some(cur.0);
+            let _ = super::items::mount_bike(s)?;
+        }
         plans += 1;
         if plans > 60 {
             return Err(PlayError::Death(format!(
@@ -911,7 +966,16 @@ pub fn go_to(
             )));
         }
         let v = view(s, &temp_block);
-        let live = s.graph().plan(&v, cur, goal, opts);
+        // Around every unbeaten trainer's sight line if there is a way, else through (a forced
+        // fight: `human-run/tools/forced.py` audits which ones the plan cannot avoid).
+        let walls = Opts {
+            cone_walls: true,
+            ..opts.clone()
+        };
+        let live = s
+            .graph()
+            .plan(&v, cur, goal, &walls)
+            .or_else(|| s.graph().plan(&v, cur, goal, opts));
         if live.is_none() && opts.strict {
             return Err(PlayError::Death(format!(
                 "blocked: {what}: no path around live objects"

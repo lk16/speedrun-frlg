@@ -661,6 +661,29 @@ pub fn hunt(s: &mut Session, h: &Hunt) -> PResult<HuntReport> {
         rep.why = "complete".into();
         return Ok(rep);
     }
+    // No ball to throw (the Master Ball is kept): the hunt would weaken and flee from every new
+    // species (seen: Bond Bridge, 9 encounters, 166 s, nothing caught). The human skips it.
+    if !safari {
+        let master = id("ITEM_MASTER_BALL");
+        let balls: u16 = Ram::new(&s.obs)
+            .pocket(s.hf.rec.emu(), 2)
+            .iter()
+            .filter(|&&(it, _)| it != master)
+            .map(|&(_, n)| n)
+            .sum();
+        if balls == 0 {
+            s.event(
+                "model-vs-actual",
+                format!(
+                    "hunt at {}: skipped, no ball in the bag (the plan buys none before it)",
+                    h.site.trim_start_matches("MAP_")
+                ),
+                json!({"site": h.site, "needed": need}),
+            );
+            rep.why = "no balls".into();
+            return Ok(rep);
+        }
+    }
     s.dex.hunt = Some(HuntRun {
         site: h.site.clone(),
         skip: skip.clone(),
@@ -798,7 +821,14 @@ fn hunt_loop(
             };
             go(s, &h.site, target.0, target.1, &opts)?;
         }
-        rep.steps += 1;
+        // The plan's `steps` are the sim's encounter rolls (one per step). Pacing a pair of tiles
+        // rolls twice per tile, at the turn and at the step (`checkStandardWildEncounter` runs at
+        // every tile centre, turns included: `decompiled/src/field_control_avatar.c:138-141`).
+        rep.steps += if area == Area::Fish || rep.steps == 0 {
+            1
+        } else {
+            2
+        };
     }
     Ok(())
 }
