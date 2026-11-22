@@ -509,6 +509,15 @@ fn warden(s: &mut Session) -> PResult<()> {
 /// `leg_koga`: Kirk (forced, `fuchsia-gym-trainers`), Koga at (7, 13); the gym's invisible walls are
 /// collision in the live grid.
 fn koga(s: &mut Session) -> PResult<()> {
+    // Not in the model (its heal is `center-heal@koga-badge`, after the fight): Blastoise comes
+    // out of the Safari with 13/14/15 PP on its attacks and 98/130 HP, and the first branch lost
+    // to Koga's Muk / Weezing. A human heals at Fuchsia's center, two screens from the gym.
+    s.event(
+        "model-vs-actual",
+        "healing at the Fuchsia center before Koga (model heals after the badge); low PP after the Safari",
+        json!({"segment": "koga-walk"}),
+    );
+    center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
     let _ = super::items::mount_bike(s)?;
     s.seg = "fuchsia-gym-trainers".into();
     go_map(s, "MAP_FUCHSIA_CITY_GYM", &Opts::default())?;
