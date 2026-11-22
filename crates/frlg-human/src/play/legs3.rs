@@ -748,6 +748,27 @@ pub(super) fn pickup(
     }
     let before = have(s, item);
     let t0 = s.frame();
+    // A dry plan first: a ball the planner cannot reach (Rock Smash rocks, ledges) is left, as a
+    // human who knows the map would.
+    let mid = s.graph().id(map);
+    let reach = super::walk::plan_len(
+        s,
+        None,
+        &move |n: &Node| n.0 == mid && (n.1 - x).abs() + (n.2 - y).abs() == 1,
+        &hm_opts(),
+    );
+    if reach.is_none() {
+        s.event(
+            "warn",
+            format!(
+                "{} at {} ({x}, {y}) not reachable on foot: left",
+                item.trim_start_matches("ITEM_"),
+                map.trim_start_matches("MAP_")
+            ),
+            json!({"item": item, "map": map}),
+        );
+        return Ok(());
+    }
     go_face(s, map, x, y, &hm_opts())?;
     // A press can be dropped on the frame the walk ends: retry while the flag is still clear.
     for _ in 0..4 {
