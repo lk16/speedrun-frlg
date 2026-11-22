@@ -421,6 +421,88 @@ fn cycling(s: &mut Session) -> PResult<()> {
     split(s, "Snorlax", "snorlax")
 }
 
+/// `leg_safari` "safari-trip" + "safari-fee-and-hms": into the Safari Zone gate; the entry
+/// triggers at (3..5, 3) ask to join (yes, ¥500; `FuchsiaCity_SafariZone_Entrance/map.json`).
+fn safari_trip(s: &mut Session) -> PResult<()> {
+    let _ = super::items::mount_bike(s)?;
+    go_map(s, "MAP_FUCHSIA_CITY_SAFARI_ZONE_ENTRANCE", &Opts::default())?;
+    go(
+        s,
+        "MAP_FUCHSIA_CITY_SAFARI_ZONE_ENTRANCE",
+        4,
+        3,
+        &Opts::default(),
+    )?;
+    settle(s)?;
+    go_map(s, "MAP_SAFARI_ZONE_CENTER", &Opts::default())
+}
+
+/// "safari-walk" with the plan's hunts in the East and West areas (`hunts` `after: safari-walk`,
+/// on route): the Gold Teeth item ball at (28, 14) of the West area and the Secret House's HM03
+/// (`SafariZone_West/map.json`, `SafariZone_SecretHouse/scripts.inc`). Wild Pokémon met on the way
+/// are thrown at (`WildPlan::Catch`; the bridge plays the Safari ball/bait/rock policy).
+fn safari_walk(s: &mut Session) -> PResult<()> {
+    s.wild_plan = super::battle::WildPlan::Catch;
+    s.seg = "safari-walk".into();
+    let o = Opts::default();
+    go_face(s, "MAP_SAFARI_ZONE_WEST", 28, 14, &o)?;
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    talk_to(s, "MAP_SAFARI_ZONE_SECRET_HOUSE", 1)?;
+    settle(s)?;
+    let have = |s: &mut Session, it: &str| {
+        super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), super::names::id(it)) > 0
+    };
+    let (teeth, hm03) = (have(s, "ITEM_GOLD_TEETH"), have(s, "ITEM_HM03"));
+    s.event(
+        "decision",
+        format!("Safari: Gold Teeth {teeth}, HM03 {hm03}"),
+        json!({"gold_teeth": teeth, "hm03": hm03}),
+    );
+    if !hm03 {
+        return Err(super::session::PlayError::Fatal(
+            "no HM03 from the Secret House".into(),
+        ));
+    }
+    // Out: walk back toward the gate; when the steps run out the game sends the player there.
+    s.wild_plan = super::battle::WildPlan::Flee;
+    go_map(s, "MAP_FUCHSIA_CITY", &o)
+}
+
+/// `leg_warden` (variant `warden_early`): the Warden takes the Gold Teeth and gives HM04
+/// (`FuchsiaCity_WardensHouse/scripts.inc`).
+fn warden(s: &mut Session) -> PResult<()> {
+    talk_to(s, "MAP_FUCHSIA_CITY_WARDENS_HOUSE", 1)?;
+    settle(s)?;
+    let hm04 =
+        super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), super::names::id("ITEM_HM04")) > 0;
+    s.event(
+        "decision",
+        format!("Warden: HM04 {hm04}"),
+        json!({"hm04": hm04}),
+    );
+    Ok(())
+}
+
+/// `leg_koga`: Kirk (forced, `fuchsia-gym-trainers`), Koga at (7, 13); the gym's invisible walls are
+/// collision in the live grid.
+fn koga(s: &mut Session) -> PResult<()> {
+    let _ = super::items::mount_bike(s)?;
+    s.seg = "fuchsia-gym-trainers".into();
+    go_map(s, "MAP_FUCHSIA_CITY_GYM", &Opts::default())?;
+    go_face(s, "MAP_FUCHSIA_CITY_GYM", 7, 13, &Opts::default())?;
+    s.seg = "koga".into();
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    let badge = super::names::id("FLAG_BADGE05_GET");
+    if !s.obs.flag(s.hf.rec.emu(), badge).unwrap_or(false) {
+        return Err(super::session::PlayError::Fatal(
+            "no Soul Badge after Koga".into(),
+        ));
+    }
+    split(s, "Koga", "koga-badge")
+}
+
 fn fly_lavender(s: &mut Session) -> PResult<()> {
     // Fly works outdoors only ("Can't use that here."): out of the gym first.
     go_map(s, "MAP_VERMILION_CITY", &Opts::default())?;
@@ -488,6 +570,22 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "cycling-road",
             run: cycling,
+        },
+        Stage {
+            name: "safari-trip",
+            run: safari_trip,
+        },
+        Stage {
+            name: "safari-walk",
+            run: safari_walk,
+        },
+        Stage {
+            name: "warden",
+            run: warden,
+        },
+        Stage {
+            name: "koga",
+            run: koga,
         },
     ]
 }
