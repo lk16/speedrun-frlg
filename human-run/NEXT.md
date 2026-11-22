@@ -1,5 +1,21 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 model honesty 2 (read first; journal `journal/2026-11-22-21-30-model-honesty-2.md`)
+
+The controller-2 model bugs, each a default-off MODEL CHANGE key (1280 scores unchanged) plus a plan response, paired at
+WR+2m seed 7401 R 800k. Strength (`strength_carrier`), stones (`stone_shops`), TM13 (`Teach::prize`, dead entry dropped):
+0.0 h each -- the sim's carrier rides a PC visit the plan already pays (trade at `stones` / `fly-viridian`), the
+`stones` segment uses the Safari Leaf / Power Plant Thunder pickups, TM13 (80000) was never affordable. Balls (`Mart::topup`:
+with any stop, no on-demand buying in caves): best 3 stops **Lavender 15 / Cinnabar 30 / Saffron 35 Great** (1409, +340 h).
+Heals (`potion_bag_from` koga-badge, `Mart::potions`; centers stay skipped by the Torrent phase): **Cinnabar 5 / Saffron 4
+before Silph / Saffron 3 after Sabrina** (1413, +252 h vs 1409). PP: Elixirs are spent, 2 Max Elixirs are held for the
+League; PP Ups on the carry (`carry_pp_ups`) wreck round 2 (Mewtwo's Psychic): refuted. **1413-potion-bag-small vs 1280:
++592 h [416, 876]** (109 vs 171 finishes): recommended as the honest model of record; main session decides CURRENT.
+**League agent:** nothing in the League mechanics changed (heal items, preheal, Max Elixir reserve, PP rules); the bag is
+risk-lane only. But the stops spend money earlier, so money at the Indigo heal purchase falls and Lance/Champion reach
+with it -- refit League stand-ins on 1413's money, not 1280's. Controller: withdraw the Strength carrier at the trade's
+PC visit; buy balls/potions at the listed stops only.
+
 ## 2026-11-22 19:40 main session: CURRENT = 1280-wr-faithful (model of record)
 
 1280 replaces 1301 as the model of record: the WR's own trainer list and Rare Candies (VOD-read), the emulator
