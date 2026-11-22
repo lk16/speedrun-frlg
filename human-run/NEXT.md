@@ -1,5 +1,35 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 model honesty: later descents must use the new model (read first)
+
+Journal `journal/2026-11-22-13-00-model-honesty.md`. The battle bridge and the controller's played run
+showed stand-ins and route steps the model got wrong. Fixed as labelled MODEL CHANGE keys (all default off
+in `params.rs`, so every older plan scores as before; a plan opts in by setting them):
+
+| plan | what | WR+2m | WR |
+| --- | --- | --- | --- |
+| 1122-lgdescent | old model (CURRENT file) | 83.3-86.2 | 112.6 |
+| 1200-model-honesty | 1122 + S.S. Anne rival `risk_power` 1.0, `potion_tiers`, `sleep_no_potion`, `ball_shop_from`/`early_balls` | 134.1-139.1 | 184.8 |
+| 1201-awakening | 1200 + 3 Awakenings (`awakenings`, `Action::Awaken`), S.S. Anne potions 9 / heal_below .35, `early_balls` 0 (plan response, -30.4 h) | 106.9-108.7 | 143.4 |
+| **1202-controller-model** | 1201 + `fly_badge_gate`, `coin_case_frames`, `trash_cans`, `marowak_fight` (same policy) | **162.2-165.1** | **260.4** |
+
+**1202 is the honest score of the best policy known; descents started from 1122 or earlier score the old,
+optimistic model.** `plans/CURRENT` still names 1122 (another agent's descent runs on it): switch CURRENT to
+1202 at the next merge and re-run descents from it. Open model questions, ranked:
+
+1. `rival-cerulean` `risk_power` 3.5 is the same stand-in class as the S.S. Anne rival (sim engine 44% win
+   at power 1.0 vs 100% at 3.5; what-if +48.9 h). Cut a battle-bridge state before the Cerulean rival at
+   the plan party and measure 20+ seeds before changing it. Misty's 2.0 is harmless (0.94 either way; 14/14
+   played).
+2. The timing lane's pre-fight potions are free and unlimited outside the League (`preheal_below`, entry
+   heals): why the controller blacked out at the tower and Koga while the sim's extra heals there are worth
+   0.1-0.2 h. A finite bag in the timing lane (as in the risk lane) is the next honesty step.
+3. In the League the fighter fainting is a loss in the sim, while Blastoise behind Mewtwo can finish a fight.
+4. The plan's sim carry is L25 at the S.S. Anne rival; the played s11 run was L27.
+5. Plan responses still open: Awakening count/where, Super Potions at Cerulean vs the WR's Potions, the
+   S.S. Anne rival lead/X Defend, levels before the S.S. Anne (the `skip_groups` entries are ignored by
+   the `wr` route style, so un-skipping does nothing).
+
 Read `PROMPT.md`, `CLAUDE.md`, this file, then `ROBUSTNESS.md` sections 12-19 and the newest journals.
 `plans/CURRENT` names the plan to beat. All EHT figures below are hours of expected human time to a
 finish at or below the rung (WR+2m / WR), counting resets and the off-timer starter wait.

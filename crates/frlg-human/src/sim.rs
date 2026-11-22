@@ -121,6 +121,19 @@ pub struct Ctx<'a> {
     /// Per segment: skipped when the attempt is more than this many seconds behind the WR at the last
     /// split it passed (`Params::cond_skips`); infinity = never.
     pub cond_skip: Vec<f64>,
+    /// MODEL CHANGE `Params::potion_tiers`: HP of one potion use per segment (empty = level tiers).
+    pub potion_hp: Vec<i32>,
+    /// MODEL CHANGE `Params::ball_shop_from`: first segment where balls can be bought on demand.
+    pub ball_shop_from: Option<usize>,
+}
+
+/// HP one potion use restores at segment `seg_i`: the level tier (`battle::heal_amount`: the human buys the tier the
+/// level needs) capped by the best tier the plan has bought so far (`Params::potion_tiers`). Full Restores unchanged.
+pub fn potion_hp(ctx: &Ctx, seg_i: usize, level: u32, league_items: bool) -> i32 {
+    match ctx.potion_hp.get(seg_i) {
+        Some(&hp) if !league_items => hp.min(crate::battle::heal_amount(level, false)),
+        _ => crate::battle::heal_amount(level, league_items),
+    }
 }
 
 #[derive(Default, Clone)]
@@ -283,6 +296,10 @@ struct State {
     /// Repel steps left, and whether a mart on the route has sold them yet.
     repel_left: u32,
     repel_ok: bool,
+    /// MODEL CHANGE `Params::awakenings`: Awakenings in the bag.
+    awakenings: u32,
+    /// MODEL CHANGE `Params::coin_case_frames`: the Coin Case has been fetched.
+    coin_case: bool,
     /// Battle simulation: the carry's IVs and nature (rolled at the starter), effort values earned,
     /// HP as a fraction, badges (bit 0 Boulder, 4 Soul, 6 Volcano) and whether Surf is known.
     ivs: [u32; 6],
@@ -958,6 +975,50 @@ impl SafariMon {
     }
 }
 
+/// Money a Game Corner prize really costs (`buy` specials price coins at 20 each): with the Coin Case
+/// model (`Params::coin_case_frames`) the coins come in purchases of 50 for 1,000 (`strings.c:425`).
+fn buy_cost(ctx: &Ctx, cost: u32) -> u32 {
+    if ctx.p.coin_case_frames > 0 {
+        (cost / 20).div_ceil(50) * 1000
+    } else {
+        cost
+    }
+}
+
+/// The number of trash cans the human checks in the Vermilion Gym (`Params::trash_cans`): the switch
+/// layout of `SetVermilionTrashCans` (`field_specials.c:552`: first switch 1..15 uniform, the second a
+/// neighbour +-1 in the row or +-5 in the column with equal odds), checked in order 1..15 until the first
+/// switch, then one guess among the neighbours; a wrong guess re-rolls both (`VermilionCity_Gym/scripts.inc`
+/// `TrySwitchTwo`).
+pub fn trash_can_checks(rng: &mut Rng) -> u32 {
+    let mut checks = 0;
+    loop {
+        let first = 1 + (rng.next_u64() % 15) as i32;
+        let col = (first - 1) % 5;
+        let mut nb: Vec<i32> = vec![];
+        if col > 0 {
+            nb.push(first - 1);
+        }
+        if col < 4 {
+            nb.push(first + 1);
+        }
+        if first > 5 {
+            nb.push(first - 5);
+        }
+        if first <= 10 {
+            nb.push(first + 5);
+        }
+        let second = nb[(rng.next_u64() % nb.len() as u64) as usize];
+        checks += first as u32;
+        // The human guesses a neighbour uniformly (he cannot see which one the game picked).
+        let guess = nb[(rng.next_u64() % nb.len() as u64) as usize];
+        checks += 1;
+        if guess == second {
+            return checks;
+        }
+    }
+}
+
 /// The odds of one Safari Ball at catch factor `factor`: the factor back to a catch rate
 /// (`* 1275 / 100`), the ball's x1.5 (`battle_script_commands.c:808-814`), a full-HP mon
 /// (`:9497,9549-9556`).
@@ -1010,13 +1071,22 @@ fn take_ball(ctx: &Ctx, st: &mut State) -> Option<u32> {
             st.balls[t] -= 1;
             return Some(BALL_MULT[t]);
         }
-        if !ctx.p.marts.is_empty() {
-            // Scheduled mart stops only: use whatever is in the bag.
-            let t = bag_ball(t, st.balls)?;
+        if !ctx.p.marts.is_empty() || ctx.ball_shop_from.is_some_and(|f| st.seg_i < f) {
+            // Scheduled mart stops only (or, MODEL CHANGE `ball_shop_from`, no mart on the way yet):
+            // use whatever is in the bag.
+            let Some(t) = bag_ball(t, st.balls) else {
+                if std::env::var_os("FRLG_BALL_TRACE").is_some() {
+                    eprintln!("ball-empty seg {}", st.seg_i);
+                }
+                return None;
+            };
             st.balls[t] -= 1;
             return Some(BALL_MULT[t]);
         }
         let qty = (st.money / BALL_PRICE[t]).min(ctx.p.ball_batch);
+        if std::env::var_os("FRLG_BALL_TRACE").is_some() {
+            eprintln!("ball-buy seg {} tier {t} qty {qty}", st.seg_i);
+        }
         if qty > 0 {
             st.money -= qty * BALL_PRICE[t];
             st.balls[t] += qty;
@@ -1604,6 +1674,8 @@ pub struct TacIn<'a> {
     /// Heal items for the League round in progress.
     pub heal_items: u32,
     pub mewtwo_now: bool,
+    /// Awakenings in the bag (`Tactics::awakenings`).
+    pub awakenings: u32,
 }
 
 /// The [`Tactics`] of the fight named `name` (`Params::fight_tactics`, the global knobs): the one
@@ -1642,7 +1714,7 @@ pub fn fight_tactics(ctx: &Ctx, name: &str, league: bool, t: &TacIn) -> crate::b
     crate::battle::Tactics {
         x_items: xs,
         heal_below,
-        heal: crate::battle::heal_amount(t.level, t.league_items),
+        heal: potion_hp(ctx, t.seg_i, t.level, t.league_items),
         full_restore: t.league_items,
         sacs: cfg.sacs.min(t.fodder_at_start),
         sac_free: !(ctx.p.sac_honest && (!league || ctx.p.sac_honest_league)),
@@ -1656,6 +1728,8 @@ pub fn fight_tactics(ctx: &Ctx, name: &str, league: bool, t: &TacIn) -> crate::b
         setup_min: ctx.p.setup_min_turns,
         menu_slip: ctx.p.menu_slip,
         scarce: ctx.p.scarce_factor,
+        sleep_no_potion: ctx.p.sleep_no_potion,
+        awakenings: t.awakenings,
     }
 }
 
@@ -1678,7 +1752,7 @@ struct BattleArgs<'a> {
 /// human gives up (three whiteouts, or one in the League where a loss means walking the
 /// rooms again).
 fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool {
-    use crate::battle::{fight, heal_amount, make_mon, Status1};
+    use crate::battle::{fight, make_mon, Status1};
     let dex = ctx.dex;
     let t0 = st.clock;
     if a.trainer && hazard_death(ctx, st, rng, a.name) {
@@ -1890,7 +1964,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             let lo = (crate::battle::entry_floor(dex, &me, a.foes) as f64 * hits).ceil() as i32 + 1;
             let cur = (me.max_hp as f64 * st.hp_frac).round() as i32;
             if cur < lo {
-                let per = heal_amount(me.level, st.league_items);
+                let per = potion_hp(ctx, st.seg_i, me.level, st.league_items);
                 let uses = (lo - cur + per - 1) / per;
                 bump(st, uses as f64 * ctx.turn());
                 let before = st.hp_frac;
@@ -1900,7 +1974,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             }
         } else if st.hp_frac < ctx.p.preheal_below && !mewtwo_now && !torrent {
             let uses = (((0.85 - st.hp_frac) * me.max_hp as f64)
-                / heal_amount(me.level, st.league_items) as f64)
+                / potion_hp(ctx, st.seg_i, me.level, st.league_items) as f64)
                 .ceil();
             bump(st, uses * ctx.turn());
             st.risk_real += 0.85 - st.hp_frac;
@@ -1947,20 +2021,25 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 fodder_at_start,
                 heal_items: st.heal_items,
                 mewtwo_now,
+                awakenings: st.awakenings,
             },
         );
         let xs = tac.x_items.clone();
         // Risk lane: the honest copy of this fight decides whether the attempt survives it.
         let mut risk_healed = false;
-        let risk_lost =
-            !mewtwo_now && !a.league && ctx.risk_end.is_some_and(|e| st.seg_i <= e) && {
-                let (lost, healed) = risk_fight(ctx, st, rng, a, &tac, &cfg, in_torrent);
-                risk_healed = healed;
-                lost
-            };
+        let in_lane = !mewtwo_now && !a.league && ctx.risk_end.is_some_and(|e| st.seg_i <= e);
+        let risk_lost = in_lane && {
+            let (lost, healed) = risk_fight(ctx, st, rng, a, &tac, &cfg, in_torrent);
+            risk_healed = healed;
+            lost
+        };
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
+        // Awakenings: the honest lane spent its own (in `risk_fight`); outside it, this fight's.
+        if !in_lane {
+            st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
+        }
         if a.trainer && st.log_fights {
             st.fight_log
                 .push((a.name.to_string(), out.turns, out.won, 0.0));
@@ -2192,7 +2271,7 @@ fn risk_fight(
     cfg: &TacCfg,
     in_torrent: bool,
 ) -> (bool, bool) {
-    use crate::battle::{entry_floor, fight, heal_amount, make_mon};
+    use crate::battle::{entry_floor, fight, make_mon};
     let dex = ctx.dex;
     let mut me = make_mon(
         dex,
@@ -2258,7 +2337,7 @@ fn risk_fight(
     };
     // Potions are paid for (Potion 300, Super Potion 700, Hyper Potion 1200 at the heal tier of the level:
     // `items.json`) out of the purse and each use is a bag turn: no free lunch in healing.
-    let per = heal_amount(st.carry, st.league_items);
+    let per = potion_hp(ctx, st.seg_i, st.carry, st.league_items);
     let price = match per {
         20 => 300,
         50 => 700,
@@ -2275,7 +2354,7 @@ fn risk_fight(
         let lo = (entry_floor(dex, &me, &foes) as f64 * hits).ceil() as i32 + 1;
         let cur = (me.max_hp as f64 * st.risk_hp).round() as i32;
         if cur < lo {
-            let per = heal_amount(me.level, st.league_items);
+            let per = potion_hp(ctx, st.seg_i, me.level, st.league_items);
             let uses = (((lo - cur + per - 1) / per).max(1) as u32).min(potions);
             potions -= uses;
             healed = true;
@@ -2293,6 +2372,7 @@ fn risk_fight(
     t2.rollouts = 0;
     let mut g = crate::rng::GameRng::from_u32(rng.next_u64() as u32);
     let out = fight(dex, &mut me, &t2, &foes, a.ai, a.heals, a.wild, &mut g);
+    st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
     healed |= out.heals_used > 0;
     if pay {
         let n = out.heals_used.min(potions);
@@ -2895,6 +2975,8 @@ pub fn attempt(
         max_tier: 0,
         repel_left: 0,
         repel_ok: false,
+        awakenings: 0,
+        coin_case: false,
         ivs: [15; 6],
         nature: 0,
         quiet_hits_left: u32::MAX,
@@ -3332,6 +3414,33 @@ pub fn attempt(
                         }
                     }
                 }
+                Kind::Special { special } if special.kind == "fight" => {
+                    // MODEL CHANGE `marowak_fight`: a forced one-off wild battle (the Marowak ghost,
+                    // `PokemonTower_6F/scripts.inc:9` `setwildbattle SPECIES_MAROWAK, 30`).
+                    bump(&mut st, special.frames as f64 * ctx.p.text_factor);
+                    for n in &special.species {
+                        let foe = wild_mon(ctx, &mut st, ctx.dex.id(n), special.level);
+                        let ok = sim_battle(
+                            ctx,
+                            &mut st,
+                            &mut rng,
+                            &BattleArgs {
+                                name: &seg.name,
+                                foes: &[foe],
+                                trainer: false,
+                                intro: 0,
+                                ai: 0,
+                                heals: 0,
+                                yield_: None,
+                                league: false,
+                                wild: true,
+                            },
+                        );
+                        if !ok || st.abandoned {
+                            break;
+                        }
+                    }
+                }
                 Kind::Special { special }
                     if special.requires.iter().any(|r| {
                         let d = ctx.dex.species[ctx.dex.id(r)].dex;
@@ -3343,10 +3452,15 @@ pub fn attempt(
                             .species
                             .iter()
                             .all(|n| st.caught.has(ctx.dex.species[ctx.dex.id(n)].dex))
-                            || (ctx.p.money_model && st.money < special.cost)) => {}
+                            || (ctx.p.money_model && st.money < buy_cost(ctx, special.cost))) => {}
                 Kind::Special { special } => {
                     if special.kind == "buy" && ctx.p.money_model {
-                        st.money -= special.cost;
+                        st.money -= buy_cost(ctx, special.cost);
+                    }
+                    if special.kind == "buy" && ctx.p.coin_case_frames > 0 && !st.coin_case {
+                        // MODEL CHANGE `coin_case_frames`: the restaurant's Coin Case first.
+                        st.coin_case = true;
+                        bump(&mut st, ctx.p.coin_case_frames as f64 * ctx.p.text_factor);
                     }
                     if special.kind == "sell" && ctx.p.money_model {
                         // Items sold at a Poke Mart: `cost` is the money received.
@@ -3725,8 +3839,51 @@ pub fn attempt(
                 st.mystic = true;
                 bump(&mut st, ctx.p.mystic_frames as f64 * ctx.p.text_factor);
             }
+            // MODEL CHANGE `trash_cans`: the Vermilion Gym switches, after the walk into the gym.
+            if ctx.p.trash_cans && seg.name == "surge-walk" {
+                let mut r = Rng::new(seed, idx, hash_str("surge-cans"));
+                let n = trash_can_checks(&mut r);
+                bump(
+                    &mut st,
+                    ctx.p.cans_fixed as f64 + n as f64 * ctx.p.can_frames as f64,
+                );
+            }
+            // MODEL CHANGE `played_extra`: controller-measured time the segment model misses.
+            if let Some(&x) = ctx.p.played_extra.get(&seg.name) {
+                bump(&mut st, x);
+            }
             match seg.name.as_str() {
                 "black-glasses-swap" => st.glasses = true,
+                // MODEL CHANGE `awakenings`: bought in the Cerulean mart menus of this segment
+                // (`CeruleanCity_Mart/scripts.inc:30`, 250 each `items.json`); the WR bag at Cerulean
+                // holds three (`video-analysis/stream-2026-11-14-main97.md`). No extra frames: the
+                // segment is the runner's measured potion/Persim menu time.
+                "persim-and-potions" if ctx.p.awakenings > 0 => {
+                    let n = if ctx.p.money_model {
+                        ctx.p.awakenings.min(st.money / 250)
+                    } else {
+                        ctx.p.awakenings
+                    };
+                    if ctx.p.money_model {
+                        st.money -= n * 250;
+                    }
+                    st.awakenings += n;
+                }
+                // MODEL CHANGE `ball_shop_from`: the early balls are bought at the Viridian mart once
+                // the parcel is delivered (`ViridianCity_Mart/scripts.inc`: Poke Ball), the last shop
+                // before Cerulean on this route.
+                "deliver" if ctx.ball_shop_from.is_some() && ctx.p.early_balls > 0 => {
+                    let qty = if ctx.p.money_model {
+                        ctx.p.early_balls.min(st.money / BALL_PRICE[0])
+                    } else {
+                        ctx.p.early_balls
+                    };
+                    if ctx.p.money_model {
+                        st.money -= qty * BALL_PRICE[0];
+                    }
+                    st.balls[0] += qty;
+                    bump(&mut st, MART as f64 * ctx.p.text_factor);
+                }
                 "brock" => {
                     st.repel_ok = true;
                     st.badges |= 1;

@@ -63,7 +63,14 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     leg_tower(b, p, h);
     // Surge is folded into this leg: fly to Vermilion, the gym, then to Celadon for Snorlax.
     if !p.variant("surge_early") {
-        b.text("fly-vermilion", 700, Src::Guess);
+        if crate::route::fly_gated(p) {
+            // MODEL CHANGE `fly_badge_gate`: Lavender -> Route 8 -> Saffron -> Route 6 -> Vermilion,
+            // 242 tiles (`frlg-mapgraph path`), no Fly before the Thunder Badge.
+            let e = b.era;
+            b.walk("walk-vermilion", 242, e, None, Src::Tiles);
+        } else {
+            b.text("fly-vermilion", 700, Src::Guess);
+        }
         leg_surge(b, p, h);
     }
     leg_cycling(b, p, h);

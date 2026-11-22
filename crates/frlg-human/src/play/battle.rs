@@ -89,6 +89,7 @@ const ITEM_ULTRA_BALL: u16 = 2;
 const ITEM_GREAT_BALL: u16 = 3;
 const ITEM_POKE_BALL: u16 = 4;
 const ITEM_POTION: u16 = 13;
+const ITEM_AWAKENING: u16 = 17;
 const ITEM_FULL_RESTORE: u16 = 19;
 const ITEM_MAX_POTION: u16 = 20;
 const ITEM_HYPER_POTION: u16 = 21;
@@ -420,6 +421,7 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
             fodder_at_start: alive_others,
             heal_items: heal_count(&sc.items),
             mewtwo_now: sc.me.species == mewtwo,
+            awakenings: count(&sc.items, ITEM_AWAKENING),
         },
     );
     // The real bag rations the heals (the sim leaves them unlimited outside the League), and the
@@ -1057,7 +1059,8 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
             "my_status": format!("{:?}", sc.me.status), "enemy_status": format!("{:?}", sc.foe.status),
             "turn": c.turns, "action": what, "policy": format!("{:?}", d.action),
             "enemy": species_name(dex, sc.foe.species), "enemy_hp": sc.foe.hp, "enemy_max_hp": sc.foe.max_hp,
-            "my_hp": sc.me.hp, "my_max_hp": sc.me.max_hp, "pp_left": mv_pp,
+            "my_hp": sc.me.hp, "my_max_hp": sc.me.max_hp, "my_level": sc.me.level,
+            "my_stats": sc.me.stat, "heal_hp": tac.heal, "heals_left": c.fs.as_ref().map(|f| f.heals_left()), "pp_left": mv_pp,
             "danger": d.read.danger, "sure_kill": d.read.sure_kill, "stall": d.read.stalled,
             "win_prob": win, "exp_turns": exp_turns, "hp_left_on_win": hp_left,
             "rollouts": d.rollouts.iter().map(|(a, w)| format!("{} {w}", describe(dex, &sc, *a))).collect::<Vec<_>>(),
@@ -1072,15 +1075,16 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
     Ok(())
 }
 
-fn describe(dex: &Dex, sc: &Scene, a: Action) -> String {
+fn describe(dex: &Dex, _sc: &Scene, a: Action) -> String {
     match a {
         Action::Move(mv) => move_name(dex, mv),
         Action::XItem(x) => match x.setup_move(dex) {
             Some(mv) => move_name(dex, mv),
             None => format!("{x:?}"),
         },
-        Action::Heal => format!("potion (+{})", sim_battle::heal_amount(sc.me.level, false)),
+        Action::Heal => "potion".to_string(),
         Action::FullRestore => "Full Restore".into(),
+        Action::Awaken => "Awakening".into(),
         Action::Switch => "switch back".into(),
         Action::Sac(_) => "sacrifice switch".into(),
     }
@@ -1137,6 +1141,11 @@ fn execute(
                     Ok(Action::Move(mv))
                 }
             }
+        }
+        Action::Awaken => {
+            // `tactics_for` counts the bag's Awakenings, so the policy only picks one the bag holds.
+            use_item(f, c, sc, battle_ram::POCKET_ITEMS, ITEM_AWAKENING, true)?;
+            Ok(a)
         }
         Action::Sac(x) => {
             if x.is_some() {

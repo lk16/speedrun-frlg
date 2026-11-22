@@ -877,6 +877,63 @@ pub struct Params {
     /// damage stays under it does not faint the helper and the fighter takes the hit on the switch back
     /// (`Tactics::helper_hp`). 0 = every helper faints.
     pub helper_hp: i32,
+    /// MODEL CHANGE (battle bridge, journal 2026-11-22 model-honesty): the policy drinks no potion while
+    /// the fighter is asleep unless it outheals the foe's best hit (`Tactics::sleep_no_potion`). Off = the
+    /// old policy.
+    pub sleep_no_potion: bool,
+    /// MODEL CHANGE (same journal): the potion tier the bag really holds. Non-empty: the heal per potion use
+    /// outside the League's items is the level tier of `battle::heal_amount` capped by the best tier bought so
+    /// far: a Potion (20 HP) from the start, each entry's `hp` from the segment after its `after` mart stop on
+    /// (Super Potion 50 first sold at Cerulean, `CeruleanCity_Mart/scripts.inc:26`; Hyper Potion 200 first at
+    /// Cinnabar on this route, `CinnabarIsland_Mart/scripts.inc`, or Saffron). Empty = the level tiers alone
+    /// (Super Potion from L15 and Hyper from L30 wherever the carry is: the old model).
+    pub potion_tiers: Vec<PotionTier>,
+    /// MODEL CHANGE (same journal): balls cannot be bought on demand before the segment `ball_shop_from`
+    /// (inside Viridian Forest, Route 3, Mt. Moon, Route 4 no mart is on the way). The bag then holds the
+    /// `early_balls` Poke Balls bought at the Viridian mart after the parcel (`ViridianCity_Mart/scripts.inc`),
+    /// paid out of the purse there. Empty = the old on-demand buying everywhere.
+    pub ball_shop_from: String,
+    pub early_balls: u32,
+    /// PLAN (with the `sleep_no_potion` model): Awakenings bought at the Cerulean mart stop
+    /// (`persim-and-potions`), 250 each; the policy wakes a sleeping fighter with one (`Action::Awaken`).
+    pub awakenings: u32,
+    /// MODEL CHANGE (controller run Giovanni 1 -> Koga, journal 2026-11-22-12-30-controller): Fly needs the
+    /// Thunder Badge (`decompiled/src/party_menu.c:3926`, `FlagGet(FLAG_BADGE01_GET + FIELD_MOVE_FLY)`,
+    /// `FIELD_MOVE_FLY` 2 in `include/constants/party_menu.h:36`). In the `wr` order without `surge_early`
+    /// the Flys to Lavender (Route 16 house -> tower) and to Vermilion (tower -> Surge) come before the
+    /// badge: they become bike walks through Saffron (the Tea opens the gates,
+    /// `Route7_EastEntrance/scripts.inc:30`): 321 and 242 tiles (`bin/frlg-mapgraph path`).
+    pub fly_badge_gate: bool,
+    /// MODEL CHANGE (same run): a Game Corner prize (`buy` special, the Abra) needs the Coin Case
+    /// (`CeladonCity_GameCorner_PrizeRoom/scripts.inc:15`), a gift in the Celadon restaurant
+    /// (`CeladonCity_Restaurant/scripts.inc:19`), and the coins are sold 50 for 1,000 (`strings.c:425`):
+    /// the prize's coins are rounded up to whole purchases and these frames are added once (restaurant
+    /// detour + clerk menus; guess). 0 = the old model (no Coin Case, coins at exactly 20 each).
+    pub coin_case_frames: u32,
+    /// MODEL CHANGE (same run): the Vermilion Gym trash-can switches (`SetVermilionTrashCans`,
+    /// `decompiled/src/field_specials.c:552`; `VermilionCity_Gym/scripts.inc`: a wrong second can resets
+    /// both). The human checks the 15 cans in order until the first switch, then one random neighbour
+    /// (+-1 in the row, +-5 in the column); a miss re-rolls. Cost `cans_fixed + checks * can_frames`
+    /// after `surge-walk`: 170 frames a check (walk to the next can + "Nope, there's only trash"), the
+    /// 53-can played branch's ~9000 frames / 53; fixed 0 (the 13-can branch's 117 s holds controller
+    /// overhead a line fit would turn into a 90 s constant, more than the WR's whole window allows).
+    pub trash_cans: bool,
+    pub can_frames: u32,
+    pub cans_fixed: u32,
+    /// MODEL CHANGE (same run): frames added at the end of the named segment, measured by the playing
+    /// controller against the model (one sample each; `calibration.md`).
+    pub played_extra: std::collections::HashMap<String, f64>,
+    /// MODEL CHANGE (same run): the Pokemon Tower 6F Marowak ghost is a forced wild battle (Marowak L30,
+    /// `PokemonTower_6F/scripts.inc:9`), fought by the sim's engine after the channelers. Off = not modelled.
+    pub marowak_fight: bool,
+}
+
+/// One step of `Params::potion_tiers`.
+#[derive(Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct PotionTier {
+    pub after: String,
+    pub hp: i32,
 }
 
 impl Default for Params {
@@ -1059,6 +1116,18 @@ impl Default for Params {
             sac_honest: false,
             sac_honest_league: false,
             helper_hp: 0,
+            sleep_no_potion: false,
+            potion_tiers: vec![],
+            ball_shop_from: String::new(),
+            early_balls: 0,
+            awakenings: 0,
+            fly_badge_gate: false,
+            coin_case_frames: 0,
+            trash_cans: false,
+            can_frames: 170,
+            cans_fixed: 0,
+            played_extra: Default::default(),
+            marowak_fight: false,
         }
     }
 }
