@@ -165,7 +165,7 @@ pub fn buy(
         };
         let p = price(s, item);
         let money = Ram::new(&s.obs).money(s.hf.rec.emu());
-        let can = if p == 0 { 99 } else { (money / p).min(99) } as u16;
+        let can = money.checked_div(p).map_or(99, |q| q.min(99)) as u16;
         let n = qty.min(can);
         if n == 0 {
             s.event(
