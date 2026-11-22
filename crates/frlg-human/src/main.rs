@@ -1214,6 +1214,13 @@ fn main() {
                 }
                 return;
             }
+            // `--all`: every segment in route order with its index.
+            if args.iter().any(|a| a == "--all") {
+                for (i, sg) in plan.segs.iter().enumerate() {
+                    println!("{i} {}", sg.name);
+                }
+                return;
+            }
             for sg in &plan.segs {
                 let k = match &sg.kind {
                     frlg_human::route::Kind::Walk { enc: Some(_), .. } => "walk-grass",

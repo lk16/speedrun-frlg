@@ -195,6 +195,11 @@ impl Plan {
                 v
             },
             ball_shop_from: seg_index(&self.segs, &self.params.ball_shop_from),
+            potion_bag_from: seg_index(&self.segs, &self.params.potion_bag_from),
+            stone_shop_from: self
+                .segs
+                .iter()
+                .position(|s| self.params.stone_shops.contains(&s.name)),
             aggr: self
                 .segs
                 .iter()
