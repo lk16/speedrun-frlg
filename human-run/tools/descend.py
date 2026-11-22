@@ -43,6 +43,8 @@ SKIP_FIRST = opt('--skip', 0)
 FIXED_RUNG = opt('--rung', '')
 R1 = opt('--r1', 0)  # fixed start R for screening (0 = grow from 10000)
 R2 = opt('--r2', 0)  # fixed R for the seed-2 confirmation
+# --num-from N: number promoted plans inside an assigned block N..N+99 (agents share plans/)
+NUM_FROM = opt('--num-from', 0)
 os.environ['FRLG_POINTER'] = POINTER
 
 
@@ -55,7 +57,10 @@ def load(name):
 
 
 def next_number():
-    return max(int(f.split('-')[0]) for f in os.listdir(PLANS) if f[:3].isdigit()) + 1
+    nums = [int(f.split('-')[0]) for f in os.listdir(PLANS) if f[:3].isdigit() and f.split('-')[0].isdigit()]
+    if NUM_FROM:
+        return max([n for n in nums if NUM_FROM <= n < NUM_FROM + 100] + [NUM_FROM - 1]) + 1
+    return max(nums) + 1
 
 
 _SEGS = None
