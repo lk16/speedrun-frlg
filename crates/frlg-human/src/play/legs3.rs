@@ -1733,6 +1733,18 @@ fn league2_entry(s: &mut Session) -> PResult<()> {
     s.seg = "league-entry".into();
     center_heal(s, "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F")?;
     super::legs2::indigo_mart(s)?;
+    // Revives for the second fighter (`IndigoPlateau_PokemonCenter_1F/scripts.inc` sells them):
+    // Mewtwo's 25 attacks do not cover the round (see `pp_lead`), so Blastoise fights twice.
+    let money = Ram::new(&s.obs).money(s.hf.rec.emu());
+    let n = (money / 1500).min(3) as u16;
+    if n > 0 {
+        super::shop::buy(
+            s,
+            "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F",
+            Some((0, 7)),
+            &[("ITEM_REVIVE", n)],
+        )?;
+    }
     mva(s, "to the League", t0, "mewtwo", "league-entry");
     Ok(())
 }
@@ -1757,6 +1769,23 @@ fn attack_pp(s: &Session, m: &super::ram::Mon) -> u32 {
 /// `apply_pp_ups`), which the played route never picked up; Mewtwo reached Lance 2 with Psychic
 /// and Fire Blast at 0 and lost 12 of 12 branches using Calm Mind only.
 fn pp_lead(s: &mut Session) -> PResult<()> {
+    // A fainted fighter (level >= 40) gets a Revive between rooms, if the bag has one.
+    let party = Ram::new(&s.obs).party(s.hf.rec.emu());
+    for (i, m) in party.iter().enumerate() {
+        if m.hp == 0 && m.level >= 40 && have(s, "ITEM_REVIVE") > 0 {
+            super::shop::use_item_on(s, "ITEM_REVIVE", i)?;
+            s.event(
+                "model-vs-actual",
+                format!(
+                    "Revive on {} between League rooms (the sim's fighter never faints)",
+                    super::names::names()
+                        .species(m.species)
+                        .trim_start_matches("SPECIES_")
+                ),
+                json!({"slot": i}),
+            );
+        }
+    }
     let party = Ram::new(&s.obs).party(s.hf.rec.emu());
     let lead = attack_pp(s, &party[0]);
     if lead >= 8 {
