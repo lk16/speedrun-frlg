@@ -136,7 +136,7 @@ pub struct Session<'p> {
     forced_done: Vec<String>,
 }
 
-fn read_ilog(path: &Path) -> Result<InputLog, String> {
+pub(crate) fn read_ilog(path: &Path) -> Result<InputLog, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     InputLog::decode(&bytes).map_err(|e| format!("{}: {e}", path.display()))
 }

@@ -268,8 +268,10 @@ pub struct Fight {
     pub money: u32,
     pub full: Vec<PartyMon>,
     pub ai: u32,
-    /// Full Restores etc. (`trainers.h` `.items`): count of usable heals.
+    /// Full Restores etc. (`trainers.h` `.items`): count of usable heals (the old count includes Full Heals).
     pub heals: u32,
+    /// Of `heals`, the Full Heals: cure-only items with no HP (`Params::ai_cure_items`).
+    pub cures: u32,
 }
 
 /// `TYPE_*` numbers, `decompiled/include/constants/pokemon.h:96-114`.
@@ -319,7 +321,7 @@ pub struct Dex {
     /// Prize money per trainer id (`battle_script_commands.c:5373`).
     money: HashMap<String, u32>,
     /// AI bits and heal-item count per trainer id (`trainers.h`).
-    trainer_ai: HashMap<String, (u32, u32)>,
+    trainer_ai: HashMap<String, (u32, u32, u32)>,
     /// Mart prices (`items.json`).
     pub item_prices: HashMap<String, u32>,
     map_trainers: HashMap<String, Vec<String>>,
@@ -490,7 +492,10 @@ impl Dex {
                         )
                     })
                     .count() as u32;
-                (k.clone(), (t.ai, heals))
+                // `ITEM_FULL_HEAL` restores no HP: the AI uses it as `AI_ITEM_CURE_CONDITION`
+                // (`decompiled/src/battle_ai_switch_items.c:606-638`), only on a status or confusion.
+                let cures = t.items.iter().filter(|i| *i == "ITEM_FULL_HEAL").count() as u32;
+                (k.clone(), (t.ai, heals, cures))
             })
             .collect();
         #[derive(Deserialize)]
@@ -583,13 +588,14 @@ impl Dex {
 
     /// A trainer's fight with the detailed mons, by decomp trainer id.
     pub fn fight(&self, id: &str) -> Fight {
-        let (ai, heals) = self.trainer_ai.get(id).copied().unwrap_or((1, 0));
+        let (ai, heals, cures) = self.trainer_ai.get(id).copied().unwrap_or((1, 0, 0));
         Fight {
             party: self.trainer(id).to_vec(),
             money: self.trainer_money(id),
             full: self.trainer_full.get(id).cloned().unwrap_or_default(),
             ai,
             heals,
+            cures,
         }
     }
 
@@ -610,6 +616,10 @@ impl Dex {
 
     pub fn trainer_money(&self, name: &str) -> u32 {
         self.money.get(name).copied().unwrap_or(0)
+    }
+
+    pub fn has_trainer(&self, name: &str) -> bool {
+        self.trainers.contains_key(name)
     }
 
     pub fn trainer(&self, name: &str) -> &[(u32, usize)] {

@@ -124,6 +124,36 @@ lavender-heal 19, tower-rival 121, tower-marowak 362, fuji-flute 178, fly-celado
 safari-trip 25, safari-walk 293 (3 catches), warden 24, koga 322 (with a center heal). Splits: Surge 6058 s,
 Snorlax 6874 s, Koga 7538 s (model p50 4364 / 4470 / 5103).
 
+## Played segments after Koga, seed 11, LeafGreen, tier 1 (2026-11-22, controller 2)
+
+`human-run/journal/2026-11-22-14-00-controller-2.md`. Seconds between checkpoints. Koga -> Sevii from the
+canonical-code pass (`runs/human-play/fwd-canon`, dex hooks active); Sevii -> Indigo from the development
+run (`runs/human-play/fwd-main`; same code paths, earlier stages without the dex hooks). One sample each.
+
+| played stage | s | model segments | note |
+| --- | --- | --- | --- |
+| teach-surf | 23 | warden-strength (23 for HM teaches) | HM03 through the TM case + forget screen |
+| power-plant | 94 | fly-lavender-2 12 + powerplant-walk | Lavender fly, bike, surf Route 10 |
+| power-plant-out | 486 | powerplant-out 7 + hunt-power_plant | Thunder Stone + 200-step hunt with no balls in the bag |
+| to-cinnabar | 47 | fly-pallet + surf-cinnabar + surf-route21-* | two swimmers fought |
+| mansion | 358 | mansion + secret-key 15 | 4-6 statue presses, Moon Stone, TM14, Elixir, out on foot |
+| blaine | 221 | blaine-walk, blaine-quiz-text 45, blaine, blaine-badge | Blizzard taught, center heal (not in model), 6 quizzes, Blaine 4 turns |
+| sevii-boat .. sevii | 737 | leg_sevii | 94 + 47 + 214 (bikers) + 317 (Bond Bridge hunt, Berry Forest) + 65 |
+| celadon-shopping | 143 | fly-celadon-2 12 + xbuy 30 | 2F balls, 4F stones, 5F X items, Saffron Hyper Potions |
+| silph (3 stages) | 423 | silph-walk .. master-ball | Saffron heal (not in model), 3 card-key doors, Giovanni 2, Master Ball, Lapras |
+| sabrina | 454 | sabrina-walk, sabrina, badge, heal, Hitmonlee | teleport pads with bumps |
+| erika | 377 | fly-celadon-3, erika-walk, gym, erika, badge, heal, Jolteon | |
+| giovanni | 521 | fly-viridian, Diglett hunt, gym, giovanni, badge, heal | PC (Doduo out, Lapras in) + HM04: ~45 s not in the model; one gym re-entry |
+| route22 | 228 | route22, rival-route22, hunt-route22 | |
+| victory-road | 707 | route23 .. victory-road .. indigo-heal | Route 23 hunt ~160 s; boulders 19 + 6 + 33 + 1 + 19 pushes |
+| indigo-mart | 12 | (league_heals top-up) | 12 Max Potions |
+
+Splits (run timer vs model p50): Blaine 8767 s (canonical) / 8611 (dev) vs 5890; Sevii 9503 / 9457 vs 6805;
+Sabrina 10191 vs 7678; Erika 10783 vs 7913; Giovanni 11342 vs 8198; Victory Road (indigo-heal) 12308 vs 9175.
+The gap to the model p50 is ~2.4-3.1 ks from Koga on and holds roughly flat: Blaine -> Sevii (737 s played vs
+915 s model) and Sevii -> Sabrina were faster than modelled, Sabrina -> Erika (592 vs 235) and the Victory Road
+leg (966 vs ~980 incl. Route 22) as modelled or slower.
+
 ## Fight win rates on the plan's policy, emulator vs engine (2026-11-22, stand-in audit)
 
 `frlg-human battle-test --plan 1202-controller-model --seg S` from states cut out of the canonical s11 `run.ilog`
@@ -287,3 +317,11 @@ Scores (paired vs 1132, WR+2m, seed 7401, R 800k): 1246 +323 h [282, 378] (377 f
 [-12.9, 7.6]. **Per-window WR check** (each window no further from the WR than 1132's error + 30 s, and the window
 total within 1132's): 1245 fails (Snorlax, Blaine, Sevii, Sabrina, Start E4R1), 1246 fails (Blaine,
 Start E4R1, total), 1247 fails (Sevii, Bike). CURRENT stays 1132.
+| Koga | Blastoise L42, 128/133 HP, 11 Super Potions, 3 X Specials | 15/20; **73/100** (seeds 1-100, 2026-11-22 exp-and-koga) | 35% was a harness mismatch (`battle` CLI at `--setup-min 1 --heal-below 0.4`, so the X Specials went on Koffing turn 1); **60.5%** at the plan's `setup_min_turns` 2 / `heal_below` .6 (n 10 000) |
+
+Koga detail (journal `2026-11-22-16-50-exp-and-koga.md`; the controller now logs `foe_last_move`, `my_stages`, `foe_stages`
+per turn): per Water Pulse on Muk the hit rate by Muk's evasion stage is the same in both (engine .495 at mean +3.03, emulator
+.533 at +3.10, `Cmd_accuracycheck` matches), damage rolls and Sludge damage match, Muk's Minimize / Acid Armor shares match at
+full HP. Remaining gap (~12 points): the engine's Muk picks Toxic more often (5.6% of its turns vs 2.9%), so the carry is
+poisoned more (31% of Muk turns vs 16%) and more often dies at the second Koffing / Weezing after Muk (12.7% vs 5%). Not
+located in the AI port (`AI_CV_Toxic`, `AI_CBM_Poison` checked); open.

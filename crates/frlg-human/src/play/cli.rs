@@ -43,6 +43,7 @@ pub fn usage() -> &'static str {
      \x20      [--force-rollback <stage>[,<stage>]] [--retries n] [--model-R n]\n\
      \x20                                      continue a played attempt from its last checkpoint\n\
      \x20 play-verify --plan <plan.md> <dir>    replay <dir>/run.ilog from boot, check checkpoint RAM hashes\n\
+     \x20 play-battles --plan <plan.md> <dir>   replay <dir>/run.ilog, one line per battle (trainer, exp)\n\
      \x20 play-inspect --plan <plan.md> <state> print map, position, party, bag of a savestate"
 }
 
@@ -124,6 +125,18 @@ pub fn main(cmd: &str, args: &[String], dex: &'static Dex) {
                     println!("VERIFY FAILED: {e}");
                     std::process::exit(1)
                 }
+            }
+        }
+        "play-battles" => {
+            let dir = args
+                .iter()
+                .skip(1)
+                .filter(|a| !a.starts_with("--"))
+                .find(|a| Path::new(a).is_dir())
+                .expect("play-battles <dir>");
+            if let Err(e) = super::battle_audit::run(&rom, &sym, Path::new(dir)) {
+                println!("play-battles failed: {e}");
+                std::process::exit(1)
             }
         }
         "play-inspect" => {
