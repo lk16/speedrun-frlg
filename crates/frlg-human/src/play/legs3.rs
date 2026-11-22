@@ -2292,7 +2292,12 @@ fn champion2(s: &mut Session) -> PResult<()> {
     if let Some(b) = party_slot(s, "SPECIES_BLASTOISE") {
         let m = Ram::new(&s.obs).party(s.hf.rec.emu())[b].clone();
         let att = attack_pp(s, &m);
-        if m.hp > 0 && att < 20 {
+        // Surf is the attack that matters (Tyranitar, Arcanine): its PP decides, not the total
+        // (Bite's 24 PP made a dry Surf look like 42 attacks, dev `pg-dev-fin16`).
+        let surf = m
+            .knows(super::names::id("MOVE_SURF"))
+            .map_or(u8::MAX, |k| m.pp[k]);
+        if m.hp > 0 && (att < 20 || surf <= 5) {
             if let Some(it) = ["ITEM_ELIXIR", "ITEM_MAX_ELIXIR"]
                 .into_iter()
                 .find(|it| have(s, it) > 0)
@@ -2301,7 +2306,7 @@ fn champion2(s: &mut Session) -> PResult<()> {
                 s.event(
                     "model-vs-actual",
                     format!(
-                        "{} on Blastoise before the Champion ({att} attacks left)",
+                        "{} on Blastoise before the Champion ({att} attacks left, Surf {surf})",
                         it.trim_start_matches("ITEM_")
                     ),
                     json!({"pp": m.pp}),
