@@ -435,15 +435,28 @@ fn cycling(s: &mut Session) -> PResult<()> {
 fn safari_trip(s: &mut Session) -> PResult<()> {
     let _ = super::items::mount_bike(s)?;
     go_map(s, "MAP_FUCHSIA_CITY_SAFARI_ZONE_ENTRANCE", &Opts::default())?;
-    go(
-        s,
-        "MAP_FUCHSIA_CITY_SAFARI_ZONE_ENTRANCE",
-        4,
-        3,
-        &Opts::default(),
-    )?;
+    // Stand below the trigger row, step up onto it, and answer the fee's yes/no explicitly
+    // (`AskEnterSafariZone`: a NO walks the player back down).
+    go(s, "MAP_FUCHSIA_CITY_SAFARI_ZONE_ENTRANCE", 4, 4, &Opts::default())?;
+    s.hf.late()?;
+    let mut fed = 0;
+    while !s.obs.field_controls_locked(s.hf.rec.emu()) {
+        if fed > 120 {
+            return Err(super::session::PlayError::Death(
+                "soft-lock: Safari entry trigger did not fire".into(),
+            ));
+        }
+        s.hf.step(if fed < 10 { keys::UP } else { 0 })?;
+        fed += 1;
+    }
+    menu::text_until_yesno(s)?;
+    menu::answer(s, true)?;
     settle(s)?;
-    go_map(s, "MAP_SAFARI_ZONE_CENTER", &Opts::default())
+    let center = s.graph().id("MAP_SAFARI_ZONE_CENTER");
+    if here(s).map(|n| n.0) != Some(center) {
+        return Err(super::session::PlayError::Fatal("not in the Safari Zone after the fee".into()));
+    }
+    Ok(())
 }
 
 /// "safari-walk" with the plan's hunts in the East and West areas (`hunts` `after: safari-walk`,
