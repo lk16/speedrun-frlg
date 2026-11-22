@@ -12,20 +12,25 @@ WR 335.4 h; **1211-cerulean-potions** (plan response: 3 potions, heal below .35 
 2. Koga's Muk: engine 35% vs emulator 15/20 at identical stats; the 1.35 window stands in for an engine bug.
 3. The 0.773 Blaine/Sevii window is deadlier than the honest engine (-21 h at 1.0); refit windows under 1211.
 
-## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1131-honest-fheal
+## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1132-standin-fheal
 
 | plan | what | WR+2m | WR | model |
 | --- | --- | --- | --- | --- |
 | 1127-fheal1 | 1122 + League heal_below bundle (bruno .65, champion .35, champion-2 .5, lance-2 0) | 79.3-80.2 | 103.4-104.5 | old (fitted League) |
 | 1130-honest-fheal | 1200 + the bundle | 125.3-126.0 | 166.3-169.9 | honest 1200 |
-| **1131-honest-fheal (CURRENT)** | **1202 + the bundle** | **152.0 (R 3.2M, seeds 7521/7522; -9.8 / -12.5 vs 1202)** | **241.8-243.7 (-18.4 / -20.3)** | **honest controller model** |
+| 1131-honest-fheal | 1202 + the bundle | 152.0 (-9.8 / -12.5 vs 1202) | 241.8-243.7 | controller model |
+| **1132-standin-fheal (CURRENT)** | **1211 + the bundle** | **184.1 / 187.2 (R 3.2M, seeds 7541/7542; -13.0 / -15.6 vs 1211)** | **291.3 / 294.7 (-24.8 / -26.5)** | **stand-in audit model** |
 
-* NEXT item 1 done: the League pass is finished (tail: lance-2 / champion-2 queues, pp floor, all per-fight
-  heal_below); 1120 and 1114 confirmed by undoing them on 1127 (R 3.2M two seeds both rungs + corners).
-* NEXT item 2: reset_table refit on 1131 (train 3M, eval 1.6M, seed 7611): WR+2m -0.4 h [-0.9, +0.1] n.s., WR table
-  unchanged by the best-iterate guard: not adopted, the table is at its optimum. `fit_post_evidence.py` /
-  `fit_lane.py --check` not re-run under the honest model (the honesty agent owns the stand-ins).
-* Pointer `plans/CURRENT-OPT` is the descent pointer (descend.py `--pointer CURRENT-OPT`).
+* League pass finished (lance-2 / champion-2 queues, pp floor, every per-fight heal_below); 1120 and 1114 confirmed
+  by undoing them on 1127 (R 3.2M two seeds both rungs + corners). Mewtwo teaches stay dropped (0.001 h).
+* reset_table refit on 1131: not adopted (WR+2m -0.4 h n.s., WR table unchanged). Re-run only after a big model move.
+* Plan responses of 1201 re-screened on 1131 (Awakenings 2/4/5, S.S. Anne potions 7/12, heal_below .2/.45): all refuted.
+* `risk_windows` under 1132 (`fit_lane.py`, R 1.6M seed 7651): `--check` has every lane window inside the runner's
+  CI (only forest-brock .589 vs [.30, .54] outside, independent of powers). The refit saturates the first window at the
+  4.5 cap (it also governs Brock / Mt Moon, standin-audit finding 6) and gives the Blaine/Sevii window 0.766 again (the
+  shrunk runner target .724 asks for it). **Not adopted**; capping that window at 1.0 (-21 h) is a modelling call, not a fit.
+* Pointer `plans/CURRENT-OPT` is the descent pointer (descend.py `--pointer CURRENT-OPT`). Running: `--set earlymid`
+  from 1132 (304 candidates).
 
 ## 2026-11-22 model honesty: later descents must use the new model
 
