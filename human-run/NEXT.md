@@ -1,5 +1,30 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 segment-cost calibration: model of record stays 1132 (read first)
+
+Journal `journal/2026-11-22-14-00-calibration.md`, `calibration.md` ("Segment-cost calibration" and
+"Reconciliation with the WR windows"). Measured per-event costs from the played run are in as MODEL CHANGE keys
+(`catch_end_new`, `throw_frames`, `flee_frames`, `safari_run_frames`, `indoor_speed`, `fly_frames`, all off by
+default). With all of them, 1245 overshoots the WR's windows by +669 s (1132: +178 s). No WR-fitted constant
+absorbs that cleanly: `trainer_fit` is pinned by the fight-only windows (Bill, Rock Tunnel), `text_factor` /
+`path_overhead` would go below measured floors, and a FIT on the guessed pre-League text lumps (`guess_text_scale`)
+either fixes the windows 1132 already matched (0.71, plan **1246**: +323 h, total still +451 s) or the pre-League
+total (0.42, plan **1247**: -2.1 h [-12.9, 7.6], but Sevii -97 s, Bike -178 s, and 0.42 contradicts the played
+text lumps at ~0.9). Neither passes the per-window WR check, so **CURRENT stays 1132-standin-fheal**.
+
+| plan | what | WR+2m vs 1132 (seed 7401, R 800k) | no-reset mean | window total vs WR |
+| --- | --- | --- | --- | --- |
+| 1132-standin-fheal (CURRENT) | | 173.9 h | 3:28:22 | +178 s |
+| 1245-calibrated-model | measured costs | +3461 h [2687, 5005] | 3:35:45 | +669 s |
+| 1246-reconciled | 1245 + guess text 0.71 | +323 h [282, 378] | 3:32:07 | +451 s |
+| 1247-reconciled-total | 1245 + guess text 0.42 | -2.1 h [-12.9, 7.6] | 3:28:28 | ~+0 pre-League |
+
+Ranked next steps: (1) the structural window errors that 1132 already has and that dominate the check (Start E4R1
++175..+292 s from the back-loaded dex fill, Giovanni 3 -206 s, Bike -144 s, Blaine +115 s, Snorlax +65 s) are
+route/plan differences against the WR, not constants: fix those first, then re-run the reconciliation; (2) measure
+more guessed text lumps on the played run (`tools/cal_decompose.py` per stage) instead of one global scale;
+(3) the controller agent's inefficiency list (journal) before the next played pass.
+
 ## 2026-11-22 stand-in audit: descend from 1211 (read first)
 
 Journal `journal/2026-11-22-14-30-standin-audit.md` (per-fight table: sim rate, engine at real stats, emulator).

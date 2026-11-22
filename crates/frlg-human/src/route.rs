@@ -1583,5 +1583,22 @@ pub fn build(dex: &Dex, p: &Params) -> Result<Vec<Seg>, String> {
             },
         );
     }
+    // FIT `Params::guess_text_scale`: the guessed text lumps before the League (up to `indigo-heal`, the
+    // Start E4R1 split) scaled; the League and post-game lumps keep their own WR-window fits
+    // (`league_transit`, `postgame_calib`).
+    if p.guess_text_scale > 0.0 {
+        let end = b
+            .segs
+            .iter()
+            .position(|s| s.name == "indigo-heal")
+            .unwrap_or(b.segs.len());
+        for s in b.segs[..end].iter_mut() {
+            if s.src == Src::Guess {
+                if let Kind::Text { frames } = &mut s.kind {
+                    *frames = (*frames as f64 * p.guess_text_scale).round() as u32;
+                }
+            }
+        }
+    }
     Ok(b.segs)
 }

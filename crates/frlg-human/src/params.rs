@@ -955,6 +955,12 @@ pub struct Params {
     /// menu, region map, flight, arrival warp). Played 809 and 848 (`fly-celadon`, `fly-lavender`).
     /// 0 = the segments' own 700 (guess).
     pub fly_frames: u32,
+    /// FIT (calibration reconciliation, journal 2026-11-22-14-00-calibration): multiplier on the frames of
+    /// every guessed text lump (`Src::Guess` `Kind::Text`). The WR-level skill knobs of plan 373
+    /// (`text_factor`, `path_overhead`, `mistake_rate`) were set against the WR splits while the catch
+    /// tail, ball misses and indoor walking were priced too low; with those measured, this one factor puts
+    /// the pre-League WR window total back on the WR. A stand-in, not a measurement. 0 = 1.0.
+    pub guess_text_scale: f64,
     /// MODEL CHANGE (stand-in audit 2026-11-22): the Persim Berry of `persim-and-potions` is *held* by the
     /// carry until `black-glasses-swap` and cures the first confusion right after the move that caused it
     /// (`HOLD_EFFECT_CURE_CONFUSION`, `decompiled/src/battle_util.c:2766` end of turn and `:2913` move end).
@@ -1169,6 +1175,7 @@ impl Default for Params {
             safari_run_frames: 0,
             indoor_speed: false,
             fly_frames: 0,
+            guess_text_scale: 0.0,
             persim_held: false,
         }
     }

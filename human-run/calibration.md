@@ -233,3 +233,57 @@ battle, it is more battles and more turns, not slower turns.
 
 The calibrated model finishes 7 minutes slower than the old one and the WR (3:25:25) is now about its p3. The reset
 table was fitted under the old model (at WR+5m it resets every attempt): refit it before any descent from 1245.
+
+### Reconciliation with the WR windows (coordinator follow-up, 2026-11-22)
+
+Concern: the 1202/1132 model already matched several WR windows (Brock, Bill, Rock Tunnel, Giovanni 1, Sevii)
+with constants fitted to the WR, so adding measured costs could double-count. Model window means (`frlg-human
+splits`, R 8000, seconds; error vs the WR window in brackets):
+
+| window | WR | 1132 | 1245 | 1246 (guess text 0.71) | 1247 (0.42) |
+| --- | --- | --- | --- | --- | --- |
+| Brock | 880 | 884 (+4) | 910 (+30) | 910 (+30) | 910 (+30) |
+| Misty | 801 | 733 (-68) | 725 (-76) | 715 (-86) | 706 (-95) |
+| Bill | 609 | 608 (-1) | 608 (-1) | 597 (-12) | 585 (-24) |
+| Bike | 484 | 341 (-143) | 342 (-142) | 324 (-160) | 306 (-178) |
+| Rock Tunnel | 565 | 549 (-16) | 550 (-15) | 550 (-15) | 550 (-15) |
+| Giovanni 1 | 557 | 584 (+27) | 608 (+51) | 593 (+36) | 579 (+22) |
+| Snorlax | 891 | 958 (+67) | 1011 (+120) | 987 (+96) | 963 (+72) |
+| Koga | 715 | 608 (-107) | 691 (-24) | 676 (-39) | 661 (-54) |
+| Blaine | 672 | 787 (+115) | 848 (+176) | 818 (+146) | 788 (+116) |
+| Sevii | 913 | 908 (-5) | 957 (+44) | 886 (-27) | 816 (-97) |
+| Sabrina | 827 | 879 (+52) | 919 (+92) | 904 (+77) | 889 (+62) |
+| Erika | 176 | 237 (+61) | 246 (+70) | 243 (+67) | 240 (+64) |
+| Giovanni 3 | 543 | 328 (-215) | 345 (-198) | 341 (-202) | 338 (-205) |
+| Start E4R1 | 732 | 907 (+175) | 1024 (+292) | 1024 (+292) | 1019 (+287) |
+| League + post-game (13 windows) | 2960 | +180 | +192 | +192 | ~+190 |
+| **total** | **12325** | **+178** | **+669** | **+451** | **~+190** |
+
+Which fitted constant could have absorbed the measured costs:
+
+- `trainer_fit` 0.81 (intro and per-mon overhead of non-League fights, fitted to the WR video's fight durations):
+  0.7 / 0.6 / 0.5 take Bill to -39 / -77 / -116 s and Rock Tunnel to -54 / -86 / -123 s, the two fight-only windows
+  that match at 0.81. The fight fit does not contain catches or indoor walking, and the played trainer battles
+  match the formula at 0.95-1.02 anyway. Not the absorber.
+- `text_factor` / `path_overhead` / `mistake_rate` (1.02 / 1.02 / 0.3, the "WR-level skill" set against the WR
+  splits in plan 373): closing the gap with either factor needs `path_overhead` ~0.75 or `text_factor` ~0.9, below
+  the measured walking speeds (16.1 / 7.9 / 6.0 f/tile) and the TAS-ledger text floors; `mistake_rate` 0 gives
+  -141 s only.
+- The guessed text lumps (`Src::Guess`, 48% of the model's time): the only free absorber. New FIT key
+  `guess_text_scale` (pre-League lumps only, up to `indigo-heal`; League and post-game keep their own window fits).
+  0.71 restores the five windows 1132 matched (sum +12 s vs 1132's +9 s): plan 1246. 0.42 restores the pre-League
+  total: plan 1247. Played evidence on five lumps (scope-and-dig 1800 vs ~1740 played, warden-strength 1400 vs
+  ~800, safari-fee-and-hms 2400 vs ~1900, snorlax 1500 vs ~1400, hm02-fly 800 vs 1334) gives ~0.91, so 0.71 is a
+  stretch and 0.42 is not credible.
+
+The added time sits in catch-heavy segments (forest +27 s, Safari hunts +65 s, Power Plant +25, Mansion +27,
+Bond Bridge +28, dex fill +45, Route 23 +17, Victory Road +25) and indoor walks (hideout +24, tower +32, Silph +16,
+Sabrina +19, gyms +8..11). Those windows are mostly the ones 1132 already overshot (Snorlax, Blaine, Sabrina,
+Erika, Start E4R1); 1132 matched the WR total only because Giovanni 3 (-215), Bike (-143), Koga (-107) and Misty
+(-68) undershoot by as much. Those are route and dex-order differences against the WR (the model's fill is
+back-loaded into Start E4R1: dex 47 -> 61 there vs the WR's 52 -> 60), not constants.
+
+Scores (paired vs 1132, WR+2m, seed 7401, R 800k): 1246 +323 h [282, 378] (377 finishes vs 1090), 1247 -2.1 h
+[-12.9, 7.6]. **Per-window WR check** (each window no further from the WR than 1132's error + 30 s, and the window
+total within 1132's): 1245 fails (Snorlax, Blaine, Sevii, Sabrina, Start E4R1), 1246 fails (Blaine,
+Start E4R1, total), 1247 fails (Sevii, Bike). CURRENT stays 1132.
