@@ -116,6 +116,8 @@ pub enum WildPlan {
     Flee,
     Catch,
     Fight,
+    /// Throw the Master Ball on the first turn (a legendary the plan catches, `Kind::Mewtwo`).
+    Master,
 }
 
 /// How [`fight`] plays one battle.
@@ -918,6 +920,7 @@ fn on_start(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), Ro
                     WildPlan::Flee => "fleeing",
                     WildPlan::Catch => "catching",
                     WildPlan::Fight => "fighting",
+                    WildPlan::Master => "Master Ball",
                 }
             ),
             json!({"species": species_name(dex, sc.foe.species), "level": sc.foe.level,
@@ -1357,6 +1360,29 @@ fn wild_turn(
     let dex = c.dex;
     let ctx = c.cfg.ctx;
     let obs = c.obs;
+    if c.cfg.wild == WildPlan::Master && count(&sc.balls, ITEM_MASTER_BALL) > 0 {
+        c.throws += 1;
+        log.push(
+            f.frame(),
+            "catch",
+            format!(
+                "throw {}: Master Ball at {} Lv{}, catch chance 1.00",
+                c.throws,
+                species_name(dex, sc.foe.species),
+                sc.foe.level
+            ),
+            json!({"ball": ITEM_MASTER_BALL, "chance": 1.0, "throw": c.throws,
+                   "species": species_name(dex, sc.foe.species)}),
+        );
+        return use_item(
+            f,
+            c,
+            sc,
+            battle_ram::POCKET_POKE_BALLS,
+            ITEM_MASTER_BALL,
+            false,
+        );
+    }
     if c.cfg.wild == WildPlan::Catch && !c.safari {
         let sp = &dex.species[sc.foe.species];
         // Weaken first (plan `weaken`): only while the foe is above half HP.

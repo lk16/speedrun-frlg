@@ -639,5 +639,6 @@ pub fn stages() -> Vec<Stage> {
     ]
     .into_iter()
     .chain(super::legs2::stages())
+    .chain(super::legs3::stages())
     .collect()
 }
