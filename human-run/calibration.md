@@ -117,3 +117,9 @@ each; frames between consecutive checkpoints. Model column: mean seconds from `f
 | fly-lavender | 1167 | 20 | fly-lavender | 12 | incl. walking out of the gym |
 | lavender-heal | 1295 | 22 | -- | 0 | center heal + options (battle style SET); not in the model |
 | tower-rival | 7080 | 119 | tower-walk, rival-tower | 24 + 102 | rival 5 mons |
+
+Canonical pass of the same stretch (one pass, verified from boot, `run.ilog` sha1 bd99f705...), seconds per stage:
+hideout-out 110, hm02-trip 25, hm02 22, to-vermilion 70, surge-cans 117 (13 cans), surge 182, fly-lavender 20,
+lavender-heal 19, tower-rival 121, tower-marowak 362, fuji-flute 178, fly-celadon 15, snorlax 32, cycling-road 69,
+safari-trip 25, safari-walk 293 (3 catches), warden 24, koga 322 (with a center heal). Splits: Surge 6058 s,
+Snorlax 6874 s, Koga 7538 s (model p50 4364 / 4470 / 5103).
