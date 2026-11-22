@@ -742,7 +742,7 @@ fn main() {
             // battle <TRAINER_ID> <carry level> [--n 2000] [--iv 20] [--badges mask]
             //   [--species SPECIES_X] [--moves MOVE_A,MOVE_B] [--add MOVE_C,...]
             //   [--x defend,attack,...] [--heal-below 0.4] [--league] [--heal hp] [--heals n] [--hp frac]
-            //   [--awakenings n] [--sleep-fix] [--ivs a,b,c,d,e,f] [--evs ...] [--nature n] [--print-stats]
+            //   [--awakenings n] [--sleep-fix] [--ivs a,b,c,d,e,f] [--evs ...] [--nature n] [--print-stats] [--persim]
             use frlg_human::battle::{enemy_mon, fight, heal_amount, make_mon, Tactics, XItem};
             let id = &args[1];
             let level: u32 = args[2].parse().unwrap();
@@ -853,6 +853,8 @@ fn main() {
                 }
                 me.moves = moves.clone();
                 me.set_pp(dexr);
+                // `--persim`: the fighter holds a Persim Berry (MODEL CHANGE `persim_held`).
+                me.persim = args.iter().any(|a| a == "--persim");
                 let hpf: f64 = arg(&args, "--hp", 1.0);
                 me.hp = ((me.max_hp as f64 * hpf).round() as i32).clamp(1, me.max_hp);
                 let tac = Tactics {

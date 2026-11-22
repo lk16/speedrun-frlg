@@ -123,3 +123,17 @@ hideout-out 110, hm02-trip 25, hm02 22, to-vermilion 70, surge-cans 117 (13 cans
 lavender-heal 19, tower-rival 121, tower-marowak 362, fuji-flute 178, fly-celadon 15, snorlax 32, cycling-road 69,
 safari-trip 25, safari-walk 293 (3 catches), warden 24, koga 322 (with a center heal). Splits: Surge 6058 s,
 Snorlax 6874 s, Koga 7538 s (model p50 4364 / 4470 / 5103).
+
+## Fight win rates on the plan's policy, emulator vs engine (2026-11-22, stand-in audit)
+
+`frlg-human battle-test --plan 1202-controller-model --seg S` from states cut out of the canonical s11 `run.ilog`
+(~150 frames before `gMain.inBattle`), seeds 1-20 (Misty 21-40, Cerulean 1-22). "Engine" = `frlg-human battle` at the
+s11 carry's exact stats and bag. Journal `2026-11-22-14-30-standin-audit.md`.
+
+| fight | s11 carry | emulator won | engine win (power 1.0) |
+| --- | --- | --- | --- |
+| Misty | Wartortle L20, 5 Potions | 19/20 (+14/14 bridge) | 88%, 94% with a held Persim |
+| Rival Cerulean | Wartortle L21, 5 Potions, no Awakening | 15/22 | 60% (69% with Awakenings) |
+| Hideout Giovanni | Blastoise L36, 90/115 HP, 12 Super Potions | 20/20 | 100% |
+| Rival tower | Blastoise L38, 11 Super Potions | 20/20 | 98.6% |
+| Koga | Blastoise L42, 128/133 HP, 11 Super Potions, 3 X Specials | 15/20 | **35%** (engine too deadly at Muk) |
