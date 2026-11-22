@@ -297,7 +297,9 @@ fn mansion_to(s: &mut Session, what: &str, goal: &dyn Fn(&Node) -> bool) -> PRes
             ),
             json!({"statue": i, "switch_on": now, "est_steps": cost}),
         );
-        last = Some(i);
+        if now != on {
+            last = Some(i);
+        }
     }
     Err(PlayError::Death(format!(
         "soft-lock: Mansion: 8 switch rounds toward {what}"
