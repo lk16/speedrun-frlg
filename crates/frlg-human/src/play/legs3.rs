@@ -1646,6 +1646,16 @@ fn icefall(s: &mut Session) -> PResult<()> {
     s.seg = "sail-to-four".into();
     let t0 = s.timer().unwrap_or(0.0);
     seagallop(s, 1, 4)?;
+    // Four Island's Star Piece ball (5, 6) (`FourIsland/map.json`, `FLAG_HIDE_FOUR_ISLAND_STAR_PIECE`):
+    // ¥4900 at a mart, for the League's Full Restores (the dex fill spent the money on balls).
+    pickup(
+        s,
+        "MAP_FOUR_ISLAND",
+        5,
+        6,
+        "FLAG_HIDE_FOUR_ISLAND_STAR_PIECE",
+        "ITEM_STAR_PIECE",
+    )?;
     let n = ROPES.saturating_sub(have(s, "ITEM_ESCAPE_ROPE"));
     if n > 0 {
         super::shop::buy(s, "MAP_FOUR_ISLAND_MART", None, &[("ITEM_ESCAPE_ROPE", n)])?;
@@ -1814,6 +1824,25 @@ fn warehouse(s: &mut Session) -> PResult<()> {
     }
     s.seg = "warehouse-interior".into();
     take_warp(s, "MAP_FIVE_ISLAND_MEADOW", 12, 22, keys::UP)?;
+    // The warehouse's Big Pearl (8, 25) and Pearl (1, 16) balls (`FiveIsland_RocketWarehouse/map.json`):
+    // ¥3750 + ¥700 at a mart, League money.
+    s.seg = "warehouse-interior".into();
+    pickup(
+        s,
+        "MAP_FIVE_ISLAND_ROCKET_WAREHOUSE",
+        8,
+        25,
+        "FLAG_HIDE_FIVE_ISLAND_ROCKET_WAREHOUSE_BIG_PEARL",
+        "ITEM_BIG_PEARL",
+    )?;
+    pickup(
+        s,
+        "MAP_FIVE_ISLAND_ROCKET_WAREHOUSE",
+        1,
+        16,
+        "FLAG_HIDE_FIVE_ISLAND_ROCKET_WAREHOUSE_PEARL",
+        "ITEM_PEARL",
+    )?;
     s.seg = "warehouse-gideon".into();
     talk_script(s, "MAP_FIVE_ISLAND_ROCKET_WAREHOUSE", "EventScript_Gideon")?;
     if !flag(s, "FLAG_RECOVERED_SAPPHIRE") {
@@ -2095,6 +2124,10 @@ fn league2_entry(s: &mut Session) -> PResult<()> {
             "ITEM_PEARL",
             "ITEM_STAR_PIECE",
             "ITEM_STARDUST",
+            // Useless at Lv 70 / no target left: Potions, Super Potions, the spare Water Stone.
+            "ITEM_POTION",
+            "ITEM_SUPER_POTION",
+            "ITEM_WATER_STONE",
         ],
     )?;
     if got > 0 {
