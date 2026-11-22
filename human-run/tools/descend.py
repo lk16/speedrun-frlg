@@ -464,8 +464,13 @@ def gen(p):
         cands = skipknobs.candidates(p)
     elif SET == 'earlymid':
         sys.path.insert(0, HERE)
-        import earlyknobs, manipknobs, midknobs
-        cands = earlyknobs.candidates(p) + manipknobs.candidates(p) + midknobs.candidates(p)
+        import earlyknobs, fightknobs, manipknobs, midknobs
+        cands = fightknobs.candidates(p) + earlyknobs.candidates(p) + manipknobs.candidates(p) + midknobs.candidates(p)
+    elif SET == 'fights':
+        # Optional trainers per segment (fight_lists, plan 1253+): the exp-vs-time trade-off.
+        sys.path.insert(0, HERE)
+        import fightknobs
+        cands = fightknobs.candidates(p)
     elif SET == 'early':
         sys.path.insert(0, HERE)
         import earlyknobs, manipknobs
@@ -510,6 +515,9 @@ def gen(p):
         sys.path.insert(0, HERE)
         import dexknobs
         cands = dexknobs.candidates(p) + (candidates(p) if SET == 'all' else [])
+        if SET == 'all':
+            import fightknobs
+            cands = fightknobs.candidates(p) + cands
     else:
         cands = candidates(p)
     if p.get('sac_honest'):
