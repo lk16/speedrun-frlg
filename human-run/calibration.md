@@ -123,3 +123,33 @@ hideout-out 110, hm02-trip 25, hm02 22, to-vermilion 70, surge-cans 117 (13 cans
 lavender-heal 19, tower-rival 121, tower-marowak 362, fuji-flute 178, fly-celadon 15, snorlax 32, cycling-road 69,
 safari-trip 25, safari-walk 293 (3 catches), warden 24, koga 322 (with a center heal). Splits: Surge 6058 s,
 Snorlax 6874 s, Koga 7538 s (model p50 4364 / 4470 / 5103).
+
+## Played segments after Koga, seed 11, LeafGreen, tier 1 (2026-11-22, controller 2)
+
+`human-run/journal/2026-11-22-14-00-controller-2.md`. Seconds between checkpoints. Koga -> Sevii from the
+canonical-code pass (`runs/human-play/fwd-canon`, dex hooks active); Sevii -> Indigo from the development
+run (`runs/human-play/fwd-main`; same code paths, earlier stages without the dex hooks). One sample each.
+
+| played stage | s | model segments | note |
+| --- | --- | --- | --- |
+| teach-surf | 23 | warden-strength (23 for HM teaches) | HM03 through the TM case + forget screen |
+| power-plant | 94 | fly-lavender-2 12 + powerplant-walk | Lavender fly, bike, surf Route 10 |
+| power-plant-out | 486 | powerplant-out 7 + hunt-power_plant | Thunder Stone + 200-step hunt with no balls in the bag |
+| to-cinnabar | 47 | fly-pallet + surf-cinnabar + surf-route21-* | two swimmers fought |
+| mansion | 358 | mansion + secret-key 15 | 4-6 statue presses, Moon Stone, TM14, Elixir, out on foot |
+| blaine | 221 | blaine-walk, blaine-quiz-text 45, blaine, blaine-badge | Blizzard taught, center heal (not in model), 6 quizzes, Blaine 4 turns |
+| sevii-boat .. sevii | 737 | leg_sevii | 94 + 47 + 214 (bikers) + 317 (Bond Bridge hunt, Berry Forest) + 65 |
+| celadon-shopping | 143 | fly-celadon-2 12 + xbuy 30 | 2F balls, 4F stones, 5F X items, Saffron Hyper Potions |
+| silph (3 stages) | 423 | silph-walk .. master-ball | Saffron heal (not in model), 3 card-key doors, Giovanni 2, Master Ball, Lapras |
+| sabrina | 454 | sabrina-walk, sabrina, badge, heal, Hitmonlee | teleport pads with bumps |
+| erika | 377 | fly-celadon-3, erika-walk, gym, erika, badge, heal, Jolteon | |
+| giovanni | 521 | fly-viridian, Diglett hunt, gym, giovanni, badge, heal | PC (Doduo out, Lapras in) + HM04: ~45 s not in the model; one gym re-entry |
+| route22 | 228 | route22, rival-route22, hunt-route22 | |
+| victory-road | 707 | route23 .. victory-road .. indigo-heal | Route 23 hunt ~160 s; boulders 19 + 6 + 33 + 1 + 19 pushes |
+| indigo-mart | 12 | (league_heals top-up) | 12 Max Potions |
+
+Splits (run timer vs model p50): Blaine 8767 s (canonical) / 8611 (dev) vs 5890; Sevii 9503 / 9457 vs 6805;
+Sabrina 10191 vs 7678; Erika 10783 vs 7913; Giovanni 11342 vs 8198; Victory Road (indigo-heal) 12308 vs 9175.
+The gap to the model p50 is ~2.4-3.1 ks from Koga on and holds roughly flat: Blaine -> Sevii (737 s played vs
+915 s model) and Sevii -> Sabrina were faster than modelled, Sabrina -> Erika (592 vs 235) and the Victory Road
+leg (966 vs ~980 incl. Route 22) as modelled or slower.
