@@ -407,7 +407,10 @@ fn fill_round(s: &mut Session) -> PResult<()> {
     let fill: Vec<crate::params::Hunt> = s.plan.params.fill.clone();
     let mut next = None;
     for h in &fill {
-        if !tried.contains(&h.site) && site_new(s, &h.site, &h.area).0 > 0 {
+        if !tried.contains(&h.site)
+            && site_new(s, &h.site, &h.area).0 > 0
+            && site_reachable(s, &h.site, &h.area)
+        {
             next = Some(h.clone());
             break;
         }
@@ -448,8 +451,61 @@ fn fill_round(s: &mut Session) -> PResult<()> {
             }
         }
     }
-    super::dex::hunt(s, &h)?;
-    Ok(())
+    match super::dex::hunt(s, &h) {
+        Ok(_) => Ok(()),
+        // The walk planner cannot get there (Seafoam's currents and boulders): a human would not
+        // keep walking into the wall either; the site is dropped and the next round picks another.
+        Err(PlayError::Death(m)) | Err(PlayError::Fatal(m))
+            if m.contains("re-plans") || m.contains("no path") || m.contains("bumps") =>
+        {
+            s.event(
+                "warn",
+                format!(
+                    "dex fill: {} not reachable by the walker ({m}); next site",
+                    h.site.trim_start_matches("MAP_")
+                ),
+                json!({"site": h.site}),
+            );
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
+/// Can the walk planner get from the site's Fly point (its heal location tile,
+/// `heal_locations.json`) to the site at all? Sites behind Seafoam's currents and boulders are not
+/// (`MAP_SEAFOAM_ISLANDS_B4F`: every branch of the first canonical attempt soft-locked walking there).
+fn site_reachable(s: &mut Session, site: &str, area: &str) -> bool {
+    let Some((map, _)) = fly_point(s, site, area) else {
+        return false;
+    };
+    let heal: Option<serde_json::Value> =
+        std::fs::read_to_string(decomp().join("src/data/heal_locations.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok());
+    let Some(h) = heal.as_ref().and_then(|h| {
+        h["heal_locations"]
+            .as_array()?
+            .iter()
+            .find(|e| e["map"] == map.as_str())
+            .cloned()
+    }) else {
+        return false;
+    };
+    let (Some(x), Some(y)) = (h["x"].as_i64(), h["y"].as_i64()) else {
+        return false;
+    };
+    let g = s.graph();
+    let (Some(&from), Some(&to)) = (g.by_id.get(&map), g.by_id.get(site)) else {
+        return false;
+    };
+    super::walk::plan_len(
+        s,
+        Some((from, x as i16, y as i16)),
+        &move |n: &Node| n.0 == to,
+        &hm_opts(),
+    )
+    .is_some()
 }
 
 /// The Pokémon Center of a heal location's map (`heal_locations.json` `respawn_map`).
@@ -528,7 +584,7 @@ fn greedy_site(s: &mut Session, tried: &[String]) -> Option<crate::params::Hunt>
             continue;
         }
         let (k, share) = site_new(s, site, area);
-        if k == 0 {
+        if k == 0 || !site_reachable(s, site, area) {
             continue;
         }
         let tiles = v["tiles"].as_i64().unwrap_or(999);
