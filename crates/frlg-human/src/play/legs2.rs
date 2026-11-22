@@ -70,8 +70,8 @@ pub fn fly_from_here(s: &mut Session, outdoor: &str, mapsec: &str) -> PResult<()
 /// (same file), and Blastoise's four slots are all `keep_moves` after Surf and Blizzard. It waits
 /// for the Lapras gift (Silph 7F, learns HM04), before Victory Road needs it.
 fn teach_surf(s: &mut Session) -> PResult<()> {
-    dex_hook(s, "koga-badge");
-    dex_hook(s, "warden-strength");
+    dex_hook(s, "koga-badge")?;
+    dex_hook(s, "warden-strength")?;
     let party = Ram::new(&s.obs).party(s.hf.rec.emu());
     let surf = id("MOVE_SURF");
     if !party.iter().any(|m| m.knows(surf).is_some()) {
@@ -119,7 +119,7 @@ fn power_plant(s: &mut Session) -> PResult<()> {
 fn power_plant_out(s: &mut Session) -> PResult<()> {
     s.seg = "powerplant-out".into();
     pick_ball(s, "MAP_POWER_PLANT", "ItemThunderStone", &Opts::default())?;
-    dex_hook(s, "powerplant-out");
+    dex_hook(s, "powerplant-out")?;
     go_map(s, "MAP_ROUTE10", &hm_opts())?;
     Ok(())
 }
@@ -360,7 +360,7 @@ fn mansion(s: &mut Session) -> PResult<()> {
         return Err(PlayError::Fatal("no Secret Key after the B1F ball".into()));
     }
     s.event("decision", "Mansion B1F: Secret Key", json!({}));
-    dex_hook(s, "mansion");
+    dex_hook(s, "mansion")?;
     // Out on foot (no Escape Rope in the bag), through whatever doors the switch left.
     let cin = s.graph().id("MAP_CINNABAR_ISLAND");
     mansion_to(s, "out of the Mansion", &move |n: &Node| n.0 == cin)
@@ -520,7 +520,7 @@ fn sail(s: &mut Session, harbor: &str, row: i8, dest: &str) -> PResult<()> {
 /// scene in the Pokémon Center (`OneIsland_PokemonCenter_1F/scripts.inc` `MeetCelioScene`: the
 /// Meteorite and the Tri-Pass; `VAR_MAP_SCENE_ONE_ISLAND_POKEMON_CENTER_1F` 1 when done).
 fn sevii_boat(s: &mut Session) -> PResult<()> {
-    dex_hook(s, "blaine-badge");
+    dex_hook(s, "blaine-badge")?;
     s.seg = "sevii-bill-boat".into();
     // Out of the gym; the scene takes over on the doorstep (the walk ends wherever it leaves us).
     let gym = s.graph().id("MAP_CINNABAR_ISLAND_GYM");
@@ -598,10 +598,10 @@ fn three_island(s: &mut Session) -> PResult<()> {
 fn berry_forest(s: &mut Session) -> PResult<()> {
     s.seg = "bond-bridge".into();
     go_map(s, "MAP_THREE_ISLAND_BOND_BRIDGE", &hm_opts())?;
-    dex_hook(s, "bond-bridge");
+    dex_hook(s, "bond-bridge")?;
     s.seg = "berry-forest".into();
     go_face(s, "MAP_THREE_ISLAND_BERRY_FOREST", 4, 8, &hm_opts())?;
-    dex_hook(s, "berry-forest");
+    dex_hook(s, "berry-forest")?;
     s.seg = "lostelle-hypno".into();
     s.hf.press(keys::A)?;
     settle_until(s, "Lostelle's rescue", 8000, |s| {
@@ -641,23 +641,26 @@ fn sevii_return(s: &mut Session) -> PResult<()> {
         "delivered the Meteorite (Moon Stone)",
         json!({"moon_stones": moon}),
     );
-    dex_hook(s, "deliver-meteorite");
+    dex_hook(s, "deliver-meteorite")?;
     s.seg = "two-island-out-2".into();
     sail(s, "MAP_TWO_ISLAND_HARBOR", 0, "MAP_ONE_ISLAND_HARBOR")?;
     s.seg = "one-island-in".into();
     let pc = s.graph().id("MAP_ONE_ISLAND_POKEMON_CENTER_1F");
+    let cin = s.graph().id("MAP_CINNABAR_ISLAND");
+    // The scene fires on the column and runs to Cinnabar inside the walk's own settle.
     go_to(
         s,
         "the One Island center's x 12 column",
-        &move |n: &Node| n.0 == pc && n.1 == 12 && (6..=9).contains(&n.2),
+        &move |n: &Node| n.0 == cin || (n.0 == pc && n.1 == 12 && (6..=9).contains(&n.2)),
         &Opts::default(),
     )?;
     s.seg = "blaine-badge-and-sevii-scene".into();
-    let cin = s.graph().id("MAP_CINNABAR_ISLAND");
     settle_until(s, "back on Cinnabar", 12_000, move |s| {
         here(s).is_some_and(|n| n.0 == cin) && var(s, "VAR_MAP_SCENE_CINNABAR_ISLAND") >= 4
     })?;
-    split(s, "Sevii", "blaine-badge-and-sevii-scene")
+    split(s, "Sevii", "blaine-badge-and-sevii-scene")?;
+    dex_hook(s, "blaine-badge-and-sevii-scene")?;
+    dex_hook(s, "stones")
 }
 
 pub fn stages() -> Vec<Stage> {
