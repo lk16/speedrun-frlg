@@ -1740,16 +1740,8 @@ fn dotted_hole(s: &mut Session) -> PResult<()> {
             json!({}),
         );
     }
-    // The Full Restore ball of Ruin Valley (`SixIsland_RuinValley/map.json` (19, 11),
-    // `FLAG_HIDE_SIX_ISLAND_RUIN_VALLEY_FULL_RESTORE`), a League heal.
-    pickup(
-        s,
-        "MAP_SIX_ISLAND_RUIN_VALLEY",
-        19,
-        11,
-        "FLAG_HIDE_SIX_ISLAND_RUIN_VALLEY_FULL_RESTORE",
-        "ITEM_FULL_RESTORE",
-    )?;
+    // (Ruin Valley's Full Restore ball at (19, 11), `SixIsland_RuinValley/map.json`: the walk
+    // planner finds no path to it from the braille; not taken.)
     // The door's open metatile is set by the script (`CutMoveOpenDottedHoleDoor`); the planner
     // reads the layout's closed door: walk in by hand.
     take_warp(s, "MAP_SIX_ISLAND_RUIN_VALLEY", 24, 25, keys::UP)?;
