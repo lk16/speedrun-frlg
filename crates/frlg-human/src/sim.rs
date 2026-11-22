@@ -298,6 +298,8 @@ struct State {
     repel_ok: bool,
     /// MODEL CHANGE `Params::awakenings`: Awakenings in the bag.
     awakenings: u32,
+    /// MODEL CHANGE `Params::coin_case_frames`: the Coin Case has been fetched.
+    coin_case: bool,
     /// Battle simulation: the carry's IVs and nature (rolled at the starter), effort values earned,
     /// HP as a fraction, badges (bit 0 Boulder, 4 Soul, 6 Volcano) and whether Surf is known.
     ivs: [u32; 6],
@@ -915,6 +917,50 @@ fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Spec
             }
         } else {
             bait = bait.saturating_sub(1);
+        }
+    }
+}
+
+/// Money a Game Corner prize really costs (`buy` specials price coins at 20 each): with the Coin Case
+/// model (`Params::coin_case_frames`) the coins come in purchases of 50 for 1,000 (`strings.c:425`).
+fn buy_cost(ctx: &Ctx, cost: u32) -> u32 {
+    if ctx.p.coin_case_frames > 0 {
+        (cost / 20).div_ceil(50) * 1000
+    } else {
+        cost
+    }
+}
+
+/// The number of trash cans the human checks in the Vermilion Gym (`Params::trash_cans`): the switch
+/// layout of `SetVermilionTrashCans` (`field_specials.c:552`: first switch 1..15 uniform, the second a
+/// neighbour +-1 in the row or +-5 in the column with equal odds), checked in order 1..15 until the first
+/// switch, then one guess among the neighbours; a wrong guess re-rolls both (`VermilionCity_Gym/scripts.inc`
+/// `TrySwitchTwo`).
+pub fn trash_can_checks(rng: &mut Rng) -> u32 {
+    let mut checks = 0;
+    loop {
+        let first = 1 + (rng.next_u64() % 15) as i32;
+        let col = (first - 1) % 5;
+        let mut nb: Vec<i32> = vec![];
+        if col > 0 {
+            nb.push(first - 1);
+        }
+        if col < 4 {
+            nb.push(first + 1);
+        }
+        if first > 5 {
+            nb.push(first - 5);
+        }
+        if first <= 10 {
+            nb.push(first + 5);
+        }
+        let second = nb[(rng.next_u64() % nb.len() as u64) as usize];
+        checks += first as u32;
+        // The human guesses a neighbour uniformly (he cannot see which one the game picked).
+        let guess = nb[(rng.next_u64() % nb.len() as u64) as usize];
+        checks += 1;
+        if guess == second {
+            return checks;
         }
     }
 }
@@ -2813,6 +2859,7 @@ pub fn attempt(
         repel_left: 0,
         repel_ok: false,
         awakenings: 0,
+        coin_case: false,
         ivs: [15; 6],
         nature: 0,
         quiet_hits_left: u32::MAX,
@@ -3261,10 +3308,15 @@ pub fn attempt(
                             .species
                             .iter()
                             .all(|n| st.caught.has(ctx.dex.species[ctx.dex.id(n)].dex))
-                            || (ctx.p.money_model && st.money < special.cost)) => {}
+                            || (ctx.p.money_model && st.money < buy_cost(ctx, special.cost))) => {}
                 Kind::Special { special } => {
                     if special.kind == "buy" && ctx.p.money_model {
-                        st.money -= special.cost;
+                        st.money -= buy_cost(ctx, special.cost);
+                    }
+                    if special.kind == "buy" && ctx.p.coin_case_frames > 0 && !st.coin_case {
+                        // MODEL CHANGE `coin_case_frames`: the restaurant's Coin Case first.
+                        st.coin_case = true;
+                        bump(&mut st, ctx.p.coin_case_frames as f64 * ctx.p.text_factor);
                     }
                     if special.kind == "sell" && ctx.p.money_model {
                         // Items sold at a Poke Mart: `cost` is the money received.
@@ -3642,6 +3694,19 @@ pub fn attempt(
                 }
                 st.mystic = true;
                 bump(&mut st, ctx.p.mystic_frames as f64 * ctx.p.text_factor);
+            }
+            // MODEL CHANGE `trash_cans`: the Vermilion Gym switches, after the walk into the gym.
+            if ctx.p.trash_cans && seg.name == "surge-walk" {
+                let mut r = Rng::new(seed, idx, hash_str("surge-cans"));
+                let n = trash_can_checks(&mut r);
+                bump(
+                    &mut st,
+                    ctx.p.cans_fixed as f64 + n as f64 * ctx.p.can_frames as f64,
+                );
+            }
+            // MODEL CHANGE `played_extra`: controller-measured time the segment model misses.
+            if let Some(&x) = ctx.p.played_extra.get(&seg.name) {
+                bump(&mut st, x);
             }
             match seg.name.as_str() {
                 "black-glasses-swap" => st.glasses = true,

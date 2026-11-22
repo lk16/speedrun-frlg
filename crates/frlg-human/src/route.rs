@@ -695,12 +695,24 @@ pub(crate) fn leg_hm02(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     b.text("hm02-fly", 800, Src::Guess);
 }
 
+/// `Params::fly_badge_gate` in the `wr` order with Surge after the tower: the legs between the Route 16
+/// house and Surge cannot use Fly.
+pub(crate) fn fly_gated(p: &Params) -> bool {
+    p.fly_badge_gate && p.route_style == "wr" && !p.variant("surge_early")
+}
+
 #[allow(unused_variables)]
 pub(crate) fn leg_tower(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
     let e = b.era;
     // 7. Pokémon Tower and the flute.
-    b.text("fly-lavender", 700, Src::Guess);
+    if fly_gated(p) {
+        // MODEL CHANGE `fly_badge_gate`: no Thunder Badge yet, so no Fly (`party_menu.c:3926`): Route 16
+        // house -> Celadon -> Route 7 -> Saffron -> Route 8 -> Lavender, 321 tiles (`frlg-mapgraph path`).
+        b.walk("walk-lavender", 321, e, None, Src::Tiles);
+    } else {
+        b.text("fly-lavender", 700, Src::Guess);
+    }
     b.walk("tower-walk", 215, e, None, Src::Guess);
     b.wander("tower-encounters", "MAP_POKEMON_TOWER_5F", g(108, 108, 80));
     b.trainer("rival-tower", &tn("TRAINER_RIVAL_POKEMON_TOWER"), 700);

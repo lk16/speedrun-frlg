@@ -897,6 +897,30 @@ pub struct Params {
     /// PLAN (with the `sleep_no_potion` model): Awakenings bought at the Cerulean mart stop
     /// (`persim-and-potions`), 250 each; the policy wakes a sleeping fighter with one (`Action::Awaken`).
     pub awakenings: u32,
+    /// MODEL CHANGE (controller run Giovanni 1 -> Koga, journal 2026-11-22-12-30-controller): Fly needs the
+    /// Thunder Badge (`decompiled/src/party_menu.c:3926`, `FlagGet(FLAG_BADGE01_GET + FIELD_MOVE_FLY)`,
+    /// `FIELD_MOVE_FLY` 2 in `include/constants/party_menu.h:36`). In the `wr` order without `surge_early`
+    /// the Flys to Lavender (Route 16 house -> tower) and to Vermilion (tower -> Surge) come before the
+    /// badge: they become bike walks through Saffron (the Tea opens the gates,
+    /// `Route7_EastEntrance/scripts.inc:30`): 321 and 242 tiles (`bin/frlg-mapgraph path`).
+    pub fly_badge_gate: bool,
+    /// MODEL CHANGE (same run): a Game Corner prize (`buy` special, the Abra) needs the Coin Case
+    /// (`CeladonCity_GameCorner_PrizeRoom/scripts.inc:15`), a gift in the Celadon restaurant
+    /// (`CeladonCity_Restaurant/scripts.inc:19`), and the coins are sold 50 for 1,000 (`strings.c:425`):
+    /// the prize's coins are rounded up to whole purchases and these frames are added once (restaurant
+    /// detour + clerk menus; guess). 0 = the old model (no Coin Case, coins at exactly 20 each).
+    pub coin_case_frames: u32,
+    /// MODEL CHANGE (same run): the Vermilion Gym trash-can switches (`SetVermilionTrashCans`,
+    /// `decompiled/src/field_specials.c:552`; `VermilionCity_Gym/scripts.inc`: a wrong second can resets
+    /// both). The human checks the 15 cans in order until the first switch, then one random neighbour
+    /// (+-1 in the row, +-5 in the column); a miss re-rolls. Cost `cans_fixed + checks * can_frames`
+    /// after `surge-walk`, fitted to the two played branches (13 cans 117 s, 53 cans 199 s).
+    pub trash_cans: bool,
+    pub can_frames: u32,
+    pub cans_fixed: u32,
+    /// MODEL CHANGE (same run): frames added at the end of the named segment, measured by the playing
+    /// controller against the model (one sample each; `calibration.md`).
+    pub played_extra: std::collections::HashMap<String, f64>,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1092,6 +1116,12 @@ impl Default for Params {
             ball_shop_from: String::new(),
             early_balls: 0,
             awakenings: 0,
+            fly_badge_gate: false,
+            coin_case_frames: 0,
+            trash_cans: false,
+            can_frames: 122,
+            cans_fixed: 5410,
+            played_extra: Default::default(),
         }
     }
 }
