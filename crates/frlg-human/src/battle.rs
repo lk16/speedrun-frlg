@@ -3631,9 +3631,9 @@ fn run(
                     Action::Sac(x) => format!("Sac {x:?}"),
                 };
                 eprintln!(
-                    "t{} me {}/{} st{:?} stg{:?} | foe {} {}/{} | act {} | en {:?} first {} danger {} kill {} sacs {}",
+                    "t{} me {}/{} st{:?} stg{:?} | foe {} {}/{} | act {} | en {:?} first {} danger {} kill {} sacs {} foestg{:?}",
                     out.turns, me.hp, me.max_hp, me.status, me.stages, dex.species[foe.species].name, e.hp, e.max_hp,
-                    an, en_move.map(|m| dex.moves[m].name.clone()), me_first, danger, sure_kill, fs.sacs_left
+                    an, en_move.map(|m| dex.moves[m].name.clone()), me_first, danger, sure_kill, fs.sacs_left, e.stages
                 );
             }
             let fled = if me_first {
@@ -5311,5 +5311,16 @@ mod tests {
         assert_eq!((me.confusion, me.persim), (0, false));
         confuse(&mut me, 3);
         assert_eq!(me.confusion, 3);
+    }
+
+    /// Koga holds Hyper Potion x2 and a Full Heal (`decompiled/src/data/trainers.h`, `TRAINER_LEADER_KOGA`); only
+    /// the potions heal HP (`battle_ai_switch_items.c:599-638`), so `ai_cure_items` leaves him two HP heals.
+    #[test]
+    fn a_full_heal_is_not_an_hp_heal() {
+        let dex = Dex::load();
+        let f = dex.fight("TRAINER_LEADER_KOGA");
+        assert_eq!((f.heals, f.cures), (3, 1));
+        let m = dex.fight("TRAINER_LEADER_MISTY");
+        assert_eq!(m.heals - m.cures, 1);
     }
 }

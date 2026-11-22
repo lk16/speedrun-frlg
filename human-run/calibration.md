@@ -317,3 +317,11 @@ Scores (paired vs 1132, WR+2m, seed 7401, R 800k): 1246 +323 h [282, 378] (377 f
 [-12.9, 7.6]. **Per-window WR check** (each window no further from the WR than 1132's error + 30 s, and the window
 total within 1132's): 1245 fails (Snorlax, Blaine, Sevii, Sabrina, Start E4R1), 1246 fails (Blaine,
 Start E4R1, total), 1247 fails (Sevii, Bike). CURRENT stays 1132.
+| Koga | Blastoise L42, 128/133 HP, 11 Super Potions, 3 X Specials | 15/20; **73/100** (seeds 1-100, 2026-11-22 exp-and-koga) | 35% was a harness mismatch (`battle` CLI at `--setup-min 1 --heal-below 0.4`, so the X Specials went on Koffing turn 1); **60.5%** at the plan's `setup_min_turns` 2 / `heal_below` .6 (n 10 000) |
+
+Koga detail (journal `2026-11-22-16-50-exp-and-koga.md`; the controller now logs `foe_last_move`, `my_stages`, `foe_stages`
+per turn): per Water Pulse on Muk the hit rate by Muk's evasion stage is the same in both (engine .495 at mean +3.03, emulator
+.533 at +3.10, `Cmd_accuracycheck` matches), damage rolls and Sludge damage match, Muk's Minimize / Acid Armor shares match at
+full HP. Remaining gap (~12 points): the engine's Muk picks Toxic more often (5.6% of its turns vs 2.9%), so the carry is
+poisoned more (31% of Muk turns vs 16%) and more often dies at the second Koffing / Weezing after Muk (12.7% vs 5%). Not
+located in the AI port (`AI_CV_Toxic`, `AI_CBM_Poison` checked); open.

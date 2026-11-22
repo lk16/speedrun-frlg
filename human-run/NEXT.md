@@ -1,5 +1,15 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 16:55 main session: CURRENT = 1253-runner-fights-tf (model of record)
+
+Switched from 1132 because 1253 is the more honest model: the carry fights the trainers the runner
+and the played run fight, and matches the WR's levels at every split, and the risk windows refit to
+~1.0 (they had been standing in for missing exp). Its score (WR+2m 301 h) is worse, and that is the
+honest answer. One open conflict: `trainer_fit` 0.6 is a FIT to the WR splits, while the emulator
+measured 52 trainer battles at 0.95-1.02x the `calib_wr` formula (calibration.md). Resolve it in the
+route-windows work (more battles in the model than the runner actually fights there? or shorter
+battles from a higher level?) before trusting 0.6. All descents from now on start from 1253.
+
 ## 2026-11-22 segment-cost calibration: model of record stays 1132 (read first)
 
 Journal `journal/2026-11-22-14-00-calibration.md`, `calibration.md` ("Segment-cost calibration" and
@@ -24,6 +34,21 @@ Ranked next steps: (1) the structural window errors that 1132 already has and th
 route/plan differences against the WR, not constants: fix those first, then re-run the reconciliation; (2) measure
 more guessed text lumps on the played run (`tools/cal_decompose.py` per stage) instead of one global scale;
 (3) the controller agent's inefficiency list (journal) before the next played pass.
+## 2026-11-22 exp economy and Koga (read first; journal `journal/2026-11-22-16-50-exp-and-koga.md`)
+
+The sim's carry was 4-5 levels short because it fought only the sight-cone minimum; the played s11 run and the runner fight
+~20-36 more trainers (exp formula verified exact against the played run). **1253-runner-fights-tf** = 1132 + MODEL CHANGE:
+`fight_lists` (runner-level list: the sim now matches the WR's level at every split), `risk_windows` refit
+(**2.565 -> 1.04, 1.35 -> 0.99**, .773 -> .674, 1.572 -> 1.06, 2.314 -> 2.17; first window kept 1.111), `trainer_fit`
+0.81 -> 0.6 (pre-door splits back to the WR's). **WR+2m 301.0 h / WR 477.4 h** vs 1132's 182.3 / 287.9 under the old model
+(seed 7402 / 7401, R 1.6M). Under 1253 dropping the extra fights costs +132 h (1254); the full s11 list has no WR+2m finishes
+(1255). Koga: the audit's 35% was a CLI mismatch (setup-min 1); engine 60.5% at the plan's policy vs emulator 73/100; the
+residual is Muk's Toxic frequency (open). `ai_cure_items` (Full Heal is no HP heal) is correct and nil.
+
+**Coordination**: everything is behind default-off keys; 1132 scores unchanged. CURRENT not switched (League descents run on
+1132). Proposed: descents move to 1253's keys (`fight_lists`, `risk_windows`, `trainer_fit` 0.6); a League refit of
+`risk_windows` should start from 1253, not 1132. Open, ranked: optional-trainer descent per segment under 1253; measure
+route-trainer fight time on the emulator (replaces the 0.6 fit); first window not identifiable; Koga Toxic AI term.
 
 ## 2026-11-22 stand-in audit: descend from 1211 (read first)
 
