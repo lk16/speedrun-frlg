@@ -381,6 +381,21 @@ fn fill_round(s: &mut Session) -> PResult<()> {
         })
         .collect();
     let round = tried.len();
+    // v3: once the bag, party and boxes hold enough evolutions / trades / gifts for the rest
+    // (`dexfin::plan`), the hunts stop and the dex-finish stages take over (pg-canon5 hunted 24
+    // rounds first, the last ones for one species at 6-55 % of a site's encounters).
+    if let Some(acts) = super::dexfin::plan(s, 60 - n) {
+        s.event(
+            "decision",
+            format!(
+                "dex fill: {n} caught, the last {} come from evolutions / trades / gifts ({} actions): no more hunts",
+                60 - n,
+                acts.len()
+            ),
+            json!({"caught": n, "actions": acts.len()}),
+        );
+        return Ok(());
+    }
     let balls = have(s, "ITEM_GREAT_BALL") + have(s, "ITEM_POKE_BALL") + have(s, "ITEM_ULTRA_BALL");
     if balls < 8 {
         let want = (2 * (60 - n) as u16).clamp(12, 50);

@@ -123,6 +123,10 @@ pub struct Session<'p> {
     pub wild_plan: super::battle::WildPlan,
     /// The dex fill's hunt state (`play/dex.rs`): which wild mons to catch, Safari counts.
     pub dex: super::dex::DexState,
+    /// Tiles the walker bumped into during this stage, with counts: a tile bumped on two walks
+    /// is treated as blocked for the rest of the stage (cleared at every stage start, so a run
+    /// resumed at a checkpoint plans exactly as the uninterrupted one).
+    pub bumped: std::collections::HashMap<super::walk::Node, u32>,
     pub model: Model,
     pub cfg: PlayCfg,
     prefix: Vec<u16>,
@@ -288,6 +292,7 @@ impl<'p> Session<'p> {
             fallback: false,
             wild_plan: super::battle::WildPlan::Flee,
             dex: Default::default(),
+            bumped: Default::default(),
             model,
             cfg,
             prefix,
@@ -376,6 +381,7 @@ impl<'p> Session<'p> {
             );
             self.seg = st.name.to_string();
             self.wild_plan = super::battle::WildPlan::Flee;
+            self.bumped.clear();
             let mut res = (st.run)(self);
             if res.is_ok()
                 && self.cfg.force_rollback.iter().any(|n| n == st.name)

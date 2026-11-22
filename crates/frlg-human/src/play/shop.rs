@@ -287,6 +287,48 @@ pub fn buy(
     Ok(out)
 }
 
+/// v3 mart stop: top the bag up to `targets` (item, count wanted in the bag) at the mart on `map`
+/// (nothing bought when every count is reached). The stops and counts are model-honesty-2's plan
+/// 1413 `marts` (`human-run/plans/1413-potion-bag-small.md`: Great Balls to 15 at Lavender
+/// (walk-lavender), 30 + 5 potions at Cinnabar (surf-route21-s), 35 + 3 at Saffron (sabrina-badge),
+/// 4 potions at silph-walk); plan 1122 has no `marts` and bought no ball before the Power Plant
+/// hunt (v2: every hunt before Celadon skipped, "no ball in the bag").
+pub fn mart_topup(
+    s: &mut Session,
+    map: &str,
+    clerk: Option<(i16, i16)>,
+    targets: &[(&str, u16)],
+    why: &str,
+) -> PResult<()> {
+    let want: Vec<(&str, u16)> = targets
+        .iter()
+        .map(|&(it, n)| (it, n.saturating_sub(Ram::new(&s.obs).count(s.hf.rec.emu(), id(it)))))
+        .filter(|&(_, k)| k > 0)
+        .collect();
+    let money = Ram::new(&s.obs).money(s.hf.rec.emu());
+    s.event(
+        "decision",
+        format!(
+            "mart stop {} ({why}): {}",
+            map.trim_start_matches("MAP_"),
+            if want.is_empty() {
+                "bag already full enough".to_string()
+            } else {
+                want.iter()
+                    .map(|(it, k)| format!("{k} {}", it.trim_start_matches("ITEM_")))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+        ),
+        json!({"map": map, "targets": targets.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>(),
+               "buy": want.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>(), "money": money}),
+    );
+    if want.is_empty() {
+        return Ok(());
+    }
+    buy(s, map, clerk, &want).map(|_| ())
+}
+
 /// Sell every one of `items` in the bag at the mart on `map` (SELL on the shop menu, the bag in
 /// sell mode, `decompiled/src/item_menu.c:1787-1960`: `Task_ItemContext_Sell`, the quantity box
 /// `Task_SelectQuantityToSell` (DOWN from 1 wraps to the stack size,

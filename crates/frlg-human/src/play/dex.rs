@@ -196,7 +196,7 @@ fn needed_at(s: &mut Session, slots: &[crate::data::Slot], skip: &[usize]) -> Ve
 /// Logged as a `decision` with the numbers behind it.
 pub fn wild_plan(s: &mut Session, default: WildPlan) -> WildPlan {
     let Some(h) = s.dex.hunt.clone() else {
-        return default;
+        return pass_plan(s, default);
     };
     let (game_id, level) = wild_mon(s);
     let Some((idx, national)) = dex_species(s, game_id) else {
@@ -235,6 +235,71 @@ pub fn wild_plan(s: &mut Session, default: WildPlan) -> WildPlan {
     } else {
         WildPlan::Flee
     }
+}
+
+/// Balls in the bag the human throws at a passing mon (the Master Ball is kept for Mewtwo).
+pub fn ball_count(s: &mut Session) -> u16 {
+    let master = id("ITEM_MASTER_BALL");
+    Ram::new(&s.obs)
+        .pocket(s.hf.rec.emu(), 2)
+        .iter()
+        .filter(|&&(it, _)| it != master)
+        .map(|&(_, n)| n)
+        .sum()
+}
+
+/// A passing encounter outside a hunt (the stage's own plan is `Flee`): the sim's rule for
+/// encounters on the way (`sim::run_encounters`: `want_catch` = `catch_on_pass` and the species'
+/// catch rate at least `pass_min_catch`, never on the plan's `pass_off` segments), through the
+/// same [`sim::wants_catch`] as a hunt, with the Pokédex flags from RAM. The controller adds the
+/// one thing the sim abstracts: a ball in the bag (Safari Balls in the Safari Zone).
+fn pass_plan(s: &mut Session, default: WildPlan) -> WildPlan {
+    if default != WildPlan::Flee {
+        return default;
+    }
+    let (game_id, level) = wild_mon(s);
+    let Some((idx, national)) = dex_species(s, game_id) else {
+        return default;
+    };
+    let p = &s.plan.params;
+    let sp = &s.plan.dex.species[idx];
+    let (name, rate) = (sp.name.clone(), sp.catch_rate);
+    let allowed = p.catch_on_pass && rate >= p.pass_min_catch && !p.pass_off.contains(&s.seg);
+    let is_owned = owned(s, national);
+    if !sim::wants_catch(&s.ctx, idx, is_owned, &[], allowed) {
+        return default;
+    }
+    let flags = s.obs.battle_type_flags(s.hf.rec.emu());
+    let safari = flags & (1 << 7) != 0;
+    let balls = if safari {
+        safari_counters(s).0 as u16
+    } else {
+        ball_count(s)
+    };
+    let caught_n = caught_count(s);
+    if balls == 0 {
+        s.event(
+            "model-vs-actual",
+            format!(
+                "passing {} Lv{level} (new, catch rate {rate}): no ball in the bag, fled",
+                short(&name)
+            ),
+            json!({"species": name, "level": level, "catch_rate": rate, "seg": s.seg}),
+        );
+        return default;
+    }
+    s.event(
+        "decision",
+        format!(
+            "passing {} Lv{level} on {}: catch (new, catch rate {rate} >= pass_min_catch {}; {balls} balls)",
+            short(&name),
+            s.seg,
+            p.pass_min_catch
+        ),
+        json!({"species": name, "level": level, "catch": true, "reason": "pass", "catch_rate": rate,
+               "owned_total": caught_n, "balls": balls, "seg": s.seg}),
+    );
+    WildPlan::Catch
 }
 
 /// After a wild battle of a hunt: count the catch.
@@ -531,6 +596,7 @@ fn go_first(s: &mut Session, map: &str, cands: &[(i16, i16)], opts: &Opts) -> PR
         match go(s, map, x, y, opts) {
             Ok(()) => return Ok(i),
             Err(PlayError::Fatal(e)) if e.contains("no path") => last = Some(e),
+            Err(PlayError::Death(e)) if e.contains("goal tile bumped") => last = Some(e),
             Err(e) => return Err(e),
         }
     }
@@ -813,13 +879,38 @@ fn hunt_loop(
         if area == Area::Fish {
             cast(s)?;
         } else {
+            // A pacing tile the walker bumped into (the layout calls it walkable, the game does
+            // not: Victory Road 2F (33, 17), 57 bumps in one hunt of the 11-22 run): pace
+            // somewhere else.
+            let bumped = |s: &Session, t: (i16, i16)| s.bumped.contains_key(&(site, t.0, t.1));
+            if bumped(s, pair[0]) || bumped(s, pair[1]) {
+                let me = here(s).map_or((0, 0), |n| (n.1, n.2));
+                let pairs: Vec<[(i16, i16); 2]> = pace_pairs(s, &h.site, water, me)
+                    .into_iter()
+                    .filter(|p| !bumped(s, p[0]) && !bumped(s, p[1]))
+                    .collect();
+                let cands: Vec<(i16, i16)> = pairs.iter().map(|p| p[0]).collect();
+                let i = go_first(s, &h.site, &cands, &opts)?;
+                s.event(
+                    "warn",
+                    format!(
+                        "hunt: pacing pair {:?} bumped; pacing {:?} instead",
+                        pair, pairs[i]
+                    ),
+                    json!({"site": h.site}),
+                );
+                pair = pairs[i];
+            }
             let cur = here(s).map(|n| (n.1, n.2));
             let target = if cur == Some(pair[0]) {
                 pair[1]
             } else {
                 pair[0]
             };
-            go(s, &h.site, target.0, target.1, &opts)?;
+            match go(s, &h.site, target.0, target.1, &opts) {
+                Err(PlayError::Death(m)) if m.contains("goal tile bumped") => continue,
+                r => r?,
+            }
         }
         // The plan's `steps` are the sim's encounter rolls (one per step). Pacing a pair of tiles
         // rolls twice per tile, at the turn and at the step (`checkStandardWildEncounter` runs at

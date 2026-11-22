@@ -933,7 +933,14 @@ pub fn go_to(
     opts: &Opts,
 ) -> PResult<()> {
     let start_frame = s.frame();
-    let mut temp_block: HashSet<Node> = HashSet::new();
+    // Tiles bumped on two earlier walks of this stage stay blocked (Victory Road 2F (33, 17) was
+    // bumped 57 times by one hunt's pacing in the 11-22 canonical run, ~50 frames each).
+    let mut temp_block: HashSet<Node> = s
+        .bumped
+        .iter()
+        .filter(|(_, &c)| c >= 2)
+        .map(|(n, _)| *n)
+        .collect();
     let mut bumps = 0;
     let mut plans = 0;
     let mut bike_tried: Option<MapId> = None;
@@ -1025,6 +1032,16 @@ pub fn go_to(
                     json!({"map": mn, "x": n.1, "y": n.2}),
                 );
                 temp_block.insert(n);
+                let c = s.bumped.entry(n).or_insert(0);
+                *c += 1;
+                if *c >= 2 && goal(&n) && plan.nodes.last() == Some(&n) {
+                    // The goal tile itself cannot be entered (twice now): the caller picks
+                    // another (hunt pacing pairs) or the branch dies as before.
+                    return Err(PlayError::Death(format!(
+                        "soft-lock: {what}: goal tile bumped ({}, {})",
+                        n.1, n.2
+                    )));
+                }
                 if bumps > 40 {
                     return Err(PlayError::Death(format!("soft-lock: {what}: 40 bumps")));
                 }

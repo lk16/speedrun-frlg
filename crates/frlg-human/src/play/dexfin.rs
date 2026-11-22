@@ -370,6 +370,11 @@ pub fn candidates(s: &mut Session) -> Vec<Action> {
 /// actions need in the party. Returns the chosen actions in visit order.
 pub fn plan(s: &mut Session, need: u32) -> Option<Vec<Action>> {
     let cands = candidates(s);
+    plan_from(s, cands, need)
+}
+
+/// [`plan`] over a given candidate list.
+fn plan_from(s: &mut Session, cands: Vec<Action>, need: u32) -> Option<Vec<Action>> {
     let mut places: Vec<Place> = cands.iter().map(|a| a.place).collect();
     places.sort();
     places.dedup();
@@ -464,18 +469,46 @@ pub fn plan(s: &mut Session, need: u32) -> Option<Vec<Action>> {
 
 /// Party slots the errands never deposit: the lead (the fighter) and the Fly and Cut users (the
 /// walk to every place may need them).
-fn keep_slots(s: &mut Session) -> Vec<usize> {
+pub fn keep_slots(s: &mut Session) -> Vec<usize> {
     let party = Ram::new(&s.obs).party(s.hf.rec.emu());
     let fly = id("MOVE_FLY");
     let cut = id("MOVE_CUT");
     let mut v = vec![0];
-    for mv in [fly, cut] {
+    for mv in [fly, cut, id("MOVE_SURF"), id("MOVE_STRENGTH")] {
         if let Some(i) = party.iter().position(|m| m.knows(mv).is_some()) {
             if !v.contains(&i) {
                 v.push(i);
             }
         }
     }
+    // The pre-evolution of a stone evolution the plan still does from the party later
+    // (`dex::evolve` uses party mons only: Eevee for the Jolteon at erika-badge).
+    let own = owned_set(s);
+    let pending: Vec<crate::params::Evolve> = s
+        .plan
+        .params
+        .evolutions
+        .iter()
+        .filter(|e| e.via == "stone")
+        .cloned()
+        .collect();
+    for e in &pending {
+        let t = s.plan.dex.id(&e.species);
+        if own[s.plan.dex.species[t].dex as usize] {
+            continue;
+        }
+        for (i, m) in party.iter().enumerate() {
+            let name = names().species(m.species).to_string();
+            let Some(sp) = s.plan.dex.species.iter().find(|x| x.name == name) else {
+                continue;
+            };
+            let d = sp.dex;
+            if crate::sim::evo_source(&s.ctx, e, &|x| x == d).is_some() && !v.contains(&i) {
+                v.push(i);
+            }
+        }
+    }
+    v.truncate(5);
     v
 }
 
@@ -937,5 +970,157 @@ pub fn finish_party(s: &mut Session) -> PResult<()> {
     );
     shop::pc(s, c, &pc_ops)?;
     let _ = have(s, "ITEM_POKE_BALL");
+    Ok(())
+}
+
+/// v3: the dex work a human does while passing a Pokémon Center on the main route (not the
+/// post-game): the same RAM planner as the dex finish ([`candidates`]), restricted to the
+/// party/PC (`Place::Pc`: stones and Rare Candies already in the bag, on party or boxed mons) and
+/// to `place` (the town's trades, fossils, stones bought there). Every species any such action
+/// adds is taken, not just enough for 60: the plan's dex is due at the first Hall of Fame. Stone
+/// purchases keep `reserve` yen in hand (the League's heals). Eevee is left alone (the plan's
+/// own Thunder Stone evolution at erika-badge), and Rare Candy evolutions are taken only when
+/// they need at most two candies (the rest go to the carry, `candy_early`). Up to three passes
+/// (an evolution makes a trade possible: Pikachu -> Raichu -> Electrode). Returns the species
+/// added.
+pub fn errands(s: &mut Session, center: &str, place: Option<Place>, reserve: u32) -> PResult<u32> {
+    let n0 = caught_count(s);
+    let eevee = id("SPECIES_EEVEE");
+    for pass in 0..3 {
+        let money = Ram::new(&s.obs).money(s.hf.rec.emu());
+        let cands: Vec<Action> = candidates(s)
+            .into_iter()
+            .filter(|a| a.place == Place::Pc || Some(a.place) == place)
+            .filter(|a| match &a.kind {
+                Kind::Stone { pre, .. } => *pre != eevee,
+                Kind::BuyStone { pre, price, .. } => *pre != eevee && money >= price + reserve,
+                Kind::Candy { n, .. } => *n <= 2,
+                Kind::Gift { .. } => place == Some(Place::Route4),
+                _ => true,
+            })
+            .collect();
+        let mut targets: Vec<u32> = cands.iter().map(|a| a.dex).collect();
+        targets.sort();
+        targets.dedup();
+        if targets.is_empty() {
+            break;
+        }
+        let mut acts = None;
+        for need in (1..=targets.len() as u32).rev() {
+            if let Some(v) = plan_from(s, cands.clone(), need) {
+                acts = Some(v);
+                break;
+            }
+        }
+        let Some(acts) = acts else { break };
+        let desc: Vec<String> = acts
+            .iter()
+            .map(|a| {
+                let how = match &a.kind {
+                    Kind::Stone { item, .. } | Kind::BuyStone { item, .. } => {
+                        item.trim_start_matches("ITEM_").to_string()
+                    }
+                    Kind::Candy { n, .. } => format!("{n} Rare Candy"),
+                    Kind::Trade { give } => format!(
+                        "trade {}",
+                        names().species(*give).trim_start_matches("SPECIES_")
+                    ),
+                    Kind::Gift { .. } => "gift".into(),
+                    Kind::Fossil { .. } => "fossil".into(),
+                };
+                format!("{} ({how})", a.target.trim_start_matches("SPECIES_"))
+            })
+            .collect();
+        let caught = caught_count(s);
+        s.event(
+            "decision",
+            format!(
+                "dex errands at {} (pass {}): {}",
+                center.trim_start_matches("MAP_"),
+                pass + 1,
+                desc.join(", ")
+            ),
+            json!({"center": center, "caught": caught, "money": money,
+                   "plan": acts.iter().map(|a| json!({"target": a.target, "place": format!("{:?}", a.place), "kind": format!("{:?}", a.kind)})).collect::<Vec<_>>()}),
+        );
+        execute(s, &acts, center)?;
+        if caught_count(s) == caught {
+            break;
+        }
+    }
+    let n = caught_count(s);
+    if n > n0 {
+        s.event(
+            "model-vs-actual",
+            format!(
+                "dex errands at {}: +{} species ({n} caught); the model banks these at its own anchors",
+                center.trim_start_matches("MAP_"),
+                n - n0
+            ),
+            json!({"center": center, "gained": n - n0, "caught": n}),
+        );
+    }
+    Ok(n - n0)
+}
+
+/// Do `acts` (all in `center`'s town): Pc evolutions in party-sized batches, the trades (the
+/// mons to give withdrawn first), gifts, stones bought and used, fossils.
+fn execute(s: &mut Session, acts: &[Action], center: &str) -> PResult<()> {
+    let is_pc_evo =
+        |a: &Action| matches!(a.kind, Kind::Stone { .. } | Kind::Candy { .. }) && a.place == Place::Pc;
+    let evos: Vec<Action> = acts.iter().filter(|a| is_pc_evo(a)).cloned().collect();
+    if !evos.is_empty() {
+        do_evolutions(s, &evos, center)?;
+    }
+    let gives: Vec<u16> = acts
+        .iter()
+        .filter_map(|a| match &a.kind {
+            Kind::Trade { give } => Some(*give),
+            _ => None,
+        })
+        .collect();
+    if gives.iter().any(|g| party_has(s, *g).is_none()) {
+        let room = 6 - keep_slots(s).len();
+        let want: Vec<u16> = gives.iter().copied().take(room).collect();
+        arrange(s, center, &want)?;
+    }
+    let mut order: Vec<Action> = acts.iter().filter(|a| !is_pc_evo(a)).cloned().collect();
+    order.sort_by_key(|a| match a.kind {
+        Kind::Gift { .. } => 0,
+        Kind::Trade { .. } => 1,
+        Kind::BuyStone { .. } => 2,
+        Kind::Stone { .. } | Kind::Candy { .. } => 3,
+        Kind::Fossil { .. } => 4,
+    });
+    for a in &order {
+        if dex::owned(s, a.dex) {
+            continue;
+        }
+        match &a.kind {
+            Kind::Gift { .. } => npc(s, a)?,
+            Kind::Trade { give } => {
+                if party_has(s, *give).is_none() {
+                    arrange(s, center, &[*give])?;
+                }
+                npc(s, a)?
+            }
+            Kind::Fossil { .. } => fossil(s, a)?,
+            Kind::BuyStone { item, pre, .. } => {
+                if have(s, item) == 0 {
+                    shop::buy(
+                        s,
+                        "MAP_CELADON_CITY_DEPARTMENT_STORE_4F",
+                        Some((3, 13)),
+                        &[(item.as_str(), 1)],
+                    )?;
+                }
+                if party_has(s, *pre).is_none() {
+                    arrange(s, center, &[*pre])?;
+                }
+                evolve_one(s, a)?;
+            }
+            Kind::Stone { .. } | Kind::Candy { .. } => evolve_one(s, a)?,
+        }
+    }
     Ok(())
 }
