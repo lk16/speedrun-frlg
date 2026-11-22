@@ -385,9 +385,9 @@ fn fill_round(s: &mut Session) -> PResult<()> {
     if balls < 8 {
         let want = (2 * (60 - n) as u16).clamp(12, 50);
         let money = Ram::new(&s.obs).money(s.hf.rec.emu());
-        // The 60 are mandatory, the League's Full Restores are not: keep ¥15000 (five of them);
-        // the Sevii trainers pay the rest back before the League.
-        let afford = (money.saturating_sub(15_000) / 600) as u16;
+        // The 60 are mandatory, the League's Full Restores are not: every yen goes to balls (the
+        // Sevii trainers pay some of it back before the League).
+        let afford = (money / 600) as u16;
         let k = want.saturating_sub(balls).min(afford);
         if k == 0 {
             return Err(PlayError::Fatal(format!(
