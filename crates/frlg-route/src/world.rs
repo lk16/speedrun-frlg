@@ -51,6 +51,9 @@ pub struct Tile {
     pub behavior: u16,
     /// Metatile attribute bits 24-26: 1 = land encounters roll here.
     pub land: bool,
+    /// `MAPGRID_ELEVATION_MASK >> 12` (`decompiled/include/global.fieldmap.h`): 0 and 15 never
+    /// block; otherwise an object only moves between tiles of its own elevation.
+    pub elevation: u8,
 }
 
 /// One `object_events` entry of a map.json, reduced to what routing needs.
@@ -354,6 +357,7 @@ impl World {
                     collision: ((grid >> 10) & 3) as u8,
                     behavior: (attr & 0x1FF) as u16,
                     land: ((attr >> 24) & 7) as u8 == ENCOUNTER_LAND,
+                    elevation: (grid >> 12) as u8,
                 }
             })
             .collect();

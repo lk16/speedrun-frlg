@@ -220,17 +220,21 @@ pub fn sim_party_mon(
     Some(m)
 }
 
-fn species_index(dex: &Dex, id: u16) -> Option<usize> {
+pub(crate) fn species_index(dex: &Dex, id: u16) -> Option<usize> {
     let name = ids::SPECIES.get(id as usize).filter(|n| !n.is_empty())?;
     dex.has_species(name).then(|| dex.id(name))
 }
 
-fn move_index(dex: &Dex, id: u16) -> Option<usize> {
+pub(crate) fn move_index(dex: &Dex, id: u16) -> Option<usize> {
     let name = ids::MOVES.get(id as usize).filter(|n| !n.is_empty())?;
     dex.has_move(name).then(|| dex.move_id(name))
 }
 
-fn moves_of(dex: &Dex, moves: &[u16; 4], pp: &[u8; 4]) -> Option<(Vec<usize>, Vec<i32>)> {
+pub(crate) fn moves_of(
+    dex: &Dex,
+    moves: &[u16; 4],
+    pp: &[u8; 4],
+) -> Option<(Vec<usize>, Vec<i32>)> {
     let mut m = vec![];
     let mut p = vec![];
     for (i, &id) in moves.iter().enumerate() {
