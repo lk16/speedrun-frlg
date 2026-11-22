@@ -271,6 +271,9 @@ pub struct Opts {
     pub ignore: Vec<&'static str>,
     /// Maps the path must not enter.
     pub avoid: Vec<&'static str>,
+    /// Tiles a script has opened since the layout was drawn (`setmetatile` barriers: gym beams,
+    /// doors), as (map, x, y): walkable floor whatever the layout says.
+    pub open: Vec<(&'static str, i16, i16)>,
 }
 
 type Node = (MapId, i16, i16);
@@ -419,6 +422,11 @@ impl Graph {
             .iter()
             .filter_map(|a| self.by_id.get(*a).copied())
             .collect();
+        let open: HashSet<Node> = opts
+            .open
+            .iter()
+            .filter_map(|(m, x, y)| self.by_id.get(*m).map(|id| (*id, *x, *y)))
+            .collect();
         // state: node + last direction index (4 = none) + surfing
         type St = (Node, u8, bool);
         let mut dist: HashMap<St, u32> = HashMap::new();
@@ -561,7 +569,11 @@ impl Graph {
                 if blk.contains(&(nx, ny)) {
                     continue;
                 }
-                let Some(water) = self.passable(m, nx, ny, surfing || opts.surf) else {
+                let opened = open.contains(&(mid, nx, ny));
+                let Some(water) = self
+                    .passable(m, nx, ny, surfing || opts.surf)
+                    .or(opened.then_some(false))
+                else {
                     continue;
                 };
                 let mut cost = STEP + turn;

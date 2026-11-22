@@ -37,6 +37,14 @@ fn parse(file: &str, prefix: &str, by_name: &mut HashMap<String, u16>) -> HashMa
             continue;
         };
         let val: String = it.collect::<Vec<_>>().join(" ");
+        // A trailing `// 0x800` comment states the value of an expression this parser cannot
+        // evaluate (`#define SYS_FLAGS (TRAINER_FLAGS_END + 1) // 0x800`, `flags.h:1324`).
+        let comment_val = val
+            .split("//")
+            .nth(1)
+            .map(str::trim)
+            .and_then(|c| c.strip_prefix("0x"))
+            .and_then(|h| u16::from_str_radix(h, 16).ok());
         let val = val.split("//").next().unwrap_or_default().trim();
         if !name.starts_with(prefix) || val.is_empty() {
             continue;
@@ -57,7 +65,8 @@ fn parse(file: &str, prefix: &str, by_name: &mut HashMap<String, u16>) -> HashMa
             .trim_end_matches(')')
             .split('+')
             .map(|t| term(t, by_name))
-            .try_fold(0u16, |a, t| t.map(|t| a.wrapping_add(t)));
+            .try_fold(0u16, |a, t| t.map(|t| a.wrapping_add(t)))
+            .or(comment_val);
         if let Some(v) = v {
             by_name.insert(name.to_string(), v);
             out.entry(v).or_insert_with(|| name.to_string());

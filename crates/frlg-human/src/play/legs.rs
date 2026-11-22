@@ -134,7 +134,163 @@ fn hm02_walk(s: &mut Session) -> PResult<()> {
     go_map(s, "MAP_ROUTE16_HOUSE", &o)
 }
 
+/// Log a split: the run timer against the model's no-reset p50 for the segment `seg` (the clock
+/// after that segment, `Model::p50`), then the reset verdict the plan would give there (logged,
+/// never acted on: `PROMPT.md`, *No resets in the review attempt*).
+pub fn split(s: &mut Session, name: &str, seg: &str) -> PResult<()> {
+    let t = s.timer().unwrap_or(0.0);
+    let p50 = s.model.p50(seg);
+    let q = s.model.index(seg).map(|i| s.model.q[i]);
+    s.event(
+        "split",
+        match p50 {
+            Some(p) => format!(
+                "split {name}: {t:.0}s vs model p50 {p:.0}s ({:+.0}s)",
+                t - p
+            ),
+            None => format!("split {name}: {t:.0}s (no model segment {seg})"),
+        },
+        json!({"actual": t, "p50": p50, "p10": q.map(|q| q.0), "p90": q.map(|q| q.2),
+               "name": name, "seg": seg}),
+    );
+    if let Some((text, nums)) = s.model.verdict(seg, t) {
+        s.event("reset-verdict", text, nums);
+    }
+    Ok(())
+}
+
+/// The plan flies from the Route 16 house to Lavender with the new HM02 (`leg_hm02`, then
+/// `leg_tower`'s "fly-lavender"), and only later flies to Vermilion for Surge. Fly needs the
+/// Thunder Badge: `FlagGet(FLAG_BADGE01_GET + fieldMove)` with `FIELD_MOVE_FLY` = 2
+/// (`decompiled/src/party_menu.c:3926`, `include/constants/party_menu.h:36`), i.e. Surge's badge.
+/// So Surge comes first, on foot: Celadon -> Saffron (the Tea opened the gates) -> Route 6 ->
+/// Vermilion, cutting the tree in front of the gym.
+fn to_vermilion(s: &mut Session) -> PResult<()> {
+    s.event(
+        "model-vs-actual",
+        "model bug: the plan flies to Lavender before Surge, but Fly needs the Thunder Badge \
+         (party_menu.c:3926); walking to Vermilion for Surge first, flying to Lavender after",
+        json!({"segments": ["hm02-fly", "fly-lavender", "fly-vermilion"], "cite": "decompiled/src/party_menu.c:3926"}),
+    );
+    let o = Opts {
+        cut: true,
+        ..Opts::default()
+    };
+    go_map(s, "MAP_VERMILION_CITY_GYM", &o)
+}
+
+/// The trash-can switches (`decompiled/data/maps/VermilionCity_Gym/scripts.inc`): the first switch
+/// is a random can (`SetVermilionTrashCans`, `decompiled/src/field_specials.c:552`), the second a
+/// neighbour of it; a wrong second guess re-rolls both. The human checks cans nearest-first, and
+/// after the first switch, its grid neighbours. Cans are the bg events at x 1..9 step 2, y 10..14
+/// step 2, id = col + 5 * row + 1 (`VermilionCity_Gym/map.json`). Progress is read the way the
+/// player sees it: the first lock's flag (`FOUND_FIRST_SWITCH` = `FLAG_TEMP_1`) and
+/// `FLAG_FOUND_BOTH_VERMILION_GYM_SWITCHES`.
+fn surge_cans(s: &mut Session) -> PResult<()> {
+    let n = super::names::names();
+    let both = n.id("FLAG_FOUND_BOTH_VERMILION_GYM_SWITCHES");
+    let first = n.id("FLAG_TEMP_1");
+    let map = "MAP_VERMILION_CITY_GYM";
+    let can_xy = |id: i16| (1 + 2 * ((id - 1) % 5), 10 + 2 * ((id - 1) / 5));
+    let mut checked = 0;
+    let mut tried: Vec<i16> = vec![];
+    let mut found_first: Option<i16> = None;
+    while !s.obs.flag(s.hf.rec.emu(), both).unwrap_or(false) {
+        if checked > 60 {
+            return Err(super::session::PlayError::Death(
+                "soft-lock: 60 trash cans without the locks".into(),
+            ));
+        }
+        let cand: Vec<i16> = match found_first {
+            Some(f) => {
+                let (c, r) = ((f - 1) % 5, (f - 1) / 5);
+                let mut v = vec![];
+                if c < 4 {
+                    v.push(f + 1);
+                }
+                if c > 0 {
+                    v.push(f - 1);
+                }
+                if r < 2 {
+                    v.push(f + 5);
+                }
+                if r > 0 {
+                    v.push(f - 5);
+                }
+                v
+            }
+            None => (1..=15).filter(|c| !tried.contains(c)).collect(),
+        };
+        // Nearest can first.
+        let me = here(s).unwrap();
+        let next = *cand
+            .iter()
+            .min_by_key(|&&c| {
+                let (x, y) = can_xy(c);
+                (x - me.1).abs() + (y - me.2).abs()
+            })
+            .unwrap();
+        let (x, y) = can_xy(next);
+        go_face(s, map, x, y, &Opts::default())?;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        checked += 1;
+        let f1 = s.obs.flag(s.hf.rec.emu(), first).unwrap_or(false);
+        if found_first.is_none() {
+            tried.push(next);
+            if f1 {
+                found_first = Some(next);
+                s.event(
+                    "decision",
+                    format!("first switch in can {next}"),
+                    json!({"can": next, "checked": checked}),
+                );
+            }
+        } else if !f1 && !s.obs.flag(s.hf.rec.emu(), both).unwrap_or(false) {
+            s.event(
+                "decision",
+                format!("can {next} was wrong: the locks reset"),
+                json!({"can": next}),
+            );
+            found_first = None;
+            tried.clear();
+        }
+    }
+    s.event(
+        "decision",
+        format!("both locks open after {checked} cans"),
+        json!({"cans": checked}),
+    );
+    Ok(())
+}
+
+/// `leg_surge`: Tucker (forced, `VermilionCity_Gym/map.json`) on the way, Lt. Surge at (5, 2).
+fn surge(s: &mut Session) -> PResult<()> {
+    s.seg = "surge-gym-trainers".into();
+    // The beam barrier rows 6-7, x 3-7, are switched off by `SetBeamsOff` once both locks are
+    // open (`VermilionCity_Gym/scripts.inc`).
+    let mut o = Opts::default();
+    for y in 6..=7 {
+        for x in 3..=7 {
+            o.open.push(("MAP_VERMILION_CITY_GYM", x, y));
+        }
+    }
+    go_face(s, "MAP_VERMILION_CITY_GYM", 5, 2, &o)?;
+    s.seg = "surge".into();
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    let badge = super::names::id("FLAG_BADGE03_GET");
+    if !s.obs.flag(s.hf.rec.emu(), badge).unwrap_or(false) {
+        return Err(super::session::PlayError::Fatal(
+            "no Thunder Badge after Surge".into(),
+        ));
+    }
+    split(s, "Surge", "surge-badge")
+}
+
 fn fly_lavender(s: &mut Session) -> PResult<()> {
+    // Fly works outdoors only ("Can't use that here."): out of the gym first.
+    go_map(s, "MAP_VERMILION_CITY", &Opts::default())?;
     super::items::fly(s, "MAPSEC_LAVENDER_TOWN")
 }
 
@@ -155,6 +311,18 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "hm02",
             run: hm02,
+        },
+        Stage {
+            name: "to-vermilion",
+            run: to_vermilion,
+        },
+        Stage {
+            name: "surge-cans",
+            run: surge_cans,
+        },
+        Stage {
+            name: "surge",
+            run: surge,
         },
         Stage {
             name: "fly-lavender",
