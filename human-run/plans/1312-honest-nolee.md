@@ -1274,3 +1274,18 @@ Journal `2026-11-22-12-00-optimisation.md`.
  "evo_candy_frames": 1620
 }
 ```
+
+## Score (combined honest model of record, paired against 1311; child - parent, negative = 1312 better)
+
+| cell | 1312 | 1311 | diff [95% CI] |
+| --- | --- | --- | --- |
+| WR+2m seed 7791 R 3.2M | 1130.4 (668 fin) | 1314.9 | -184.5 [-255.7, -116.1] |
+| WR+2m seed 7792 R 3.2M | 1104.1 (683 fin) | 1258.3 | -154.2 [-212.0, -100.6] |
+| WR seed 7791 R 3.2M | 3222.2 (221 fin) | 3805.3 | -583.1 [-993.3, -254.1] |
+| WR seed 7792 R 3.2M | 3039.1 (234 fin) | 3883.2 | -844.1 [-1264.1, -488.7] |
+| WR+2m lp 1.0 / 1.4 R 1.6M | 950.0 / 591.5 | 1121.9 / 659.3 | -171.9 / -67.9 |
+| WR+2m mp 1.0 / 1.3 | 2130.4 / 900.1 | 2581.6 / 1024.3 | -451.1 / -124.2 |
+| WR+2m door ~.10 | 2165.2 | 2942.0 | -776.9 [-1108, -474] |
+
+Better in every cell. Fight-price sensitivity of the base: the WR factor's interval moves the score by about x0.45 .. x4.7
+(1309: 317 / 718 / 3396 h at WR+2m).
