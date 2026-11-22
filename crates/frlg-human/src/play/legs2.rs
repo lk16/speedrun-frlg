@@ -1850,14 +1850,16 @@ pub fn indigo_mart(s: &mut Session) -> PResult<()> {
 /// and every branch with Blizzard at 3 PP lost to Lance's last mons (10 of 10).
 pub fn league_prep(s: &mut Session) -> PResult<()> {
     let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    if super::names::names().species(m.species) == "SPECIES_MEWTWO" {
+        return mewtwo_pp_prep(s, &m);
+    }
     let low_pp = m
         .moves
         .iter()
         .zip(m.pp.iter())
         .any(|(&mv, &pp)| mv != 0 && pp <= 5);
-    let elixir = ["ITEM_MAX_ELIXIR", "ITEM_ELIXIR"]
-        .into_iter()
-        .find(|it| have(s, it) > 0);
+    // The Max Elixirs are Mewtwo's (the round's fighter): the carry gets the plain Elixir only.
+    let elixir = ["ITEM_ELIXIR"].into_iter().find(|it| have(s, it) > 0);
     if let (true, Some(it)) = (low_pp, elixir) {
         super::shop::use_item_on(s, it, 0)?;
         let pp = Ram::new(&s.obs).party(s.hf.rec.emu())[0].pp;
@@ -1873,6 +1875,86 @@ pub fn league_prep(s: &mut Session) -> PResult<()> {
         s.event(
             "model-vs-actual",
             "Full Restore on the carry between League rooms (not in the model)",
+            json!({"hp": m.hp, "max_hp": m.max_hp, "status": m.status}),
+        );
+    }
+    Ok(())
+}
+
+/// Max PP of move slot `i` (`gBattleMoves[].pp` plus a fifth per PP Up, `CalculatePPWithBonus`,
+/// `decompiled/src/pokemon.c`).
+fn max_pp(s: &Session, m: &super::ram::Mon, i: usize) -> u32 {
+    let Some(k) = super::battle::move_index(s.plan.dex, m.moves[i]) else {
+        return 0;
+    };
+    let base = s.plan.dex.moves[k].pp;
+    let b = ((m.pp_bonuses >> (2 * i)) & 3) as u32;
+    base + base * b / 5
+}
+
+/// Mewtwo between League rooms: its attacks are the round's budget. A Max Elixir (or Elixir)
+/// once its attacking PP is below 45 % of the maximum; else an Ether on Psychic at 3 PP or less.
+/// Not in the model (its Mewtwo spends the plan's Max Elixirs on its own schedule, `mewtwo_pp`).
+fn mewtwo_pp_prep(s: &mut Session, m: &super::ram::Mon) -> PResult<()> {
+    let attacking: Vec<usize> = (0..4)
+        .filter(|&i| {
+            m.moves[i] != 0
+                && super::battle::move_index(s.plan.dex, m.moves[i])
+                    .is_some_and(|k| s.plan.dex.moves[k].power > 0)
+        })
+        .collect();
+    let cur: u32 = attacking.iter().map(|&i| m.pp[i] as u32).sum();
+    let max: u32 = attacking.iter().map(|&i| max_pp(s, m, i)).sum();
+    let deficit = attacking
+        .iter()
+        .map(|&i| max_pp(s, m, i).saturating_sub(m.pp[i] as u32))
+        .max()
+        .unwrap_or(0);
+    if max > 0 && cur * 100 < max * 45 {
+        // The plain Elixir first when 10 PP a move covers the gap.
+        let order = if deficit <= 10 {
+            ["ITEM_ELIXIR", "ITEM_MAX_ELIXIR"]
+        } else {
+            ["ITEM_MAX_ELIXIR", "ITEM_ELIXIR"]
+        };
+        if let Some(it) = order.into_iter().find(|it| have(s, it) > 0) {
+            super::shop::use_item_on(s, it, 0)?;
+            let pp = Ram::new(&s.obs).party(s.hf.rec.emu())[0].pp;
+            s.event(
+                "model-vs-actual",
+                format!(
+                    "{} on Mewtwo between League rooms ({cur}/{max} attacking PP)",
+                    it.trim_start_matches("ITEM_")
+                ),
+                json!({"pp_before": m.pp, "pp_after": pp, "item": it}),
+            );
+        }
+    } else if let Some(k) = m.knows(super::names::id("MOVE_PSYCHIC")) {
+        if m.pp[k] <= 3 {
+            if let Some(it) = ["ITEM_ETHER", "ITEM_MAX_ETHER"]
+                .into_iter()
+                .find(|it| have(s, it) > 0)
+            {
+                super::shop::use_item_on_move(s, it, 0, Some(k))?;
+                let pp = Ram::new(&s.obs).party(s.hf.rec.emu())[0].pp;
+                s.event(
+                    "model-vs-actual",
+                    format!(
+                        "{} on Mewtwo's Psychic between League rooms ({} PP)",
+                        it.trim_start_matches("ITEM_"),
+                        m.pp[k]
+                    ),
+                    json!({"pp_before": m.pp, "pp_after": pp, "item": it}),
+                );
+            }
+        }
+    }
+    let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    if (m.hp * 2 < m.max_hp || m.status != 0) && have(s, "ITEM_FULL_RESTORE") > 0 {
+        super::shop::use_item_on(s, "ITEM_FULL_RESTORE", 0)?;
+        s.event(
+            "model-vs-actual",
+            "Full Restore on Mewtwo between League rooms (not in the model)",
             json!({"hp": m.hp, "max_hp": m.max_hp, "status": m.status}),
         );
     }

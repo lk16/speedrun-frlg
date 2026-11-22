@@ -729,6 +729,55 @@ fn trainer_beaten(s: &mut Session, trainer: &str) -> bool {
     s.obs.flag(s.hf.rec.emu(), base + id).unwrap_or(false)
 }
 
+/// Pick up an item ball (stand next to the object, face it, A) or a hidden item (face the tile, A:
+/// hidden items need no Itemfinder, `decompiled/src/field_control_avatar.c` `TryStartHiddenItem`
+/// scripts) unless its `flag` says it is gone. Not in the model's post-game: the plan's PP items
+/// (`elixirs`: Max Elixirs, PP Ups, Rare Candies) are main-route pickups the played route did not
+/// make; the human takes the League-relevant ones the post-game legs pass instead
+/// (`model-vs-actual`). `item` is the `ITEM_*` it gives (`map.json` / the item script).
+pub(super) fn pickup(
+    s: &mut Session,
+    map: &str,
+    x: i16,
+    y: i16,
+    gone_flag: &str,
+    item: &str,
+) -> PResult<()> {
+    if flag(s, gone_flag) {
+        return Ok(());
+    }
+    let before = have(s, item);
+    let t0 = s.frame();
+    go_face(s, map, x, y, &hm_opts())?;
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    let after = have(s, item);
+    s.event(
+        if after > before { "decision" } else { "warn" },
+        format!(
+            "picked up {} at {} ({x}, {y}): {} in the bag",
+            item.trim_start_matches("ITEM_"),
+            map.trim_start_matches("MAP_"),
+            after
+        ),
+        json!({"item": item, "map": map, "x": x, "y": y, "have": after, "frames": s.frame() - t0}),
+    );
+    if !s
+        .log
+        .events
+        .iter()
+        .any(|e| e.kind == "model-vs-actual" && e.text.starts_with("post-game pickups"))
+    {
+        s.event(
+            "model-vs-actual",
+            "post-game pickups: the plan's Max Elixirs / PP Ups were main-route items the played \
+             route never took; the human picks up the League items on the post-game legs instead",
+            json!({}),
+        );
+    }
+    Ok(())
+}
+
 /// The local id of the object of `map` whose script contains `script` (`map.json`).
 pub(super) fn obj_id(s: &Session, map: &str, script: &str) -> PResult<u8> {
     let g = s.graph();
@@ -1440,6 +1489,16 @@ fn celio_ruby(s: &mut Session) -> PResult<()> {
 fn mt_ember(s: &mut Session) -> PResult<()> {
     s.seg = "kindle-road-in".into();
     let t0 = s.timer().unwrap_or(0.0);
+    // The Ether ball on Kindle Road (`OneIsland_KindleRoad/map.json` (15, 70),
+    // `FLAG_HIDE_ONE_ISLAND_KINDLE_ROAD_ETHER`): Mewtwo's Psychic for the League.
+    pickup(
+        s,
+        "MAP_ONE_ISLAND_KINDLE_ROAD",
+        15,
+        70,
+        "FLAG_HIDE_ONE_ISLAND_KINDLE_ROAD_ETHER",
+        "ITEM_ETHER",
+    )?;
     go_map(s, "MAP_MT_EMBER_EXTERIOR", &hm_opts())?;
     for (seg, script, tr) in [
         (
@@ -1651,6 +1710,16 @@ fn dotted_hole(s: &mut Session) -> PResult<()> {
             json!({}),
         );
     }
+    // The Full Restore ball of Ruin Valley (`SixIsland_RuinValley/map.json` (19, 11),
+    // `FLAG_HIDE_SIX_ISLAND_RUIN_VALLEY_FULL_RESTORE`), a League heal.
+    pickup(
+        s,
+        "MAP_SIX_ISLAND_RUIN_VALLEY",
+        19,
+        11,
+        "FLAG_HIDE_SIX_ISLAND_RUIN_VALLEY_FULL_RESTORE",
+        "ITEM_FULL_RESTORE",
+    )?;
     // The door's open metatile is set by the script (`CutMoveOpenDottedHoleDoor`); the planner
     // reads the layout's closed door: walk in by hand.
     take_warp(s, "MAP_SIX_ISLAND_RUIN_VALLEY", 24, 25, keys::UP)?;
@@ -1695,6 +1764,24 @@ fn warehouse(s: &mut Session) -> PResult<()> {
     s.seg = "five-island-approach".into();
     let t0 = s.timer().unwrap_or(0.0);
     seagallop(s, 6, 5)?;
+    // The Meadow's PP Up (3, 22) and Max Potion (12, 11) balls, next to the warehouse door
+    // (`FiveIsland_Meadow/map.json`, `FLAG_HIDE_FIVE_ISLAND_MEADOW_PP_UP` / `_MAX_POTION`).
+    pickup(
+        s,
+        "MAP_FIVE_ISLAND_MEADOW",
+        3,
+        22,
+        "FLAG_HIDE_FIVE_ISLAND_MEADOW_PP_UP",
+        "ITEM_PP_UP",
+    )?;
+    pickup(
+        s,
+        "MAP_FIVE_ISLAND_MEADOW",
+        12,
+        11,
+        "FLAG_HIDE_FIVE_ISLAND_MEADOW_MAX_POTION",
+        "ITEM_MAX_POTION",
+    )?;
     if !flag(s, "FLAG_UNLOCKED_ROCKET_WAREHOUSE") {
         go_face(s, "MAP_FIVE_ISLAND_MEADOW", 12, 21, &hm_opts())?;
         s.hf.press(keys::A)?;
@@ -1848,6 +1935,25 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
             )?;
         }
         s.seg = "cerulean-cave".into();
+        // 1F's Full Restore (11, 16), Max Elixir (25, 5) and Nugget (7, 3) balls
+        // (`CeruleanCave_1F/map.json`, `FLAG_HIDE_CERULEAN_CAVE_1F_*`): the League's PP and heals.
+        for (x, y, f, it) in [
+            (
+                11,
+                16,
+                "FLAG_HIDE_CERULEAN_CAVE_1F_FULL_RESTORE",
+                "ITEM_FULL_RESTORE",
+            ),
+            (
+                25,
+                5,
+                "FLAG_HIDE_CERULEAN_CAVE_1F_MAX_ELIXIR",
+                "ITEM_MAX_ELIXIR",
+            ),
+            (7, 3, "FLAG_HIDE_CERULEAN_CAVE_1F_NUGGET", "ITEM_NUGGET"),
+        ] {
+            pickup(s, "MAP_CERULEAN_CAVE_1F", x, y, f, it)?;
+        }
         go_face(s, "MAP_CERULEAN_CAVE_B1F", 7, 12, &hm_opts())?;
         s.seg = "mewtwo".into();
         s.wild_plan = super::battle::WildPlan::Master;
@@ -1865,6 +1971,23 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
         if !tm.mewtwo {
             continue;
         }
+        // Shock Wave (TM34, in the bag since Surge) instead of the plan's Fire Blast: 20 PP of a
+        // never-missing Electric move against 5 PP; it hits Lance's and the rival's Gyarados 4x
+        // and Aerodactyl 2x, while Psychic already covers what Fire Blast was for (Heracross,
+        // Venusaur). The played route has no PP Ups / Max Elixirs from the main route (bug 7).
+        let tm = if tm.mv == "MOVE_FIRE_BLAST" && have(s, "ITEM_TM34") > 0 {
+            s.event(
+                "model-vs-actual",
+                "Mewtwo learns Shock Wave (TM34, 20 PP) instead of the plan's Fire Blast (5 PP): \
+                 the played route reaches the League without the plan's PP Ups and Max Elixirs",
+                json!({"plan": "MOVE_FIRE_BLAST", "played": "MOVE_SHOCK_WAVE"}),
+            );
+            let mut t2 = tm.clone();
+            t2.mv = "MOVE_SHOCK_WAVE".into();
+            t2
+        } else {
+            tm
+        };
         let mv = super::names::id(&tm.mv);
         let slot = party_slot(s, "SPECIES_MEWTWO").ok_or("no Mewtwo")?;
         let m = Ram::new(&s.obs).party(s.hf.rec.emu())[slot].clone();
@@ -1889,6 +2012,25 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
         }
         super::items::teach_tmhm(s, &item, slot)?;
     }
+    // PP Ups on Psychic (its main attack: +2 PP each, `ItemUseCB_PPUp`).
+    while have(s, "ITEM_PP_UP") > 0 {
+        let slot = party_slot(s, "SPECIES_MEWTWO").ok_or("no Mewtwo")?;
+        let m = Ram::new(&s.obs).party(s.hf.rec.emu())[slot].clone();
+        let Some(k) = m.knows(super::names::id("MOVE_PSYCHIC")) else {
+            break;
+        };
+        let pp0 = m.pp[k];
+        super::shop::use_item_on_move(s, "ITEM_PP_UP", slot, Some(k))?;
+        let pp1 = Ram::new(&s.obs).party(s.hf.rec.emu())[slot].pp[k];
+        s.event(
+            "decision",
+            format!("PP Up on Mewtwo's Psychic: {pp0} -> {pp1} PP"),
+            json!({"before": pp0, "after": pp1}),
+        );
+        if pp1 <= pp0 {
+            break;
+        }
+    }
     let slot = party_slot(s, "SPECIES_MEWTWO").ok_or("no Mewtwo")?;
     if slot != 0 {
         party_swap(s, slot, 0)?;
@@ -1910,6 +2052,17 @@ fn league2_entry(s: &mut Session) -> PResult<()> {
     s.seg = "fly-indigo".into();
     let t0 = s.timer().unwrap_or(0.0);
     super::items::fly(s, "MAPSEC_INDIGO_PLATEAU")?;
+    // The plan's Route 23 Max Elixir (`elixirs` max after route23; hidden at (9, 8) of
+    // `Route23/map.json`, `FLAG_HIDDEN_ITEM_ROUTE23_MAX_ELIXIR`), a few tiles south of the
+    // plateau, if the first pass left it.
+    pickup(
+        s,
+        "MAP_ROUTE23",
+        9,
+        8,
+        "FLAG_HIDDEN_ITEM_ROUTE23_MAX_ELIXIR",
+        "ITEM_MAX_ELIXIR",
+    )?;
     s.seg = "league-entry".into();
     center_heal(s, "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F")?;
     super::legs2::indigo_mart(s)?;

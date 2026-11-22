@@ -641,6 +641,18 @@ pub fn use_item(s: &mut Session, item: &str) -> PResult<()> {
 /// USE -> the party menu -> the mon. An evolution scene is mashed with A only (B stops it:
 /// `decompiled/src/evolution_scene.c`). Returns the mon's species afterwards.
 pub fn use_item_on(s: &mut Session, item: &str, slot: usize) -> PResult<u16> {
+    use_item_on_move(s, item, slot, None)
+}
+
+/// [`use_item_on`] for items that ask which move (an Ether, a PP Up: `ShowMoveSelectWindow` and
+/// `Task_HandleRestoreWhichMoveInput`, a standard menu, `decompiled/src/party_menu.c:4548-4590,4709-4715`):
+/// `mv` is the move slot 0..3.
+pub fn use_item_on_move(
+    s: &mut Session,
+    item: &str,
+    slot: usize,
+    mv: Option<usize>,
+) -> PResult<u16> {
     let it = id(item);
     let ram_party = Ram::new(&s.obs).party(s.hf.rec.emu());
     let before = ram_party
@@ -650,6 +662,12 @@ pub fn use_item_on(s: &mut Session, item: &str, slot: usize) -> PResult<u16> {
     open_bag(s)?;
     super::items::bag_use(s, it, 0)?;
     super::items::party_choose(s, slot as i8)?;
+    if let Some(m) = mv {
+        wait_until(s, "the which-move list", 600, |s| {
+            menu::task(s, "Task_HandleRestoreWhichMoveInput")
+        })?;
+        menu::choose(s, m as i8)?;
+    }
     // Evolution scene (A only), the "grew to Lv" / "evolved" text, back to the bag or the field.
     let start = s.hf.fed();
     loop {
