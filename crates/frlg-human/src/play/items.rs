@@ -67,7 +67,7 @@ fn bag_input(s: &mut Session) -> bool {
 
 /// Start menu row of an action: `sStartMenuOrder[]` holds the `STARTMENU_*` ids in display order
 /// (`decompiled/src/start_menu.c:43-66,213`).
-fn start_row(s: &mut Session, action: u8) -> PResult<u8> {
+pub fn start_row(s: &mut Session, action: u8) -> PResult<u8> {
     let order = s.sym("sStartMenuOrder");
     let n = s.sym("sNumStartMenuItems");
     let emu = s.hf.rec.emu();
@@ -76,7 +76,7 @@ fn start_row(s: &mut Session, action: u8) -> PResult<u8> {
         .find(|&i| emu.read8(order + i as u32) == action)
         .ok_or_else(|| PlayError::Fatal(format!("start menu has no action {action}")))
 }
-const STARTMENU_POKEMON: u8 = 1;
+pub const STARTMENU_POKEMON: u8 = 1;
 const STARTMENU_BAG: u8 = 2;
 
 /// Open the bag from the field and wait for its list to take input.
@@ -369,7 +369,7 @@ pub fn teach_tmhm(s: &mut Session, item: &str, slot: usize) -> PResult<()> {
 
 /// The tm item's move (`ITEM_TM01` + i -> `sTMHMMoves[i]`, `decompiled/src/data/party_menu.h:1197`), by the
 /// item's name: TMs map through the move constants the TM case shows.
-fn tm_move(item: u16) -> Option<u16> {
+pub fn tm_move(item: u16) -> Option<u16> {
     let nm = names().item(item);
     let n = names();
     // HM/TM names in the decomp's item list are ITEM_TMxx / ITEM_HMxx; the move list is in

@@ -1287,10 +1287,347 @@ fn warehouse(s: &mut Session) -> PResult<()> {
     split(s, "Warehouse", "warehouse-gideon")
 }
 
-#[allow(dead_code)]
-fn unused(_s: &mut Session) -> PResult<()> {
-    let _ = (center_heal, go_to);
+/// "celio-network-machine": Seagallop to One Island, Celio takes the Sapphire
+/// (`GiveCelioSapphire`: `FLAG_SYS_CAN_LINK_WITH_RS` -- the Elite Four's rematch switch,
+/// `PokemonLeague_LoreleisRoom/scripts.inc:57-62` -- and `FLAG_HIDE_CERULEAN_CAVE_GUARD`,
+/// `OneIsland_PokemonCenter_1F/scripts.inc:244-282`).
+fn celio_sapphire(s: &mut Session) -> PResult<()> {
+    s.seg = "celio-network-machine".into();
+    let t0 = s.timer().unwrap_or(0.0);
+    seagallop(s, 5, 1)?;
+    talk_script(s, CELIO_PC, "EventScript_Celio")?;
+    if !flag(s, "FLAG_SYS_CAN_LINK_WITH_RS") {
+        return Err(PlayError::Fatal("Celio did not take the Sapphire".into()));
+    }
+    s.event(
+        "decision",
+        "Celio took the Sapphire: the network is up, the League upgraded",
+        json!({}),
+    );
+    mva(
+        s,
+        "Sapphire to Celio",
+        t0,
+        "warehouse-gideon",
+        "celio-network-machine",
+    );
+    split(s, "Sevii done", "celio-network-machine")
+}
+
+/// Swap party slots `a` and `b` (party menu: the mon, SWITCH -- after SUMMARY and the mon's field
+/// moves, `SetPartyMonFieldSelectionActions`, `decompiled/src/party_menu.c:2963-2988` -- then the
+/// other mon).
+fn party_swap(s: &mut Session, a: usize, b: usize) -> PResult<()> {
+    let mon = Ram::new(&s.obs).party(s.hf.rec.emu())[a].clone();
+    let fm: Vec<u16> = [
+        "MOVE_FLASH",
+        "MOVE_CUT",
+        "MOVE_FLY",
+        "MOVE_STRENGTH",
+        "MOVE_SURF",
+        "MOVE_ROCK_SMASH",
+        "MOVE_WATERFALL",
+        "MOVE_TELEPORT",
+        "MOVE_DIG",
+        "MOVE_MILK_DRINK",
+        "MOVE_SOFT_BOILED",
+        "MOVE_SWEET_SCENT",
+    ]
+    .iter()
+    .map(|m| super::names::id(m))
+    .collect();
+    let switch_row = 1 + mon.moves.iter().filter(|m| fm.contains(m)).count() as i8;
+    menu::open_start(s)?;
+    let r = super::items::start_row(s, super::items::STARTMENU_POKEMON)?;
+    menu::start_menu_pick(s, r)?;
+    super::items::party_choose(s, a as i8)?;
+    wait_until(s, "the mon's menu", 200, |s| {
+        menu::task(s, "Task_HandleSelectionMenuInput")
+    })?;
+    menu::choose(s, switch_row)?;
+    super::items::party_choose(s, b as i8)?;
+    let sp = mon.species;
+    wait_until(s, "the switch", 300, move |s| {
+        Ram::new(&s.obs).party(s.hf.rec.emu())[b].species == sp
+            && menu::task(s, "Task_HandleChooseMonInput")
+    })?;
+    super::items::close_to_field(s)?;
+    settle(s)?;
+    s.event(
+        "decision",
+        format!(
+            "party: {} to slot {b}",
+            super::names::names()
+                .species(sp)
+                .trim_start_matches("SPECIES_")
+        ),
+        json!({"from": a, "to": b}),
+    );
     Ok(())
+}
+
+/// "fly-cerulean", "cerulean-cave", "mewtwo" (`mewtwo: true`): Seagallop to Vermilion (no flying
+/// across regions), fly to Cerulean, deposit the Weedle so Mewtwo joins the party, the cave (the
+/// guard left with the Sapphire), Mewtwo at B1F (7, 12) (`CeruleanCave_B1F/map.json`,
+/// `CeruleanCave_B1F_EventScript_Mewtwo`) with the Master Ball, the Escape Rope out
+/// (`rope_cerulean_cave`), the plan's Mewtwo TMs (`tms` with `mewtwo: true`: Fire Blast,
+/// Earthquake, Calm Mind; `replace_slot` picks the forgotten move), and Mewtwo to the front: after
+/// the catch the sim's fighter is Mewtwo (`mewtwo_pp`, `sim.rs`).
+fn mewtwo(s: &mut Session) -> PResult<()> {
+    s.seg = "fly-cerulean".into();
+    let t0 = s.timer().unwrap_or(0.0);
+    let mw = super::names::id("SPECIES_MEWTWO");
+    if party_slot(s, "SPECIES_MEWTWO").is_none() {
+        go_map(s, "MAP_ONE_ISLAND_HARBOR", &hm_opts())?;
+        seagallop(s, 1, 0)?;
+        super::items::fly(s, "MAPSEC_CERULEAN_CITY")?;
+        let party = Ram::new(&s.obs).party(s.hf.rec.emu());
+        if party.len() >= 6 {
+            let slot = party_slot(s, "SPECIES_WEEDLE").unwrap_or(2);
+            super::shop::pc(
+                s,
+                "MAP_CERULEAN_CITY_POKEMON_CENTER_1F",
+                &[super::shop::PcOp::Deposit(slot)],
+            )?;
+        }
+        s.seg = "cerulean-cave".into();
+        go_face(s, "MAP_CERULEAN_CAVE_B1F", 7, 12, &hm_opts())?;
+        s.seg = "mewtwo".into();
+        s.wild_plan = super::battle::WildPlan::Master;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        s.wild_plan = super::battle::WildPlan::Flee;
+        if party_slot(s, "SPECIES_MEWTWO").is_none() {
+            return Err(PlayError::Death(
+                "Mewtwo not in the party after the battle".into(),
+            ));
+        }
+        escape_rope(s, "MAP_CERULEAN_CITY")?;
+    }
+    for tm in s.plan.params.tms.clone() {
+        if !tm.mewtwo {
+            continue;
+        }
+        let mv = super::names::id(&tm.mv);
+        let slot = party_slot(s, "SPECIES_MEWTWO").ok_or("no Mewtwo")?;
+        let m = Ram::new(&s.obs).party(s.hf.rec.emu())[slot].clone();
+        if m.knows(mv).is_some() {
+            continue;
+        }
+        let Some(item) = tm_item_for(&tm.mv) else {
+            s.event(
+                "model-vs-actual",
+                format!("no TM item for {}", tm.mv),
+                json!({"move": tm.mv}),
+            );
+            continue;
+        };
+        if have(s, &item) == 0 {
+            s.event(
+                "model-vs-actual",
+                format!("{item} not in the bag: {} not taught", tm.mv),
+                json!({"move": tm.mv}),
+            );
+            continue;
+        }
+        super::items::teach_tmhm(s, &item, slot)?;
+    }
+    let slot = party_slot(s, "SPECIES_MEWTWO").ok_or("no Mewtwo")?;
+    if slot != 0 {
+        party_swap(s, slot, 0)?;
+    }
+    let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    s.event(
+        "decision",
+        format!("Mewtwo Lv{} leads", m.level),
+        json!({"species": mw, "moves": m.moves.iter().map(|x| super::names::names().mv(*x)).collect::<Vec<_>>(),
+               "hp": m.max_hp}),
+    );
+    mva(s, "Mewtwo", t0, "celio-network-machine", "mewtwo");
+    split(s, "Mewtwo", "mewtwo")
+}
+
+/// "fly-indigo", "league-entry": fly to Indigo Plateau, heal, top the League heals up (the same
+/// Full Restores as the first round, `legs2::indigo_mart`).
+fn league2_entry(s: &mut Session) -> PResult<()> {
+    s.seg = "fly-indigo".into();
+    let t0 = s.timer().unwrap_or(0.0);
+    super::items::fly(s, "MAPSEC_INDIGO_PLATEAU")?;
+    s.seg = "league-entry".into();
+    center_heal(s, "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F")?;
+    super::legs2::indigo_mart(s)?;
+    mva(s, "to the League", t0, "mewtwo", "league-entry");
+    Ok(())
+}
+
+fn lorelei2(s: &mut Session) -> PResult<()> {
+    super::legs2::e4_member(
+        s,
+        "MAP_POKEMON_LEAGUE_LORELEIS_ROOM",
+        "lorelei-2",
+        6,
+        5,
+        "FLAG_DEFEATED_LORELEI",
+    )
+}
+
+fn bruno2(s: &mut Session) -> PResult<()> {
+    super::legs2::e4_member(
+        s,
+        "MAP_POKEMON_LEAGUE_BRUNOS_ROOM",
+        "bruno-2",
+        6,
+        5,
+        "FLAG_DEFEATED_BRUNO",
+    )
+}
+
+fn agatha2(s: &mut Session) -> PResult<()> {
+    super::legs2::e4_member(
+        s,
+        "MAP_POKEMON_LEAGUE_AGATHAS_ROOM",
+        "agatha-2",
+        6,
+        5,
+        "FLAG_DEFEATED_AGATHA",
+    )
+}
+
+fn lance2(s: &mut Session) -> PResult<()> {
+    super::legs2::e4_member(
+        s,
+        "MAP_POKEMON_LEAGUE_LANCES_ROOM",
+        "lance-2",
+        6,
+        8,
+        "FLAG_DEFEATED_LANCE",
+    )
+}
+
+/// "champion-2": the rematch Champion (`TRAINER_CHAMPION_REMATCH_*`; the room's scene as in the
+/// first round, `PokemonLeague_ChampionsRoom/scripts.inc`), then into the Hall of Fame room, whose
+/// scene ends in `special EnterHallOfFame` (`PokemonLeague_HallOfFame/scripts.inc`). Ends on the
+/// first frame of the Hall of Fame screen (`CB2_DoHallOfFameScreen`).
+fn champion2(s: &mut Session) -> PResult<()> {
+    s.seg = "champion-2".into();
+    let room = s.graph().id("MAP_POKEMON_LEAGUE_CHAMPIONS_ROOM");
+    let hof = s.graph().id("MAP_POKEMON_LEAGUE_HALL_OF_FAME");
+    super::legs2::league_prep(s)?;
+    super::legs2::e4_door(s)?;
+    go_to(
+        s,
+        "the Champion's room",
+        &move |n: &Node| n.0 == room || n.0 == hof,
+        &Opts::default(),
+    )?;
+    let start = s.frame();
+    let mut split_done = false;
+    loop {
+        if super::prims::in_hall_of_fame(s) {
+            break;
+        }
+        if s.frame() - start > 60_000 {
+            return Err(PlayError::Death(
+                "soft-lock: no Hall of Fame after the Champion".into(),
+            ));
+        }
+        if s.obs.in_battle(s.hf.rec.emu()) {
+            super::fallback_battle::battle(s)?;
+            continue;
+        }
+        if !split_done && flag(s, "FLAG_DEFEATED_CHAMP") {
+            split_done = true;
+            let t = s.timer().unwrap_or(0.0);
+            let p50 = s.model.p50("champion-2");
+            s.event(
+                "split",
+                format!(
+                    "champion-2: {t:.0}s vs model p50 {:.0}s ({:+.0}s)",
+                    p50.unwrap_or(f64::NAN),
+                    t - p50.unwrap_or(f64::NAN)
+                ),
+                json!({"actual": t, "p50": p50, "name": "champion-2", "seg": "champion-2"}),
+            );
+        }
+        if super::prims::is_free(s) {
+            if here(s).is_some_and(|n| n.0 == room) {
+                take_warp(s, "MAP_POKEMON_LEAGUE_CHAMPIONS_ROOM", 6, 3, keys::UP)?;
+                continue;
+            }
+            s.hf.step(0)?;
+            continue;
+        }
+        s.hf.late()?;
+        s.hf.step(keys::A)?;
+        s.hf.step(0)?;
+    }
+    s.seg = "hall-of-fame-2".into();
+    s.event(
+        "decision",
+        "the second Hall of Fame begins",
+        json!({"cite": "decompiled/src/hall_of_fame.c:361"}),
+    );
+    Ok(())
+}
+
+/// Is the whole screen black (every pixel's R, G and B zero)?
+fn screen_black(s: &mut Session) -> bool {
+    let px = s.hf.rec.emu().screen_rgba();
+    px.chunks_exact(4)
+        .all(|p| p[0] == 0 && p[1] == 0 && p[2] == 0)
+}
+
+/// "hall-of-fame-2": the timer stops on the first full black frame at the end of the second Hall
+/// of Fame sequence (the category rule, `human-run/PROMPT.md`). The sequence waits for A on the
+/// "LEAGUE CHAMPION" text (`Task_Hof_ExitOnKeyPressed`), then fades every palette to black
+/// (`Task_Hof_HandlePaletteOnExit`: `BeginNormalPaletteFade(PALETTES_ALL, 8, 0, 16, RGB_BLACK)`)
+/// and tears down when the fade is done (`Task_Hof_HandleExit`), `decompiled/src/hall_of_fame.c:665-697`.
+/// The finish frame is the first frame after that A whose picture is entirely black.
+fn hall_of_fame2(s: &mut Session) -> PResult<()> {
+    s.seg = "hall-of-fame-2".into();
+    wait_until(s, "the LEAGUE CHAMPION text", 20_000, |s| {
+        menu::task(s, "Task_Hof_ExitOnKeyPressed")
+    })?;
+    s.hf.press(keys::A)?;
+    let start = s.frame();
+    while !screen_black(s) {
+        if s.frame() - start > 600 {
+            return Err(PlayError::Fatal(
+                "no black frame after the Hall of Fame A".into(),
+            ));
+        }
+        s.hf.step(0)?;
+    }
+    let t = s.timer().unwrap_or(0.0);
+    let p50 = s.model.p50("hall-of-fame-2");
+    let q = s.model.index("hall-of-fame-2").map(|i| s.model.q[i]);
+    s.event(
+        "split",
+        format!(
+            "FINISH (first black frame of the second Hall of Fame): {} ({t:.1}s) vs model p50 {:.0}s ({:+.0}s); WR 12325s ({:+.0}s)",
+            hms(t),
+            p50.unwrap_or(f64::NAN),
+            t - p50.unwrap_or(f64::NAN),
+            t - 12325.0
+        ),
+        json!({"actual": t, "p50": p50, "p10": q.map(|q| q.0), "p90": q.map(|q| q.2),
+               "name": "Finish", "seg": "hall-of-fame-2", "final": true, "timer_stopped": true,
+               "frame": s.frame(), "cite": "decompiled/src/hall_of_fame.c:665-697"}),
+    );
+    Ok(())
+}
+
+/// The `ITEM_TMxx` that teaches `mv` (`sTMHMMoves`, `items::tm_move`).
+fn tm_item_for(mv: &str) -> Option<String> {
+    let want = super::names::id(mv);
+    (1..=50)
+        .map(|i| format!("ITEM_TM{i:02}"))
+        .find(|it| super::items::tm_move(super::names::id(it)) == Some(want))
+}
+
+fn hms(t: f64) -> String {
+    let t = t.max(0.0) as u64;
+    format!("{}:{:02}:{:02}", t / 3600, t / 60 % 60, t % 60)
 }
 
 pub fn stages() -> Vec<Stage> {
@@ -1326,6 +1663,42 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "warehouse",
             run: warehouse,
+        },
+        Stage {
+            name: "celio-sapphire",
+            run: celio_sapphire,
+        },
+        Stage {
+            name: "mewtwo",
+            run: mewtwo,
+        },
+        Stage {
+            name: "league2-entry",
+            run: league2_entry,
+        },
+        Stage {
+            name: "lorelei-2",
+            run: lorelei2,
+        },
+        Stage {
+            name: "bruno-2",
+            run: bruno2,
+        },
+        Stage {
+            name: "agatha-2",
+            run: agatha2,
+        },
+        Stage {
+            name: "lance-2",
+            run: lance2,
+        },
+        Stage {
+            name: "champion-2",
+            run: champion2,
+        },
+        Stage {
+            name: "hall-of-fame-2",
+            run: hall_of_fame2,
         },
     ]
 }
