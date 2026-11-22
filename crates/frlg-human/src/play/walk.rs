@@ -518,9 +518,12 @@ impl Graph {
             // A warp under the player's feet. A warp event only fires on a warp behavior
             // (`TryStartWarpEventScript` / `TryArrowWarp`, `field_control_avatar.c:825-866`): the
             // plain tiles of a three-wide exit mat around the one arrow tile do nothing.
-            let warp_here = m
-                .tile(x, y)
-                .is_some_and(|t| is_warp_tile(t.behavior) || arrow_dir(t.behavior).is_some());
+            // Standing where the player started on a non-arrow warp (a Silph pad, arrived on by a
+            // warp): it only fires on stepping onto it (`TryStartWarpEventScript` runs on a step),
+            // so it has to be left and re-entered.
+            let warp_here = m.tile(x, y).is_some_and(|t| {
+                arrow_dir(t.behavior).is_some() || (is_warp_tile(t.behavior) && st != s0)
+            });
             if let Some(&(_, _, Some(dm), wid)) =
                 m.warps.iter().find(|w| warp_here && (w.0, w.1) == (x, y))
             {
@@ -862,6 +865,19 @@ pub fn plan_len(
         v.cur_live = None;
     }
     s.graph().plan(&v, cur, goal, opts).map(|p| p.moves.len())
+}
+
+/// The nodes of the path the planner would take from `from` (the current map as `opts.patch`
+/// leaves it, not the live grid) to a node satisfying `goal`.
+pub fn plan_nodes(
+    s: &mut Session,
+    from: Node,
+    goal: &dyn Fn(&Node) -> bool,
+    opts: &Opts,
+) -> Option<Vec<Node>> {
+    let mut v = view(s, &HashSet::new());
+    v.cur_live = None;
+    s.graph().plan(&v, from, goal, opts).map(|p| p.nodes)
 }
 
 /// Walk to `(map, x, y)`.

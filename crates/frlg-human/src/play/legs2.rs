@@ -12,7 +12,7 @@ use super::names::{id, names};
 use super::prims::settle;
 use super::ram::Ram;
 use super::session::{PResult, PlayError, Session, Stage};
-use super::walk::{go_face, go_map, go_to, here, plan_len, Node, Opts};
+use super::walk::{go_face, go_map, go_to, here, plan_len, MapId, Node, Opts};
 
 pub fn have(s: &mut Session, item: &str) -> u16 {
     Ram::new(&s.obs).count(s.hf.rec.emu(), id(item))
@@ -663,6 +663,352 @@ fn sevii_return(s: &mut Session) -> PResult<()> {
     dex_hook(s, "stones")
 }
 
+/// `xbuy@fly-celadon-2` (the plan's `xbuys` after fly-celadon-2) plus what the dex module needs
+/// bought on this visit: Great Balls (`ball: great`, `ball_batch`) at 2F
+/// (`CeladonCity_DepartmentStore_2F_Items`), the evolution stones the plan buys (`evolutions`
+/// with `buy: true`) at 4F (`..._4F_Items`), the X items at 5F (`..._5F_XItems`); the League
+/// heals are Hyper Potions, sold at the Saffron Mart (`SaffronCity_Mart/scripts.inc`), on the way
+/// to Silph.
+fn celadon_shopping(s: &mut Session) -> PResult<()> {
+    s.event(
+        "model-vs-actual",
+        "the model's 'stones' segment (right after Sevii) evolves with stones the plan buys \
+         (evolutions buy: true) only at the Celadon store 4F on fly-celadon-2, after it",
+        json!({"segment": "stones"}),
+    );
+    s.seg = "fly-celadon-2".into();
+    fly_from_here(s, "MAP_CINNABAR_ISLAND", "MAPSEC_CELADON_CITY")?;
+    s.seg = "xbuy@fly-celadon-2".into();
+    let xb: Vec<crate::params::XBuy> = s
+        .plan
+        .params
+        .xbuys
+        .iter()
+        .filter(|x| x.after == "fly-celadon-2")
+        .cloned()
+        .collect();
+    let mut x_items: Vec<(&str, u16)> = vec![];
+    for x in &xb {
+        for (it, n) in [
+            ("ITEM_X_ATTACK", x.attack),
+            ("ITEM_X_DEFEND", x.defend),
+            ("ITEM_X_SPEED", x.speed),
+            ("ITEM_X_SPECIAL", x.special),
+            ("ITEM_DIRE_HIT", x.dire),
+            ("ITEM_X_ACCURACY", x.accuracy),
+            ("ITEM_GUARD_SPEC", x.guard),
+        ] {
+            if n > 0 {
+                x_items.push((it, n as u16));
+            }
+        }
+    }
+    let heals: u32 = xb.iter().map(|x| x.heals).sum();
+    let revives: u32 = xb.iter().map(|x| x.revives).sum();
+    let balls = s.plan.params.ball_batch.max(10) as u16;
+    let _ = super::shop::buy(
+        s,
+        "MAP_CELADON_CITY_DEPARTMENT_STORE_2F",
+        Some((1, 8)),
+        &[("ITEM_GREAT_BALL", balls)],
+    )?;
+    let mut stones: Vec<String> = vec![];
+    for e in &s.plan.params.evolutions {
+        if e.via == "stone" && e.buy && !e.item.is_empty() {
+            let it = format!("ITEM_{}_STONE", e.item);
+            if !stones.contains(&it) {
+                stones.push(it);
+            }
+        }
+    }
+    let stones: Vec<String> = stones.into_iter().filter(|it| have(s, it) == 0).collect();
+    if !stones.is_empty() {
+        let want: Vec<(&str, u16)> = stones.iter().map(|it| (it.as_str(), 1)).collect();
+        let _ = super::shop::buy(
+            s,
+            "MAP_CELADON_CITY_DEPARTMENT_STORE_4F",
+            Some((3, 13)),
+            &want,
+        )?;
+    }
+    if !x_items.is_empty() {
+        let _ = super::shop::buy(
+            s,
+            "MAP_CELADON_CITY_DEPARTMENT_STORE_5F",
+            Some((1, 7)),
+            &x_items,
+        )?;
+    }
+    if s.model
+        .names
+        .iter()
+        .any(|n| n == "tm-ice_beam@fly-celadon-2")
+    {
+        s.event(
+            "model-vs-actual",
+            "TM13 Ice Beam (tms after fly-celadon-2, cost 80000) is a Game Corner prize: no Coin \
+             Case in this run, not bought",
+            json!({"segment": "tm-ice_beam@fly-celadon-2"}),
+        );
+    }
+    let mut saffron: Vec<(&str, u16)> = vec![];
+    if heals > 0 {
+        saffron.push(("ITEM_HYPER_POTION", heals as u16));
+    }
+    if revives > 0 {
+        saffron.push(("ITEM_REVIVE", revives as u16));
+    }
+    if !saffron.is_empty() {
+        let _ = super::items::mount_bike(s)?;
+        let _ = super::shop::buy(s, "MAP_SAFFRON_CITY_MART", None, &saffron)?;
+    }
+    Ok(())
+}
+
+/// One Silph card-key door: its floor map, the flag that says it is open, and the barrier tiles a
+/// closed door has (`EventScript_Close<F>Door<N>`, the `setmetatile ..., 1` lines of
+/// `decompiled/data/scripts/silphco_doors.inc`; each floor's `OnLoad` closes the doors whose flag
+/// is clear, e.g. `SilphCo_5F/scripts.inc:5-8`).
+struct SilphDoor {
+    map: &'static str,
+    flag: String,
+    tiles: Vec<(i16, i16)>,
+}
+
+fn silph_doors() -> Vec<SilphDoor> {
+    const FLOORS: [&str; 10] = ["2F", "3F", "4F", "5F", "6F", "7F", "8F", "9F", "10F", "11F"];
+    const MAPS: [&str; 10] = [
+        "MAP_SILPH_CO_2F",
+        "MAP_SILPH_CO_3F",
+        "MAP_SILPH_CO_4F",
+        "MAP_SILPH_CO_5F",
+        "MAP_SILPH_CO_6F",
+        "MAP_SILPH_CO_7F",
+        "MAP_SILPH_CO_8F",
+        "MAP_SILPH_CO_9F",
+        "MAP_SILPH_CO_10F",
+        "MAP_SILPH_CO_11F",
+    ];
+    let root = std::env::var_os("FRLG_DECOMP_RO")
+        .or_else(|| std::env::var_os("FRLG_DECOMP"))
+        .map(std::path::PathBuf::from)
+        .expect("$FRLG_DECOMP");
+    let text = std::fs::read_to_string(root.join("data/scripts/silphco_doors.inc"))
+        .expect("silphco_doors.inc");
+    let mut out: Vec<SilphDoor> = vec![];
+    for line in text.lines() {
+        let l = line.trim();
+        if let Some(head) = l.split("::").next().filter(|_| l.contains("::")) {
+            if let Some(rest) = head.strip_prefix("EventScript_Close") {
+                // "5FDoor1" / "6FDoor"
+                if let Some((fl, n)) = rest.split_once("Door") {
+                    if let Some(i) = FLOORS.iter().position(|f| *f == fl) {
+                        let flag = if n.is_empty() {
+                            format!("FLAG_SILPH_{fl}_DOOR")
+                        } else {
+                            format!("FLAG_SILPH_{fl}_DOOR_{n}")
+                        };
+                        out.push(SilphDoor {
+                            map: MAPS[i],
+                            flag,
+                            tiles: vec![],
+                        });
+                        continue;
+                    }
+                }
+            }
+        }
+        if l.starts_with("return") || l.ends_with("::") {
+            continue;
+        }
+        if let (Some(d), Some(args)) = (out.last_mut(), l.strip_prefix("setmetatile")) {
+            let a: Vec<&str> = args.split(',').map(str::trim).collect();
+            if a.len() == 4 && a[3] != "0" {
+                if let (Ok(x), Ok(y)) = (a[0].parse(), a[1].parse()) {
+                    if !d.tiles.contains(&(x, y)) {
+                        d.tiles.push((x, y));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Walk inside Silph Co. to `goal`, opening card-key doors on the way: plan with the closed doors
+/// shut; if there is no way, plan as if every closed door were open (Card Key in the bag), walk up
+/// to the first closed door the path crosses, face it and press A (`EventScript_TryUnlockDoor`,
+/// `silphco_doors.inc`), and plan again.
+fn silph_to(s: &mut Session, what: &str, goal: &dyn Fn(&Node) -> bool) -> PResult<()> {
+    let doors = silph_doors();
+    for _ in 0..12 {
+        let mut shut = Opts::default();
+        let mut open = Opts::default();
+        let mut closed_tiles: Vec<(MapId, i16, i16, usize)> = vec![];
+        let g = s.graph();
+        for (k, d) in doors.iter().enumerate() {
+            let is_open = flag(s, &d.flag);
+            for &(x, y) in &d.tiles {
+                shut.patch.push((d.map, x, y, !is_open));
+                open.patch.push((d.map, x, y, false));
+                if !is_open {
+                    closed_tiles.push((g.id(d.map), x, y, k));
+                }
+            }
+        }
+        if plan_len(s, None, goal, &shut).is_some() {
+            return go_to(s, what, goal, &shut);
+        }
+        if have(s, "ITEM_CARD_KEY") == 0 {
+            return Err(PlayError::Fatal(format!(
+                "Silph: no way to {what} without the Card Key"
+            )));
+        }
+        let cur = here(s).ok_or("no position")?;
+        let nodes = super::walk::plan_nodes(s, cur, goal, &open)
+            .ok_or_else(|| PlayError::Fatal(format!("Silph: no way to {what} even with doors")))?;
+        let Some(i) = nodes
+            .iter()
+            .position(|n| closed_tiles.iter().any(|&(m, x, y, _)| (m, x, y) == *n))
+        else {
+            // The live grid disagrees with the patch: walk it anyway.
+            return go_to(s, what, goal, &open);
+        };
+        let (door_node, stand) = (nodes[i], nodes[i.saturating_sub(1)]);
+        let k = closed_tiles
+            .iter()
+            .find(|&&(m, x, y, _)| (m, x, y) == door_node)
+            .map(|c| c.3)
+            .unwrap();
+        go_to(
+            s,
+            "a Silph card-key door",
+            &move |n: &Node| *n == stand,
+            &shut,
+        )?;
+        let dir = match (door_node.1 - stand.1, door_node.2 - stand.2) {
+            (0, -1) => keys::UP,
+            (0, 1) => keys::DOWN,
+            (-1, 0) => keys::LEFT,
+            _ => keys::RIGHT,
+        };
+        super::walk::face(s, dir)?;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        let ok = flag(s, &doors[k].flag);
+        s.event(
+            "decision",
+            format!(
+                "Silph: opened {} with the Card Key{}",
+                doors[k].flag.trim_start_matches("FLAG_SILPH_"),
+                if ok { "" } else { " (did not open)" }
+            ),
+            json!({"door": doors[k].flag, "open": ok}),
+        );
+    }
+    Err(PlayError::Death(format!(
+        "soft-lock: Silph: 12 doors toward {what}"
+    )))
+}
+
+/// `leg_silph_walk` "silph-walk" (to the Card Key: 5F (22, 21), `SilphCo_5F/map.json`).
+fn silph_card_key(s: &mut Session) -> PResult<()> {
+    // Not in the model (no heal between Blaine and Sabrina's badge): the Sevii fights and hunts
+    // leave the carry low, and the first branch into Silph blacked out to Scientist Beau.
+    s.event(
+        "model-vs-actual",
+        "healing at the Saffron center before Silph (model: no heal from Blaine to sabrina-badge)",
+        json!({"segment": "silph-walk"}),
+    );
+    center_heal(s, "MAP_SAFFRON_CITY_POKEMON_CENTER_1F")?;
+    s.seg = "silph-walk".into();
+    let _ = super::items::mount_bike(s)?;
+    go_map(s, "MAP_SILPH_CO_1F", &Opts::default())?;
+    let f5 = s.graph().id("MAP_SILPH_CO_5F");
+    silph_to(s, "the Card Key", &move |n: &Node| {
+        n.0 == f5 && (n.1 - 22).abs() + (n.2 - 21).abs() == 1
+    })?;
+    let cur = here(s).unwrap();
+    let dir = match (22 - cur.1, 21 - cur.2) {
+        (0, -1) => keys::UP,
+        (0, 1) => keys::DOWN,
+        (-1, 0) => keys::LEFT,
+        _ => keys::RIGHT,
+    };
+    super::walk::face(s, dir)?;
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    if have(s, "ITEM_CARD_KEY") == 0 {
+        return Err(PlayError::Fatal("no Card Key after the 5F ball".into()));
+    }
+    s.event("decision", "Silph 5F: Card Key", json!({}));
+    Ok(())
+}
+
+/// "rival-silph", "silph-card-doors", "silph-grunts", "silph-giovanni": Giovanni's scene fires on
+/// the coord events (5, 15) / (6, 15) of 11F (`SilphCo_11F/map.json`,
+/// `GiovanniTriggerLeft/Right`); the rival's on (2, 4) / (2, 5) of 7F
+/// (`SilphCo_7F/map.json`), met only if the path crosses it.
+fn silph_giovanni(s: &mut Session) -> PResult<()> {
+    s.seg = "silph-grunts".into();
+    let f11 = s.graph().id("MAP_SILPH_CO_11F");
+    silph_to(s, "Giovanni's trigger", &move |n: &Node| {
+        n.0 == f11 && n.2 == 15 && (5..=6).contains(&n.1)
+    })?;
+    s.seg = "silph-giovanni".into();
+    settle(s)?;
+    let rival = var(s, "VAR_MAP_SCENE_SILPH_CO_7F");
+    if rival == 0 {
+        s.event(
+            "model-vs-actual",
+            "the Silph rival (rival-silph, forced in the model) was not met: the path to 11F \
+             does not cross his 7F trigger (SilphCo_7F/map.json coord (2, 4)/(2, 5))",
+            json!({"segment": "rival-silph"}),
+        );
+    }
+    if var(s, "VAR_MAP_SCENE_SILPH_CO_11F") == 0 {
+        return Err(PlayError::Fatal("Giovanni's scene did not run".into()));
+    }
+    s.event("decision", "Silph 11F: Giovanni beaten", json!({}));
+    Ok(())
+}
+
+/// "master-ball": the president at (9, 9) of 11F gives the Master Ball
+/// (`SilphCo_11F/scripts.inc` `President`); then the dex module's specials after silph-giovanni
+/// (the Lapras gift on 7F), and out of Silph.
+fn silph_out(s: &mut Session) -> PResult<()> {
+    s.seg = "master-ball".into();
+    talk_to(s, "MAP_SILPH_CO_11F", 1)?;
+    settle(s)?;
+    let mb = have(s, "ITEM_MASTER_BALL");
+    s.event(
+        "decision",
+        "Silph 11F: the president's Master Ball",
+        json!({"master_ball": mb}),
+    );
+    dex_hook(s, "silph-giovanni")?;
+    let saffron = s.graph().id("MAP_SAFFRON_CITY");
+    silph_to(s, "out of Silph", &move |n: &Node| n.0 == saffron)
+}
+
+/// "sabrina-walk", "sabrina" -> the "Sabrina" split (`leg_silph_walk`): the gym's teleport pads
+/// are warp events (`SaffronCity_Gym/map.json`, 33 warps); Sabrina at (14, 11).
+fn sabrina(s: &mut Session) -> PResult<()> {
+    s.seg = "sabrina-walk".into();
+    go_face(s, "MAP_SAFFRON_CITY_GYM", 14, 11, &Opts::default())?;
+    s.seg = "sabrina".into();
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    if !flag(s, "FLAG_BADGE06_GET") {
+        return Err(PlayError::Fatal("no Marsh Badge after Sabrina".into()));
+    }
+    split(s, "Sabrina", "sabrina-badge")?;
+    // The plan's heal after the badge (`extra_heals` sabrina-badge) and its gift (Hitmonlee:
+    // the dex module's).
+    center_heal(s, "MAP_SAFFRON_CITY_POKEMON_CENTER_1F")?;
+    dex_hook(s, "sabrina-badge")
+}
+
 pub fn stages() -> Vec<Stage> {
     vec![
         Stage {
@@ -708,6 +1054,26 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "sevii",
             run: sevii_return,
+        },
+        Stage {
+            name: "celadon-shopping",
+            run: celadon_shopping,
+        },
+        Stage {
+            name: "silph-card-key",
+            run: silph_card_key,
+        },
+        Stage {
+            name: "silph-giovanni",
+            run: silph_giovanni,
+        },
+        Stage {
+            name: "silph-out",
+            run: silph_out,
+        },
+        Stage {
+            name: "sabrina",
+            run: sabrina,
         },
     ]
 }

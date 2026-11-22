@@ -146,10 +146,24 @@ pub fn buy(
     let money0 = Ram::new(&s.obs).money(s.hf.rec.emu());
     talk_at(s, map, cx, cy)?;
     // "Hi there! May I help you?" then BUY / SELL / SEE YA (`Task_ShopMenu`, `shop.c:256`).
-    press_until(s, "the shop menu", keys::A, 3000, |s| {
-        menu::task(s, "Task_ShopMenu")
-    })?;
-    menu::choose(s, 0)?;
+    // The greeting prints with the menu (`pokemart` script, `CreateShopMenu`): wait for it rather
+    // than mash, since an A on the menu's first frame picks BUY and the next ones buy whatever
+    // the list cursor is on (seen: ¥40000 of X items, the 4F stones bought twice).
+    if wait_until(s, "the shop menu", 400, |s| menu::task(s, "Task_ShopMenu")).is_err() {
+        press_until(s, "the shop menu", keys::A, 3000, |s| {
+            menu::task(s, "Task_ShopMenu") || buy_list_up(s)
+        })?;
+    }
+    if buy_list_up(s) {
+        s.event(
+            "warn",
+            "shop: the buy list opened while advancing the greeting",
+            json!({"map": map}),
+        );
+    }
+    if !buy_list_up(s) {
+        menu::choose(s, 0)?;
+    }
     wait_until(s, "the buy list", 600, buy_list_up)?;
     let stock = mart_items(s);
     let mut out = vec![];
@@ -217,7 +231,26 @@ pub fn buy(
         })?;
         menu::answer(s, true)?;
         // "Here you go, thank you!" waits for A or B (`Task_ReturnToItemListAfterItemPurchase`).
-        press_until(s, "back to the buy list", keys::A, 900, buy_list_up)?;
+        // A only while that text task runs: an A landing on the list's first frame would buy the
+        // item under the cursor again (seen: ¥40000 of X items for 9 wanted).
+        let start = s.hf.fed();
+        loop {
+            if buy_list_up(s) {
+                break;
+            }
+            if s.hf.fed() - start > 900 {
+                return Err(PlayError::Death(
+                    "soft-lock: back to the buy list not reached".into(),
+                ));
+            }
+            if menu::task(s, "Task_ReturnToItemListAfterItemPurchase") {
+                s.hf.late()?;
+                if menu::task(s, "Task_ReturnToItemListAfterItemPurchase") {
+                    s.hf.step(keys::A)?;
+                }
+            }
+            s.hf.step(0)?;
+        }
         let after = Ram::new(&s.obs).money(s.hf.rec.emu());
         let have = Ram::new(&s.obs).count(s.hf.rec.emu(), item);
         s.event(
