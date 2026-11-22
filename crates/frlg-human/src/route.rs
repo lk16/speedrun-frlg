@@ -1072,11 +1072,15 @@ pub(crate) fn leg_viridian(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let t = indoor(p, 55, 45, Era::Walk, e);
     b.walk("viridian-gym-walk", t, e, None, Src::Tiles);
     if p.audited_forced {
-        b.forced(
-            "viridian-gym-trainers",
-            &["ViridianCity_Gym_EventScript_Takashi"],
-            &[],
-        );
+        let always: &[&str] = if p.viridian_warren {
+            &[
+                "ViridianCity_Gym_EventScript_Takashi",
+                "ViridianCity_Gym_EventScript_Warren",
+            ]
+        } else {
+            &["ViridianCity_Gym_EventScript_Takashi"]
+        };
+        b.forced("viridian-gym-trainers", always, &[]);
     } else {
         b.group("viridian-gym-trainers", 3, 2, 42, 80);
     }

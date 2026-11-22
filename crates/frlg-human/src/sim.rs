@@ -1796,8 +1796,18 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     } else {
         1.0
     };
+    // MODEL CHANGE `trainer_cost`: the played run's per-battle / per-action / per-KO frames.
+    let tcost = (a.trainer && !a.league && ctx.p.trainer_cost.len() == 3).then(|| {
+        let c = &ctx.p.trainer_cost;
+        (c[0], c[1], c[2])
+    });
+    let fit = if tcost.is_some() { 1.0 } else { fit };
     if a.trainer {
-        bump(st, ctx.trainer_intro(a.intro) * fit);
+        match tcost {
+            // The outro is paid at the end as usual: `a` covers both.
+            Some((a0, _, _)) => bump(st, (a0 - ctx.outro()).max(0.0)),
+            None => bump(st, ctx.trainer_intro(a.intro) * fit),
+        }
         bump(st, jitter(ctx, rng, 8) as f64);
     }
     let cfg = ctx.tactics.get(a.name).cloned().unwrap_or_default();
@@ -2095,7 +2105,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         {
             st.x_stock[x_index(*x)] -= 1;
         }
-        bump(st, out.turns as f64 * ctx.turn());
+        bump(
+            st,
+            out.turns as f64 * tcost.map_or_else(|| ctx.turn(), |(_, t, _)| t),
+        );
         if mewtwo_now && ctx.p.mewtwo_hp_bar > 0.0 {
             bump(st, out.hp_bar * ctx.p.mewtwo_hp_bar);
         }
@@ -2105,7 +2118,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 (out.heals_used + out.full_restores_used) as f64 * ctx.p.mewtwo_heal_extra,
             );
         }
-        bump(st, out.kos.len() as f64 * ctx.mon_overhead() * fit);
+        bump(
+            st,
+            out.kos.len() as f64 * tcost.map_or_else(|| ctx.mon_overhead() * fit, |(_, _, m)| m),
+        );
         // A sacrifice costs its faint animation and the send-outs both ways. guess.
         bump(st, (out.sacs_used + out.sacs_survived) as f64 * 900.0);
         st.fodder = st.fodder.saturating_sub(out.sacs_used);

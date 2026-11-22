@@ -1,5 +1,25 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 route windows (read first; journal `journal/2026-11-22-17-30-route-windows.md`)
+
+Structural causes of 1253's window errors, read off the WR VOD with contact sheets (the 60 s scene log is too coarse; it misled
+twice): Warren fought in the Viridian Gym (MODEL CHANGE `viridian_warren`, 1270: +81 h [57, 109] vs 1253); the runner splits
+"Erika" at the Warden's door (split mapping fixed, reporting only); the WR gives the Gold Teeth after Erika, fights the
+Cerulean Rocket after Bill, catches on Route 3/4, skips Hitmonlee (plan 1271 with all of them: +3443 h, refuted as a plan);
+Snorlax split checked (on the Cycling Road: the model was right). **trainer_fit 0.6 conflict resolved**: the played 79 fights
+fit `a 838 + 579/action + 223/KO` (MODEL CHANGE `trainer_cost`): one-shot fights are 0.85 of `calib_wr`, multi-turn 1.12, so
+the formula's 630/KO overprices route trainers; and 1253's list fights 7 vs the WR's 4 trainers on Route 25 and 16 vs 10 on
+Route 9 / Rock Tunnel (video). With the WR's lists Bill/Rock Tunnel match at `trainer_cost` or 0.75, but the carry is then 2
+levels short (the WR's exp comes later: 5-6 hideout grunts + two Rare Candies before Giovanni 1), deaths rise (1272 +559 h).
+**Recommendation: keep 1253 as model of record for now; adopt `viridian_warren` (1270) as a model change (it is evidence,
+not a choice), and replace `trainer_fit` 0.6 only together with video-derived fight lists for Giovanni 1 -> Koga and a risk-
+window refit** (next step 1). No candidate passes the +-60 s per-window check (1275: 5 windows out, total +456 s).
+
+Next, ranked: (1) fight lists Giovanni 1 -> Koga from the VOD (Route 8: Rich only; hideout door grunt + 5; two candies),
+then `trainer_cost`, refit risk windows, re-score; (2) Safari/Power Plant hunting time (WR ~30 s per Safari species, model
+~60-80 s at the margin with matching per-event costs: the search/unwanted-encounter part); (3) dex re-plan toward the WR's
+early sites (Route 3/4 done in 1271; costs exp-free time in this model).
+
 ## 2026-11-22 16:55 main session: CURRENT = 1253-runner-fights-tf (model of record)
 
 Switched from 1132 because 1253 is the more honest model: the carry fights the trainers the runner
