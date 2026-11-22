@@ -85,8 +85,31 @@ fn cursor_2x2(s: &mut Session, cur: u8, want: u8) -> PResult<()> {
     Ok(())
 }
 
-/// Play the battle that is on screen to its end and back to the field.
+/// The one call site the field code uses for a battle on screen: the sim-policy bridge
+/// (`play/battle.rs`, `fight`) with the session's current plan segment, or the stand-in below with
+/// `--fallback-battle`. A loss is a dead branch.
 pub fn battle(s: &mut Session) -> PResult<()> {
+    if s.fallback {
+        return stand_in(s);
+    }
+    let wild = s.wild_plan;
+    let cfg = super::battle::BattleCfg {
+        wild,
+        ..super::battle::BattleCfg::new(&s.ctx, &s.seg)
+    };
+    let rep = super::battle::fight(&mut s.hf, &s.obs, &mut s.log, &cfg)?;
+    match rep.end {
+        super::battle::BattleEnd::Lost => Err(PlayError::Death(format!(
+            "blacked out in {} ({})",
+            rep.trainer.as_deref().unwrap_or("a wild battle"),
+            s.seg
+        ))),
+        _ => Ok(()),
+    }
+}
+
+/// The stand-in driver.
+pub fn stand_in(s: &mut Session) -> PResult<()> {
     let start = s.hf.fed();
     let emu = s.hf.rec.emu();
     let trainer = s.obs.battle_type_flags(emu) & BATTLE_TYPE_TRAINER != 0;

@@ -111,6 +111,14 @@ pub struct Session<'p> {
     sized_syms: std::collections::HashMap<(String, u32), u32>,
     pub log: EventLog,
     pub plan: &'p Plan,
+    /// The simulator context the battle policy reads (`Plan::ctx`, built once).
+    pub ctx: crate::sim::Ctx<'p>,
+    /// The plan segment being played (battle tactics key, `Params::fight_tactics`).
+    pub seg: String,
+    /// Use the stand-in battle driver instead of the sim-policy bridge (`--fallback-battle`).
+    pub fallback: bool,
+    /// What to do with wild encounters right now (flee unless a hunt says otherwise).
+    pub wild_plan: super::battle::WildPlan,
     pub model: Model,
     pub cfg: PlayCfg,
     prefix: Vec<u16>,
@@ -258,6 +266,10 @@ impl<'p> Session<'p> {
             sized_syms,
             log,
             plan,
+            ctx: plan.ctx(),
+            seg: String::new(),
+            fallback: false,
+            wild_plan: super::battle::WildPlan::Flee,
             model,
             cfg,
             prefix,
@@ -337,6 +349,7 @@ impl<'p> Session<'p> {
                 self.retry,
                 self.frame()
             );
+            self.seg = st.name.to_string();
             let mut res = (st.run)(self);
             if res.is_ok()
                 && self.cfg.force_rollback.iter().any(|n| n == st.name)

@@ -94,7 +94,9 @@ pub fn close_to_field(s: &mut Session) -> PResult<()> {
             return Ok(());
         }
         if s.obs.callback2_is(s.hf.rec.emu(), "CB2_Overworld")
-            && !s.obs.start_menu_taking_input(s.hf.rec.emu())
+            && !s
+                .obs
+                .task_active(s.hf.rec.emu(), "Task_StartMenuHandleInput")
         {
             // Field, a script or a fade: settle handles it.
             return settle(s);

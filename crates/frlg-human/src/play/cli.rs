@@ -89,6 +89,7 @@ pub fn main(cmd: &str, args: &[String], dex: &'static Dex) {
                 eprintln!("{e}");
                 std::process::exit(1)
             });
+            s.fallback = args.iter().any(|a| a == "--fallback-battle");
             let until = flag(args, "--until");
             let stages = super::legs::stages();
             match s.play(&stages, until.as_deref()) {

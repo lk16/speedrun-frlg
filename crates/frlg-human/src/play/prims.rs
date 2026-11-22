@@ -80,6 +80,15 @@ pub fn settle(s: &mut Session) -> PResult<()> {
             s.hf.press(keys::A)?;
             continue;
         }
+        // Leaving the bag or the party menu reopens the start menu
+        // (`Task_StartMenuHandleInput`, `decompiled/src/start_menu.c`): close it with B, never A.
+        if s.obs
+            .task_active(s.hf.rec.emu(), "Task_StartMenuHandleInput")
+        {
+            s.hf.press(keys::B)?;
+            s.hf.idle(2)?;
+            continue;
+        }
         // One human press of A, then a release frame.
         s.hf.late()?;
         if s.obs.in_battle(s.hf.rec.emu()) || is_free(s) {
