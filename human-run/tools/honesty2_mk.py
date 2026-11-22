@@ -66,6 +66,19 @@ for st in steps.split(','):
                 m['potions'] = n
         # Saffron Mart before Silph (Hyper Potions, SaffronCity_Mart/scripts.inc).
         p['marts'].append({'after': 'silph-walk', 'potions': n, 'topup': True})
+    elif st.startswith('potl='):
+        # MODEL CHANGE + PLAN: potl=FROM/STOP:N/STOP:N...: finite potion bag from segment FROM; potions topped up
+        # to N at each stop (an existing ball stop there gets the potions, else a new stop). Potion stocks:
+        # FuchsiaCity_Mart Super, CinnabarIsland_Mart Hyper, SaffronCity_Mart Hyper, LavenderTown_Mart Super.
+        parts = st[5:].split('/')
+        p['potion_bag_from'] = parts[0]
+        for x in parts[1:]:
+            a, n = x.split(':')
+            m = next((m for m in p['marts'] if m['after'] == a), None)
+            if m is None:
+                m = {'after': a, 'topup': True}
+                p['marts'].append(m)
+            m['potions'] = int(n)
     elif st.startswith('ppups='):
         # MODEL CHANGE: PP Ups on the carry, in this order.
         p['carry_pp_ups'] = ['MOVE_' + m.upper() for m in st[6:].split(':')]

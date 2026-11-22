@@ -2553,8 +2553,17 @@ fn risk_fight(
     let mut lost = !out.won && !fled;
     if std::env::var_os("FRLG_RISK_TRACE").is_some() {
         eprintln!(
-            "risk {} L{} hp_in {:.2} pots {} -> won {} turns {} hp_out {:.2}",
-            a.name, st.carry, st.risk_hp, potions, !lost, out.turns, out.hp_frac
+            "risk {} L{} hp_in {:.2} pots {} -> won {} turns {} hp_out {:.2} used {} seg {} bag {}",
+            a.name,
+            st.carry,
+            st.risk_hp,
+            potions,
+            !lost,
+            out.turns,
+            out.hp_frac,
+            out.heals_used,
+            st.seg_i,
+            st.potions
         );
     }
     if !lost {
