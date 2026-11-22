@@ -32,6 +32,23 @@
 //! Choices the simulator never makes are logged as `model-vs-actual` and handled by a fixed rule
 //! here: the lead fainting (send the highest-level mon left), weakening a wild mon before a throw
 //! ([`crate::battle::weaken_move`]: the sim abstracts it), a heal or ball the bag does not hold.
+//!
+//! # Human timing
+//!
+//! Every menu press is late by `U{0..N}` ([`HumanFeed::press`]); text is mashed with the same
+//! jitter. A reaction delay `U{lo..hi}` ([`HumanFeed::react`]) is paid at an action menu only after
+//! a turn the human could not predict (a miss or a move that did nothing, a hit above the expected
+//! max roll, a new status on either side, an enemy heal), and before choosing a send-out after a
+//! faint: the sim's `Outcome::events`.
+//!
+//! # Logged
+//!
+//! `battle` per action menu (action, policy action, HP both sides, PP left, danger, sure kill,
+//! win probability / expected turns from [`crate::battle::outlook`], lookahead table, last turn's
+//! damage dealt and taken, the reaction reason), the trainer's send-outs against the model's
+//! `most_suitable`, learn/skip decisions; `encounter` and `catch` (ball, odds, catch chance) for
+//! wild mons; `model-vs-actual` wherever the game leaves the model (above, plus a trainer party
+//! or stats that differ from the dex's trainer data, a bag without heals).
 use frlg_emu::keys;
 use frlg_route::{Feed, Observer, RouteError};
 use serde_json::json;
@@ -405,9 +422,42 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
             mewtwo_now: sc.me.species == mewtwo,
         },
     );
-    // The real bag rations the heals (the sim leaves them unlimited outside the League).
+    // The real bag rations the heals (the sim leaves them unlimited outside the League), and the
+    // potion it holds is the one the policy can count on.
     tac.heal_stock = tac.heal_stock.min(heal_count(&sc.items));
+    if let (_, Some(id)) = heal_pick(&sc.items, sc.me.level, false) {
+        tac.heal = item_hp(id);
+    }
     tac
+}
+
+/// HP an item restores: Potion 20, Super Potion 50, Hyper Potion 200, Max Potion / Full Restore
+/// all (`decompiled/src/data/pokemon/item_effects.h`; the sim's `heal_amount` tiers).
+fn item_hp(id: u16) -> i32 {
+    match id {
+        ITEM_POTION => 20,
+        ITEM_SUPER_POTION => 50,
+        ITEM_HYPER_POTION => 200,
+        _ => 999,
+    }
+}
+
+/// The heal item the model means (`heal_amount`'s tier for this level, or a Full Restore), and the
+/// one the bag can pay: that tier, else the nearest other.
+fn heal_pick(items: &[(u16, u16)], level: u32, full: bool) -> (u16, Option<u16>) {
+    let want: [u16; 3] = if full {
+        [ITEM_FULL_RESTORE, ITEM_MAX_POTION, ITEM_HYPER_POTION]
+    } else {
+        match sim_battle::heal_amount(level, false) {
+            20 => [ITEM_POTION, ITEM_SUPER_POTION, ITEM_HYPER_POTION],
+            50 => [ITEM_SUPER_POTION, ITEM_HYPER_POTION, ITEM_POTION],
+            _ => [ITEM_HYPER_POTION, ITEM_SUPER_POTION, ITEM_POTION],
+        }
+    };
+    (
+        want[0],
+        want.iter().copied().find(|&id| count(items, id) > 0),
+    )
 }
 
 /// One frame-by-frame human mash whose key depends on the state: `key(emu)` is pressed, each
@@ -514,6 +564,61 @@ fn nav_2x2(
     }
 }
 
+/// Both sides as the human saw them at an action menu.
+#[derive(Clone, Copy, Debug)]
+struct Seen {
+    me_slot: usize,
+    me_hp: i32,
+    me_status: Status1,
+    foe_slot: usize,
+    foe_hp: i32,
+    foe_status: Status1,
+    /// The foe's best no-crit hit as the policy read it (0 = not computed).
+    danger: i32,
+    /// The player used a damaging move.
+    attacked: bool,
+}
+
+impl Seen {
+    fn of(sc: &Scene) -> Seen {
+        Seen {
+            me_slot: sc.active,
+            me_hp: sc.me.hp,
+            me_status: sc.me.status,
+            foe_slot: sc.foe.slot,
+            foe_hp: sc.foe.hp,
+            foe_status: sc.foe.status,
+            danger: 0,
+            attacked: false,
+        }
+    }
+
+    /// What about the turn since `self` a human did not see coming (the sim's reaction events:
+    /// a miss or a move that did nothing, a hit above the expected max, a status, an enemy heal).
+    fn surprise(&self, now: &Seen) -> Option<&'static str> {
+        let same_me = self.me_slot == now.me_slot;
+        let same_foe = self.foe_slot == now.foe_slot;
+        if (same_me && !same_status(self.me_status, now.me_status))
+            || (same_foe && !same_status(self.foe_status, now.foe_status))
+        {
+            Some("status")
+        } else if same_foe && now.foe_hp > self.foe_hp {
+            Some("enemy healed")
+        } else if same_foe && self.attacked && now.foe_hp == self.foe_hp {
+            Some("no damage dealt")
+        } else if same_me && self.danger > 0 && self.me_hp - now.me_hp > self.danger {
+            Some("hit above the expected max")
+        } else {
+            None
+        }
+    }
+}
+
+/// Same status kind (a sleep counter or Toxic counter ticking down is no news).
+fn same_status(a: Status1, b: Status1) -> bool {
+    std::mem::discriminant(&a) == std::mem::discriminant(&b)
+}
+
 /// Where the loop stands between presses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Point {
@@ -544,6 +649,11 @@ struct Ctl<'a, 'b> {
     throws: u32,
     rng: GameRng,
     armed: std::cell::Cell<bool>,
+    /// Both sides at the last action menu and what the policy expected, for the turn-result note
+    /// and the reaction rule of the next menu.
+    last: Option<Seen>,
+    /// The foe on the field at the last menu, its bench, and the fighter then (the send-out check).
+    last_foe: Option<(Mon, Vec<Mon>, Mon)>,
 }
 
 impl Ctl<'_, '_> {
@@ -632,6 +742,8 @@ pub fn fight(
         throws: 0,
         rng: GameRng::from_u32(seed),
         armed: std::cell::Cell::new(false),
+        last: None,
+        last_foe: None,
     };
     if trainer {
         let id = c.ram.trainer_id(f.emu());
@@ -835,11 +947,15 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
         c.fighter = Some(sc.active);
         c.tac = Some(tactics_for(c.cfg.ctx, &c.cfg.seg, c.wild, &sc));
     }
-    // A human decides after watching the turn: an unpredictable turn costs a reaction (`react`).
-    if c.turns > 1 {
+    // A human decides after watching the turn; only an unpredictable one costs a reaction
+    // (`react`, the sim's `out.events`), the rest is the menu jitter of each press.
+    let now = Seen::of(&sc);
+    let surprise = c.last.and_then(|l| l.surprise(&now));
+    if surprise.is_some() {
         f.react()?;
     }
     if c.wild && c.cfg.wild != WildPlan::Fight {
+        c.last = Some(now);
         return wild_turn(f, c, log, &sc);
     }
     let tac = c.tac.clone().unwrap();
@@ -879,20 +995,66 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
             .map(|i| sc.me.pp[i]),
         _ => None,
     };
+    // A new foe after a faint: is it the one the model's `most_suitable` sends?
+    if let Some((old, old_bench, old_me)) = c.last_foe.take() {
+        if old.slot != sc.foe.slot && old_bench.len() > 1 {
+            let fainted = Mon { hp: 0, ..old };
+            let i = sim_battle::predict_next(
+                dex,
+                &old_me,
+                &fainted,
+                c.fs.as_ref().unwrap(),
+                &old_bench,
+            );
+            let model = old_bench[i].species;
+            let text = format!(
+                "trainer sent {} (model's most_suitable: {})",
+                species_name(dex, sc.foe.species),
+                species_name(dex, model)
+            );
+            if model == sc.foe.species {
+                log.push(f.frame(), "battle", text, json!({"match": true}));
+            } else {
+                log.push(f.frame(), "model-vs-actual", text, json!({"match": false}));
+            }
+        }
+    }
+    c.last_foe = Some((sc.foe.clone(), sc.bench.clone(), sc.me.clone()));
+    // What the last turn did, as the human saw it: HP lost on both sides (same mons only).
+    let (dealt, took) = match c.last {
+        Some(l) => (
+            (l.foe_slot == sc.foe.slot).then_some(l.foe_hp - sc.foe.hp),
+            (l.me_slot == sc.active).then_some(l.me_hp - sc.me.hp),
+        ),
+        None => (None, None),
+    };
+    c.last = Some(Seen {
+        danger: d.read.danger,
+        attacked: matches!(taken, Action::Move(mv) if dex.moves[mv].power > 0),
+        ..now
+    });
+    let st = |m: &Mon| match m.status {
+        Status1::None => String::new(),
+        s => format!(" [{s:?}]"),
+    };
     log.push(
         f.frame(),
         "battle",
         format!(
-            "turn {}: {what} vs {} {}/{} (danger {}{}, win {:.0}%)",
+            "turn {}: {what}{} vs {} {}/{}{} (danger {}{}, win {:.0}%)",
             c.turns,
+            st(&sc.me),
             species_name(dex, sc.foe.species),
             sc.foe.hp,
             sc.foe.max_hp,
+            st(&sc.foe),
             d.read.danger,
             if d.read.sure_kill { ", sure kill" } else { "" },
             win * 100.0
         ),
         json!({
+            "dealt_last": dealt, "took_last": took, "react": surprise,
+            "my_status": format!("{:?}", sc.me.status), "enemy_status": format!("{:?}", sc.foe.status),
             "turn": c.turns, "action": what, "policy": format!("{:?}", d.action),
             "enemy": species_name(dex, sc.foe.species), "enemy_hp": sc.foe.hp, "enemy_max_hp": sc.foe.max_hp,
             "my_hp": sc.me.hp, "my_max_hp": sc.me.max_hp, "pp_left": mv_pp,
@@ -949,23 +1111,15 @@ fn execute(
             Ok(a)
         }
         Action::Heal | Action::FullRestore => {
-            let want = if a == Action::FullRestore {
-                vec![ITEM_FULL_RESTORE, ITEM_MAX_POTION, ITEM_HYPER_POTION]
-            } else {
-                match sim_battle::heal_amount(sc.me.level, false) {
-                    20 => vec![ITEM_POTION, ITEM_SUPER_POTION, ITEM_HYPER_POTION],
-                    50 => vec![ITEM_SUPER_POTION, ITEM_HYPER_POTION, ITEM_POTION],
-                    _ => vec![ITEM_HYPER_POTION, ITEM_SUPER_POTION, ITEM_POTION],
-                }
-            };
-            match want.iter().find(|&&id| count(&sc.items, id) > 0) {
-                Some(&id) => {
-                    if id != want[0] {
+            let (model, pick) = heal_pick(&sc.items, sc.me.level, a == Action::FullRestore);
+            match pick {
+                Some(id) => {
+                    if id != model {
                         log.push(
                             f.frame(),
                             "model-vs-actual",
-                            format!("heal: item {} instead of {} (bag)", id, want[0]),
-                            json!({"item": id, "model": want[0]}),
+                            format!("heal: item {id} instead of {model} (bag)"),
+                            json!({"item": id, "model": model}),
                         );
                     }
                     use_item(f, c, sc, battle_ram::POCKET_ITEMS, id, true)?;
@@ -1095,7 +1249,8 @@ fn use_item(
         f.wait_until("the party menu for the item", 600, |e| {
             obs.task_active(e, "Task_HandleChooseMonInput")
         })?;
-        party_nav(f, c, sc.active as i8)?;
+        let slot = c.ram.menu_slot_of(f.emu(), sc.active);
+        party_nav(f, c, slot as i8)?;
         press_until(f, "the item used", keys::A, 4, 30, |e| {
             !obs.task_active(e, "Task_HandleChooseMonInput")
         })?;
@@ -1127,8 +1282,8 @@ fn party_nav(f: &mut HumanFeed, c: &Ctl, slot: i8) -> Result<(), RouteError> {
     })
 }
 
-/// POKEMON, the slot, A, SHIFT.
-fn switch_to(f: &mut HumanFeed, c: &Ctl, slot: usize) -> Result<(), RouteError> {
+/// POKEMON, the mon at field party index `field`, A, SHIFT.
+fn switch_to(f: &mut HumanFeed, c: &Ctl, field: usize) -> Result<(), RouteError> {
     let obs = c.obs;
     nav_2x2(f, "action cursor on POKEMON", 2, |e| {
         obs.action_cursor(e, 0)
@@ -1136,11 +1291,12 @@ fn switch_to(f: &mut HumanFeed, c: &Ctl, slot: usize) -> Result<(), RouteError> 
     press_until(f, "the party menu", keys::A, 4, 120, |e| {
         obs.task_active(e, "Task_HandleChooseMonInput")
     })?;
+    let slot = c.ram.menu_slot_of(f.emu(), field);
     pick_party(f, c, slot)
 }
 
-/// In the party menu: steer to `slot`, A, then A on the first entry of the selection menu
-/// (SHIFT / SEND OUT; `party_menu.c` `Task_HandleSelectionMenuInput`).
+/// In the party menu: steer to menu `slot` (battle order), A, then A on the first entry of the
+/// selection menu (SHIFT / SEND OUT; `party_menu.c` `Task_HandleSelectionMenuInput`).
 fn pick_party(f: &mut HumanFeed, c: &Ctl, slot: usize) -> Result<(), RouteError> {
     let obs = c.obs;
     party_nav(f, c, slot as i8)?;
@@ -1262,8 +1418,10 @@ fn wild_turn(
 /// wins; a lost lead is a model-vs-actual), or the SHIFT-style prompt (cancelled).
 fn party_choice(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteError> {
     let dex = c.dex;
+    // The menu is open: `gPlayerParty` is in battle order, the mon on the field at its slot.
     let party = c.ram.player_party(f.emu());
-    let active = c.ram.party_index(f.emu(), 0);
+    let field_active = c.ram.party_index(f.emu(), 0);
+    let active = c.ram.menu_slot_of(f.emu(), field_active);
     let active_alive = party.get(active).is_some_and(|m| m.hp > 0);
     if active_alive {
         // Not forced: SHIFT style's "Will you change?" answered YES by the mash. Back out.
