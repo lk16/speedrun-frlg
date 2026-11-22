@@ -305,7 +305,12 @@ fn tower_rival(s: &mut Session) -> PResult<()> {
 /// Scope reveals it and it blocks the stairs until beaten.
 fn tower_marowak(s: &mut Session) -> PResult<()> {
     s.seg = "tower-channelers".into();
+    go_map(s, "MAP_POKEMON_TOWER_6F", &Opts::default())?;
+    // The ghost cannot be fled: running replays the scene on the next step. Fight it.
+    s.seg = "tower-encounters".into();
+    s.wild_plan = super::battle::WildPlan::Fight;
     go(s, "MAP_POKEMON_TOWER_6F", 12, 16, &Opts::default())?;
+    s.wild_plan = super::battle::WildPlan::Flee;
     settle(s)?;
     let scene = super::names::names().get("VAR_MAP_SCENE_POKEMON_TOWER_6F");
     let v = scene.and_then(|v| s.obs.var(s.hf.rec.emu(), v));

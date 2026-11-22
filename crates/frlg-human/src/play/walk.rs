@@ -739,9 +739,9 @@ pub fn go_to(
             break;
         }
         plans += 1;
-        if plans > 200 {
+        if plans > 60 {
             return Err(PlayError::Death(format!(
-                "soft-lock: {what}: 200 re-plans without arriving"
+                "soft-lock: {what}: 60 re-plans without arriving"
             )));
         }
         let v = view(s, &temp_block);
