@@ -22,6 +22,7 @@ pub mod ids;
 pub mod inspect;
 pub mod items;
 pub mod legs;
+pub mod legs2;
 pub mod menu;
 pub mod model;
 pub mod names;
