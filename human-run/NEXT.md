@@ -1,6 +1,58 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
-## 2026-11-22 model honesty: later descents must use the new model (read first)
+## 2026-11-22 segment-cost calibration: model of record stays 1132 (read first)
+
+Journal `journal/2026-11-22-14-00-calibration.md`, `calibration.md` ("Segment-cost calibration" and
+"Reconciliation with the WR windows"). Measured per-event costs from the played run are in as MODEL CHANGE keys
+(`catch_end_new`, `throw_frames`, `flee_frames`, `safari_run_frames`, `indoor_speed`, `fly_frames`, all off by
+default). With all of them, 1245 overshoots the WR's windows by +669 s (1132: +178 s). No WR-fitted constant
+absorbs that cleanly: `trainer_fit` is pinned by the fight-only windows (Bill, Rock Tunnel), `text_factor` /
+`path_overhead` would go below measured floors, and a FIT on the guessed pre-League text lumps (`guess_text_scale`)
+either fixes the windows 1132 already matched (0.71, plan **1246**: +323 h, total still +451 s) or the pre-League
+total (0.42, plan **1247**: -2.1 h [-12.9, 7.6], but Sevii -97 s, Bike -178 s, and 0.42 contradicts the played
+text lumps at ~0.9). Neither passes the per-window WR check, so **CURRENT stays 1132-standin-fheal**.
+
+| plan | what | WR+2m vs 1132 (seed 7401, R 800k) | no-reset mean | window total vs WR |
+| --- | --- | --- | --- | --- |
+| 1132-standin-fheal (CURRENT) | | 173.9 h | 3:28:22 | +178 s |
+| 1245-calibrated-model | measured costs | +3461 h [2687, 5005] | 3:35:45 | +669 s |
+| 1246-reconciled | 1245 + guess text 0.71 | +323 h [282, 378] | 3:32:07 | +451 s |
+| 1247-reconciled-total | 1245 + guess text 0.42 | -2.1 h [-12.9, 7.6] | 3:28:28 | ~+0 pre-League |
+
+Ranked next steps: (1) the structural window errors that 1132 already has and that dominate the check (Start E4R1
++175..+292 s from the back-loaded dex fill, Giovanni 3 -206 s, Bike -144 s, Blaine +115 s, Snorlax +65 s) are
+route/plan differences against the WR, not constants: fix those first, then re-run the reconciliation; (2) measure
+more guessed text lumps on the played run (`tools/cal_decompose.py` per stage) instead of one global scale;
+(3) the controller agent's inefficiency list (journal) before the next played pass.
+
+## 2026-11-22 stand-in audit: descend from 1211 (read first)
+
+Journal `journal/2026-11-22-14-30-standin-audit.md` (per-fight table: sim rate, engine at real stats, emulator).
+**1210-standin-audit** (MODEL CHANGE: `persim_held`, Misty and Cerulean rival `risk_power` 1.0) WR+2m 210.6 h /
+WR 335.4 h; **1211-cerulean-potions** (plan response: 3 potions, heal below .35 at the Cerulean rival)
+**199.4 h / 323.5 h** (seed 7402 / 7401, R 1.6M). Descents start from 1211. Open, ranked:
+
+1. Exp economy: the sim's carry is 4-5 levels behind the played s11 run on the same route (L32/33/37 vs 36/38/42 at
+   Giovanni 1 / tower rival / Koga). The 2.565 window stands in for it (emulator 40/40 at s11 levels).
+2. Koga's Muk: engine 35% vs emulator 15/20 at identical stats; the 1.35 window stands in for an engine bug.
+3. The 0.773 Blaine/Sevii window is deadlier than the honest engine (-21 h at 1.0); refit windows under 1211.
+
+## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1131-honest-fheal
+
+| plan | what | WR+2m | WR | model |
+| --- | --- | --- | --- | --- |
+| 1127-fheal1 | 1122 + League heal_below bundle (bruno .65, champion .35, champion-2 .5, lance-2 0) | 79.3-80.2 | 103.4-104.5 | old (fitted League) |
+| 1130-honest-fheal | 1200 + the bundle | 125.3-126.0 | 166.3-169.9 | honest 1200 |
+| **1131-honest-fheal (CURRENT)** | **1202 + the bundle** | **152.0 (R 3.2M, seeds 7521/7522; -9.8 / -12.5 vs 1202)** | **241.8-243.7 (-18.4 / -20.3)** | **honest controller model** |
+
+* NEXT item 1 done: the League pass is finished (tail: lance-2 / champion-2 queues, pp floor, all per-fight
+  heal_below); 1120 and 1114 confirmed by undoing them on 1127 (R 3.2M two seeds both rungs + corners).
+* NEXT item 2: reset_table refit on 1131 (train 3M, eval 1.6M, seed 7611): WR+2m -0.4 h [-0.9, +0.1] n.s., WR table
+  unchanged by the best-iterate guard: not adopted, the table is at its optimum. `fit_post_evidence.py` /
+  `fit_lane.py --check` not re-run under the honest model (the honesty agent owns the stand-ins).
+* Pointer `plans/CURRENT-OPT` is the descent pointer (descend.py `--pointer CURRENT-OPT`).
+
+## 2026-11-22 model honesty: later descents must use the new model
 
 Journal `journal/2026-11-22-13-00-model-honesty.md`. The battle bridge and the controller's played run
 showed stand-ins and route steps the model got wrong. Fixed as labelled MODEL CHANGE keys (all default off

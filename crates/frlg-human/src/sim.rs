@@ -317,6 +317,9 @@ struct State {
     mewtwo_evs_real: [u32; 6],
     /// Black Glasses equipped (`Params::black_glasses`).
     glasses: bool,
+    /// MODEL CHANGE `persim_held`: the carry holds the Persim Berry (from `persim-and-potions` until it is
+    /// eaten or swapped for the glasses at `black-glasses-swap`).
+    persim: bool,
     /// Never-Melt Ice held (pickup kind `neverice`): Ice moves x1.1, instead of the glasses.
     ice: bool,
     /// Leftovers held (pickup kind `leftovers`): 1/16 HP per turn, instead of the glasses.
@@ -401,6 +404,10 @@ impl Ctx<'_> {
 
     /// One ball thrown and its result back at the menu: 397-416 measured, x1.2.
     fn throw_cost(&self) -> f64 {
+        if self.p.throw_frames > 0 {
+            // MODEL CHANGE `throw_frames` (played misses, calibration 2026-11-22).
+            return self.p.throw_frames as f64;
+        }
         if self.p.calib_wr {
             // Measured floor 397-416 per ball (`calibration.md`) x ~1.05.
             425.0
@@ -414,7 +421,10 @@ impl Ctx<'_> {
     /// After the last shake: Gotcha text, dex page, nickname prompt. The measured throw-to-overworld
     /// total is 409-549, so what comes after the throw cycle is small.
     fn catch_end(&self) -> f64 {
-        let base = if self.p.calib_wr {
+        let base = if self.p.catch_end_new > 0 {
+            // MODEL CHANGE `catch_end_new`: a new species' dex page (`battle_scripts_2.s:73-91`).
+            self.p.catch_end_new as f64
+        } else if self.p.calib_wr {
             130.0
         } else if self.p.calib_enc {
             150.0
@@ -497,6 +507,10 @@ impl Ctx<'_> {
     pub fn floor_frames(&self, seg: &Seg) -> f64 {
         let p = self.p;
         match &seg.kind {
+            // MODEL CHANGE `fly_frames`: a played Fly, menu to control on arrival (calibration 2026-11-22).
+            Kind::Text { .. } if p.fly_frames > 0 && seg.name.starts_with("fly-") => {
+                p.fly_frames as f64
+            }
             Kind::Text { frames } => *frames as f64 * p.text_factor,
             Kind::Walk { tiles, era, .. } => {
                 *tiles as f64 * era.frames_per_tile() * p.path_overhead
@@ -1306,8 +1320,14 @@ fn encounter(
     } else if safari {
         // Safari battles have no Run roll and a two-row menu: leaving an unwanted
         // encounter is one press (`decompiled/src/battle_script_commands.c`, Safari
-        // flee always succeeds). 200 frames is the fill audit's estimate (guess).
-        bump(st, 200.0);
+        // flee always succeeds). 200 frames is the fill audit's estimate (guess); MODEL CHANGE
+        // `safari_run_frames`: played 100 (calibration 2026-11-22).
+        let f = if ctx.p.safari_run_frames > 0 {
+            ctx.p.safari_run_frames as f64
+        } else {
+            200.0
+        };
+        bump(st, f);
     } else {
         flee(ctx, st, rng);
     }
@@ -1330,6 +1350,12 @@ fn flee(ctx: &Ctx, st: &mut State, rng: &mut Rng) {
         (430.0, 400.0)
     } else {
         (500.0, 470.0)
+    };
+    // MODEL CHANGE `flee_frames` (played Runs at carry L36, calibration 2026-11-22).
+    let ok_cost = if ctx.p.flee_frames > 0 {
+        ctx.p.flee_frames as f64
+    } else {
+        ok_cost
     };
     loop {
         if rng.chance(p_ok) {
@@ -1930,6 +1956,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 m.ability = crate::data::Ability::None;
             }
             m.force_torrent = cfg.free_torrent;
+            m.persim = st.persim;
             if st.mystic {
                 m.boost = Some((11, 10));
             } else if st.ice {
@@ -2036,6 +2063,9 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
+        if !mewtwo_now {
+            st.persim &= me.persim;
+        }
         // Awakenings: the honest lane spent its own (in `risk_fight`); outside it, this fight's.
         if !in_lane {
             st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
@@ -2293,6 +2323,7 @@ fn risk_fight(
         me.boost = Some((17, 10));
     }
     me.leftovers = st.leftovers;
+    me.persim = st.persim;
     let win = ctx
         .risk_win
         .get(st.seg_i)
@@ -2372,6 +2403,8 @@ fn risk_fight(
     t2.rollouts = 0;
     let mut g = crate::rng::GameRng::from_u32(rng.next_u64() as u32);
     let out = fight(dex, &mut me, &t2, &foes, a.ai, a.heals, a.wild, &mut g);
+    // A berry eaten in either lane is gone.
+    st.persim &= me.persim;
     st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
     healed |= out.heals_used > 0;
     if pay {
@@ -2987,6 +3020,7 @@ pub fn attempt(
         mewtwo_evs: [0; 6],
         mewtwo_evs_real: [0; 6],
         glasses: false,
+        persim: false,
         ice: false,
         leftovers: false,
         itemfinder: false,
@@ -3154,9 +3188,10 @@ pub fn attempt(
             }
             match &seg.kind {
                 _ if skipped => {}
-                Kind::Text { frames } => {
+                Kind::Text { .. } => {
                     if !skip_heal {
-                        bump(&mut st, *frames as f64 * ctx.p.text_factor);
+                        // `floor_frames`: `frames` x `text_factor`, or a MODEL CHANGE `fly_frames`.
+                        bump(&mut st, ctx.floor_frames(seg));
                     }
                     bump(&mut st, jitter(ctx, &mut rng, seg.inputs) as f64);
                     bump(&mut st, mistakes(ctx, &mut rng, seg.inputs as f64 / 100.0));
@@ -3853,12 +3888,17 @@ pub fn attempt(
                 bump(&mut st, x);
             }
             match seg.name.as_str() {
-                "black-glasses-swap" => st.glasses = true,
+                "black-glasses-swap" => {
+                    st.glasses = true;
+                    st.persim = false;
+                }
                 // MODEL CHANGE `awakenings`: bought in the Cerulean mart menus of this segment
                 // (`CeruleanCity_Mart/scripts.inc:30`, 250 each `items.json`); the WR bag at Cerulean
                 // holds three (`video-analysis/stream-2026-11-14-main97.md`). No extra frames: the
                 // segment is the runner's measured potion/Persim menu time.
-                "persim-and-potions" if ctx.p.awakenings > 0 => {
+                "persim-and-potions" if ctx.p.awakenings > 0 || ctx.p.persim_held => {
+                    // MODEL CHANGE `persim_held`: the berry fetched in this segment is held from here on.
+                    st.persim = ctx.p.persim_held && ctx.p.persim && ctx.p.item_swaps;
                     let n = if ctx.p.money_model {
                         ctx.p.awakenings.min(st.money / 250)
                     } else {
