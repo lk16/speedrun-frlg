@@ -342,8 +342,13 @@ fn open_storage(s: &mut Session, center_map: &str, row: i8) -> PResult<()> {
         s.hf.press(keys::A)?;
         // "Booted up the PC." -> "Which PC should be accessed?" (`CreatePCMenu`,
         // `decompiled/src/script_menu.c:977`, a multichoice with the storage PC first).
-        menu::text_until_multichoice(s)?;
-        menu::choose(s, 0)?;
+        // A mashed press can land on the list as it opens: row 0 is what the human wants anyway.
+        press_until(s, "the PC list", keys::A, 3000, |s| {
+            menu::multichoice_up(s) || menu::task(s, "Task_PCMainMenu")
+        })?;
+        if menu::multichoice_up(s) {
+            menu::choose(s, 0)?;
+        }
         press_until(s, "the storage menu", keys::A, 3000, |s| {
             menu::task(s, "Task_PCMainMenu")
         })?;
@@ -384,6 +389,16 @@ pub fn pc(s: &mut Session, center_map: &str, ops: &[PcOp]) -> PResult<()> {
                 storage_ready(s, "Task_PokeStorageMain")
             })?;
             s.hf.idle(8)?;
+            // `gStorage->boxOption` (offset 1): OPTION_WITHDRAW 0, OPTION_DEPOSIT 1.
+            let g = s.sym("gStorage");
+            let emu = s.hf.rec.emu();
+            let gp = emu.read32(g);
+            let opt = emu.read8(gp + 1) as i8;
+            if opt != row {
+                return Err(PlayError::Death(format!(
+                    "storage opened with option {opt}, wanted {row}"
+                )));
+            }
             opened = Some(row);
         }
         match op {
