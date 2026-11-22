@@ -14,10 +14,23 @@ pub const SCRIPT_BUDGET: usize = 20_000;
 pub fn is_free(s: &mut Session) -> bool {
     let obs = &s.obs;
     let emu = s.hf.rec.emu();
-    !obs.in_battle(emu)
-        && obs.callback2_is(emu, "CB2_Overworld")
-        && obs.player_can_step(emu)
-        && !obs.field_controls_locked(emu)
+    if obs.in_battle(emu)
+        || !obs.callback2_is(emu, "CB2_Overworld")
+        || obs.field_controls_locked(emu)
+    {
+        return false;
+    }
+    if obs.player_can_step(emu) {
+        return true;
+    }
+    // On Cycling Road the slope keeps the bike rolling south (`FLAG_SYS_ON_CYCLING_ROAD`,
+    // `decompiled/data/maps/Route16/scripts.inc` `OnTransitionCyclingRoad`), so the avatar is
+    // never settled; with no script holding it, the player is in control.
+    let cyc = super::names::names()
+        .get("FLAG_SYS_ON_CYCLING_ROAD")
+        .and_then(|f| obs.flag(emu, f))
+        .unwrap_or(false);
+    cyc && obs.player_avatar_flags(emu) != 0 && !obs.prevent_step(emu)
 }
 
 /// Is a yes/no prompt of the battle's learn-move script waiting for input? `gBattlescriptCurrInstr`
