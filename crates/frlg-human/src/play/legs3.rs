@@ -24,7 +24,7 @@ use super::menu;
 use super::prims::{settle, wait_until};
 use super::ram::Ram;
 use super::session::{PResult, PlayError, Session, Stage};
-use super::walk::{go, go_face, go_map, go_to, here, Node, Opts};
+use super::walk::{go, go_face, go_map, go_to, here, MapId, Node, Opts};
 
 /// The model's no-reset clock (p50, seconds) after `seg`, or NaN.
 fn p50(s: &Session, seg: &str) -> f64 {
@@ -500,7 +500,9 @@ fn seagallop(s: &mut Session, from: u8, to: u8) -> PResult<()> {
     } else {
         talk_to(s, HARBORS[from as usize], 2)?;
     }
-    super::menu::text_until_multichoice(s)?;
+    // "Where do you want to sail?" is `message` + `waitmessage`: the list opens by itself, and a
+    // mashed A would take its first row (`OneIsland_Harbor/scripts.inc` `Sailor`).
+    wait_until(s, "the Seagallop list", 900, menu::multichoice_up)?;
     if celio_var(s) < 5 {
         let row = if from == 0 { to as i8 - 1 } else { -1 };
         if row < 0 {
@@ -700,6 +702,254 @@ fn boulder_go_map(s: &mut Session, to: &str) -> PResult<()> {
     go_map(s, to, &o)
 }
 
+// ----------------------------------------------------------------------------------------------
+// Icefall Cave: ice that slides, thin ice that breaks, a waterfall.
+
+const MB_WATERFALL: u16 = 0x13;
+const MB_ICE: u16 = 0x23;
+/// Icefall 1F's thin ice: a step on it cracks it, a step on the cracked tile breaks it and the
+/// player falls to B1F at the same coordinates (`sIcefallCaveIceCoords`,
+/// `IcefallCaveIcePerStepCallback`, `decompiled/src/field_tasks.c:51-62,172-245`;
+/// `FourIsland_IcefallCave_1F_EventScript_FallDownHole`: `warphole MAP_FOUR_ISLAND_ICEFALL_CAVE_B1F`).
+/// The cracks are temp flags (`FlagGet(i + 1)`), cleared on every map load.
+const THIN_ICE: [(i16, i16); 9] = [
+    (8, 3),
+    (10, 5),
+    (15, 5),
+    (8, 9),
+    (9, 9),
+    (16, 9),
+    (8, 10),
+    (9, 10),
+    (8, 14),
+];
+
+/// One planned move: the direction pressed and where the player stands after it (slides,
+/// falls and warps included).
+type IceMove = (u16, Node);
+
+/// Dijkstra (in moves) over (map, x, y, cracked thin ice) across the maps `maps`: walls are
+/// collision and map objects; warp tiles move to the destination warp; ice (`MB_ICE`) slides
+/// on in the same direction until the next tile is blocked (`ForcedMovement_Slip` for
+/// `MetatileBehavior_IsIce_2`, `decompiled/src/field_player_avatar.c:229`); water needs Surf and a
+/// waterfall is climbed northward only (`GetInteractedWaterScript`,
+/// `decompiled/src/field_control_avatar.c:600-615`).
+fn ice_plan(
+    s: &Session,
+    maps: &[&str],
+    start: Node,
+    goal: &dyn Fn(&Node) -> bool,
+) -> Option<Vec<IceMove>> {
+    use std::collections::{BinaryHeap, HashMap};
+    let g = s.graph();
+    let ids: Vec<MapId> = maps.iter().map(|m| g.id(m)).collect();
+    let f1 = g.id("MAP_FOUR_ISLAND_ICEFALL_CAVE_1F");
+    let b1 = g.id("MAP_FOUR_ISLAND_ICEFALL_CAVE_B1F");
+    let passable = |mid: MapId, x: i16, y: i16, key: u16| -> bool {
+        let Some(m) = g.maps.get(&mid) else {
+            return false;
+        };
+        let Some(t) = m.tile(x, y) else { return false };
+        if m.objects.iter().any(|o| (o.x, o.y) == (x, y)) {
+            return false;
+        }
+        if super::walk::is_warp_tile(t.behavior) {
+            return true;
+        }
+        if t.collision != 0 {
+            return false;
+        }
+        t.behavior != MB_WATERFALL || key == keys::UP
+    };
+    let warp_dest = |mid: MapId, x: i16, y: i16| -> Option<Node> {
+        let m = g.maps.get(&mid)?;
+        let w = m.warps.iter().find(|w| (w.0, w.1) == (x, y))?;
+        let dm = w.2?;
+        if !ids.contains(&dm) {
+            return None;
+        }
+        let dw = g.maps.get(&dm)?.warps.get(w.3)?;
+        Some((dm, dw.0, dw.1))
+    };
+    type St = (Node, u16);
+    let s0: St = (start, 0);
+    let mut dist: HashMap<St, u32> = HashMap::from([(s0, 0)]);
+    let mut prev: HashMap<St, (St, u16)> = HashMap::new();
+    let mut pq = BinaryHeap::from([std::cmp::Reverse((0u32, s0))]);
+    let mut end = None;
+    while let Some(std::cmp::Reverse((c, st))) = pq.pop() {
+        if dist.get(&st).is_some_and(|&d| d < c) {
+            continue;
+        }
+        if goal(&st.0) {
+            end = Some(st);
+            break;
+        }
+        let ((mid, x, y), cracked) = st;
+        for (key, dx, dy) in [
+            (keys::UP, 0i16, -1i16),
+            (keys::DOWN, 0, 1),
+            (keys::LEFT, -1, 0),
+            (keys::RIGHT, 1, 0),
+        ] {
+            let (mut px, mut py) = (x + dx, y + dy);
+            if !passable(mid, px, py, key) {
+                continue;
+            }
+            let m = &g.maps[&mid];
+            while m.tile(px, py).is_some_and(|t| t.behavior == MB_ICE)
+                && passable(mid, px + dx, py + dy, key)
+            {
+                px += dx;
+                py += dy;
+            }
+            let next: St = if mid == f1 && THIN_ICE.contains(&(px, py)) {
+                let i = THIN_ICE.iter().position(|&p| p == (px, py)).unwrap();
+                if cracked >> i & 1 != 0 {
+                    ((b1, px, py), 0)
+                } else {
+                    ((mid, px, py), cracked | 1 << i)
+                }
+            } else if let Some(d) = warp_dest(mid, px, py) {
+                (d, 0)
+            } else {
+                ((mid, px, py), cracked)
+            };
+            let nc = c + 1;
+            if dist.get(&next).is_none_or(|&d| nc < d) {
+                dist.insert(next, nc);
+                prev.insert(next, (st, key));
+                pq.push(std::cmp::Reverse((nc, next)));
+            }
+        }
+    }
+    let mut cur = end?;
+    let mut out = vec![];
+    while let Some(&(p, key)) = prev.get(&cur) {
+        out.push((key, cur.0));
+        cur = p;
+    }
+    out.reverse();
+    Some(out)
+}
+
+/// Play an [`ice_plan`]: each move is one press of its direction, held until the player leaves
+/// the tile, then settled (slides, falls, warps and battles run out). Water: A to Surf when
+/// stepping off land, A at a waterfall to climb it (both scripts' yes/no default to YES). The
+/// player's node is matched against the plan after every move (a slide or a climb can pass
+/// several planned nodes).
+fn ice_follow(s: &mut Session, plan: &[IceMove]) -> PResult<()> {
+    let mut i = 0;
+    let mut guard = 0;
+    while i < plan.len() {
+        guard += 1;
+        if guard > plan.len() * 3 + 20 {
+            return Err(PlayError::Death("soft-lock: the ice route".into()));
+        }
+        settle(s)?;
+        let cur = here(s).ok_or("no position")?;
+        let (key, to) = plan[i];
+        let (dx, dy) = match key {
+            keys::UP => (0, -1),
+            keys::DOWN => (0, 1),
+            keys::LEFT => (-1, 0),
+            _ => (1, 0),
+        };
+        let g = s.graph();
+        let t = g
+            .maps
+            .get(&cur.0)
+            .and_then(|m| m.tile(cur.1 + dx, cur.2 + dy));
+        let surfing = s.obs.player_avatar_flags(s.hf.rec.emu()) & super::walk::AVATAR_SURFING != 0;
+        let beh = t.map_or(0, |t| t.behavior);
+        if beh == MB_WATERFALL || (!surfing && super::walk::MB_WATER.contains(&beh)) {
+            super::walk::face(s, key)?;
+            s.hf.press(keys::A)?;
+            settle(s)?;
+        } else {
+            // Hold the direction until the player leaves the tile or a script takes over (the
+            // thin-ice fall locks the player on the tile it breaks under).
+            let mut fed = 0;
+            let mut held = 0;
+            while here(s) == Some(cur) && held < 3 {
+                if fed > 60 {
+                    return Err(PlayError::Death(format!(
+                        "soft-lock: ice route bump at {cur:?}"
+                    )));
+                }
+                if super::prims::is_free(s) {
+                    s.hf.step(key)?;
+                    held = 0;
+                } else {
+                    s.hf.step(0)?;
+                    held += 1;
+                }
+                fed += 1;
+            }
+            s.hf.step(0)?;
+        }
+        settle(s)?;
+        let mut now = here(s).ok_or("no position")?;
+        if std::env::var_os("FRLG_PG_DEBUG").is_some() {
+            let lb = super::walk::live_map(s, now.0)
+                .and_then(|m| m.tile(now.1, now.2))
+                .map(|t| t.behavior);
+            eprintln!("ice: {cur:?} key {key} -> {now:?} (planned {to:?}) live behavior {lb:x?}");
+        }
+        if now != to && to.0 != cur.0 && now.0 == cur.0 {
+            // A fall or a warp that has not started yet (the broken ice's on-frame script).
+            let dest = to.0;
+            let start = s.frame();
+            while s.frame() - start < 300 && here(s).is_none_or(|n| n.0 != dest) {
+                if super::prims::is_free(s) {
+                    s.hf.step(0)?;
+                } else {
+                    settle(s)?;
+                }
+            }
+            settle(s)?;
+            now = here(s).ok_or("no position")?;
+        }
+        if now == to {
+            i += 1;
+            continue;
+        }
+        if now == cur {
+            // Only turned (a tap on a new direction turns in place): press again.
+            continue;
+        }
+        match plan[i..].iter().position(|m| m.1 == now) {
+            Some(k) => i += k + 1,
+            None => {
+                return Err(PlayError::Death(format!(
+                    "ice route: at {now:?}, planned {to:?}"
+                )))
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Plan and play an Icefall route to `goal`.
+fn ice_go(s: &mut Session, what: &str, goal: &dyn Fn(&Node) -> bool) -> PResult<()> {
+    const MAPS: [&str; 4] = [
+        "MAP_FOUR_ISLAND_ICEFALL_CAVE_ENTRANCE",
+        "MAP_FOUR_ISLAND_ICEFALL_CAVE_1F",
+        "MAP_FOUR_ISLAND_ICEFALL_CAVE_B1F",
+        "MAP_FOUR_ISLAND_ICEFALL_CAVE_BACK",
+    ];
+    settle(s)?;
+    let cur = here(s).ok_or("no position")?;
+    let plan = ice_plan(s, &MAPS, cur, goal)
+        .ok_or_else(|| PlayError::Fatal(format!("{what}: no ice route from {cur:?}")))?;
+    s.event(
+        "decision",
+        format!("Icefall Cave: {} moves to {what}", plan.len()),
+        json!({"moves": plan.len()}),
+    );
+    ice_follow(s, &plan)
+}
+
 const CELIO_PC: &str = "MAP_ONE_ISLAND_POKEMON_CENTER_1F";
 
 fn celio_var(s: &mut Session) -> u16 {
@@ -827,9 +1077,114 @@ fn celio_rainbow(s: &mut Session) -> PResult<()> {
     split(s, "Ruby", "celio-rainbow-pass")
 }
 
+fn party_slot(s: &mut Session, species: &str) -> Option<usize> {
+    let sp = super::names::id(species);
+    Ram::new(&s.obs)
+        .party(s.hf.rec.emu())
+        .iter()
+        .position(|m| m.species == sp)
+}
+
+/// Escape Rope from the bag: back to the last outdoor escape point
+/// (`decompiled/src/item_use.c` `ItemUseOutOfBattle_EscapeRope`, `SetEscapeWarp`).
+fn escape_rope(s: &mut Session, outside: &str) -> PResult<()> {
+    let from = here(s);
+    super::shop::use_item(s, "ITEM_ESCAPE_ROPE")?;
+    let out = s.graph().id(outside);
+    super::legs2::settle_until(s, "the Escape Rope", 3000, move |s| {
+        here(s).is_some_and(|n| n.0 == out)
+    })?;
+    s.event(
+        "decision",
+        format!("Escape Rope out to {}", outside.trim_start_matches("MAP_")),
+        json!({"from": from.map(|n| [n.1, n.2])}),
+    );
+    Ok(())
+}
+
+/// Escape Ropes bought at the Four Island Mart (`FourIsland_Mart/scripts.inc` sells
+/// `ITEM_ESCAPE_ROPE`): Icefall Cave's HM07 pocket and the Back room, the Dotted Hole, Cerulean
+/// Cave (`rope_cerulean_cave`).
+const ROPES: u16 = 4;
+
+/// "sail-to-four", "icefall-cave-walk", "icefall-grunt", "icefall-ice-slides", "icefall-cave".
+/// The Back room (Lorelei's scene, the forced grunt: `LoreleiRocketsScene` on the coord row y 18,
+/// `TRAINER_TEAM_ROCKET_GRUNT_45`; it hides the Ruin Valley scientist that stands on the Dotted
+/// Hole's Cut spot, `FLAG_HIDE_RUIN_VALLEY_SCIENTIST`,
+/// `decompiled/data/maps/FourIsland_IcefallCave_Back/scripts.inc`) is behind the Entrance's
+/// waterfall (rows 14-20, `MB_WATERFALL`, `LAYOUT_FOUR_ISLAND_ICEFALL_CAVE_ENTRANCE`): its upper
+/// door (9, 7) leads to 1F (2, 8) and the Back door (3, 6) (`map.json` warps). Waterfall is HM07,
+/// the item ball at 1F (12, 16) (`FourIsland_IcefallCave_1F/map.json`), in a pocket reached only
+/// by falling through 1F's thin ice to B1F and up its (15, 16) ladder, and left only by an
+/// Escape Rope ([`ice_plan`] finds no way back on foot). Lapras learns HM07 (`tmhm_learnsets.h`).
+fn icefall(s: &mut Session) -> PResult<()> {
+    s.seg = "sail-to-four".into();
+    let t0 = s.timer().unwrap_or(0.0);
+    seagallop(s, 1, 4)?;
+    let n = ROPES.saturating_sub(have(s, "ITEM_ESCAPE_ROPE"));
+    if n > 0 {
+        super::shop::buy(s, "MAP_FOUR_ISLAND_MART", None, &[("ITEM_ESCAPE_ROPE", n)])?;
+    }
+    s.seg = "icefall-cave-walk".into();
+    let f1 = s.graph().id("MAP_FOUR_ISLAND_ICEFALL_CAVE_1F");
+    if have(s, "ITEM_HM07") == 0 {
+        go_map(s, "MAP_FOUR_ISLAND_ICEFALL_CAVE_1F", &hm_opts())?;
+        s.seg = "icefall-ice-slides".into();
+        ice_go(s, "the HM07 ball", &move |n: &Node| {
+            n.0 == f1 && (n.1 - 12).abs() + (n.2 - 16).abs() == 1
+        })?;
+        let cur = here(s).ok_or("no position")?;
+        let key = match (12 - cur.1, 16 - cur.2) {
+            (0, 1) => keys::DOWN,
+            (0, -1) => keys::UP,
+            (1, 0) => keys::RIGHT,
+            _ => keys::LEFT,
+        };
+        super::walk::face(s, key)?;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        if have(s, "ITEM_HM07") == 0 {
+            return Err(PlayError::Fatal("no HM07 after the ball".into()));
+        }
+        s.event(
+            "model-vs-actual",
+            "Icefall: the Back room is behind a waterfall; HM07 (1F pocket) and an Escape Rope \
+             are not in the model",
+            json!({"segment": "icefall-cave-walk"}),
+        );
+        let slot = party_slot(s, "SPECIES_LAPRAS").ok_or("no Lapras for HM07")?;
+        super::items::teach_tmhm(s, "ITEM_HM07", slot)?;
+        escape_rope(s, "MAP_FOUR_ISLAND")?;
+    }
+    s.seg = "icefall-cave-walk".into();
+    go_map(s, "MAP_FOUR_ISLAND_ICEFALL_CAVE_ENTRANCE", &hm_opts())?;
+    let back = s.graph().id("MAP_FOUR_ISLAND_ICEFALL_CAVE_BACK");
+    s.seg = "icefall-grunt".into();
+    ice_go(s, "the Back room", &move |n: &Node| n.0 == back)?;
+    // Up the room to the scene row (the scene walks the player on from there).
+    go(
+        s,
+        "MAP_FOUR_ISLAND_ICEFALL_CAVE_BACK",
+        12,
+        19,
+        &Opts::default(),
+    )?;
+    let mut fed = 0;
+    while super::prims::is_free(s) && fed < 60 {
+        s.hf.step(keys::UP)?;
+        fed += 1;
+    }
+    super::legs2::settle_until(s, "Lorelei's scene", 20_000, |s| {
+        var(s, "VAR_MAP_SCENE_ICEFALL_CAVE_BACK") >= 1
+    })?;
+    s.seg = "icefall-cave".into();
+    escape_rope(s, "MAP_FOUR_ISLAND")?;
+    mva(s, "Icefall Cave", t0, "celio-rainbow-pass", "icefall-cave");
+    split(s, "Icefall", "icefall-cave")
+}
+
 #[allow(dead_code)]
 fn unused(s: &mut Session) -> PResult<()> {
-    let _ = Ram::new(&s.obs);
     let _ = go as fn(&mut Session, &str, i16, i16, &Opts) -> PResult<()>;
     let _ = (center_heal, take_warp);
     let _ = go_to;
@@ -858,6 +1213,10 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "celio-rainbow",
             run: celio_rainbow,
+        },
+        Stage {
+            name: "icefall",
+            run: icefall,
         },
     ]
 }
