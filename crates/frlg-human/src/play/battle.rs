@@ -32,6 +32,23 @@
 //! Choices the simulator never makes are logged as `model-vs-actual` and handled by a fixed rule
 //! here: the lead fainting (send the highest-level mon left), weakening a wild mon before a throw
 //! ([`crate::battle::weaken_move`]: the sim abstracts it), a heal or ball the bag does not hold.
+//!
+//! # Human timing
+//!
+//! Every menu press is late by `U{0..N}` ([`HumanFeed::press`]); text is mashed with the same
+//! jitter. A reaction delay `U{lo..hi}` ([`HumanFeed::react`]) is paid at an action menu only after
+//! a turn the human could not predict (a miss or a move that did nothing, a hit above the expected
+//! max roll, a new status on either side, an enemy heal), and before choosing a send-out after a
+//! faint: the sim's `Outcome::events`.
+//!
+//! # Logged
+//!
+//! `battle` per action menu (action, policy action, HP both sides, PP left, danger, sure kill,
+//! win probability / expected turns from [`crate::battle::outlook`], lookahead table, last turn's
+//! damage dealt and taken, the reaction reason), the trainer's send-outs against the model's
+//! `most_suitable`, learn/skip decisions; `encounter` and `catch` (ball, odds, catch chance) for
+//! wild mons; `model-vs-actual` wherever the game leaves the model (above, plus a trainer party
+//! or stats that differ from the dex's trainer data, a bag without heals).
 use frlg_emu::keys;
 use frlg_route::{Feed, Observer, RouteError};
 use serde_json::json;
@@ -547,6 +564,61 @@ fn nav_2x2(
     }
 }
 
+/// Both sides as the human saw them at an action menu.
+#[derive(Clone, Copy, Debug)]
+struct Seen {
+    me_slot: usize,
+    me_hp: i32,
+    me_status: Status1,
+    foe_slot: usize,
+    foe_hp: i32,
+    foe_status: Status1,
+    /// The foe's best no-crit hit as the policy read it (0 = not computed).
+    danger: i32,
+    /// The player used a damaging move.
+    attacked: bool,
+}
+
+impl Seen {
+    fn of(sc: &Scene) -> Seen {
+        Seen {
+            me_slot: sc.active,
+            me_hp: sc.me.hp,
+            me_status: sc.me.status,
+            foe_slot: sc.foe.slot,
+            foe_hp: sc.foe.hp,
+            foe_status: sc.foe.status,
+            danger: 0,
+            attacked: false,
+        }
+    }
+
+    /// What about the turn since `self` a human did not see coming (the sim's reaction events:
+    /// a miss or a move that did nothing, a hit above the expected max, a status, an enemy heal).
+    fn surprise(&self, now: &Seen) -> Option<&'static str> {
+        let same_me = self.me_slot == now.me_slot;
+        let same_foe = self.foe_slot == now.foe_slot;
+        if (same_me && !same_status(self.me_status, now.me_status))
+            || (same_foe && !same_status(self.foe_status, now.foe_status))
+        {
+            Some("status")
+        } else if same_foe && now.foe_hp > self.foe_hp {
+            Some("enemy healed")
+        } else if same_foe && self.attacked && now.foe_hp == self.foe_hp {
+            Some("no damage dealt")
+        } else if same_me && self.danger > 0 && self.me_hp - now.me_hp > self.danger {
+            Some("hit above the expected max")
+        } else {
+            None
+        }
+    }
+}
+
+/// Same status kind (a sleep counter or Toxic counter ticking down is no news).
+fn same_status(a: Status1, b: Status1) -> bool {
+    std::mem::discriminant(&a) == std::mem::discriminant(&b)
+}
+
 /// Where the loop stands between presses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Point {
@@ -577,9 +649,9 @@ struct Ctl<'a, 'b> {
     throws: u32,
     rng: GameRng,
     armed: std::cell::Cell<bool>,
-    /// HP of both sides at the last action menu (fighter slot, HP, foe slot, foe HP), for the
-    /// turn-result note of the next line.
-    last: Option<(usize, i32, usize, i32)>,
+    /// Both sides at the last action menu and what the policy expected, for the turn-result note
+    /// and the reaction rule of the next menu.
+    last: Option<Seen>,
     /// The foe on the field at the last menu, its bench, and the fighter then (the send-out check).
     last_foe: Option<(Mon, Vec<Mon>, Mon)>,
 }
@@ -875,11 +947,15 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
         c.fighter = Some(sc.active);
         c.tac = Some(tactics_for(c.cfg.ctx, &c.cfg.seg, c.wild, &sc));
     }
-    // A human decides after watching the turn: an unpredictable turn costs a reaction (`react`).
-    if c.turns > 1 {
+    // A human decides after watching the turn; only an unpredictable one costs a reaction
+    // (`react`, the sim's `out.events`), the rest is the menu jitter of each press.
+    let now = Seen::of(&sc);
+    let surprise = c.last.and_then(|l| l.surprise(&now));
+    if surprise.is_some() {
         f.react()?;
     }
     if c.wild && c.cfg.wild != WildPlan::Fight {
+        c.last = Some(now);
         return wild_turn(f, c, log, &sc);
     }
     let tac = c.tac.clone().unwrap();
@@ -923,7 +999,13 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
     if let Some((old, old_bench, old_me)) = c.last_foe.take() {
         if old.slot != sc.foe.slot && old_bench.len() > 1 {
             let fainted = Mon { hp: 0, ..old };
-            let i = sim_battle::predict_next(dex, &old_me, &fainted, c.fs.as_ref().unwrap(), &old_bench);
+            let i = sim_battle::predict_next(
+                dex,
+                &old_me,
+                &fainted,
+                c.fs.as_ref().unwrap(),
+                &old_bench,
+            );
             let model = old_bench[i].species;
             let text = format!(
                 "trainer sent {} (model's most_suitable: {})",
@@ -940,13 +1022,17 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
     c.last_foe = Some((sc.foe.clone(), sc.bench.clone(), sc.me.clone()));
     // What the last turn did, as the human saw it: HP lost on both sides (same mons only).
     let (dealt, took) = match c.last {
-        Some((ms, mh, fs_, fh)) => (
-            (fs_ == sc.foe.slot).then_some(fh - sc.foe.hp),
-            (ms == sc.active).then_some(mh - sc.me.hp),
+        Some(l) => (
+            (l.foe_slot == sc.foe.slot).then_some(l.foe_hp - sc.foe.hp),
+            (l.me_slot == sc.active).then_some(l.me_hp - sc.me.hp),
         ),
         None => (None, None),
     };
-    c.last = Some((sc.active, sc.me.hp, sc.foe.slot, sc.foe.hp));
+    c.last = Some(Seen {
+        danger: d.read.danger,
+        attacked: matches!(taken, Action::Move(mv) if dex.moves[mv].power > 0),
+        ..now
+    });
     let st = |m: &Mon| match m.status {
         Status1::None => String::new(),
         s => format!(" [{s:?}]"),
@@ -967,7 +1053,7 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
             win * 100.0
         ),
         json!({
-            "dealt_last": dealt, "took_last": took,
+            "dealt_last": dealt, "took_last": took, "react": surprise,
             "my_status": format!("{:?}", sc.me.status), "enemy_status": format!("{:?}", sc.foe.status),
             "turn": c.turns, "action": what, "policy": format!("{:?}", d.action),
             "enemy": species_name(dex, sc.foe.species), "enemy_hp": sc.foe.hp, "enemy_max_hp": sc.foe.max_hp,
