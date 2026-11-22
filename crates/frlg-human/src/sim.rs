@@ -766,6 +766,12 @@ fn apply_pp_ups(ctx: &Ctx, st: &mut State) -> f64 {
     frames
 }
 
+/// `FRLG_EXP_TRACE`: print the carry's level and exp at the start of every segment.
+fn exp_trace() -> bool {
+    static T: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *T.get_or_init(|| std::env::var_os("FRLG_EXP_TRACE").is_some())
+}
+
 /// `EXP_SLOW(n)` (`decompiled/src/data/pokemon/experience_tables.h:4`), Mewtwo's growth rate.
 fn slow_exp(n: u32) -> u32 {
     5 * n * n * n / 4
@@ -3117,6 +3123,12 @@ pub fn attempt(
             let before = st.clock;
             let wo_before = st.whiteouts;
             st.seg_i = i;
+            if exp_trace() {
+                eprintln!(
+                    "exp-trace {idx} {} {} {} {}",
+                    seg.name, st.carry, st.exp, st.clock
+                );
+            }
             if seg.name == "indigo-heal" || seg.name == "league-entry" {
                 st.league_t0 = st.clock;
             }

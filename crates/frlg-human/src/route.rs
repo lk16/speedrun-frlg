@@ -282,6 +282,56 @@ impl<'a> B<'a> {
         );
     }
 
+    /// `Params::fight_lists`: replace a `Parties`/`Group` segment's fights with the given trainer ids, or
+    /// insert them as a new `<seg>+fights` segment after any other segment.
+    pub(crate) fn apply_fight_lists(
+        &mut self,
+        lists: &std::collections::BTreeMap<String, Vec<String>>,
+    ) -> Result<(), String> {
+        for (seg, ids) in lists {
+            let i = self
+                .segs
+                .iter()
+                .position(|s| s.name == *seg)
+                .ok_or_else(|| format!("fight_lists: no segment {seg}"))?;
+            let fights: Vec<crate::data::Fight> = ids
+                .iter()
+                .map(|id| {
+                    if self.dex.has_trainer(id) {
+                        Ok(self.dex.fight(id))
+                    } else {
+                        Err(format!("fight_lists: unknown trainer {id}"))
+                    }
+                })
+                .collect::<Result<_, _>>()?;
+            let n = fights.len() as u32;
+            let kind = Kind::Parties {
+                money: fights.iter().map(|f| f.money).sum(),
+                parties: fights.iter().map(|f| f.party.clone()).collect(),
+                ais: fights.iter().map(|f| f.ai).collect(),
+                fulls: fights.into_iter().map(|f| f.full).collect(),
+            };
+            if matches!(self.segs[i].kind, Kind::Parties { .. } | Kind::Group { .. }) {
+                self.segs[i].kind = kind;
+                self.segs[i].inputs = 6 * n;
+            } else {
+                self.segs.insert(
+                    i + 1,
+                    Seg {
+                        name: format!("{seg}+fights"),
+                        src: Src::Tiles,
+                        inputs: 6 * n,
+                        split: false,
+                        off_timer: false,
+                        starter_check: false,
+                        kind,
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// The `n` hardest trainers on the given maps. `n` is a routing assumption (which ones the
     /// route cannot walk around), the parties are the decomp's.
     pub(crate) fn maps_group(&mut self, name: &str, maps: &[&str], n: u32) {
@@ -1312,6 +1362,7 @@ pub fn build(dex: &Dex, p: &Params) -> Result<Vec<Seg>, String> {
     } else {
         old_order(&mut b, p, &helpers);
     }
+    b.apply_fight_lists(&p.fight_lists)?;
 
     for name in &p.extra_splits {
         let seg = b

@@ -61,7 +61,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let seed: u64 = arg(&args, "--seed", 1);
     match args.first().map(String::as_str) {
-        Some(c @ ("play" | "play-verify" | "play-inspect")) => {
+        Some(c @ ("play" | "play-verify" | "play-inspect" | "play-battles")) => {
             frlg_human::play::cli::main(c, &args, dex());
         }
         Some("ladder") => {
@@ -1173,6 +1173,47 @@ fn main() {
         Some("segs") => {
             // Segment names with their kind, for tools that enumerate knobs.
             let plan = load(&args[1]);
+            // `--fights`: every trainer segment with its parties (the exp-economy audit).
+            if args.iter().any(|a| a == "--fights") {
+                let d = dex();
+                let show = |p: &[(u32, usize)]| {
+                    p.iter()
+                        .map(|&(l, s)| {
+                            format!("{}L{l}", d.species[s].name.trim_start_matches("SPECIES_"))
+                        })
+                        .collect::<Vec<_>>()
+                        .join(",")
+                };
+                for sg in &plan.segs {
+                    match &sg.kind {
+                        frlg_human::route::Kind::Trainer { party, .. } => {
+                            println!("{} trainer {}", sg.name, show(party))
+                        }
+                        frlg_human::route::Kind::Parties { parties, .. } => {
+                            for p in parties {
+                                println!("{} parties {}", sg.name, show(p));
+                            }
+                        }
+                        frlg_human::route::Kind::Group {
+                            n,
+                            mons,
+                            level,
+                            yield_,
+                        } => {
+                            println!("{} group n{n} mons{mons} L{level} yield{yield_}", sg.name)
+                        }
+                        frlg_human::route::Kind::Grind {
+                            battles,
+                            level,
+                            yield_,
+                        } => {
+                            println!("{} grind {battles} L{level} yield{yield_}", sg.name)
+                        }
+                        _ => {}
+                    }
+                }
+                return;
+            }
             for sg in &plan.segs {
                 let k = match &sg.kind {
                     frlg_human::route::Kind::Walk { enc: Some(_), .. } => "walk-grass",

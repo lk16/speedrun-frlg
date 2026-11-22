@@ -612,6 +612,10 @@ impl Dex {
         self.money.get(name).copied().unwrap_or(0)
     }
 
+    pub fn has_trainer(&self, name: &str) -> bool {
+        self.trainers.contains_key(name)
+    }
+
     pub fn trainer(&self, name: &str) -> &[(u32, usize)] {
         self.trainers
             .get(name)

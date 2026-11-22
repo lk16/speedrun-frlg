@@ -932,6 +932,14 @@ pub struct Params {
     /// Before this the berry was priced (frames) but had no battle effect, and Misty's `risk_power` 2.0
     /// stood in for it among other things. Needs `persim`. Off = the old model.
     pub persim_held: bool,
+    /// MODEL CHANGE (exp-economy audit 2026-11-22): the trainers the human actually fights, per segment, by
+    /// trainer id (`decompiled/include/constants/opponents.h`, parties `src/data/trainer_parties.h`). A named
+    /// `Parties`/`Group` segment gets exactly this list (fought in the given order); any other named segment
+    /// gets a new `<seg>+fights` segment right after it. The sight-cone lists (`forced-audit.md`) are the
+    /// fewest fights a perfect dodger needs; the played s11 controller and the runner's stream (Giovanni 1
+    /// at Lv36, Koga at Lv41/42) fight about 35 more, which is why the sim's carry was 4-5 levels short.
+    /// Empty = the old model (cone-forced trainers only).
+    pub fight_lists: std::collections::BTreeMap<String, Vec<String>>,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1135,6 +1143,7 @@ impl Default for Params {
             played_extra: Default::default(),
             marowak_fight: false,
             persim_held: false,
+            fight_lists: Default::default(),
         }
     }
 }
