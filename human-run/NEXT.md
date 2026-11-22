@@ -1,5 +1,20 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1131-honest-fheal
+
+| plan | what | WR+2m | WR | model |
+| --- | --- | --- | --- | --- |
+| 1127-fheal1 | 1122 + League heal_below bundle (bruno .65, champion .35, champion-2 .5, lance-2 0) | 79.3-80.2 | 103.4-104.5 | old (fitted League) |
+| 1130-honest-fheal | 1200 + the bundle | 125.3-126.0 | 166.3-169.9 | honest 1200 |
+| **1131-honest-fheal (CURRENT)** | **1202 + the bundle** | **152.0 (R 3.2M, seeds 7521/7522; -9.8 / -12.5 vs 1202)** | **241.8-243.7 (-18.4 / -20.3)** | **honest controller model** |
+
+* NEXT item 1 done: the League pass is finished (tail: lance-2 / champion-2 queues, pp floor, all per-fight
+  heal_below); 1120 and 1114 confirmed by undoing them on 1127 (R 3.2M two seeds both rungs + corners).
+* NEXT item 2: reset_table refit on 1131 (train 3M, eval 1.6M, seed 7611): WR+2m -0.4 h [-0.9, +0.1] n.s., WR table
+  unchanged by the best-iterate guard: not adopted, the table is at its optimum. `fit_post_evidence.py` /
+  `fit_lane.py --check` not re-run under the honest model (the honesty agent owns the stand-ins).
+* Pointer `plans/CURRENT-OPT` is the descent pointer (descend.py `--pointer CURRENT-OPT`).
+
 ## 2026-11-22 model honesty: later descents must use the new model (read first)
 
 Journal `journal/2026-11-22-13-00-model-honesty.md`. The battle bridge and the controller's played run
