@@ -1017,6 +1017,17 @@ pub struct Params {
     /// on the WR's VOD battle times, which already hold its reactions, and the copy's actions hold its heal
     /// turns. Pre-fight bag trips (Elixirs, pre-heals, Revives) stay. Off = the old charges.
     pub tcost_whole: bool,
+    /// MODEL CHANGE (non-fight windows, journal 2026-11-22 nonfight-windows): the base frames of the named
+    /// `Text` / `Walk` segment (the text lump x `text_factor`, or tiles x frames per tile x `path_overhead`)
+    /// are replaced by this value, measured on the WR VOD (human speed already, no factor on top). Jitter,
+    /// mistakes and a walk's wild encounters stay. Each entry is cited in the journal. Empty = off.
+    pub vod_frames: std::collections::HashMap<String, f64>,
+    /// MODEL CHANGE (same): frames of a stone evolution scene (bag, stone, party, animation, congratulations),
+    /// replacing the guess `EVO_STONE` 1100. WR VOD: four chained stone evolutions 24-26 s each. 0 = 1100.
+    pub evo_stone_frames: u32,
+    /// MODEL CHANGE (same): base frames of a Rare Candy evolution (bag, candy, level-up box and stats, the
+    /// animation), replacing the guess `EVO_CANDY` 700 (`EVO_CANDY_EACH` per candy stays). 0 = 700.
+    pub evo_candy_frames: u32,
     /// MODEL CHANGE (exp-economy audit 2026-11-22): the trainers the human actually fights, per segment, by
     /// trainer id (`decompiled/include/constants/opponents.h`, parties `src/data/trainer_parties.h`). A named
     /// `Parties`/`Group` segment gets exactly this list (fought in the given order); any other named segment
@@ -1269,6 +1280,9 @@ impl Default for Params {
             turn_power: 0.0,
             turn_power_boss: 0.0,
             tcost_whole: false,
+            vod_frames: Default::default(),
+            evo_stone_frames: 0,
+            evo_candy_frames: 0,
             fight_lists: Default::default(),
             ai_cure_items: false,
             strength_carrier: false,

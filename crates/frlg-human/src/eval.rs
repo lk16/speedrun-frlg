@@ -981,4 +981,28 @@ mod tests {
         let dex = DEX.get_or_init(Dex::load);
         assert!(Plan::load(dex, "no block here").is_err());
     }
+
+    #[test]
+    fn vod_frames_replace_named_text_and_walk_floors_only() {
+        let dex = DEX.get_or_init(Dex::load);
+        let base = "\"name\":\"t\",\"route_style\":\"wr\",\"audited_forced\":true";
+        let floors = |extra: &str| {
+            let text = PLAN.replace("\"name\":\"t\"", &format!("{base}{extra}"));
+            let plan = Plan::load(dex, &text).unwrap();
+            let ctx = plan.ctx();
+            let f = |n: &str| {
+                let s = plan.segs.iter().find(|s| s.name == n).unwrap();
+                ctx.floor_frames(s)
+            };
+            (f("giovanni-badge"), f("viridian-gym-walk"), f("giovanni"))
+        };
+        let off = floors("");
+        let on = floors(
+            ",\"vod_frames\":{\"giovanni-badge\":1190,\"viridian-gym-walk\":1285,\"giovanni\":5}",
+        );
+        assert_eq!((on.0, on.1), (1190.0, 1285.0));
+        assert_ne!(off.0, on.0);
+        // A trainer segment keeps its own price.
+        assert_eq!(off.2, on.2);
+    }
 }
