@@ -179,31 +179,40 @@ WR 335.4 h; **1211-cerulean-potions** (plan response: 3 potions, heal below .35 
 2. Koga's Muk: engine 35% vs emulator 15/20 at identical stats; the 1.35 window stands in for an engine bug.
 3. The 0.773 Blaine/Sevii window is deadlier than the honest engine (-21 h at 1.0); refit windows under 1211.
 
-## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1301-warren-potkoga
+## 2026-11-22 optimisation / combined honest model (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1311-honest-mtmoon-repel
 
-| plan | what | WR+2m | WR | model |
-| --- | --- | --- | --- | --- |
-| 1127-fheal1 | 1122 + League heal_below bundle (bruno .65, champion .35, champion-2 .5, lance-2 0) | 79.3-80.2 | 103.4-104.5 | old (fitted League) |
-| 1130-honest-fheal | 1200 + the bundle | 125.3-126.0 | 166.3-169.9 | honest 1200 |
-| 1131-honest-fheal | 1202 + the bundle | 152.0 (-9.8 / -12.5 vs 1202) | 241.8-243.7 | controller model |
-| 1132-standin-fheal | 1211 + the bundle | 184.1 / 187.2 (-13.0 / -15.6 vs 1211) | 291.3 / 294.7 | stand-in audit model |
-| 1300-runner-potkoga | 1253 + Mt. Moon Miguel potions 5 + Koga heal_below .55 | 269.9 / 283.4 (-15.3 / -11.6 vs 1253) | 477.2 / 487.1 | 1253 model |
-| **1301-warren-potkoga (CURRENT)** | **1270 (Viridian Warren) + the 1300 steps** | **353.6 / 343.7 (R 3.2M, seeds 7561/7562; -18.9 / -17.3 vs 1270)** | **672.6 / 651.0 (-39.9 / -29.9)** | **1270 model** |
+**1311 = 1423 fight clock + 1444 non-fight VOD block + 1413 honest shop stops + the WR-level League refit + candies eaten
+at Indigo + tactics + Mt. Moon B1F/B2F Repels.** It is the honest model of record; it is worse than the partial models
+because each block made the model more honest, not because a plan step lost.
 
-* League pass finished (lance-2 / champion-2 queues, pp floor, every per-fight heal_below); 1120 and 1114 confirmed
-  by undoing them on 1127 (R 3.2M two seeds both rungs + corners). Mewtwo teaches stay dropped (0.001 h).
-* reset_table refit on 1131: not adopted (WR+2m -0.4 h n.s., WR table unchanged). Re-run only after a big model move.
-* Plan responses of 1201 re-screened on 1131 (Awakenings 2/4/5, S.S. Anne potions 7/12, heal_below .2/.45): all refuted.
-* `risk_windows` under 1132 (`fit_lane.py`, R 1.6M seed 7651): `--check` has every lane window inside the runner's
-  CI (only forest-brock .589 vs [.30, .54] outside, independent of powers). The refit saturates the first window at the
-  4.5 cap (it also governs Brock / Mt Moon, standin-audit finding 6) and gives the Blaine/Sevii window 0.766 again (the
-  shrunk runner target .724 asks for it). **Not adopted**; capping that window at 1.0 (-21 h) is a modelling call, not a fit.
-* Optional-trainer dimension: `tools/fightknobs.py` (`descend.py --set fights`; first in `earlymid`, also in `all`).
-  On 1300 every drop was refuted (+29..+163 h; exp outweighs fight time at ~1.0 windows), s11 Route 3 list +206 h;
-  additions untried. Re-run after the WR-read fight lists / `trainer_cost` land.
-* Pointer `plans/CURRENT-OPT` is the descent pointer (`descend.py --pointer CURRENT-OPT --num-from 1300`). Running:
-  `--set league` from 1301. Next: `--set earlymid --notkinds fights` (tactics), then `--set all` / `pp` / `dex`,
-  fill/hunt orders; reset_table refit after the model settles (EHT moved 170 -> 350 h).
+| plan | what | WR+2m (R 3.2M) | WR |
+| --- | --- | --- | --- |
+| 1304-e4level-lgfit | 1280 + League at the WR level (candies held) + refit lp 1.2 / mp 1.15 / fatal | 1785 (vs 1280 999) | 5263 |
+| 1309-honest-e4fit-candies | 1413 stops + 1423 clock + refit + candies eaten + Miguel 5 / Koga .55 | 715 / 741 (vs 1423 450 / 472) | 1752 / 1716 |
+| 1310-honest-vod | 1309 + 1444 VOD block | 3606 / 3337 (vs 1444 2040 / 1795) | 15104 / 13200 |
+| **1311-honest-mtmoon-repel (CURRENT)** | **1310 + Mt. Moon Repels** | **1326 / 1269 (seeds 7781/7782; -2280 / -2068 vs 1310)** | **4171 / 4015** |
+
+* **League refit at the WR's League level** (`tools/league_fit_grid.py`, data `data/league-fit-wr-level-2026-11-22.jsonl`):
+  at Lv55 (candies eaten) the grid reproduces the old fit (lp 1.0, mp 1.3); at the WR's Lv51 **lp 1.2 [~1.1, 1.3], mp 1.15
+  [1.0, 1.3]**, unchanged under 1413's money. Post-door `fatal` refit under 1413 money: engine-only Lance .253, Champion
+  .362; fatal Bruno .172, Lance .097; door-to-finish total .254 (posterior median .239 [.08, .48]).
+* **Eating the held candies at Indigo is a large plan gain under the WR-level fit** (1309 vs 1308: -606 / -651 h WR+2m,
+  -1363 / -1639 h WR; on 1305 -592 / -668). The WR keeps two candies; in this model that costs him League survival.
+* **Fight-price sensitivity** (the WR factor's 95% interval, `trainer_cost` 0.904 / 0.981, journal 21-35-boss-turns): on
+  1309 (seed 7771, R 1.6M) WR+2m 317 / **718** / 3396 h, WR 547 / **1666** / 13613 h. Report 1311's score with that
+  spread: ~1300 h at WR+2m with a roughly x0.45 .. x4.7 range from the fight price alone.
+* Attribution on 1309: 1423 + 1413 stops alone is 764 h (WR+2m) vs 1309's 718: the stops cost ~+300 h, the League refit
+  + candies + tactics recover ~50 h net.
+* Confirmed tactics carried through every model: League heal_below bundle (in 1253+), Mt. Moon Miguel potions 5, Koga
+  heal_below .55. Earlier: all optional-trainer drops refuted on 1300 (exp outweighs fight time), reset_table refit
+  not adopted (and now below the 2000-finish noise floor: ~550 finishes per 3.2M at WR+2m).
+* New descent sets: `--set fights` (fightknobs.py), `--set shops` (shopknobs.py: mart top-up targets, potion bag,
+  league_heals). Next: post-game MODEL CHANGE block (Fly between regions, Six Island trip, Five Island fights, post-game
+  segment times, PP pickups), then the WR structural choices on the honest base (warden after Erika + evolutions, no
+  Hitmonlee, no Mr. Mime / Diglett, Safari North+West, Routes 3/4 catches; candidates built by scratch `opt-struct.py`
+  from `tools/wr_faithful_mk.py`), then `--set shops`, `--set league` from the new base.
+* Pointer `plans/CURRENT-OPT` is the descent pointer (`descend.py --pointer CURRENT-OPT --num-from 1300`).
+
 
 ## 2026-11-22 model honesty: later descents must use the new model
 
