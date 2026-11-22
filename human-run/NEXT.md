@@ -1,5 +1,21 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 WR-faithful model (read first; journal `journal/2026-11-22-19-30-wr-faithful.md`)
+
+Every trainer the WR fights from Route 3 to the League read off the VOD (10 s / 2-7 s contact sheets): vs 1270 the WR fights
+no Cerulean gym trainer, Greg (not Sally) on Route 3, Robby (not Miriam) in Mt. Moon, Route 25 x4, the Cerulean Rocket after
+Bill, Route 6 Jeff only, Route 9/RT x10, Route 8 Rich only, hideout grunts 7/18/16/17 (not 13), no Aroma Lady Nikki, Celadon
+Tamia + Lori; everything else matches. Its candies: two eaten in Cerulean (Mt. Moon + hidden Cerulean City), three in the
+hideout before Giovanni (Route 9, Route 6 hidden, B3F). **1280-wr-faithful** = 1270 + that list + those candies +
+`trainer_cost` (no `trainer_fit` 0.6) + windows refit: the carry has the WR's level at every split Brock -> Giovanni 3, and
+scores **WR+2m 1053 h, +682 [547, 868] vs 1270** (seed 7401, R 800k). **Recommended as model of record** (honest, worse).
+No candidate passes the +-60 s window check (1280: 7 windows out, total +269 s; on the WR's structure 1281: 4 out, +319 s;
+the bot's fights are ~7 % slower than the WR's: x0.9 on `trainer_cost` = 1283, -225 h vs 1270, a FIT on two WR fights).
+Safari / Power Plant per-species cost matches the WR (~51 s); the Koga gap is the plan (East+West, stop 5 vs the WR's
+North+West, 7 species). League finding (1284): at the WR's League level (no candy dump at Indigo, Lv51 vs 55) finishes fall
+171 -> 27: the League fit leans on held candies the WR does not eat. Ranked next: League refit at WR levels; time more WR
+route fights for the skill factor; Safari North alone as a plan; Sevii/fill dex split.
+
 ## 2026-11-22 route windows (read first; journal `journal/2026-11-22-17-30-route-windows.md`)
 
 Structural causes of 1253's window errors, read off the WR VOD with contact sheets (the 60 s scene log is too coarse; it misled
