@@ -577,6 +577,27 @@ const FILL: [(&str, fn(&mut Session) -> PResult<()>); 24] = [
     ("dex-fill-24", fill24),
 ];
 
+macro_rules! finish_stages {
+    ($($f:ident),*) => {
+        $(fn $f(s: &mut Session) -> PResult<()> {
+            super::dexfin::finish_round(s)
+        })*
+    };
+}
+finish_stages!(fin1, fin2, fin3, fin4, fin5, fin6, fin7, fin8);
+/// The end of the dex fill (`dexfin.rs`): one place of the cheapest evolution / trade / gift plan
+/// per stage.
+const FINISH: [(&str, fn(&mut Session) -> PResult<()>); 8] = [
+    ("dex-finish-1", fin1),
+    ("dex-finish-2", fin2),
+    ("dex-finish-3", fin3),
+    ("dex-finish-4", fin4),
+    ("dex-finish-5", fin5),
+    ("dex-finish-6", fin6),
+    ("dex-finish-7", fin7),
+    ("dex-finish-8", fin8),
+];
+
 /// The not-yet-tried Kanto site (land or water, `flydist.json`) with the most uncaught species;
 /// ties go to the larger encounter share, then the shorter walk from its Fly point.
 fn greedy_site(s: &mut Session, tried: &[String]) -> Option<crate::params::Hunt> {
@@ -623,7 +644,7 @@ fn greedy_site(s: &mut Session, tried: &[String]) -> Option<crate::params::Hunt>
 
 /// Get somewhere Fly works: outdoors already, else an Escape Rope if the bag has one, else walk
 /// to `town` (out of the cave or building the last hunt ended in).
-fn leave_to_fly(s: &mut Session, town: &str) -> PResult<()> {
+pub(super) fn leave_to_fly(s: &mut Session, town: &str) -> PResult<()> {
     if outdoors(s) {
         return Ok(());
     }
@@ -709,7 +730,7 @@ fn trainer_beaten(s: &mut Session, trainer: &str) -> bool {
 }
 
 /// The local id of the object of `map` whose script contains `script` (`map.json`).
-fn obj_id(s: &Session, map: &str, script: &str) -> PResult<u8> {
+pub(super) fn obj_id(s: &Session, map: &str, script: &str) -> PResult<u8> {
     let g = s.graph();
     g.maps[&g.id(map)]
         .objects
@@ -2185,7 +2206,12 @@ pub fn stages() -> Vec<Stage> {
     ]
     .into_iter()
     .chain(FILL.iter().map(|&(name, run)| Stage { name, run }))
+    .chain(FINISH.iter().map(|&(name, run)| Stage { name, run }))
     .chain(vec![
+        Stage {
+            name: "dex-finish-party",
+            run: super::dexfin::finish_party,
+        },
         Stage {
             name: "national-dex",
             run: national_dex,
