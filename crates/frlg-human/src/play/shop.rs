@@ -270,7 +270,8 @@ pub fn buy(
     }
     // CANCEL out of the list (B), SEE YA on the shop menu (B), the clerk's goodbye.
     press_until(s, "the shop menu again", keys::B, 900, |s| {
-        menu::task(s, "Task_ShopMenu")
+        // Two quick B presses can leave the shop menu before its task is seen: free counts too.
+        menu::task(s, "Task_ShopMenu") || is_free(s)
     })?;
     s.hf.idle(4)?;
     press_until(s, "out of the shop menu", keys::B, 300, |s| {
@@ -389,7 +390,7 @@ pub fn sell(s: &mut Session, map: &str, clerk: Option<(i16, i16)>, items: &[&str
         );
     }
     press_until(s, "the shop menu again", keys::B, 900, |s| {
-        menu::task(s, "Task_ShopMenu")
+        menu::task(s, "Task_ShopMenu") || is_free(s)
     })?;
     s.hf.idle(4)?;
     press_until(s, "out of the shop menu", keys::B, 300, |s| {
