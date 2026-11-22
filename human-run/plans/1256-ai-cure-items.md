@@ -1,6 +1,6 @@
 # Plan 1256-ai-cure-items
 
-Parent: `1253-runner-fights-tf`. 1253 + `ai_cure_items` (a trainer's Full Heal is not an HP heal, `battle_ai_switch_items.c:599-638`): -0.04 h [-1.83, 1.54], nil. Journal `2026-11-22-17-30-exp-and-koga.md`.
+Parent: `1253-runner-fights-tf`. 1253 + `ai_cure_items` (a trainer's Full Heal is not an HP heal, `battle_ai_switch_items.c:599-638`): -0.04 h [-1.83, 1.54], nil. Journal `2026-11-22-16-50-exp-and-koga.md`.
 
 Same step-by-step description as `001-crude.md` except where the parameters below differ.
 

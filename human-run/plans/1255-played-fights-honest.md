@@ -1,6 +1,6 @@
 # Plan 1255-played-fights-honest
 
-Parent: `1250-played-fights`. The full s11 list under 1253's windows and trainer_fit: refuted, zero finishes at WR+2m. Journal `2026-11-22-17-30-exp-and-koga.md`.
+Parent: `1250-played-fights`. The full s11 list under 1253's windows and trainer_fit: refuted, zero finishes at WR+2m. Journal `2026-11-22-16-50-exp-and-koga.md`.
 
 Same step-by-step description as `001-crude.md` except where the parameters below differ.
 

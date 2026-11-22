@@ -1,6 +1,6 @@
 # Plan 1251-runner-fights
 
-Parent: `1132-standin-fheal`. MODEL CHANGE input: the runner-level `fight_lists` (Luis; Route 25 x7; Isabelle; Route 9 / Rock Tunnel / Route 10 x16; Aidan; hideout grunts 7/13/18/17/16, which also removes the second Giovanni that `group_n` 3 took from the B4F map). The sim carry then matches the WR's levels at every split with a level (Misty 21, Bike 27, Koga 41, Blaine 42, Sabrina 46-47, Giovanni 3 49) and the stream's L36 at Giovanni 1. Old windows. Journal `2026-11-22-17-30-exp-and-koga.md`.
+Parent: `1132-standin-fheal`. MODEL CHANGE input: the runner-level `fight_lists` (Luis; Route 25 x7; Isabelle; Route 9 / Rock Tunnel / Route 10 x16; Aidan; hideout grunts 7/13/18/17/16, which also removes the second Giovanni that `group_n` 3 took from the B4F map). The sim carry then matches the WR's levels at every split with a level (Misty 21, Bike 27, Koga 41, Blaine 42, Sabrina 46-47, Giovanni 3 49) and the stream's L36 at Giovanni 1. Old windows. Journal `2026-11-22-16-50-exp-and-koga.md`.
 
 Same step-by-step description as `001-crude.md` except where the parameters below differ.
 

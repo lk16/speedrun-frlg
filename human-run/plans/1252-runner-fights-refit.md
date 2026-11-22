@@ -1,6 +1,6 @@
 # Plan 1252-runner-fights-refit
 
-Parent: `1251-runner-fights`. 1251 + `risk_windows` refit with `fit_lane.py` (R 1M, seed 1, WR+160m): rt-snorlax 2.565 -> 1.038, snorlax-koga 1.35 -> 0.99, koga-sevii 0.773 -> 0.674, sevii-gio3 1.572 -> 1.06, gio3-door 2.314 -> 2.169; the first window stays 1.111 (not identifiable: its model survival saturates at .646 by power 4.5). Check: every window inside the runner's CI, survival to the door .0550 vs runner .0563. Journal `2026-11-22-17-30-exp-and-koga.md`.
+Parent: `1251-runner-fights`. 1251 + `risk_windows` refit with `fit_lane.py` (R 1M, seed 1, WR+160m): rt-snorlax 2.565 -> 1.038, snorlax-koga 1.35 -> 0.99, koga-sevii 0.773 -> 0.674, sevii-gio3 1.572 -> 1.06, gio3-door 2.314 -> 2.169; the first window stays 1.111 (not identifiable: its model survival saturates at .646 by power 4.5). Check: every window inside the runner's CI, survival to the door .0550 vs runner .0563. Journal `2026-11-22-16-50-exp-and-koga.md`.
 
 Same step-by-step description as `001-crude.md` except where the parameters below differ.
 

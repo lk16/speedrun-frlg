@@ -1,6 +1,6 @@
 # Plan 1253-runner-fights-tf
 
-Parent: `1252-runner-fights-refit`. **Proposed honest baseline.** 1252 + `trainer_fit` 0.81 -> 0.6: with the runner's fights in, the old per-fight time put the sim 8-12 min behind the WR to Giovanni 1, while the runner's stream run fought the same trainers at WR pace; 0.6 brings the pre-door no-reset splits to the WR's (mean error ~0 Misty..E4R1). WR+2m 301.0 h (seed 7402, R 1.6M), WR 477.4 h (seed 7401). Journal `2026-11-22-17-30-exp-and-koga.md`.
+Parent: `1252-runner-fights-refit`. **Proposed honest baseline.** 1252 + `trainer_fit` 0.81 -> 0.6: with the runner's fights in, the old per-fight time put the sim 8-12 min behind the WR to Giovanni 1, while the runner's stream run fought the same trainers at WR pace; 0.6 brings the pre-door no-reset splits to the WR's (mean error ~0 Misty..E4R1). WR+2m 301.0 h (seed 7402, R 1.6M), WR 477.4 h (seed 7401). Journal `2026-11-22-16-50-exp-and-koga.md`.
 
 Same step-by-step description as `001-crude.md` except where the parameters below differ.
 

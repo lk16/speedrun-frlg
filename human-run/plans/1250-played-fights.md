@@ -1,6 +1,6 @@
 # Plan 1250-played-fights
 
-Parent: `1132-standin-fheal`. MODEL CHANGE input (exp-economy audit): `fight_lists` = every trainer the played s11 controller fought (read from the replayed `run.ilog` with `frlg-human play-battles`), Miriam's `extra_fights` dropped (s11 fought Iris/Josh/Grunt 4 on Mt Moon 1F). Old windows and trainer_fit: diagnostic only (carry L36 at Giovanni 1, L42 at Koga, = s11). Journal `2026-11-22-17-30-exp-and-koga.md`.
+Parent: `1132-standin-fheal`. MODEL CHANGE input (exp-economy audit): `fight_lists` = every trainer the played s11 controller fought (read from the replayed `run.ilog` with `frlg-human play-battles`), Miriam's `extra_fights` dropped (s11 fought Iris/Josh/Grunt 4 on Mt Moon 1F). Old windows and trainer_fit: diagnostic only (carry L36 at Giovanni 1, L42 at Koga, = s11). Journal `2026-11-22-16-50-exp-and-koga.md`.
 
 Same step-by-step description as `001-crude.md` except where the parameters below differ.
 

@@ -1,6 +1,6 @@
 # Plan 1254-forced-only-honest
 
-Parent: `1132-standin-fheal`. 1132's cone-forced trainer lists under 1253's honest windows and trainer_fit: refuted, +131.7 h [99.8, 166.3] vs 1253 (WR+2m). Journal `2026-11-22-17-30-exp-and-koga.md`.
+Parent: `1132-standin-fheal`. 1132's cone-forced trainer lists under 1253's honest windows and trainer_fit: refuted, +131.7 h [99.8, 166.3] vs 1253 (WR+2m). Journal `2026-11-22-16-50-exp-and-koga.md`.
 
 Same step-by-step description as `001-crude.md` except where the parameters below differ.
 
