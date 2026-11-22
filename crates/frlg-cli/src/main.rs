@@ -828,6 +828,28 @@ struct VideoArgs {
     /// `origin` remote.
     #[arg(long)]
     repo_url: Option<String>,
+
+    /// Review mode: burn this decision log (`events.jsonl`) in as the
+    /// overlay panels (timer, splits, dex bar, chat; `human-run/VIDEO.md`).
+    /// Needs --input; encodes lossy x264 + AAC at 1920x1080 and bypasses the
+    /// tier-2 gate, since a review video is not a publication.
+    #[arg(long, requires = "input")]
+    overlay: Option<PathBuf>,
+
+    /// Review mode: the input log to replay from power-on (.ilog or text).
+    #[arg(long, requires = "overlay")]
+    input: Option<PathBuf>,
+
+    /// Review mode: the plan the run played, for its name and as the dex
+    /// grid's fallback species list.
+    #[arg(long, requires = "overlay")]
+    plan: Option<PathBuf>,
+
+    /// Review mode: output file. Defaults to
+    /// $FRLG_ARTIFACTS/videos/<input dir name>.mp4. The panels are written
+    /// next to it as `<name>.ass`.
+    #[arg(short = 'o', long, requires = "overlay")]
+    output: Option<PathBuf>,
 }
 
 /// Record a verified run: video file plus the title and description to publish
@@ -838,6 +860,9 @@ struct VideoArgs {
 /// ledger, and it cannot be corrected after upload -- so it may only be made
 /// from a run BizHawk has replayed and git has recorded (`publish::gate`).
 fn cmd_video(args: VideoArgs) -> Result<()> {
+    if args.overlay.is_some() {
+        return cmd_video_review(args);
+    }
     let target = parse_target(&args.target)?;
     let ledger_path = target_ledger(target, &args.ledger);
     let led =
@@ -882,6 +907,7 @@ fn cmd_video(args: VideoArgs) -> Result<()> {
         ffmpeg: args.ffmpeg.clone(),
         expect_boot: led.bios.clone(),
         title: Some(title.clone()),
+        overlay: None,
     };
     println!("title   {title}");
     println!("encode  {} -> {}", format.describe(), video_path.display());
@@ -920,6 +946,112 @@ fn cmd_video(args: VideoArgs) -> Result<()> {
     fs::write(&text_path, &publication.markdown)
         .with_context(|| format!("writing {}", text_path.display()))?;
     println!("        {}", text_path.display());
+    Ok(())
+}
+
+/// Render a review video: one input log replayed from power-on, the decision
+/// log burned in as panels (`frlg_route::overlay`), lossy x264 + AAC.
+///
+/// No tier-2 gate and no description: this is for a person checking the
+/// bot's decisions, not something that leaves the project as a claim.
+fn cmd_video_review(args: VideoArgs) -> Result<()> {
+    use frlg_route::overlay;
+
+    let events_path = args.overlay.clone().context("--overlay is required")?;
+    let input = args.input.clone().context("--overlay needs --input")?;
+    let log = read_log(&input)?;
+    let rom = match &args.rom.rom {
+        Some(path) => path.clone(),
+        None => frlg_emu::rom_path_for_sha1(&hex::encode(log.rom_sha1))
+            .or_else(frlg_emu::default_rom_path)
+            .context("no ROM matching the log's rom sha1: pass --rom")?,
+    };
+    check_log_rom(&log, frlg_emu::file_sha1(&rom)?)?;
+
+    let events = overlay::read_events(&events_path)?;
+    let plan = match &args.plan {
+        Some(path) => Some(overlay::read_plan(path)?),
+        None => None,
+    };
+
+    let output = match &args.output {
+        Some(path) => path.clone(),
+        None => {
+            let art =
+                std::env::var_os("FRLG_ARTIFACTS").context("FRLG_ARTIFACTS is not set; pass -o")?;
+            let name = input
+                .parent()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "review".to_string());
+            PathBuf::from(art)
+                .join("videos")
+                .join(format!("{name}.mp4"))
+        }
+    };
+    if let Some(dir) = output.parent() {
+        fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
+    }
+
+    let run_frames = args
+        .preview_frames
+        .map_or(log.frames.len(), |p| p.min(log.frames.len()));
+    let built = overlay::build(&overlay::OverlayInput {
+        events: &events,
+        plan: plan.as_ref(),
+        video_frames: (run_frames + args.tail_frames) as u64,
+        run_frames: run_frames as u64,
+    });
+    let ass_path = output.with_extension("ass");
+    fs::write(&ass_path, &built.ass).with_context(|| format!("writing {}", ass_path.display()))?;
+
+    let title = format!(
+        "review: {} ({} frames{})",
+        plan.as_ref()
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| input.display().to_string()),
+        log.frames.len(),
+        if run_frames < log.frames.len() {
+            format!(", first {run_frames} shown")
+        } else {
+            String::new()
+        }
+    );
+    let options = video::Options {
+        format: video::Format::Review,
+        scale: 5,
+        tail_frames: args.tail_frames,
+        preview_frames: args.preview_frames,
+        ffmpeg: args.ffmpeg.clone(),
+        expect_boot: String::new(),
+        title: Some(title.clone()),
+        overlay: Some(video::OverlayFiles {
+            ass: ass_path.clone(),
+            timer: overlay::timer_filters(&built),
+        }),
+    };
+    println!("title   {title}");
+    println!("events  {} ({} lines)", events_path.display(), events.len());
+    println!("panels  {}", ass_path.display());
+    println!(
+        "encode  {} -> {}",
+        video::Format::Review.describe(),
+        output.display()
+    );
+    let started = std::time::Instant::now();
+    let report = video::encode(&rom, &log, &output, &options, |line| {
+        println!("{line}");
+    })?;
+    println!(
+        "wrote   {} ({} MiB, {}x{}, {} frames, {:.0} s video, {:.0} s to render)",
+        report.path.display(),
+        report.bytes / (1 << 20),
+        report.width,
+        report.height,
+        report.frames,
+        report.seconds(),
+        started.elapsed().as_secs_f64()
+    );
     Ok(())
 }
 

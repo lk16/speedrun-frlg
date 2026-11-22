@@ -26,6 +26,8 @@ use std::process::{Command, Stdio};
 
 use frlg_emu::{Emu, InputLog};
 
+use crate::overlay;
+
 /// The GBA's frame rate as an exact rational: the ARM7 clock (16777216 Hz)
 /// over the 280896 cycles in a frame. 59.7275 Hz, which is the rate the route
 /// docs publish their times at (`docs/defeat-brock/route.md`).
@@ -76,6 +78,11 @@ pub enum Format {
     /// or a battle text box leaves on screen. MP4 is also the container every
     /// upload path documents.
     Mp4,
+    /// Lossy H.264 (`libx264 -crf 20`, yuv420p) + AAC in MP4: the review
+    /// video with the overlay panels (`overlay.rs`). Four hours at 1080p
+    /// would run to hundreds of GB losslessly; this is the one format meant
+    /// to be watched, not archived.
+    Review,
 }
 
 impl Format {
@@ -83,6 +90,7 @@ impl Format {
         match name {
             "mkv" => Some(Format::Mkv),
             "mp4" => Some(Format::Mp4),
+            "review" => Some(Format::Review),
             _ => None,
         }
     }
@@ -90,7 +98,7 @@ impl Format {
     pub fn extension(self) -> &'static str {
         match self {
             Format::Mkv => "mkv",
-            Format::Mp4 => "mp4",
+            Format::Mp4 | Format::Review => "mp4",
         }
     }
 
@@ -100,6 +108,7 @@ impl Format {
         match self {
             Format::Mkv => "Matroska: FFV1 video (lossless) + FLAC audio (lossless)",
             Format::Mp4 => "MP4: H.264 RGB at qp 0 (lossless) + ALAC audio (lossless)",
+            Format::Review => "MP4: H.264 yuv420p at crf 20 (lossy) + AAC audio (lossy)",
         }
     }
 
@@ -144,6 +153,25 @@ impl Format {
                 "-movflags",
                 "+faststart",
             ],
+            // The panels are static between events, so most frames are cheap
+            // P-frames; `faster` keeps a four-hour encode well under the run's
+            // own length on 16 cores, without a visible cost at crf 20.
+            Format::Review => vec![
+                "-c:v",
+                "libx264",
+                "-crf",
+                "20",
+                "-preset",
+                "faster",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "160k",
+                "-movflags",
+                "+faststart",
+            ],
         }
     }
 }
@@ -168,6 +196,16 @@ pub struct Options {
     pub expect_boot: String,
     /// Written into the container's metadata.
     pub title: Option<String>,
+    /// Review overlay: the picture is scaled 5x onto a 1920x1080 canvas and
+    /// these panels are burned in (`overlay.rs`). Use with `Format::Review`.
+    pub overlay: Option<OverlayFiles>,
+}
+
+/// The ffmpeg side of an overlay: the ASS track on disk and the timer's
+/// `drawtext` filters.
+pub struct OverlayFiles {
+    pub ass: PathBuf,
+    pub timer: Vec<String>,
 }
 
 impl Default for Options {
@@ -180,6 +218,7 @@ impl Default for Options {
             ffmpeg: PathBuf::from("ffmpeg"),
             expect_boot: String::new(),
             title: None,
+            overlay: None,
         }
     }
 }
@@ -383,7 +422,14 @@ fn encode_video(
     let height = emu.height();
 
     let mut filters = Vec::new();
-    if opts.scale > 1 {
+    let (out_width, out_height) = match &opts.overlay {
+        Some(overlay) => {
+            overlay_filters(overlay, width, height, &mut filters)?;
+            (1920, 1080)
+        }
+        None => (width * opts.scale, height * opts.scale),
+    };
+    if opts.overlay.is_none() && opts.scale > 1 {
         // flags=neighbor: every output pixel is a copy of one input pixel, so
         // the upscale stays reversible. Any interpolating scaler would invent
         // colours the console never drew.
@@ -394,7 +440,9 @@ fn encode_video(
     }
     // The frame arrives as RGBA with a constant alpha; gbrp is the same three
     // channels planar, which is what both encoders take losslessly.
-    filters.push("format=gbrp".to_string());
+    if opts.overlay.is_none() {
+        filters.push("format=gbrp".to_string());
+    }
 
     let mut command = Command::new(&opts.ffmpeg);
     command
@@ -458,14 +506,63 @@ fn encode_video(
         path: out.to_path_buf(),
         bytes: fs::metadata(out)?.len(),
         frames: keys.len(),
-        width: width * opts.scale,
-        height: height * opts.scale,
+        width: out_width,
+        height: out_height,
         audio_rate: audio.rate,
         audio_frames: audio.frames,
         rate_changes: audio.changes.clone(),
         ffmpeg_version: ffmpeg_version.to_string(),
         format: opts.format,
     })
+}
+
+/// The review layout's filter chain (`overlay.rs`, `human-run/PROMPT.md`):
+/// game box 360,16 1200x800 at 5x nearest-neighbour on a 1920x1080 canvas,
+/// the ASS panels burned in, the run timer drawn on top.
+fn overlay_filters(
+    overlay: &OverlayFiles,
+    width: u32,
+    height: u32,
+    filters: &mut Vec<String>,
+) -> Result<(), VideoError> {
+    if (width, height) != (240, 160) {
+        return Err(VideoError::Message(format!(
+            "the overlay layout is for a 240x160 picture, the core gives {width}x{height}"
+        )));
+    }
+    let ass = overlay.ass.display().to_string();
+    if ass.contains(['\'', '\\', ':', ',', ';', '[', ']']) {
+        return Err(VideoError::Message(format!(
+            "{ass}: the overlay path may not contain any of ' \\ : , ; [ ] (ffmpeg filter syntax)"
+        )));
+    }
+    filters.push("scale=1200:800:flags=neighbor".to_string());
+    // The canvas is built from pads, not drawn: an ASS or drawbox fill of the
+    // three panel boxes is blended over ~1 M pixels every frame and halved the
+    // encode rate (70 against 133 fps measured on 16 cores); a pad is a copy.
+    // yuv420p first, so every filter after the upscale works on 12 bpp.
+    filters.push("format=yuv420p".to_string());
+    let (gutter, panel) = (overlay::GUTTER_RGB, overlay::PANEL_RGB);
+    for pad in [
+        format!("pad=1200:816:0:0:color={gutter}"), // gutter under the game
+        format!("pad=1200:1048:0:0:color={panel}"), // dex bar, 232 high
+        format!("pad=1200:1064:0:16:color={gutter}"), // top gutter
+        format!("pad=1200:1080:0:0:color={gutter}"), // bottom gutter
+        format!("pad=1232:1080:16:0:color={gutter}"), // gutters beside the game
+        format!("pad=1888:1080:328:0:color={panel}"), // left and chat columns
+        format!("pad=1920:1080:16:0:color={gutter}"), // outer gutters
+    ] {
+        filters.push(pad);
+    }
+    // The side columns end 16 px short of the top and bottom edges.
+    for (x, y) in [(16, 0), (16, 1064), (1576, 0), (1576, 1064)] {
+        filters.push(format!(
+            "drawbox=x={x}:y={y}:w=328:h=16:color={gutter}:t=fill"
+        ));
+    }
+    filters.push(format!("ass=filename={ass}"));
+    filters.extend(overlay.timer.iter().cloned());
+    Ok(())
 }
 
 /// A core booted exactly the way the ledger says the run was built.
@@ -569,6 +666,7 @@ mod tests {
     fn formats_round_trip_their_names() {
         assert_eq!(Format::parse("mkv"), Some(Format::Mkv));
         assert_eq!(Format::parse("mp4"), Some(Format::Mp4));
+        assert_eq!(Format::parse("review"), Some(Format::Review));
         assert_eq!(Format::parse("webm"), None);
         assert_eq!(Format::Mkv.extension(), "mkv");
     }

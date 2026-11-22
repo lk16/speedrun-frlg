@@ -49,7 +49,8 @@ fn usage() -> ! {
          \x20 report  <plan> --rung <r> [--R n]                 per-segment mean, spread, resets, time by source\n\
          \x20 starter-phase <plan> [--R n]                     manip starter phase: attempts and wall time to a good starter\n\
          \x20 dist    <plan> [--R n]                            run-time distribution with no resets\n\
-         \x20 starter [--min n]                                 level-5 stat-total distribution of a Squirtle\n\
+         \x20 battle-test --state X --seg S [--wild flee|catch|fight] [--seed n]   play one battle (S4)\n\
+         \x20 starter [--min n]                              level-5 stat-total distribution of a Squirtle\n\
          \x20{}",
         frlg_human::play::cli::usage()
     );
@@ -1248,6 +1249,12 @@ fn main() {
                 let pass =
                     totals.iter().filter(|&&t| t >= min).count() as f64 / totals.len() as f64;
                 println!("P(total >= {min}) = {pass:.4}");
+            }
+        }
+        Some("battle-test") => {
+            if let Err(e) = frlg_human::play::battle_test::run(dex(), &args[1..]) {
+                eprintln!("{e}");
+                std::process::exit(1);
             }
         }
         _ => usage(),
