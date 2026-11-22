@@ -2,7 +2,7 @@
 """League stand-in fit at the WR's League level: grid over league_power / mewtwo_power, `frlg-human fightdist` per cell,
 cal_lik log-likelihood of the WR + A1 per-fight action counts (round 1 and round 2), plus the win rates per fight.
 
-usage: opt-lfit.py ROOT BASE_PLAN OUT.jsonl --lp 0.9,1.0,... --mp 1.3 [--R 200000] [--seed 7701] [--wrq 1] [--set k=json ...]
+usage: league_fit_grid.py ROOT BASE_PLAN OUT.jsonl --lp 0.9,1.0,... --mp 1.3 [--R 200000] [--seed 7701] [--wrq 1] [--set k=json ...]
 --wrq 1: Lance / Champion / Champion-2 X queues = the WR and A1 queues (as the 1113 fit, journal 2026-12-08-14-00).
 """
 import json, os, subprocess, sys
@@ -32,7 +32,8 @@ BIN = os.path.join(root, 'target', 'release', 'frlg-human')
 sys.path.insert(0, os.path.join(root, 'human-run', 'tools'))
 import cal_lik  # noqa: E402
 
-SCR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'opt-scr')
+SCR = os.environ.get('FRLG_SCRATCH', '/tmp/frlg-human-scratch')
+os.makedirs(SCR, exist_ok=True)
 P = json.loads(open(base).read().split('```json')[1].split('```')[0])
 if wrq:
     ft = P['fight_tactics']
