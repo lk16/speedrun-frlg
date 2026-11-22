@@ -344,8 +344,9 @@ fn fill_to_60(s: &mut Session) -> PResult<()> {
         if balls < 8 {
             let want = (2 * (60 - n) as u16).clamp(12, 50);
             let money = Ram::new(&s.obs).money(s.hf.rec.emu());
-            // Keep the League's Full Restores (`league_heals`) and four Escape Ropes.
-            let keep = s.plan.params.league_heals as u32 * 3000 + 4 * 550;
+            // The 60 are mandatory, the League's Full Restores are not: keep ¥15000 (five of
+            // them); the Sevii trainers pay the rest back before the League.
+            let keep = 15_000;
             let afford = (money.saturating_sub(keep) / 600) as u16;
             let k = want.saturating_sub(balls).min(afford);
             if k == 0 {
