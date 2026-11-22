@@ -137,3 +137,99 @@ s11 carry's exact stats and bag. Journal `2026-11-22-14-30-standin-audit.md`.
 | Hideout Giovanni | Blastoise L36, 90/115 HP, 12 Super Potions | 20/20 | 100% |
 | Rival tower | Blastoise L38, 11 Super Potions | 20/20 | 98.6% |
 | Koga | Blastoise L42, 128/133 HP, 11 Super Potions, 3 X Specials | 15/20 | **35%** (engine too deadly at Muk) |
+
+## Segment-cost calibration from the played run (2026-11-22, journal `2026-11-22-14-00-calibration.md`)
+
+Every played stage of seed 11 (`runs/human-play/1122-lgdescent-s11` to Koga, `runs/human-play/fwd-main` from Koga
+to the Indigo mart) was replayed from its checkpoint savestate with `cargo run --release --example cal_trace`
+(RAM hash at every stage end matches `checkpoints.jsonl`, 81 stages) and split frame by frame by
+`human-run/tools/cal_decompose.py`: **walk** (tileTransitionState set), **bump** (runningState 2 on a settled tile),
+**turn**, **idle** (free, standing), and held episodes labelled **trainer** / **wild** (the whole episode from
+losing control to regaining it, so sighting text and the return to the field count), **menu**, **warp**,
+**text**. "Overhead" below is controller inefficiency only: bump + turn + idle, transport loss (frames above the
+fastest legal transport per map: bike where `allow_cycling` and not indoor, run where `allow_running`,
+`decompiled/src/bike.c:245-259`), and trainers fought that `human-run/tools/forced.py` shows avoidable (audited
+from Giovanni 1 to Koga only). Model = mean seconds of `1202-controller-model` (`report` / `splits`, R 2000;
+1132 is within a second on these segments). WR = Main97 split segments; per-stage WR figures come from the 60 s
+scene samples (`video-analysis/data/wr-scene-*.jsonl`, +-60 s).
+
+### Per stage, Giovanni 1 -> Koga (seconds)
+
+| stage | played | overhead | played - overhead | model | WR | verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| hideout-out | 110 | 2 | 108 | 32 (scope-and-dig) | | model right: 81 s are two B1F grunts the prefix skipped on the way in (7 grunts played vs 8 modelled) |
+| hm02-trip | 25 | 4 | 20 | 24 | | model right |
+| hm02 | 22 | 0 | 22 | 14 | | model too optimistic: teaching HM02 through the TM case is 870 f of menus (guess 800 for all) |
+| to-vermilion | 70 | 13 | 57 | 27 (walk-vermilion) | | model too optimistic: 774 f of gates/doors and 4 Cuts are not in walk segments; bike not registered (9 s) |
+| surge-cans | 117 | 97 | 20 | 77 | | model right (13 cans, ~122 f/check vs 170 modelled; one sample of a random count); Baily + Dwayne avoidable (90 s) |
+| surge | 182 | 1 | 181 | 89 | ~60 | per-turn costs right; 11-turn Surge (paralysis), RNG not a constant |
+| fly-lavender | 20 | 0 | 20 | 37 (walk-lavender) | | different leg (1202 walks; played flew after Surge); Fly 848 f vs 700 guess |
+| lavender-heal | 19 | 0 | 18 | 0 | | model bug (no heal before the tower, NEXT item 2) |
+| tower-rival | 121 | 1 | 119 | 127 | | model right |
+| tower-marowak | 362 | 176 | 186 | 182 | tower ~400 | model right; 5 avoidable channelers (172 s: Patricia, Laurel, Jody, Paula, Angelica; forced.py: 3F/4F 0, 5F 1, 6F Emilia+Jennifer) |
+| fuji-flute | 178 | 2 | 177 | 202 | | model right |
+| fly-celadon | 15 | 0 | 15 | 12 | | model slightly optimistic (Fly 809 f vs 700) |
+| snorlax | 32 | 1 | 31 | 27 | | model right |
+| cycling-road | 69 | 42 | 27 | 43 | | model pessimistic (downhill 5.1 f/tile); Biker Lao avoidable per forced.py (40 s; slope not modelled) |
+| safari-trip | 25 | 1 | 25 | 23 | | model right |
+| safari-walk | 293 | 82 | 211 | 379 | ~360 (7 catches) | not comparable: this pass threw at whatever came (3 catches); see the hunt measurement below |
+| warden | 24 | 3 | 21 | 26 | | model right |
+| koga | 322 | 75 | 248 | 201 | ~250 | model too optimistic by the Fuchsia heal (moved before the gym) and 2 extra Koga turns; Edgar avoidable (70 s) |
+| **total** | **2006** | **501** | **1505** | **1522** | **1606** (split delta) | |
+
+Giovanni 1 -> Koga, the model of record is right in sum once the controller's overhead is removed (1505 vs 1522 s);
+the residual errors cancel (Surge long, Safari not comparable, Koga heal).
+
+### Per WR window, New Game -> Victory Road (seconds)
+
+| window | played | overhead | played - overhead | model (1202) | WR | trainer s played / model fight s | verdict |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Brock | 1076 | 156 | 920 | 884 | 880 | 383 / 213 | model right-ish; overhead incl. pre-shoes walking |
+| Misty | 1227 | 45 | 1182 | 731 | 801 | 846 / 429 | bot: 14 trainer battles, 57 turns (older stand-in driver) |
+| Bill | 817 | 27 | 790 | 604 | 609 | 699 / 526 | bot: battles (14, 39 turns) |
+| Bike | 620 | 104 | 516 | 338 | 484 | 279 / 127 | model too optimistic vs WR too (+146 s) |
+| Rock Tunnel | 941 | 26 | 915 | 548 | 565 | 739 / 500 | bot: 15 trainer battles |
+| Giovanni 1 | 851 | 59 | 792 | 581 | 557 | 544 / 352 | bot: battles |
+| Snorlax | 1342 | 340 | 1002 | 952 | 891 | 898 / 437 | model right after overhead (see stage table) |
+| Koga | 664 | 160 | 504 | 622 | 715 | 270 / 180 | model right (Safari not comparable) |
+| Blaine | 1072 | 26 | 1046 | 793 | 672 | 358 / 84 | bot: Mansion/Cinnabar trainers + 32 wild flees (not audited) |
+| Sevii | 846 | 40 | 806 | 903 | 913 | 294 / 242 | model right |
+| Sabrina | 1019 | 36 | 983 | 876 | 827 | 626 / 336 | battles (Silph) |
+| Erika | 377 | 6 | 371 | 239 | 176 | 266 / ? | bot: gym trainers the WR walks past |
+| Giovanni 3 | 521 | 22 | 499 | 325 | 543 | 248 / ? | model too optimistic vs WR (+218 s) |
+| Victory Road (to E4) | 934 | 65 | 869 | 1017 | 732 | 313 / ? | model pessimistic vs WR; VR wild 18152 f (304 s) |
+
+Per-battle cost is **right**: 52 trainer battles after Giovanni 1 (bridge driver, parties and turns logged) sum to
+0.95x (22 to Koga) and 1.02x (30 after Koga) the `calib_wr` formula (`0.8 x intro + 240 + 345 x turns + 630 x mons`)
+evaluated at the played turns and party sizes (`tools/cal_battles.py`). Where the played windows are slow in
+battle, it is more battles and more turns, not slower turns.
+
+### Constant by constant
+
+| piece | played (tier 1) | model | verdict |
+| --- | --- | --- | --- |
+| walk / run / bike per tile | 16.1 / 7.9 / 6.0 (5.1 on Cycling Road) | 16 / 8 / 6 | right (`event_object_movement.c` speeds) |
+| indoor walks (gyms, tower) | 15.1-16.1 f/tile: no bike, no running (`map.json`) | bike 6 for every walk after the bike | **too optimistic** -> `indoor_speed` |
+| trainer battle | 0.95-1.02 x formula (52 fights) | calib_wr | right |
+| wild Run, carry >= L14 | 635-657 f field to field (45 Runs) | 380 + react + 430 = ~832 | **too pessimistic** -> `flee_frames` 240 |
+| Safari RUN | ~505 f field to field (11) | 402 + 200 | too pessimistic -> `safari_run_frames` 100 |
+| ball, miss | Safari 509-690 (8, mean 576); Great Ball from the bag 687-883 (5) | 425 + react | **too optimistic** -> `throw_frames` 555 (still low for bag balls) |
+| catch of a new species, last ball to battle end | 1028-1174 f (8) | 425 + 130 | **too optimistic** (dex page, `battle_scripts_2.s:73-91`) -> `catch_end_new` |
+| Fly, menu to control | 809, 848 | 700 | too optimistic -> `fly_frames` 830 |
+| doors / stairs | 115-160 / 59 f each, ~90 s Giovanni 1 -> Koga | not in walk segments (path_overhead 1.02) | too optimistic; not changed (needs warp counts per segment) |
+| trash cans | ~122 f/check incl. walking (13) | 170 | slightly pessimistic, one sample; not changed |
+| hunt rolls | an encounter roll at every T_TILE_CENTER, turns included (`field_control_avatar.c:138-141`): pacing = 2 rolls per tile at 8 f each; tap-turning in place = 1 roll per 10 f, no step (probe `cal_encprobe ... spin`) | 1 roll per step at 8.2 f | per-roll cost right; the model's hunt `steps` are rolls (the controller paced 90 tiles = 180 rolls for a 90 budget) |
+
+### MODEL CHANGEs (scores.jsonl; paired, WR+2m, seed 7401, R 800k)
+
+| key | value | vs 1202 | vs 1132 (CURRENT) | no-reset mean vs 1132's 3:28:22 |
+| --- | --- | --- | --- | --- |
+| `catch_end_new` | 720 | +747 h [643, 880] | +814 h [690, 961] (1240) | 3:33:38 |
+| `throw_frames` + `catch_end_new` | 555 + 590 | +1183 h [1015, 1426] | +1269 h [1038, 1653] (1241) | 3:34:42 |
+| `flee_frames` + `safari_run_frames` | 240 + 100 | -34.7 h [-40.6, -29.5] | -32.6 h [-40.0, -26.8] (1242) | 3:27:02 |
+| `indoor_speed` | on | +121 h [107, 137] | +128 h [112, 147] (1243) | 3:30:34 |
+| `fly_frames` | 830 | +9.9 h [7.8, 12.4] | +11.1 h [8.3, 15.0] (1244) | 3:28:39 |
+| all (plans 1235 / **1245-calibrated-model**) | | 2890 h (+2728 [2216, 3598]) | **3635 h (+3461 [2687, 5005]), 50 finishes** | **3:35:45** (p10 3:29:47) |
+
+The calibrated model finishes 7 minutes slower than the old one and the WR (3:25:25) is now about its p3. The reset
+table was fitted under the old model (at WR+5m it resets every attempt): refit it before any descent from 1245.
