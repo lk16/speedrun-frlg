@@ -309,7 +309,13 @@ pub fn candidates(s: &mut Session) -> Vec<Action> {
                         }
                     }
                 }
-                "EVO_LEVEL" if via.is_none() => {
+                // A boxed mon whose species is also in the party is not a candy target: the bag's
+                // candy goes on a party slot by species (the party Paras is the Cut user).
+                "EVO_LEVEL"
+                    if via.is_none()
+                        && (party.is_some()
+                            || !bodies.iter().any(|b| b.species == *sp && b.party.is_some())) =>
+                {
                     let at: u32 = param.parse().unwrap_or(999);
                     let need = at.saturating_sub(*lv).max(1);
                     if need as u16 <= have(s, "ITEM_RARE_CANDY") {
@@ -659,7 +665,7 @@ fn evolve_one(s: &mut Session, a: &Action) -> PResult<()> {
     if ok {
         Ok(())
     } else {
-        Err(PlayError::Death(format!("{} did not evolve", a.target)))
+        Err(PlayError::Fatal(format!("{} did not evolve", a.target)))
     }
 }
 
@@ -676,7 +682,7 @@ fn npc(s: &mut Session, a: &Action) -> PResult<()> {
         ..Default::default()
     };
     if !dex::special(s, &sp)? {
-        return Err(PlayError::Death(format!("{kind} for {} failed", a.target)));
+        return Err(PlayError::Fatal(format!("{kind} for {} failed", a.target)));
     }
     Ok(())
 }
