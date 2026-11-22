@@ -1,5 +1,55 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 16:55 main session: CURRENT = 1253-runner-fights-tf (model of record)
+
+Switched from 1132 because 1253 is the more honest model: the carry fights the trainers the runner
+and the played run fight, and matches the WR's levels at every split, and the risk windows refit to
+~1.0 (they had been standing in for missing exp). Its score (WR+2m 301 h) is worse, and that is the
+honest answer. One open conflict: `trainer_fit` 0.6 is a FIT to the WR splits, while the emulator
+measured 52 trainer battles at 0.95-1.02x the `calib_wr` formula (calibration.md). Resolve it in the
+route-windows work (more battles in the model than the runner actually fights there? or shorter
+battles from a higher level?) before trusting 0.6. All descents from now on start from 1253.
+
+## 2026-11-22 segment-cost calibration: model of record stays 1132 (read first)
+
+Journal `journal/2026-11-22-14-00-calibration.md`, `calibration.md` ("Segment-cost calibration" and
+"Reconciliation with the WR windows"). Measured per-event costs from the played run are in as MODEL CHANGE keys
+(`catch_end_new`, `throw_frames`, `flee_frames`, `safari_run_frames`, `indoor_speed`, `fly_frames`, all off by
+default). With all of them, 1245 overshoots the WR's windows by +669 s (1132: +178 s). No WR-fitted constant
+absorbs that cleanly: `trainer_fit` is pinned by the fight-only windows (Bill, Rock Tunnel), `text_factor` /
+`path_overhead` would go below measured floors, and a FIT on the guessed pre-League text lumps (`guess_text_scale`)
+either fixes the windows 1132 already matched (0.71, plan **1246**: +323 h, total still +451 s) or the pre-League
+total (0.42, plan **1247**: -2.1 h [-12.9, 7.6], but Sevii -97 s, Bike -178 s, and 0.42 contradicts the played
+text lumps at ~0.9). Neither passes the per-window WR check, so **CURRENT stays 1132-standin-fheal**.
+
+| plan | what | WR+2m vs 1132 (seed 7401, R 800k) | no-reset mean | window total vs WR |
+| --- | --- | --- | --- | --- |
+| 1132-standin-fheal (CURRENT) | | 173.9 h | 3:28:22 | +178 s |
+| 1245-calibrated-model | measured costs | +3461 h [2687, 5005] | 3:35:45 | +669 s |
+| 1246-reconciled | 1245 + guess text 0.71 | +323 h [282, 378] | 3:32:07 | +451 s |
+| 1247-reconciled-total | 1245 + guess text 0.42 | -2.1 h [-12.9, 7.6] | 3:28:28 | ~+0 pre-League |
+
+Ranked next steps: (1) the structural window errors that 1132 already has and that dominate the check (Start E4R1
++175..+292 s from the back-loaded dex fill, Giovanni 3 -206 s, Bike -144 s, Blaine +115 s, Snorlax +65 s) are
+route/plan differences against the WR, not constants: fix those first, then re-run the reconciliation; (2) measure
+more guessed text lumps on the played run (`tools/cal_decompose.py` per stage) instead of one global scale;
+(3) the controller agent's inefficiency list (journal) before the next played pass.
+## 2026-11-22 exp economy and Koga (read first; journal `journal/2026-11-22-16-50-exp-and-koga.md`)
+
+The sim's carry was 4-5 levels short because it fought only the sight-cone minimum; the played s11 run and the runner fight
+~20-36 more trainers (exp formula verified exact against the played run). **1253-runner-fights-tf** = 1132 + MODEL CHANGE:
+`fight_lists` (runner-level list: the sim now matches the WR's level at every split), `risk_windows` refit
+(**2.565 -> 1.04, 1.35 -> 0.99**, .773 -> .674, 1.572 -> 1.06, 2.314 -> 2.17; first window kept 1.111), `trainer_fit`
+0.81 -> 0.6 (pre-door splits back to the WR's). **WR+2m 301.0 h / WR 477.4 h** vs 1132's 182.3 / 287.9 under the old model
+(seed 7402 / 7401, R 1.6M). Under 1253 dropping the extra fights costs +132 h (1254); the full s11 list has no WR+2m finishes
+(1255). Koga: the audit's 35% was a CLI mismatch (setup-min 1); engine 60.5% at the plan's policy vs emulator 73/100; the
+residual is Muk's Toxic frequency (open). `ai_cure_items` (Full Heal is no HP heal) is correct and nil.
+
+**Coordination**: everything is behind default-off keys; 1132 scores unchanged. CURRENT not switched (League descents run on
+1132). Proposed: descents move to 1253's keys (`fight_lists`, `risk_windows`, `trainer_fit` 0.6); a League refit of
+`risk_windows` should start from 1253, not 1132. Open, ranked: optional-trainer descent per segment under 1253; measure
+route-trainer fight time on the emulator (replaces the 0.6 fit); first window not identifiable; Koga Toxic AI term.
+
 ## 2026-11-22 stand-in audit: descend from 1211 (read first)
 
 Journal `journal/2026-11-22-14-30-standin-audit.md` (per-fight table: sim rate, engine at real stats, emulator).

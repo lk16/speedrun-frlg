@@ -32,9 +32,10 @@ pub fn print(rom: &Path, sym: &Path, state: &Path, _dex: &Dex) {
             println!("party {i}: checksum mismatch");
         }
         println!(
-            "party {i}: {} L{} hp {}/{} status {:#x} held {} moves {}",
+            "party {i}: {} L{} exp {} hp {}/{} status {:#x} held {} moves {}",
             n.species(m.species),
             m.level,
+            m.exp,
             m.hp,
             m.max_hp,
             m.status,

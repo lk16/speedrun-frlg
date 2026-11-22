@@ -9,6 +9,7 @@
 //! Every decision goes through the simulator's own policy code (`battle.rs`, `sim.rs`); nothing
 //! here re-implements a choice the model makes.
 pub mod battle;
+pub mod battle_audit;
 pub mod battle_ram;
 pub mod battle_test;
 pub mod cli;
@@ -21,6 +22,7 @@ pub mod ids;
 pub mod inspect;
 pub mod items;
 pub mod legs;
+pub mod legs2;
 pub mod menu;
 pub mod model;
 pub mod names;

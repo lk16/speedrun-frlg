@@ -61,10 +61,10 @@ pub fn talk_at(s: &mut Session, map: &str, x: i16, y: i16) -> PResult<()> {
     .map(|&(dx, dy, k)| (x + 2 * dx, y + 2 * dy, k))
     .collect();
     if let Some(&(sx, sy, k)) = across.first() {
-        go(s, map, sx, sy, &Opts::default())?;
+        go(s, map, sx, sy, &walk_opts())?;
         face(s, k)?;
     } else {
-        go_face(s, map, x, y, &Opts::default())?;
+        go_face(s, map, x, y, &walk_opts())?;
     }
     s.hf.press(keys::A)?;
     for _ in 0..12 {
@@ -146,10 +146,24 @@ pub fn buy(
     let money0 = Ram::new(&s.obs).money(s.hf.rec.emu());
     talk_at(s, map, cx, cy)?;
     // "Hi there! May I help you?" then BUY / SELL / SEE YA (`Task_ShopMenu`, `shop.c:256`).
-    press_until(s, "the shop menu", keys::A, 3000, |s| {
-        menu::task(s, "Task_ShopMenu")
-    })?;
-    menu::choose(s, 0)?;
+    // The greeting prints with the menu (`pokemart` script, `CreateShopMenu`): wait for it rather
+    // than mash, since an A on the menu's first frame picks BUY and the next ones buy whatever
+    // the list cursor is on (seen: ¥40000 of X items, the 4F stones bought twice).
+    if wait_until(s, "the shop menu", 400, |s| menu::task(s, "Task_ShopMenu")).is_err() {
+        press_until(s, "the shop menu", keys::A, 3000, |s| {
+            menu::task(s, "Task_ShopMenu") || buy_list_up(s)
+        })?;
+    }
+    if buy_list_up(s) {
+        s.event(
+            "warn",
+            "shop: the buy list opened while advancing the greeting",
+            json!({"map": map}),
+        );
+    }
+    if !buy_list_up(s) {
+        menu::choose(s, 0)?;
+    }
     wait_until(s, "the buy list", 600, buy_list_up)?;
     let stock = mart_items(s);
     let mut out = vec![];
@@ -217,7 +231,26 @@ pub fn buy(
         })?;
         menu::answer(s, true)?;
         // "Here you go, thank you!" waits for A or B (`Task_ReturnToItemListAfterItemPurchase`).
-        press_until(s, "back to the buy list", keys::A, 900, buy_list_up)?;
+        // A only while that text task runs: an A landing on the list's first frame would buy the
+        // item under the cursor again (seen: ¥40000 of X items for 9 wanted).
+        let start = s.hf.fed();
+        loop {
+            if buy_list_up(s) {
+                break;
+            }
+            if s.hf.fed() - start > 900 {
+                return Err(PlayError::Death(
+                    "soft-lock: back to the buy list not reached".into(),
+                ));
+            }
+            if menu::task(s, "Task_ReturnToItemListAfterItemPurchase") {
+                s.hf.late()?;
+                if menu::task(s, "Task_ReturnToItemListAfterItemPurchase") {
+                    s.hf.step(keys::A)?;
+                }
+            }
+            s.hf.step(0)?;
+        }
         let after = Ram::new(&s.obs).money(s.hf.rec.emu());
         let have = Ram::new(&s.obs).count(s.hf.rec.emu(), item);
         s.event(
@@ -337,7 +370,7 @@ fn open_storage(s: &mut Session, center_map: &str, row: i8) -> PResult<()> {
             .find(|&(x, y)| m.tile(x, y).is_some_and(|t| t.behavior == MB_PC))
             .ok_or_else(|| PlayError::Fatal(format!("no PC on {center_map}")))?;
         // The PC sits in the back wall: use it from the tile below, facing up.
-        go(s, center_map, pc.0, pc.1 + 1, &Opts::default())?;
+        go(s, center_map, pc.0, pc.1 + 1, &walk_opts())?;
         face(s, keys::UP)?;
         s.hf.press(keys::A)?;
         // "Booted up the PC." -> "Which PC should be accessed?" (`CreatePCMenu`,
@@ -385,9 +418,22 @@ pub fn pc(s: &mut Session, center_map: &str, ops: &[PcOp]) -> PResult<()> {
                 })?;
             }
             open_storage(s, center_map, row)?;
-            wait_until(s, "the storage screen", 900, |s| {
-                storage_ready(s, "Task_PokeStorageMain")
-            })?;
+            // The PC menu's A can be dropped: press it again while that menu still waits.
+            let start = s.hf.fed();
+            while !storage_ready(s, "Task_PokeStorageMain") {
+                if s.hf.fed() - start > 900 {
+                    return Err(PlayError::Death(
+                        "soft-lock: waited 900 frames for the storage screen".into(),
+                    ));
+                }
+                if menu::task(s, "Task_PCMainMenu") && menu::menu_cursor(s) == row {
+                    s.hf.late()?;
+                    s.hf.press(keys::A)?;
+                    s.hf.idle(20)?;
+                } else {
+                    s.hf.step(0)?;
+                }
+            }
             s.hf.idle(8)?;
             // `gStorage->boxOption` (offset 1): OPTION_WITHDRAW 0, OPTION_DEPOSIT 1.
             let g = s.sym("gStorage");
@@ -432,8 +478,8 @@ fn deposit(s: &mut Session, slot: usize) -> PResult<()> {
         s.hf.press(k)?;
         s.hf.idle(6)?;
     }
-    s.hf.press(keys::A)?;
-    wait_until(s, "the mon's storage menu", 300, selection_menu_up)?;
+    // A until the menu opens (a single press is dropped while the cursor still glides).
+    press_until(s, "the mon's storage menu", keys::A, 300, selection_menu_up)?;
     menu::choose(s, 0)?; // STORE
     wait_until(s, "the box chooser", 300, |s| {
         menu::task(s, "Task_DepositMenu") && storage_state(s) == 1
@@ -539,8 +585,8 @@ fn withdraw(s: &mut Session, species: u16) -> PResult<()> {
         s.hf.press(k)?;
         s.hf.idle(6)?;
     }
-    s.hf.press(keys::A)?;
-    wait_until(s, "the mon's storage menu", 300, selection_menu_up)?;
+    // A until the menu opens (a single press is dropped while the cursor still glides).
+    press_until(s, "the mon's storage menu", keys::A, 300, selection_menu_up)?;
     menu::choose(s, 0)?; // WITHDRAW
     wait_until(s, "the withdraw", 600, |s| {
         storage_ready(s, "Task_PokeStorageMain")
@@ -645,4 +691,12 @@ pub fn use_item_on(s: &mut Session, item: &str, slot: usize) -> PResult<u16> {
     );
     let _ = here(s);
     Ok(now)
+}
+
+/// The walk to a clerk or a PC may start far away (after a hunt): Cut trees on the way are cut.
+fn walk_opts() -> Opts {
+    Opts {
+        cut: true,
+        ..Opts::default()
+    }
 }

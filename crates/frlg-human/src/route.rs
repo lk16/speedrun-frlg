@@ -71,6 +71,8 @@ pub enum Kind {
         /// AI bits and heal items (`trainers.h` `.aiFlags`, `.items`).
         ai: u32,
         heals: u32,
+        /// Of `heals`, the Full Heals (no HP; `Params::ai_cure_items`).
+        cures: u32,
     },
     /// Several real parties fought back to back (trainers of the given maps, hardest first).
     Parties {
@@ -222,6 +224,7 @@ impl<'a> B<'a> {
                 full: f.full,
                 ai: f.ai,
                 heals: f.heals,
+                cures: f.cures,
             },
         );
     }
@@ -282,6 +285,56 @@ impl<'a> B<'a> {
         );
     }
 
+    /// `Params::fight_lists`: replace a `Parties`/`Group` segment's fights with the given trainer ids, or
+    /// insert them as a new `<seg>+fights` segment after any other segment.
+    pub(crate) fn apply_fight_lists(
+        &mut self,
+        lists: &std::collections::BTreeMap<String, Vec<String>>,
+    ) -> Result<(), String> {
+        for (seg, ids) in lists {
+            let i = self
+                .segs
+                .iter()
+                .position(|s| s.name == *seg)
+                .ok_or_else(|| format!("fight_lists: no segment {seg}"))?;
+            let fights: Vec<crate::data::Fight> = ids
+                .iter()
+                .map(|id| {
+                    if self.dex.has_trainer(id) {
+                        Ok(self.dex.fight(id))
+                    } else {
+                        Err(format!("fight_lists: unknown trainer {id}"))
+                    }
+                })
+                .collect::<Result<_, _>>()?;
+            let n = fights.len() as u32;
+            let kind = Kind::Parties {
+                money: fights.iter().map(|f| f.money).sum(),
+                parties: fights.iter().map(|f| f.party.clone()).collect(),
+                ais: fights.iter().map(|f| f.ai).collect(),
+                fulls: fights.into_iter().map(|f| f.full).collect(),
+            };
+            if matches!(self.segs[i].kind, Kind::Parties { .. } | Kind::Group { .. }) {
+                self.segs[i].kind = kind;
+                self.segs[i].inputs = 6 * n;
+            } else {
+                self.segs.insert(
+                    i + 1,
+                    Seg {
+                        name: format!("{seg}+fights"),
+                        src: Src::Tiles,
+                        inputs: 6 * n,
+                        split: false,
+                        off_timer: false,
+                        starter_check: false,
+                        kind,
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
     /// The `n` hardest trainers on the given maps. `n` is a routing assumption (which ones the
     /// route cannot walk around), the parties are the decomp's.
     pub(crate) fn maps_group(&mut self, name: &str, maps: &[&str], n: u32) {
@@ -312,8 +365,23 @@ impl<'a> B<'a> {
     }
 }
 
+/// MODEL CHANGE `Params::indoor_speed`: `tiles` of a walk at era `e` of which `inside` lie on maps
+/// whose header forbids the bike (and, for `Era::Walk`, running too), priced as the equivalent number of
+/// tiles at `e` (`decompiled/src/bike.c:245-259`; `data/maps/<map>/map.json` `allow_cycling`,
+/// `allow_running`, `map_type`). Off: the plain tile count.
+pub(crate) fn indoor(p: &Params, tiles: u32, inside: u32, inside_era: Era, e: Era) -> u32 {
+    let f = inside_era.frames_per_tile() / e.frames_per_tile();
+    if !p.indoor_speed || f <= 1.0 {
+        return tiles;
+    }
+    let inside = inside.min(tiles);
+    tiles - inside + (inside as f64 * f).round() as u32
+}
+
 pub(crate) fn erika_leg(b: &mut B<'_>, p: &Params, e: Era) {
-    b.walk("erika-walk", 146, e, None, Src::Tiles);
+    // Celadon Gym: no bike, no running (`CeladonCity_Gym/map.json`); ~40 of the tiles inside (guess).
+    let t = indoor(p, 146, 40, Era::Walk, e);
+    b.walk("erika-walk", t, e, None, Src::Tiles);
     if p.audited_forced {
         b.forced(
             "celadon-gym-trainers",
@@ -533,7 +601,10 @@ pub(crate) fn leg_ssanne(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
 pub(crate) fn leg_surge(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
     let e = b.era;
-    b.walk("surge-walk", 156, b.era, None, Src::Guess);
+    // Vermilion Gym: no bike, no running (`VermilionCity_Gym/map.json`); 60 tiles inside, as played
+    // (cans 32, to Surge 8, out 20; calibration 2026-11-22).
+    let t = indoor(p, 156, 60, Era::Walk, b.era);
+    b.walk("surge-walk", t, b.era, None, Src::Guess);
     if p.audit2 > 0 {
         // Tucker (7,8), FACE_LEFT sight 3, covers (4..6,8), the only way up to the barrier gap
         // (`VermilionCity_Gym/map.json`; `forced.py` with the gap opened: Tucker forced).
@@ -672,7 +743,11 @@ pub(crate) fn leg_celadon(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     }
     b.walk("celadon-tea", 40, e, None, Src::Tiles);
     b.text("tea", 600, Src::Guess);
-    b.walk("hideout-walk", 526, e, None, Src::Guess);
+    // Rocket Hideout: running, no bike (`RocketHideout_B1F/map.json`); the Game Corner neither
+    // (`CeladonCity_GameCorner/map.json`, ~26 tiles, played 17 one way). Guess for the split.
+    let t = indoor(p, 526, 500, Era::Run, e);
+    let t = indoor(p, t, 26, Era::Walk, e);
+    b.walk("hideout-walk", t, e, None, Src::Guess);
     b.maps_group(
         "hideout-grunts",
         &[
@@ -713,7 +788,10 @@ pub(crate) fn leg_tower(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     } else {
         b.text("fly-lavender", 700, Src::Guess);
     }
-    b.walk("tower-walk", 215, e, None, Src::Guess);
+    // Pokemon Tower: no bike, no running (`PokemonTower_*/map.json`); 160 of the tiles inside (played:
+    // 154 tower tiles to the 7F, calibration 2026-11-22).
+    let t = indoor(p, 215, 160, Era::Walk, e);
+    b.walk("tower-walk", t, e, None, Src::Guess);
     b.wander("tower-encounters", "MAP_POKEMON_TOWER_5F", g(108, 108, 80));
     b.trainer("rival-tower", &tn("TRAINER_RIVAL_POKEMON_TOWER"), 700);
     if p.audited_forced {
@@ -811,7 +889,9 @@ pub(crate) fn leg_warden(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
 pub(crate) fn leg_koga(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
     let e = b.era;
-    b.walk("koga-walk", 119, e, None, Src::Guess);
+    // Fuchsia Gym: no bike, no running (`FuchsiaCity_Gym/map.json`); 51 tiles inside, as played.
+    let t = indoor(p, 119, 51, Era::Walk, e);
+    b.walk("koga-walk", t, e, None, Src::Guess);
     if p.audited_forced {
         b.forced(
             "fuchsia-gym-trainers",
@@ -840,7 +920,9 @@ pub(crate) fn leg_silph(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
 pub(crate) fn leg_silph_walk(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let (g, enc, detour, tn) = (h.g, h.enc, h.detour, h.tn);
     let e = b.era;
-    b.walk("silph-walk", 479, e, None, Src::Guess);
+    // Silph Co.: running, no bike (`SilphCo_*F/map.json`); ~420 tiles inside (guess for the split).
+    let t = indoor(p, 479, 420, Era::Run, e);
+    b.walk("silph-walk", t, e, None, Src::Guess);
     b.trainer("rival-silph", &tn("TRAINER_RIVAL_SILPH"), 700);
     if p.audit2 > 0 {
         // 11F: the only way from the warp pad's landing to the Giovanni trigger passes (2,18),
@@ -858,7 +940,9 @@ pub(crate) fn leg_silph_walk(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     }
     b.trainer("silph-giovanni", "TRAINER_BOSS_GIOVANNI_2", 700);
     b.text("master-ball", 1800, Src::Guess);
-    b.walk("sabrina-walk", 123, e, None, Src::Guess);
+    // Saffron Gym: no bike, no running (`SaffronCity_Gym/map.json`); ~100 tiles inside (guess).
+    let t = indoor(p, 123, 100, Era::Walk, e);
+    b.walk("sabrina-walk", t, e, None, Src::Guess);
     // The audit reaches Sabrina through the teleport pads without crossing any cone.
     if !p.audited_forced {
         b.group("saffron-gym-trainers", 2, 2, 36, 75);
@@ -901,7 +985,9 @@ pub(crate) fn leg_mansion_blaine(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     );
     b.group("mansion-trainers", 3, 2, 36, 75);
     b.text("secret-key", 900, Src::Guess);
-    b.walk("blaine-walk", 34, Era::Run, None, Src::Tiles);
+    // Cinnabar Gym: no running (`CinnabarIsland_Gym/map.json`); ~30 tiles inside (guess).
+    let t = indoor(p, 34, 30, Era::Walk, Era::Run);
+    b.walk("blaine-walk", t, Era::Run, None, Src::Tiles);
     if p.audit2 > 0 {
         // Six quiz statues, one door each, chained to Blaine (`CinnabarIsland_Gym/scripts.inc`
         // OpenDoor1-6); every trainer has sight 0, so a correct answer costs text only.
@@ -982,7 +1068,9 @@ pub(crate) fn leg_viridian(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     let e = b.era;
     // 11. Viridian Gym.
     b.text("fly-viridian", 700, Src::Guess);
-    b.walk("viridian-gym-walk", 55, e, None, Src::Tiles);
+    // Viridian Gym: no bike, no running (`ViridianCity_Gym/map.json`); ~45 tiles inside (guess).
+    let t = indoor(p, 55, 45, Era::Walk, e);
+    b.walk("viridian-gym-walk", t, e, None, Src::Tiles);
     if p.audited_forced {
         b.forced(
             "viridian-gym-trainers",
@@ -1312,6 +1400,7 @@ pub fn build(dex: &Dex, p: &Params) -> Result<Vec<Seg>, String> {
     } else {
         old_order(&mut b, p, &helpers);
     }
+    b.apply_fight_lists(&p.fight_lists)?;
 
     for name in &p.extra_splits {
         let seg = b
@@ -1547,6 +1636,23 @@ pub fn build(dex: &Dex, p: &Params) -> Result<Vec<Seg>, String> {
                 kind: Kind::XBuy { xbuy: x.clone() },
             },
         );
+    }
+    // FIT `Params::guess_text_scale`: the guessed text lumps before the League (up to `indigo-heal`, the
+    // Start E4R1 split) scaled; the League and post-game lumps keep their own WR-window fits
+    // (`league_transit`, `postgame_calib`).
+    if p.guess_text_scale > 0.0 {
+        let end = b
+            .segs
+            .iter()
+            .position(|s| s.name == "indigo-heal")
+            .unwrap_or(b.segs.len());
+        for s in b.segs[..end].iter_mut() {
+            if s.src == Src::Guess {
+                if let Kind::Text { frames } = &mut s.kind {
+                    *frames = (*frames as f64 * p.guess_text_scale).round() as u32;
+                }
+            }
+        }
     }
     Ok(b.segs)
 }

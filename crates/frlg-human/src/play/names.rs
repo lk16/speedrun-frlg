@@ -86,6 +86,11 @@ pub fn names() -> &'static Names {
         // not start with FLAG_; read those first.
         parse("flags.h", "", &mut by_name);
         let flags = parse("flags.h", "FLAG_", &mut by_name);
+        // Trainer ids (`TRAINER_*`, `decompiled/include/constants/opponents.h`): a trainer's
+        // beaten flag is `TRAINER_FLAGS_START` + id (`include/constants/flags.h`).
+        parse("opponents.h", "TRAINER_", &mut by_name);
+        // Script variables (`VAR_*`, `decompiled/include/constants/vars.h`).
+        parse("vars.h", "VAR", &mut by_name);
         Names {
             by_name,
             species,

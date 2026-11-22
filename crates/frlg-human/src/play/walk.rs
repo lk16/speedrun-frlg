@@ -29,10 +29,20 @@ pub type MapId = (u8, u8);
 
 /// Water behaviors a surfer can cross (`decompiled/include/constants/metatile_behaviors.h`
 /// 0x10-0x22 water group; the set `bin/frlg-mapgraph` uses).
-const MB_WATER: [u16; 9] = [0x10, 0x11, 0x12, 0x13, 0x15, 0x19, 0x1A, 0x1B, 0x22];
+pub const MB_WATER: [u16; 9] = [0x10, 0x11, 0x12, 0x13, 0x15, 0x19, 0x1A, 0x1B, 0x22];
 /// Warp tiles are enterable despite their collision bit: `MB_CAVE_DOOR` 0x60 .. 0x6F except
 /// `MB_LAVARIDGE_1F_WARP` 0x68 (`metatile_behaviors.h`).
-fn is_warp_tile(b: u16) -> bool {
+fn spin_dir(b: u16) -> Option<(i16, i16)> {
+    match b {
+        0x54 => Some((1, 0)),
+        0x55 => Some((-1, 0)),
+        0x56 => Some((0, -1)),
+        0x57 => Some((0, 1)),
+        _ => None,
+    }
+}
+
+pub fn is_warp_tile(b: u16) -> bool {
     (0x60..0x70).contains(&b) && b != 0x68
 }
 /// `MB_EAST/WEST/NORTH/SOUTH_ARROW_WARP` 0x62-0x65: the warp fires when the player presses the
@@ -50,7 +60,7 @@ fn arrow_dir(b: u16) -> Option<u16> {
     }
 }
 /// Ledges (`MB_JUMP_EAST` .. `MB_JUMP_SOUTH`, 0x38-0x3B): hop direction.
-fn ledge(b: u16) -> Option<(i16, i16)> {
+pub fn ledge(b: u16) -> Option<(i16, i16)> {
     match b {
         0x38 => Some((1, 0)),
         0x39 => Some((-1, 0)),
@@ -72,6 +82,9 @@ pub struct ObjInfo {
     pub flag: u16,
     pub trainer: bool,
     pub sight: i16,
+    /// The trainer's beaten flag (`TRAINER_FLAGS_START` + its `TRAINER_*` id from the first
+    /// `trainerbattle` of its script), 0 if unknown: a beaten trainer's sight no longer triggers.
+    pub beaten: u16,
 }
 
 impl ObjInfo {
@@ -113,6 +126,8 @@ pub struct MapInfo {
     /// (direction, offset, map).
     pub conns: Vec<(String, i16, MapId)>,
     pub objects: Vec<ObjInfo>,
+    /// `allow_cycling` of the map's `map.json` (the Bicycle can be ridden here).
+    pub bike: bool,
 }
 
 impl MapInfo {
@@ -121,6 +136,13 @@ impl MapInfo {
             return None;
         }
         Some(self.tiles[(x + y * self.w) as usize])
+    }
+
+    pub fn set_collision(&mut self, x: i16, y: i16, blocked: bool) {
+        if x >= 0 && y >= 0 && x < self.w && y < self.h {
+            let w = self.w;
+            self.tiles[(x + y * w) as usize].collision = u8::from(blocked);
+        }
     }
 }
 
@@ -211,6 +233,29 @@ impl Graph {
                     ))
                 })
                 .collect();
+            let scripts =
+                std::fs::read_to_string(root.join(format!("data/maps/{name}/scripts.inc")))
+                    .unwrap_or_default();
+            let tflags = n.get("TRAINER_FLAGS_START").unwrap_or(0);
+            let beaten_of = |script: &str| -> u16 {
+                let mut inside = false;
+                for line in scripts.lines() {
+                    let l = line.trim();
+                    if let Some(lbl) = l.strip_suffix("::") {
+                        inside = lbl == script;
+                        continue;
+                    }
+                    if inside && l.starts_with("trainerbattle") {
+                        let t = l
+                            .split_whitespace()
+                            .nth(1)
+                            .unwrap_or("")
+                            .trim_end_matches(',');
+                        return n.get(t).map_or(0, |id| tflags + id);
+                    }
+                }
+                0
+            };
             let objects = j["object_events"]
                 .as_array()
                 .into_iter()
@@ -222,7 +267,13 @@ impl Graph {
                     ObjInfo {
                         x: int(&o["x"]) as i16,
                         y: int(&o["y"]) as i16,
-                        local_id: o.get("local_id").map(int).unwrap_or(i as i64 + 1) as u8,
+                        // A named `local_id` (`LOCALID_*`) is `#define`d to the object's index + 1
+                        // (`decompiled/tools/mapjson/mapjson.cpp:415-416`), like an unnamed one.
+                        local_id: o
+                            .get("local_id")
+                            .map(int)
+                            .filter(|&v| v > 0)
+                            .unwrap_or(i as i64 + 1) as u8,
                         movement: s("movement_type"),
                         script: s("script"),
                         graphics: s("graphics_id"),
@@ -233,6 +284,11 @@ impl Graph {
                         },
                         trainer: s("trainer_type") == "TRAINER_TYPE_NORMAL",
                         sight: int(&o["trainer_sight_or_berry_tree_id"]) as i16,
+                        beaten: if s("trainer_type") == "TRAINER_TYPE_NORMAL" {
+                            beaten_of(&s("script"))
+                        } else {
+                            0
+                        },
                     }
                 })
                 .collect();
@@ -247,6 +303,7 @@ impl Graph {
                     warps,
                     conns,
                     objects,
+                    bike: j["allow_cycling"].as_bool().unwrap_or(false),
                 },
             );
         }
@@ -275,9 +332,18 @@ pub struct Opts {
     /// Tiles a script has opened since the layout was drawn (`setmetatile` barriers: gym beams,
     /// doors), as (map, x, y): walkable floor whatever the layout says.
     pub open: Vec<(&'static str, i16, i16)>,
+    /// Collision of other maps as a script will have left it when the player gets there (the
+    /// Mansion's switch doors): (map, x, y, blocked). The current map's live grid wins.
+    pub patch: Vec<(&'static str, i16, i16, bool)>,
+    /// Fail with a `Death("blocked: ...")` at once when the live view has no path (the caller
+    /// knows a way to reset the blocker, e.g. leaving and re-entering the map).
+    pub strict: bool,
+    /// Unbeaten trainers' sight lines are walls (the first plan of every walk; the second, if
+    /// the first finds no way, only prices them).
+    pub cone_walls: bool,
 }
 
-type Node = (MapId, i16, i16);
+pub type Node = (MapId, i16, i16);
 
 /// What the planner knows of the live world when it plans.
 struct View {
@@ -288,6 +354,8 @@ struct View {
     temp_block: HashSet<Node>,
     /// The current map as the game holds it now (collision patched from `VMap`).
     cur_live: Option<MapInfo>,
+    /// Where the player stands and its `currentElevation`.
+    player: Option<(Node, u8)>,
 }
 
 /// Cost of one step and the human's tie-breakers, in hundredths of a step.
@@ -354,7 +422,8 @@ impl Graph {
             if o.stationary() {
                 b.insert((o.x, o.y));
             }
-            if o.trainer && o.sight > 0 {
+            let beaten = o.beaten != 0 && view.flags.get(&o.beaten).copied().unwrap_or(false);
+            if o.trainer && o.sight > 0 && !beaten {
                 let dirs: Vec<(i16, i16)> = match o.facing() {
                     Some(d) => vec![d],
                     None => vec![(0, -1), (0, 1), (-1, 0), (1, 0)],
@@ -430,12 +499,41 @@ impl Graph {
             .iter()
             .filter_map(|(m, x, y)| self.by_id.get(*m).map(|id| (*id, *x, *y)))
             .collect();
+        let mut patched: HashMap<MapId, MapInfo> = HashMap::new();
+        for &(pm, x, y, b) in &opts.patch {
+            let Some(&id) = self.by_id.get(pm) else {
+                continue;
+            };
+            if id == view.cur_map && view.cur_live.is_some() {
+                continue;
+            }
+            let Some(base) = self.maps.get(&id) else {
+                continue;
+            };
+            let m = patched.entry(id).or_insert_with(|| base.clone());
+            if x >= 0 && y >= 0 && x < m.w && y < m.h {
+                let w = m.w;
+                m.tiles[(x + y * w) as usize].collision = u8::from(b);
+            }
+        }
         // state: node + last direction index (4 = none) + surfing
         type St = (Node, u8, bool);
         let mut dist: HashMap<St, u32> = HashMap::new();
         let mut prev: HashMap<St, (St, Move)> = HashMap::new();
         let mut q = BinaryHeap::new();
-        let s0: St = (start, 4, view.surfing);
+        // The dir field also carries the player's elevation in its high nibble
+        // (`ObjectEventUpdateElevation` / `IsElevationMismatchAt`, `decompiled/src/event_object_movement.c`):
+        // moving onto a tile of another elevation (not 0, not 15) is blocked on foot.
+        let z0 = self
+            .maps
+            .get(&start.0)
+            .and_then(|m| m.tile(start.1, start.2))
+            .map_or(0, |t| if t.elevation == 15 { 0 } else { t.elevation });
+        let z0 = match view.player {
+            Some((n, z)) if n == start && z % 15 != 0 => z,
+            _ => z0,
+        };
+        let s0: St = (start, 4 | (z0 << 4), view.surfing);
         dist.insert(s0, 0);
         q.push(Reverse((0u32, s0)));
         let dirs = [
@@ -450,7 +548,8 @@ impl Graph {
             if dist.get(&st).is_some_and(|&b| b < d) {
                 continue;
             }
-            let (node, ld, surfing) = st;
+            let (node, ldz, surfing) = st;
+            let (ld, z) = (ldz & 0xF, ldz >> 4);
             if goal(&node) {
                 found = Some(st);
                 break;
@@ -465,6 +564,7 @@ impl Graph {
             } else {
                 None
             })
+            .or_else(|| patched.get(&mid))
             .or_else(|| self.maps.get(&mid)) else {
                 continue;
             };
@@ -491,25 +591,45 @@ impl Graph {
             // A warp under the player's feet. A warp event only fires on a warp behavior
             // (`TryStartWarpEventScript` / `TryArrowWarp`, `field_control_avatar.c:825-866`): the
             // plain tiles of a three-wide exit mat around the one arrow tile do nothing.
-            let warp_here = m
-                .tile(x, y)
-                .is_some_and(|t| is_warp_tile(t.behavior) || arrow_dir(t.behavior).is_some());
+            // Standing where the player started on a non-arrow warp (a Silph pad, arrived on by a
+            // warp): it only fires on stepping onto it (`TryStartWarpEventScript` runs on a step),
+            // so it has to be left and re-entered.
+            let warp_here = m.tile(x, y).is_some_and(|t| {
+                arrow_dir(t.behavior).is_some() || (is_warp_tile(t.behavior) && st != s0)
+            });
             if let Some(&(_, _, Some(dm), wid)) =
                 m.warps.iter().find(|w| warp_here && (w.0, w.1) == (x, y))
             {
                 if let Some(dmap) = self.maps.get(&dm) {
                     if let Some(&(dx, dy, _, _)) = dmap.warps.get(wid) {
+                        let wz = dmap.tile(dx, dy).map_or(0, |t| {
+                            if t.elevation == 15 {
+                                0
+                            } else {
+                                t.elevation
+                            }
+                        });
                         push(
                             &mut q,
                             &mut dist,
                             &mut prev,
-                            ((dm, dx, dy), 4, false),
+                            ((dm, dx, dy), 4 | (wz << 4), false),
                             STEP,
                             Move::Warp,
                         );
                     }
                 }
             }
+            let here_e = m.tile(x, y).map_or(0, |t| t.elevation);
+            // Elevation after stepping onto a tile of elevation `e` (unchanged across 15).
+            let nz = |e: u8| -> u8 {
+                if e == 15 || here_e == 15 {
+                    z
+                } else {
+                    e
+                }
+            };
+            let mismatch = |e: u8| z != 0 && e != 0 && e != 15 && e != z;
             for (di, &(key, dx, dy)) in dirs.iter().enumerate() {
                 let turn = if ld != 4 && ld as usize != di {
                     TURN
@@ -537,11 +657,12 @@ impl Graph {
                             _ => (0, y - off),
                         };
                         if let Some(w) = self.passable(o, tx, ty, surfing) {
+                            let e = o.tile(tx, ty).map_or(0, |t| t.elevation);
                             push(
                                 &mut q,
                                 &mut dist,
                                 &mut prev,
-                                ((*om, tx, ty), di as u8, w),
+                                ((*om, tx, ty), di as u8 | (nz(e) << 4), w),
                                 STEP + turn,
                                 Move::Step(key),
                             );
@@ -550,17 +671,60 @@ impl Graph {
                     continue;
                 }
                 let Some(t) = m.tile(nx, ny) else { continue };
+                // Spin tiles (`MB_SPIN_RIGHT/LEFT/UP/DOWN` 0x54-0x57, `MB_STOP_SPINNING` 0x58,
+                // `decompiled/include/constants/metatile_behaviors.h:66-70`): stepping on one
+                // slides the player its way, turning on every further spin tile, until a stop tile
+                // or something solid (`field_player_avatar.c` forced movement). The node is where
+                // the slide ends.
+                if spin_dir(t.behavior).is_some() && !surfing && !blk.contains(&(nx, ny)) {
+                    let (mut cx, mut cy) = (nx, ny);
+                    let mut d = spin_dir(t.behavior).unwrap();
+                    let mut n = 0;
+                    loop {
+                        n += 1;
+                        if n > 64 {
+                            break;
+                        }
+                        let (tx, ty) = (cx + d.0, cy + d.1);
+                        let free = self.passable(m, tx, ty, false) == Some(false)
+                            && !blk.contains(&(tx, ty));
+                        if !free {
+                            break;
+                        }
+                        cx = tx;
+                        cy = ty;
+                        let b = m.tile(cx, cy).map_or(0, |t| t.behavior);
+                        if b == 0x58 {
+                            break;
+                        }
+                        if let Some(nd) = spin_dir(b) {
+                            d = nd;
+                        }
+                    }
+                    if n <= 64 {
+                        push(
+                            &mut q,
+                            &mut dist,
+                            &mut prev,
+                            ((mid, cx, cy), di as u8 | (z << 4), false),
+                            STEP * (1 + n as u32 / 2) + turn,
+                            Move::Step(key),
+                        );
+                    }
+                    continue;
+                }
                 if let Some(hop) = ledge(t.behavior) {
                     if hop == (dx, dy) && !surfing {
                         let (lx, ly) = (nx + dx, ny + dy);
                         if self.passable(m, lx, ly, false) == Some(false)
                             && !blk.contains(&(lx, ly))
                         {
+                            let e = m.tile(lx, ly).map_or(0, |t| t.elevation);
                             push(
                                 &mut q,
                                 &mut dist,
                                 &mut prev,
-                                ((mid, lx, ly), di as u8, false),
+                                ((mid, lx, ly), di as u8 | (nz(e) << 4), false),
                                 2 * STEP + turn,
                                 Move::Step(key),
                             );
@@ -569,12 +733,12 @@ impl Graph {
                     continue;
                 }
                 if trees.contains(&(nx, ny)) {
-                    if opts.cut && !surfing {
+                    if opts.cut && !surfing && !mismatch(t.elevation) {
                         push(
                             &mut q,
                             &mut dist,
                             &mut prev,
-                            ((mid, nx, ny), di as u8, false),
+                            ((mid, nx, ny), di as u8 | (nz(t.elevation) << 4), false),
                             STEP + CUT_COST + turn,
                             Move::Cut(key),
                         );
@@ -591,11 +755,27 @@ impl Graph {
                 else {
                     continue;
                 };
+                // On foot onto land: the elevation has to match. Surfing onto land is a dismount
+                // (`COLLISION_ELEVATION_MISMATCH` -> `COLLISION_STOP_SURFING`,
+                // `decompiled/src/field_player_avatar.c`), and Surf starts from any shore.
+                if !surfing && !water && !opened && mismatch(t.elevation) {
+                    continue;
+                }
+                let new_z = if water {
+                    0
+                } else if surfing {
+                    t.elevation % 15
+                } else {
+                    nz(t.elevation)
+                };
                 let mut cost = STEP + turn;
                 if t.land {
                     cost += GRASS;
                 }
                 if sight.contains(&(nx, ny)) {
+                    if opts.cone_walls {
+                        continue;
+                    }
                     cost += SIGHT;
                 }
                 let mv = if water && !surfing {
@@ -608,7 +788,7 @@ impl Graph {
                     &mut q,
                     &mut dist,
                     &mut prev,
-                    ((mid, nx, ny), di as u8, water),
+                    ((mid, nx, ny), di as u8 | (new_z << 4), water),
                     cost,
                     mv,
                 );
@@ -670,7 +850,7 @@ fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
     let fl: Vec<u16> = g
         .maps
         .values()
-        .flat_map(|m| m.objects.iter().map(|o| o.flag))
+        .flat_map(|m| m.objects.iter().flat_map(|o| [o.flag, o.beaten]))
         .filter(|&f| f != 0)
         .collect();
     for f in fl {
@@ -684,6 +864,12 @@ fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
         flags,
         temp_block: temp_block.clone(),
         cur_live: live_map(s, cur_map),
+        player: here(s).map(|n| {
+            (
+                n,
+                super::ram::Ram::new(&s.obs).player_elevation(s.hf.rec.emu()),
+            )
+        }),
     }
 }
 
@@ -691,7 +877,7 @@ fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
 /// VMap.Xsize * (y + 7)]`, collision in bits 10-11 (`decompiled/src/fieldmap.c:17,57-59,107-124`,
 /// `struct BackupMapLayout` in `include/global.fieldmap.h:103-108`). Scripts' `setmetatile`
 /// (gym beams, opened doors) write there, so this sees barriers the layout file does not.
-fn live_map(s: &mut Session, cur: MapId) -> Option<MapInfo> {
+pub fn live_map(s: &mut Session, cur: MapId) -> Option<MapInfo> {
     let g = s.graph();
     let mut m = g.maps.get(&cur)?.clone();
     let vmap = s.sym("VMap");
@@ -707,7 +893,9 @@ fn live_map(s: &mut Session, cur: MapId) -> Option<MapInfo> {
         let bytes = emu.read_bytes(a, row);
         for x in 0..m.w {
             let v = u16::from_le_bytes([bytes[x as usize * 2], bytes[x as usize * 2 + 1]]);
-            m.tiles[(x + y * m.w) as usize].collision = ((v >> 10) & 3) as u8;
+            let tile = &mut m.tiles[(x + y * m.w) as usize];
+            tile.collision = ((v >> 10) & 3) as u8;
+            tile.elevation = (v >> 12) as u8;
         }
     }
     Some(m)
@@ -749,6 +937,7 @@ pub fn go_to(
     let mut temp_block: HashSet<Node> = HashSet::new();
     let mut bumps = 0;
     let mut plans = 0;
+    let mut bike_tried: Option<MapId> = None;
     loop {
         settle(s)?;
         let Some(cur) = here(s) else {
@@ -757,6 +946,19 @@ pub fn go_to(
         if goal(&cur) {
             break;
         }
+        // On the bike wherever the map allows it (`allow_cycling`) and the walk is more than a
+        // few tiles: the human gets on with the registered SELECT (once per map per walk).
+        if bike_tried != Some(cur.0)
+            && s.graph().maps.get(&cur.0).is_some_and(|m| m.bike)
+            && super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), names().id("ITEM_BICYCLE")) > 0
+            && s.obs.player_avatar_flags(s.hf.rec.emu())
+                & (AVATAR_MACH_BIKE | AVATAR_ACRO_BIKE | AVATAR_SURFING)
+                == 0
+            && plan_len(s, None, goal, opts).is_some_and(|n| n > 6)
+        {
+            bike_tried = Some(cur.0);
+            let _ = super::items::mount_bike(s)?;
+        }
         plans += 1;
         if plans > 60 {
             return Err(PlayError::Death(format!(
@@ -764,7 +966,22 @@ pub fn go_to(
             )));
         }
         let v = view(s, &temp_block);
-        let plan = s.graph().plan(&v, cur, goal, opts).or_else(|| {
+        // Around every unbeaten trainer's sight line if there is a way, else through (a forced
+        // fight: `human-run/tools/forced.py` audits which ones the plan cannot avoid).
+        let walls = Opts {
+            cone_walls: true,
+            ..opts.clone()
+        };
+        let live = s
+            .graph()
+            .plan(&v, cur, goal, &walls)
+            .or_else(|| s.graph().plan(&v, cur, goal, opts));
+        if live.is_none() && opts.strict {
+            return Err(PlayError::Death(format!(
+                "blocked: {what}: no path around live objects"
+            )));
+        }
+        let plan = live.or_else(|| {
             // Which live input closed the way? Try the layout's own collision, then no people.
             let mut v2 = view(s, &temp_block);
             v2.cur_live = None;
@@ -817,6 +1034,37 @@ pub fn go_to(
     }
     let _ = start_frame;
     Ok(())
+}
+
+/// Length in steps of the path the planner would take now from where the player stands to a node
+/// satisfying `goal` (no input fed), or from `from` if given (then the live view of the current
+/// map still applies to the current map only).
+pub fn plan_len(
+    s: &mut Session,
+    from: Option<Node>,
+    goal: &dyn Fn(&Node) -> bool,
+    opts: &Opts,
+) -> Option<usize> {
+    let cur = from.or_else(|| here(s))?;
+    let mut v = view(s, &HashSet::new());
+    if from.is_some() {
+        // A hypothetical start: the current map as `opts.patch` will leave it, not as it is now.
+        v.cur_live = None;
+    }
+    s.graph().plan(&v, cur, goal, opts).map(|p| p.moves.len())
+}
+
+/// The nodes of the path the planner would take from `from` (the current map as `opts.patch`
+/// leaves it, not the live grid) to a node satisfying `goal`.
+pub fn plan_nodes(
+    s: &mut Session,
+    from: Node,
+    goal: &dyn Fn(&Node) -> bool,
+    opts: &Opts,
+) -> Option<Vec<Node>> {
+    let mut v = view(s, &HashSet::new());
+    v.cur_live = None;
+    s.graph().plan(&v, from, goal, opts).map(|p| p.nodes)
 }
 
 /// Walk to `(map, x, y)`.

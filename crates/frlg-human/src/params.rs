@@ -926,12 +926,61 @@ pub struct Params {
     /// MODEL CHANGE (same run): the Pokemon Tower 6F Marowak ghost is a forced wild battle (Marowak L30,
     /// `PokemonTower_6F/scripts.inc:9`), fought by the sim's engine after the channelers. Off = not modelled.
     pub marowak_fight: bool,
+    /// MODEL CHANGE (segment-cost calibration, journal 2026-11-22-14-00-calibration, `calibration.md`):
+    /// frames after the last ball of a catch, for a species new to the Pokedex: "Gotcha", "data added to
+    /// the POKeDEX", the dex page (`displaydexinfo`) and the nickname prompt
+    /// (`decompiled/data/battle_scripts_2.s:73-91`). Played: last ball to battle end 1028-1174 frames
+    /// (8 catches, 5 Safari, 3 with Poke Balls) minus the ball itself. 0 = the old `catch_end` (130 with
+    /// `calib_wr`, measured on forest bugs that were mostly owned already).
+    pub catch_end_new: u32,
+    /// MODEL CHANGE (same calibration): frames per ball thrown, from the action menu back to it on a
+    /// miss. Played Safari misses 509-690 (8, mean 576 incl. the reaction delay); one Poke Ball miss 744
+    /// with the bag. 0 = `throw_cost` (425 with `calib_wr`, the libmgba floor x1.05).
+    pub throw_frames: u32,
+    /// MODEL CHANGE (same calibration): a successful Run from a wild battle with the carry past level 15,
+    /// after `enc_intro` and the reaction. Played: whole episodes (field to field) 636-657 frames (Gastly
+    /// x3 in the tower, Pidgey L15, Voltorb L14) = enc_intro 380 + reaction ~22 + 240. 0 = 430 (`calib_wr`).
+    pub flee_frames: u32,
+    /// MODEL CHANGE (same calibration): leaving an unwanted Safari encounter after `enc_intro` and the
+    /// reaction. Played: RUN 418-435 frames from the battle start to the field (11) plus the ~82-frame
+    /// field transition = ~505 in all, i.e. 100 after the 402 of intro and reaction. 0 = 200 (guess).
+    pub safari_run_frames: u32,
+    /// MODEL CHANGE (same calibration): walking speed by map header in the Guess walk segments that run
+    /// through gyms, the Pokemon Tower, the Rocket Hideout and Silph Co. Biking needs `allowCycling` and a
+    /// map type other than indoor (`decompiled/src/bike.c:245-252`), running needs `allowRunning`
+    /// (`bike.c:253-259`); gyms and the tower forbid both (`data/maps/*/map.json`): 16 frames a tile, not
+    /// the bike's 6. Played: 15.1 f/tile over 120 tower tiles, 16.1 over 32 Vermilion Gym tiles.
+    pub indoor_speed: bool,
+    /// MODEL CHANGE (same calibration): frames of a Fly from the start menu to control on arrival (party
+    /// menu, region map, flight, arrival warp). Played 809 and 848 (`fly-celadon`, `fly-lavender`).
+    /// 0 = the segments' own 700 (guess).
+    pub fly_frames: u32,
+    /// FIT (calibration reconciliation, journal 2026-11-22-14-00-calibration): multiplier on the frames of
+    /// every guessed text lump (`Src::Guess` `Kind::Text`). The WR-level skill knobs of plan 373
+    /// (`text_factor`, `path_overhead`, `mistake_rate`) were set against the WR splits while the catch
+    /// tail, ball misses and indoor walking were priced too low; with those measured, this one factor puts
+    /// the pre-League WR window total back on the WR. A stand-in, not a measurement. 0 = 1.0.
+    pub guess_text_scale: f64,
     /// MODEL CHANGE (stand-in audit 2026-11-22): the Persim Berry of `persim-and-potions` is *held* by the
     /// carry until `black-glasses-swap` and cures the first confusion right after the move that caused it
     /// (`HOLD_EFFECT_CURE_CONFUSION`, `decompiled/src/battle_util.c:2766` end of turn and `:2913` move end).
     /// Before this the berry was priced (frames) but had no battle effect, and Misty's `risk_power` 2.0
     /// stood in for it among other things. Needs `persim`. Off = the old model.
     pub persim_held: bool,
+    /// MODEL CHANGE (exp-economy audit 2026-11-22): the trainers the human actually fights, per segment, by
+    /// trainer id (`decompiled/include/constants/opponents.h`, parties `src/data/trainer_parties.h`). A named
+    /// `Parties`/`Group` segment gets exactly this list (fought in the given order); any other named segment
+    /// gets a new `<seg>+fights` segment right after it. The sight-cone lists (`forced-audit.md`) are the
+    /// fewest fights a perfect dodger needs; the played s11 controller and the runner's stream (Giovanni 1
+    /// at Lv36, Koga at Lv41/42) fight about 35 more, which is why the sim's carry was 4-5 levels short.
+    /// Empty = the old model (cone-forced trainers only).
+    pub fight_lists: std::collections::BTreeMap<String, Vec<String>>,
+    /// MODEL CHANGE (Koga audit 2026-11-22): a trainer's `ITEM_FULL_HEAL` is not an HP heal. The engine counted
+    /// every heal item as a full HP restore at < 1/4 HP; the game's AI uses a Full Heal only as a status /
+    /// confusion cure (`AI_ITEM_CURE_CONDITION`, `decompiled/src/battle_ai_switch_items.c:606-638`; Hyper Potion
+    /// is `AI_ITEM_HEAL_HP`, `:599-605`). Misty, Surge, Erika, Koga, Sabrina and Blaine carry one
+    /// (`src/data/trainers.h`). On = their HP heals drop by one (the cure itself is not modelled). Off = old.
+    pub ai_cure_items: bool,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1134,7 +1183,16 @@ impl Default for Params {
             cans_fixed: 0,
             played_extra: Default::default(),
             marowak_fight: false,
+            catch_end_new: 0,
+            throw_frames: 0,
+            flee_frames: 0,
+            safari_run_frames: 0,
+            indoor_speed: false,
+            fly_frames: 0,
+            guess_text_scale: 0.0,
             persim_held: false,
+            fight_lists: Default::default(),
+            ai_cure_items: false,
         }
     }
 }
