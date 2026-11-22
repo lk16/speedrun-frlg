@@ -999,6 +999,12 @@ pub struct Params {
     /// both, so the two are fitted separately on the same 67 fights (14 boss fights, 92 WR actions; 53 route
     /// fights, 145).
     pub turn_power_boss: f64,
+    /// MODEL CHANGE (boss turns): with `trainer_cost` and `turn_power`, a non-League trainer fight's clock is the
+    /// fitted price only (a + t x the copy's actions + m x KOs, level-ups, sacrifices): the input jitter, the
+    /// event reactions and the risk lane's paid in-battle potions are not charged on top. The price is fitted
+    /// on the WR's VOD battle times, which already hold its reactions, and the copy's actions hold its heal
+    /// turns. Pre-fight bag trips (Elixirs, pre-heals, Revives) stay. Off = the old charges.
+    pub tcost_whole: bool,
     /// MODEL CHANGE (exp-economy audit 2026-11-22): the trainers the human actually fights, per segment, by
     /// trainer id (`decompiled/include/constants/opponents.h`, parties `src/data/trainer_parties.h`). A named
     /// `Parties`/`Group` segment gets exactly this list (fought in the given order); any other named segment
@@ -1227,6 +1233,7 @@ impl Default for Params {
             trainer_cost: Vec::new(),
             turn_power: 0.0,
             turn_power_boss: 0.0,
+            tcost_whole: false,
             fight_lists: Default::default(),
             ai_cure_items: false,
         }

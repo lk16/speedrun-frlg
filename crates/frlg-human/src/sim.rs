@@ -1765,6 +1765,16 @@ pub fn fight_tactics(ctx: &Ctx, name: &str, league: bool, t: &TacIn) -> crate::b
     }
 }
 
+/// MODEL CHANGE `tcost_whole`: a non-League trainer fight priced by `trainer_cost` at the `turn_power` copy's
+/// actions is the whole battle (fitted on the WR's battle times, which hold its reactions and heals).
+fn whole_price(ctx: &Ctx, a: &BattleArgs) -> bool {
+    ctx.p.tcost_whole
+        && a.trainer
+        && !a.league
+        && ctx.p.turn_power > 0.0
+        && ctx.p.trainer_cost.len() == 3
+}
+
 struct BattleArgs<'a> {
     /// Segment name, for the per-fight tactics lookup.
     name: &'a str,
@@ -1808,7 +1818,8 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             Some((a0, _, _)) => bump(st, (a0 - ctx.outro()).max(0.0)),
             None => bump(st, ctx.trainer_intro(a.intro) * fit),
         }
-        bump(st, jitter(ctx, rng, 8) as f64);
+        let j = jitter(ctx, rng, 8) as f64;
+        bump(st, if whole_price(ctx, a) { 0.0 } else { j });
     }
     let cfg = ctx.tactics.get(a.name).cloned().unwrap_or_default();
     let sacs = cfg.sacs;
@@ -2165,10 +2176,13 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 .heal_items
                 .saturating_sub(out.heals_used + out.full_restores_used);
         }
+        // `tcost_whole`: the fitted price already holds the WR's reactions and mashing; the draws are kept
+        // (common random numbers) and not charged.
+        let keep = if whole_price(ctx, a) { 0.0 } else { 1.0 };
         for _ in 0..out.events {
-            bump(st, react(ctx, rng) as f64);
+            bump(st, react(ctx, rng) as f64 * keep);
         }
-        bump(st, jitter(ctx, rng, turns * 2 + 3) as f64);
+        bump(st, jitter(ctx, rng, turns * 2 + 3) as f64 * keep);
         if a.trainer && std::env::var_os("FRLG_DBG_EXTRA").is_some() {
             eprintln!(
                 "extra {} pre {} battle {} turns {} kos {} sacs {} events {}",
@@ -2481,7 +2495,11 @@ fn risk_fight(
     if pay {
         let n = out.heals_used.min(potions);
         st.money -= n * price;
-        bump(st, n as f64 * ctx.turn());
+        // `tcost_whole`: the clock's actions (the `turn_power` copy, heal turns included) already pay the
+        // in-battle heals; the lane's potions cost money only.
+        if !whole_price(ctx, a) {
+            bump(st, n as f64 * ctx.turn());
+        }
     }
     let fled = a.wild && !out.won && out.hp_frac > 0.0;
     let mut lost = !out.won && !fled;
