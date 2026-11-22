@@ -875,6 +875,17 @@ pub struct Tactics {
     /// Value factor of a scarce-PP move (Blizzard, Fire Blast) unless it kills (`Params::scarce_factor`;
     /// 1.0 = no rationing).
     pub scarce: f64,
+    /// MODEL CHANGE (`Params::sleep_no_potion`, battle bridge 2026-11-22): no potion while the fighter
+    /// is asleep. Using an item does not run the sleeper's move attempt, so the sleep counter does not
+    /// tick (`decompiled/src/battle_util.c` `AtkCanceller_UnableToUseMove`, `CANCELLER_ASLEEP` decrements
+    /// only on a move attempt): the potion buys one foe hit and leaves the fighter just as asleep (s13 on
+    /// the S.S. Anne rival state healed twice asleep and fainted). Unless the potion outheals the foe's best
+    /// hit (a Super Potion against Razor Leaf: alternate turns still gain HP). A Full Restore still goes.
+    pub sleep_no_potion: bool,
+    /// Awakenings in the bag (MODEL CHANGE `Params::awakenings`, bought at the Cerulean mart,
+    /// `CeruleanCity_Mart/scripts.inc:30`): a sleeping fighter is woken with one at once (the human
+    /// cannot see the sleep counter; the expected sleep is 2.5 lost turns for one item turn).
+    pub awakenings: u32,
 }
 
 impl Default for Tactics {
@@ -896,6 +907,8 @@ impl Default for Tactics {
             setup_min: 1,
             menu_slip: 0.0,
             scarce: SCARCE_FACTOR,
+            sleep_no_potion: false,
+            awakenings: 0,
         }
     }
 }
@@ -955,6 +968,7 @@ pub struct Outcome {
     pub x_used: u32,
     pub heals_used: u32,
     pub full_restores_used: u32,
+    pub awakenings_used: u32,
     /// Sacrificial faints spent (each costs a faint animation and a send-out).
     pub sacs_used: u32,
     /// Sacrifices whose helper survived the hit (see `Tactics::helper_hp`): two switch turns, no faint.
@@ -977,6 +991,9 @@ pub enum Action {
     XItem(XItem),
     Heal,
     FullRestore,
+    /// Awakening on the sleeping fighter (`Tactics::awakenings`; `ITEM_AWAKENING` cures sleep,
+    /// `item_effects.h`): an item turn, the fighter acts again from the next turn.
+    Awaken,
     /// A teammate eats this turn's hit while the fighter acts freely: uses its next X
     /// item, or simply attacks when no setup is pending.
     Sac(Option<XItem>),
@@ -2853,6 +2870,7 @@ pub struct Fs {
     /// After a Roar/Whirlwind the fighter's next turn is spent switching back in.
     must_switch: bool,
     heals_left: u32,
+    awakenings_left: u32,
     last_heal: bool,
     /// Full Restores the trainer still holds.
     ai_heals: u32,
@@ -2881,6 +2899,7 @@ impl Fs {
             sacs_left: tac.sacs,
             must_switch: false,
             heals_left: tac.heal_stock,
+            awakenings_left: tac.awakenings,
             last_heal: false,
             ai_heals,
             others_alive: tac.others_alive,
@@ -3089,7 +3108,10 @@ fn greedy_action(
             || (prep_heal && heal_ok))
     {
         Action::FullRestore
+    } else if fs.awakenings_left > 0 && matches!(me.status, Status1::Sleep(_)) && danger > 0 {
+        Action::Awaken
     } else if fs.heals_left > 0
+        && !(tac.sleep_no_potion && matches!(me.status, Status1::Sleep(_)) && tac.heal <= danger)
         && ((my_frac < tac.heal_below
             && me.hp <= 2 * danger
             && tac.heal as f64 + me.hp as f64 > danger as f64)
@@ -3244,6 +3266,7 @@ fn commit(fs: &mut Fs, action: Action, out: &mut Outcome) {
         Action::Switch => fs.must_switch = false,
         Action::XItem(_) => fs.setup_idx += 1,
         Action::Heal | Action::FullRestore => fs.heals_left = fs.heals_left.saturating_sub(1),
+        Action::Awaken => fs.awakenings_left = fs.awakenings_left.saturating_sub(1),
         Action::Sac(x) => {
             fs.sacs_left -= 1;
             fs.others_alive = fs.others_alive.saturating_sub(1);
@@ -3483,6 +3506,13 @@ fn run(
                         me.hp = (me.hp + tac.heal).min(me.max_hp);
                         out.hp_up += me.hp - before;
                     }
+                    Action::Awaken => {
+                        out.item_turns += 1;
+                        out.awakenings_used += 1;
+                        if matches!(me.status, Status1::Sleep(_)) {
+                            me.status = Status1::None;
+                        }
+                    }
                     Action::FullRestore => {
                         out.item_turns += 1;
                         out.full_restores_used += 1;
@@ -3581,6 +3611,7 @@ fn run(
                     Action::XItem(x) => format!("X{x:?}"),
                     Action::Heal => "Heal".into(),
                     Action::FullRestore => "FullRestore".into(),
+                    Action::Awaken => "Awaken".into(),
                     Action::Sac(x) => format!("Sac {x:?}"),
                 };
                 eprintln!(
@@ -4370,6 +4401,8 @@ mod tests {
                 setup_min: 1,
                 menu_slip: 0.0,
                 scarce: SCARCE_FACTOR,
+                sleep_no_potion: false,
+                awakenings: 0,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
@@ -5182,5 +5215,74 @@ mod tests {
         me.hp = me.max_hp - 1;
         end_of_turn(&mut me, &mut foe, &mut side, &mut out, true, &mut g);
         assert_eq!(me.hp, me.max_hp);
+    }
+
+    /// MODEL CHANGE `sleep_no_potion` / `awakenings` (battle bridge 2026-11-22): a sleeping fighter in KO range
+    /// drinks no Potion that the foe's hit out-damages (the item turn does not tick the sleep counter), still
+    /// drinks one that outheals the hit, and with an Awakening in the bag wakes up first.
+    #[test]
+    fn sleeping_fighter_wakes_or_attacks_instead_of_a_losing_potion() {
+        let dex = Dex::load();
+        let mut me = make_mon(&dex, dex.id("SPECIES_WARTORTLE"), 27, [20; 6], [0; 6], 0, 0);
+        me.moves = vec![dex.move_id("MOVE_BITE"), dex.move_id("MOVE_WATER_GUN")];
+        me.pp = vec![];
+        let mut foe = make_mon(&dex, dex.id("SPECIES_IVYSAUR"), 20, [20; 6], [0; 6], 0, 0);
+        foe.moves = vec![dex.move_id("MOVE_RAZOR_LEAF")];
+        foe.pp = vec![];
+        let danger = calc_damage(
+            &dex,
+            &foe,
+            &me,
+            foe.moves[0],
+            0,
+            false,
+            &Side::default(),
+            None,
+        );
+        assert!(danger > 20 && danger < 60, "danger {danger}");
+        me.hp = danger;
+        me.status = Status1::Sleep(3);
+        let pick = |tac: &Tactics| {
+            let fs = Fs::new(tac, 0);
+            greedy_action(
+                &dex,
+                &me,
+                &foe,
+                tac,
+                &fs,
+                false,
+                None,
+                &mut Outcome::default(),
+            )
+            .0
+        };
+        let old = Tactics {
+            heal: 20,
+            heal_below: 0.6,
+            heal_stock: 4,
+            ..Default::default()
+        };
+        assert!(
+            matches!(pick(&old), Action::Heal),
+            "old policy heals asleep"
+        );
+        let new = Tactics {
+            sleep_no_potion: true,
+            ..old.clone()
+        };
+        assert!(matches!(pick(&new), Action::Move(_)), "{:?}", pick(&new));
+        let big = Tactics {
+            heal: 60,
+            ..new.clone()
+        };
+        assert!(
+            matches!(pick(&big), Action::Heal),
+            "a potion that outheals the hit"
+        );
+        let wake = Tactics {
+            awakenings: 1,
+            ..new.clone()
+        };
+        assert!(matches!(pick(&wake), Action::Awaken));
     }
 }

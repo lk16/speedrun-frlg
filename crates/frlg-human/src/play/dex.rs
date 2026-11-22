@@ -5,7 +5,7 @@
 //! | --- | --- |
 //! | catch or run on a wild encounter | [`sim::wants_catch`] with [`sim::hunt_skip`]; owned = Pokédex flags in RAM |
 //! | leave the site | [`sim::site_done`], [`sim::hunt_stop_new`] (`stop_after`, `safari_stop`), the step budget |
-//! | Safari throw order | [`sim::SafariMon::next`] (bait / rocks / balls) |
+//! | Safari throw order | [`sim::SafariMon::next_act`] (bait / rocks / balls) |
 //! | ball, weaken, throws | `play::battle::fight` with `WildPlan::Catch` ([`sim::ball_tier`], [`sim::bag_ball`], ...) |
 //! | which mon evolves | [`sim::evo_source`] |
 //!
@@ -82,6 +82,8 @@ pub struct HuntReport {
     pub encounters: u32,
     pub caught: Vec<String>,
     pub frames: u64,
+    /// Of `frames`, the walk to the site (to the first hunting tile).
+    pub walk_frames: u64,
     /// Why it ended: `complete`, `stop_after`, `budget`, `safari steps`, `safari balls`, `skipped`.
     pub why: String,
 }
@@ -270,8 +272,8 @@ pub fn wild_battle(s: &mut Session) -> Option<PResult<()>> {
     let (species, _) = wild_mon(s);
     let plan = wild_plan(s, s.wild_plan);
     let safari = flags & (1 << 7) != 0; // BATTLE_TYPE_SAFARI, `include/constants/battle.h:52`
-    if safari && plan == WildPlan::Catch {
-        return Some(safari_battle(s));
+    if safari {
+        return Some(safari_battle(s, plan == WildPlan::Catch));
     }
     let cfg = super::battle::BattleCfg {
         wild: plan,
@@ -291,11 +293,45 @@ pub fn wild_battle(s: &mut Session) -> Option<PResult<()>> {
     Some(Ok(()))
 }
 
-/// A Safari Zone battle the plan wants to catch: the throw order of [`sim::SafariMon::next`] on
+/// The Safari action menu takes input: `gBattlerControllerFuncs[0]` is the Safari controller's
+/// `HandleInputChooseAction` (`decompiled/src/battle_controller_safari.c:162`; the sym file has
+/// four functions of that name, the Safari one is 0x184 bytes).
+fn safari_menu(s: &mut Session) -> bool {
+    let a = s.sym("gBattlerControllerFuncs");
+    let want = s.sym_sized("HandleInputChooseAction", 0x184);
+    s.hf.rec.emu().read32(a) & !1 == want
+}
+
+/// Put the Safari menu cursor (`gActionSelectionCursor[0]`, 2 x 2: bit 0 column, bit 1 row) on
+/// `want` and press A until the menu lets go.
+fn safari_pick(s: &mut Session, want: u8) -> PResult<()> {
+    for _ in 0..6 {
+        let cur = s.obs.action_cursor(s.hf.rec.emu(), 0);
+        if cur == want {
+            break;
+        }
+        let k = if (cur & 1) != (want & 1) {
+            if want & 1 != 0 {
+                keys::RIGHT
+            } else {
+                keys::LEFT
+            }
+        } else if want & 2 != 0 {
+            keys::DOWN
+        } else {
+            keys::UP
+        };
+        s.hf.press(k)?;
+        s.hf.idle(1)?;
+    }
+    super::prims::press_until(s, "the Safari choice", keys::A, 120, |s| !safari_menu(s))
+}
+
+/// A Safari Zone battle (`catch`: the plan wants it, else RUN): the throw order of [`sim::SafariMon::next_act`] on
 /// the BALL / BAIT / ROCK / RUN menu (`gActionSelectionCursor`, 2 x 2,
 /// `decompiled/src/battle_controller_safari.c:162-220`), text advanced with B (B answers NO to
 /// the nickname prompt). Each throw is logged with the real factors from RAM.
-pub fn safari_battle(s: &mut Session) -> PResult<()> {
+pub fn safari_battle(s: &mut Session, catch: bool) -> PResult<()> {
     let (species, level) = wild_mon(s);
     let Some((idx, _)) = dex_species(s, species) else {
         return Err(PlayError::Fatal(format!(
@@ -310,21 +346,30 @@ pub fn safari_battle(s: &mut Session) -> PResult<()> {
     let mut reacted = false;
     loop {
         if s.hf.fed() - start > 40_000 {
-            return Err(PlayError::Death("soft-lock: Safari battle".into()));
+            let a = s.sym("gBattlerControllerFuncs");
+            let f = s.hf.rec.emu().read32(a);
+            return Err(PlayError::Death(format!(
+                "soft-lock: Safari battle (controller {})",
+                s.obs.symbols().describe(f)
+            )));
         }
         let emu = s.hf.rec.emu();
         if !s.obs.in_battle(emu) && s.obs.callback2_is(emu, "CB2_Overworld") {
             break;
         }
-        if s.obs
-            .battle_controller_is(emu, 0, "HandleInputChooseAction")
-        {
+        if safari_menu(s) {
             if !reacted {
                 // The human sees what came out before the first choice.
                 s.hf.react()?;
                 reacted = true;
             }
-            let act = m.next();
+            if !catch {
+                // RUN: always succeeds in the Safari (`HandleAction_SafariZoneRun`,
+                // `decompiled/src/battle_main.c:4414`).
+                safari_pick(s, 3)?;
+                continue;
+            }
+            let act = m.next_act();
             let want: u8 = match act {
                 SafariAct::Ball => 0,
                 SafariAct::Bait => 1,
@@ -356,44 +401,15 @@ pub fn safari_battle(s: &mut Session) -> PResult<()> {
                     json!({"ram": [factor, esc], "model": [m.base, m.esc]}),
                 );
             }
-            for _ in 0..6 {
-                let cur = s.obs.action_cursor(s.hf.rec.emu(), 0);
-                if cur == want {
-                    break;
-                }
-                let k = if (cur & 1) != (want & 1) {
-                    if want & 1 != 0 {
-                        keys::RIGHT
-                    } else {
-                        keys::LEFT
-                    }
-                } else if want & 2 != 0 {
-                    keys::DOWN
-                } else {
-                    keys::UP
-                };
-                s.hf.press(k)?;
-                s.hf.idle(1)?;
-            }
-            s.hf.press(keys::A)?;
-            for _ in 0..30 {
-                if !s
-                    .obs
-                    .battle_controller_is(s.hf.rec.emu(), 0, "HandleInputChooseAction")
-                {
-                    break;
-                }
-                s.hf.step(0)?;
-            }
+            safari_pick(s, want)?;
             continue;
         }
         // Text, animations, the nickname prompt: B, late by U{0..N}.
         s.hf.late()?;
-        let emu = s.hf.rec.emu();
-        if s.obs
-            .battle_controller_is(emu, 0, "HandleInputChooseAction")
-            || (!s.obs.in_battle(emu) && s.obs.callback2_is(emu, "CB2_Overworld"))
-        {
+        if safari_menu(s) || {
+            let emu = s.hf.rec.emu();
+            !s.obs.in_battle(emu) && s.obs.callback2_is(emu, "CB2_Overworld")
+        } {
             continue;
         }
         s.hf.step(keys::B)?;
@@ -663,7 +679,7 @@ pub fn hunt(s: &mut Session, h: &Hunt) -> PResult<HuntReport> {
     // The model: `per_step` frames per step (run speed x path overhead) or 180 per cast (a guess),
     // plus the encounters; compare the whole hunt per step.
     let per = if rep.steps > 0 {
-        rep.frames as f64 / rep.steps as f64
+        (rep.frames - rep.walk_frames) as f64 / rep.steps as f64
     } else {
         0.0
     };
@@ -677,7 +693,7 @@ pub fn hunt(s: &mut Session, h: &Hunt) -> PResult<HuntReport> {
     s.event(
         "decision",
         format!(
-            "hunt at {} done ({}): {} {} , {} encounters, caught [{}], {} frames ({per:.0}/step incl. battles; model walk {model_per:.0}/step), still needed [{}]",
+            "hunt at {} done ({}): {} {}, {} encounters, caught [{}], {} frames ({} walking there, then {per:.0}/{} incl. battles; model {model_per:.0} + encounters), still needed [{}]",
             h.site.trim_start_matches("MAP_"),
             rep.why,
             rep.steps,
@@ -685,10 +701,13 @@ pub fn hunt(s: &mut Session, h: &Hunt) -> PResult<HuntReport> {
             rep.encounters,
             rep.caught.iter().map(|n| short(n)).collect::<Vec<_>>().join(", "),
             rep.frames,
+            rep.walk_frames,
+            if area == Area::Fish { "cast" } else { "step" },
             left.iter().map(|n| short(n)).collect::<Vec<_>>().join(", ")
         ),
         json!({"site": h.site, "why": rep.why, "steps": rep.steps, "encounters": rep.encounters,
-               "caught": rep.caught, "frames": rep.frames, "frames_per_step": per,
+               "caught": rep.caught, "frames": rep.frames, "walk_frames": rep.walk_frames,
+               "frames_per_step": per,
                "model_walk_per_step": model_per, "still_needed": left,
                "owned_total": owned_now, "safari_new": s.dex.safari_new}),
     );
@@ -706,6 +725,7 @@ fn hunt_loop(
     stop_new: u32,
     rep: &mut HuntReport,
 ) -> PResult<()> {
+    let t0 = s.frame();
     let water = area == Area::Water;
     let opts = Opts {
         surf: water,
@@ -731,6 +751,7 @@ fn hunt_loop(
         let i = go_first(s, &h.site, &cands, &opts)?;
         pair = pairs[i];
     }
+    rep.walk_frames = s.frame() - t0;
     let caught0 = s.dex.hunt.as_ref().map_or(0, |r| r.caught.len()) as u32;
     loop {
         let own = owned_set(s);
