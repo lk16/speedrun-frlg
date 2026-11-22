@@ -170,6 +170,10 @@ pub struct Teach {
     pub cost: u32,
     /// Teach Mewtwo instead of the carry (post-catch).
     pub mewtwo: bool,
+    /// A Game Corner prize TM (`CeladonCity_GameCorner_PrizeRoom/scripts.inc`: TM13 / TM23 / TM24 / TM30 /
+    /// TM35, 3500-4000 coins); `cost` is its price in money at 20 per coin. With `coin_case_frames` the
+    /// Coin Case is needed (fetched here, once, like the Abra's) and the coins come in purchases of 50.
+    pub prize: bool,
 }
 
 impl Default for Teach {
@@ -180,6 +184,7 @@ impl Default for Teach {
             frames: 800,
             cost: 0,
             mewtwo: false,
+            prize: false,
         }
     }
 }
@@ -333,6 +338,13 @@ pub struct Mart {
     pub poke: u32,
     pub great: u32,
     pub ultra: u32,
+    /// MODEL CHANGE (model honesty 2, journal 2026-11-22 model-honesty-2): the counts are targets, not
+    /// quantities: the human tops the bag up to them, and the mart's frames are paid only when something
+    /// is bought. Off = buy the listed quantities and always pay the visit.
+    pub topup: bool,
+    /// MODEL CHANGE (same, needs `potion_bag_from`): potions in the bag after this stop (top-up target), at
+    /// the potion tier of this segment (`potion_hp`; Potion 300, Super 700, Hyper 1200, `items.json`).
+    pub potions: u32,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -998,6 +1010,29 @@ pub struct Params {
     /// is `AI_ITEM_HEAL_HP`, `:599-605`). Misty, Surge, Erika, Koga, Sabrina and Blaine carry one
     /// (`src/data/trainers.h`). On = their HP heals drop by one (the cure itself is not modelled). Off = old.
     pub ai_cure_items: bool,
+    /// MODEL CHANGE (model honesty 2, controller-2 bug 1): Victory Road's boulders need Strength
+    /// (`decompiled/data/maps/VictoryRoad_1F/map.json` `EventScript_StrengthBoulder`), and `warden-strength`
+    /// taught HM04 to nobody. At `victory-road` the human needs a party mon that learns HM04
+    /// (`src/data/pokemon/tmhm_learnsets.h`): one in the party (first six obtained) costs nothing more; one in
+    /// the box is withdrawn at a Pokemon Center (`pc_frames`, free when the plan already paid a PC visit
+    /// after both the Warden and the carrier's catch); with none at all the carry learns it (a forced slot).
+    pub strength_carrier: bool,
+    /// MODEL CHANGE (model honesty 2, controller-2 bug 3): segments where the human is in the Celadon
+    /// Department Store, whose 4F sells the Fire / Thunder / Water / Leaf Stones
+    /// (`CeladonCity_DepartmentStore_4F/scripts.inc`). A `buy` stone evolution before the first of them is
+    /// skipped, and a Moon Stone is never bought (no mart lists it; `items.json` price 0). Empty = off.
+    pub stone_shops: Vec<String>,
+    /// MODEL CHANGE (model honesty 2, controller-2 bug 2): from this segment on, the risk lane's potions
+    /// come out of a finite bag, filled at the plan's `marts` stops (`Mart::potions`, paid there) instead of
+    /// a fresh `risk_potions` per fight paid at use; a fight can still spend at most its own cap. The bag
+    /// counts uses: one bought at a Super Potion stop heals at the tier of the segment it is drunk in.
+    /// Empty = off (the old per-fight budget everywhere).
+    pub potion_bag_from: String,
+    /// MODEL CHANGE (model honesty 2, controller-2 bug 11): the PP Ups the plan picks up go to the carry's
+    /// moves in this order (move names, at most 3 each: `decompiled/src/pokemon.c` `CalculatePPWithBonus`,
+    /// +20% of the base per PP Up), when picked up or as soon as the carry knows the move. Empty = off (they
+    /// wait for Mewtwo, `mewtwo_pp`).
+    pub carry_pp_ups: Vec<String>,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1212,6 +1247,10 @@ impl Default for Params {
             trainer_cost: Vec::new(),
             fight_lists: Default::default(),
             ai_cure_items: false,
+            strength_carrier: false,
+            stone_shops: vec![],
+            potion_bag_from: String::new(),
+            carry_pp_ups: vec![],
         }
     }
 }
