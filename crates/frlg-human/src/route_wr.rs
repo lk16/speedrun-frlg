@@ -83,14 +83,10 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         leg_surge(b, p, h);
     }
     leg_cycling(b, p, h);
-    if p.snorlax_first {
-        // MODEL CHANGE `snorlax_first`: the split (and its reset check) stays on Snorlax, before the road.
-        if let Some(s) = b.segs.iter_mut().rev().find(|s| s.name == "snorlax") {
-            s.split = true;
-        }
-    } else {
-        b.split(); // "Snorlax"
-    }
+    // The WR's "Snorlax" split is pressed on the Cycling Road at the Max Elixir, ~35 s after Snorlax
+    // (video 1:20:22 = run 1:19:47, 6 s contact sheets, journal 2026-11-22 route-windows), so the road
+    // belongs in this window.
+    b.split(); // "Snorlax"
 
     // Safari, Koga.
     if p.variant("safari_after_koga") {

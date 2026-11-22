@@ -974,13 +974,6 @@ pub struct Params {
     /// fights him (video run time 2:20 Marowak Lv37, 2:21 Warren's Nidoqueen), so do the 2026-11-14 stream
     /// run and the played controller run (`events.jsonl` of `fwd-main`). Off = Takashi only.
     pub viridian_warren: bool,
-    /// MODEL CHANGE (route windows): Snorlax is met before the Cycling Road, not after it. Route 16's Snorlax
-    /// stands between Celadon and the Cycling Road gate (`data/maps/Route16/map.json` object
-    /// `Route16_EventScript_Snorlax`), so the road comes after it; the WR's "Snorlax" split is there too
-    /// (video run time: Surge's Voltorb at 1:18:00, split at 1:19:47, Safari grass at 1:21:00: the badge,
-    /// a Fly and Snorlax fit before the split, the road does not). Off = the road before Snorlax (the
-    /// old order; same costs, the road and its pickups counted in the Snorlax window).
-    pub snorlax_first: bool,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1192,7 +1185,6 @@ impl Default for Params {
             guess_text_scale: 0.0,
             persim_held: false,
             viridian_warren: false,
-            snorlax_first: false,
         }
     }
 }

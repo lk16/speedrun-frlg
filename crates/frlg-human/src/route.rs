@@ -792,10 +792,6 @@ pub(crate) fn leg_cycling(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         let e = b.era;
         erika_leg(b, p, e);
     }
-    if p.snorlax_first {
-        // MODEL CHANGE `snorlax_first`: Route 16's Snorlax blocks the way to the road.
-        b.text("snorlax", 1500, Src::Guess);
-    }
     b.walk(
         "cycling-road",
         374,
@@ -803,9 +799,7 @@ pub(crate) fn leg_cycling(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         enc("MAP_ROUTE16", 0, 0, 60),
         Src::Tiles,
     );
-    if !p.snorlax_first {
-        b.text("snorlax", 1500, Src::Guess);
-    }
+    b.text("snorlax", 1500, Src::Guess);
     // The rod's house trip (guess: walking there and back plus the Fishing Guru's text).
     match p.rod.as_str() {
         "old" => {
