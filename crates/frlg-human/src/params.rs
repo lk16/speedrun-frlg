@@ -940,6 +940,12 @@ pub struct Params {
     /// at Lv36, Koga at Lv41/42) fight about 35 more, which is why the sim's carry was 4-5 levels short.
     /// Empty = the old model (cone-forced trainers only).
     pub fight_lists: std::collections::BTreeMap<String, Vec<String>>,
+    /// MODEL CHANGE (Koga audit 2026-11-22): a trainer's `ITEM_FULL_HEAL` is not an HP heal. The engine counted
+    /// every heal item as a full HP restore at < 1/4 HP; the game's AI uses a Full Heal only as a status /
+    /// confusion cure (`AI_ITEM_CURE_CONDITION`, `decompiled/src/battle_ai_switch_items.c:606-638`; Hyper Potion
+    /// is `AI_ITEM_HEAL_HP`, `:599-605`). Misty, Surge, Erika, Koga, Sabrina and Blaine carry one
+    /// (`src/data/trainers.h`). On = their HP heals drop by one (the cure itself is not modelled). Off = old.
+    pub ai_cure_items: bool,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1144,6 +1150,7 @@ impl Default for Params {
             marowak_fight: false,
             persim_held: false,
             fight_lists: Default::default(),
+            ai_cure_items: false,
         }
     }
 }

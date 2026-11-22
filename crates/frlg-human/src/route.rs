@@ -71,6 +71,8 @@ pub enum Kind {
         /// AI bits and heal items (`trainers.h` `.aiFlags`, `.items`).
         ai: u32,
         heals: u32,
+        /// Of `heals`, the Full Heals (no HP; `Params::ai_cure_items`).
+        cures: u32,
     },
     /// Several real parties fought back to back (trainers of the given maps, hardest first).
     Parties {
@@ -222,6 +224,7 @@ impl<'a> B<'a> {
                 full: f.full,
                 ai: f.ai,
                 heals: f.heals,
+                cures: f.cures,
             },
         );
     }

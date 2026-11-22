@@ -886,7 +886,7 @@ fn main() {
                     &tac,
                     &foes,
                     fightd.ai,
-                    fightd.heals,
+                    arg(&args, "--ai-heals", fightd.heals),
                     false,
                     &mut g,
                 );

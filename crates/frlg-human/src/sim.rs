@@ -3239,7 +3239,13 @@ pub fn attempt(
                     full,
                     ai,
                     heals,
+                    cures,
                 } => {
+                    let heals = &if ctx.p.ai_cure_items {
+                        heals.saturating_sub(*cures)
+                    } else {
+                        *heals
+                    };
                     if ctx.p.battle_sim && !full.is_empty() {
                         let foes: Vec<_> = full
                             .iter()
