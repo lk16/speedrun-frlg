@@ -1506,6 +1506,12 @@ fn e4_member(
     flag_name: &str,
 ) -> PResult<()> {
     s.seg = format!("e4-transit-{who}");
+    // In through the door; the room's entry scene walks the player in (`EnterRoom`, the entrance
+    // row is wall in the layout until then).
+    let mid = s.graph().id(map);
+    e4_door(s)?;
+    go_to(s, map, &move |n: &Node| n.0 == mid, &Opts::default())?;
+    settle(s)?;
     go_face(s, map, x, y, &Opts::default())?;
     s.seg = who.to_string();
     s.hf.press(keys::A)?;
@@ -1578,6 +1584,7 @@ fn lance(s: &mut Session) -> PResult<()> {
 fn champion(s: &mut Session) -> PResult<()> {
     s.seg = "champion".into();
     let room = s.graph().id("MAP_POKEMON_LEAGUE_CHAMPIONS_ROOM");
+    e4_door(s)?;
     go_to(
         s,
         "the Champion's room",
@@ -1601,14 +1608,8 @@ fn champion(s: &mut Session) -> PResult<()> {
         if super::prims::is_free(s) {
             // Free between the scenes (after the battle, before Oak's walk): walk north into the
             // Hall of Fame (`PokemonLeague_ChampionsRoom/map.json` warp (6, 2)).
-            let hof = s.graph().id("MAP_POKEMON_LEAGUE_HALL_OF_FAME");
             if here(s).is_some_and(|n| n.0 == room) {
-                go_to(
-                    s,
-                    "the Hall of Fame",
-                    &move |n: &Node| n.0 == hof,
-                    &Opts::default(),
-                )?;
+                super::legs::take_warp(s, "MAP_POKEMON_LEAGUE_CHAMPIONS_ROOM", 6, 3, keys::UP)?;
                 continue;
             }
             s.hf.step(0)?;
@@ -1769,6 +1770,47 @@ fn vr_hole(s: &mut Session) -> PResult<()> {
     Ok(())
 }
 
+/// Out of a beaten member's room by its north door. The door is wall in the layout (its metatile is
+/// swapped by the room's script after the win, and the planner only reads the live collision, not
+/// the new warp behavior): stand below it and hold UP until the map changes. Exits: (6, 2) in
+/// Lorelei's, Bruno's and Agatha's rooms, (6, 5) in Lance's (`PokemonLeague_*Room/map.json`).
+fn e4_door(s: &mut Session) -> PResult<()> {
+    let rooms: [(&str, i16, i16); 4] = [
+        ("MAP_POKEMON_LEAGUE_LORELEIS_ROOM", 6, 2),
+        ("MAP_POKEMON_LEAGUE_BRUNOS_ROOM", 6, 2),
+        ("MAP_POKEMON_LEAGUE_AGATHAS_ROOM", 6, 2),
+        ("MAP_POKEMON_LEAGUE_LANCES_ROOM", 6, 5),
+    ];
+    let Some(cur) = here(s) else {
+        return Ok(());
+    };
+    let g = s.graph();
+    let Some(&(m, x, y)) = rooms.iter().find(|r| g.id(r.0) == cur.0) else {
+        return Ok(());
+    };
+    super::legs::take_warp(s, m, x, y + 1, keys::UP)
+}
+
+/// The League heals (`league_heals` 14: "heal items the bag holds at the start of each League
+/// round ... the Indigo mart tops up to this many at `league_heal_price`", `params.rs`): Max
+/// Potions from the Indigo Plateau clerk at (0, 7) (`IndigoPlateau_PokemonCenter_1F_Items`),
+/// counting the Hyper and Max Potions already in the bag, as far as the money goes.
+fn indigo_mart(s: &mut Session) -> PResult<()> {
+    s.seg = "indigo-heal".into();
+    let want = s.plan.params.league_heals as u16;
+    let have_now = have(s, "ITEM_HYPER_POTION") + have(s, "ITEM_MAX_POTION");
+    let n = want.saturating_sub(have_now);
+    if n > 0 {
+        let _ = super::shop::buy(
+            s,
+            "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F",
+            Some((0, 7)),
+            &[("ITEM_MAX_POTION", n)],
+        )?;
+    }
+    Ok(())
+}
+
 pub fn stages() -> Vec<Stage> {
     vec![
         Stage {
@@ -1850,6 +1892,10 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "victory-road",
             run: victory_road,
+        },
+        Stage {
+            name: "indigo-mart",
+            run: indigo_mart,
         },
         Stage {
             name: "lorelei",
