@@ -450,7 +450,15 @@ fn fill_round(s: &mut Session) -> PResult<()> {
             .any(|f| super::names::names().get(f).is_some() && flag(s, f));
         if can_fly && region_cell(&sec).is_some_and(|c| c.0 == 0) {
             leave_to_fly(s, &map)?;
-            super::items::fly(s, &sec)?;
+            // Route 4's and Route 10's centers are their own map squares
+            // (`MAPSEC_ROUTE_4_POKECENTER`, `region_map_layout_kanto.h`).
+            let pc_sec = format!("{sec}_POKECENTER");
+            let fly_sec = if region_cell(&pc_sec).is_some() {
+                pc_sec
+            } else {
+                sec.clone()
+            };
+            super::items::fly(s, &fly_sec)?;
             let lead = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
             if lead.hp * 2 < lead.max_hp {
                 if let Some(pc) = center_of(s, &map) {
