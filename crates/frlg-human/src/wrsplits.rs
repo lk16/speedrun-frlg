@@ -109,7 +109,7 @@ type Row = (
     Vec<u32>,
     Vec<u32>,
     bool,
-    Vec<(String, u32, bool, f64)>,
+    Vec<(String, u32, bool, f64, u32)>,
 );
 
 /// Real fight lengths read off the WR video (`human-run/video-analysis/data/calib/v1..v4`):
@@ -314,7 +314,7 @@ pub fn print_table(plan: &Plan, ctx: &Ctx, seed: u64, r: u64, all: bool, within:
     for (name, wt, ws) in WR_FIGHTS {
         // `within`: only attempts that finished in that many seconds (the WR video is one successful run, so
         // its fights are conditioned on success: luck in the fights is part of why it finished).
-        let v: Vec<&(String, u32, bool, f64)> = rows
+        let v: Vec<&(String, u32, bool, f64, u32)> = rows
             .iter()
             .filter(|r| {
                 within.is_none_or(|t| {
