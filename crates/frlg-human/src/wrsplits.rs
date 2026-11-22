@@ -35,12 +35,11 @@ pub const WR_SPLITS: &[(&str, f64, i32, i32, &[&str])] = &[
         &["sevii-return", "blaine-badge-and-sevii-scene"],
     ),
     ("Sabrina", 7914.0, 45, 46, &["sabrina-badge"]),
-    // The runner splits "Erika" after the Warden when the Gold Teeth go in after Erika: in the WR video
-    // (run time) Erika's Tangela is on screen at 2:14:00 and "A gave the GOLD TEETH to the WARDEN" at
-    // 2:15:00, around the 2:14:50 split (`video-analysis/data/wr-scene-B.jsonl`; time base checked
-    // against the 3 s frame facts at Koga and Giovanni 3). A plan whose Warden comes earlier
-    // (`warden_early`) has no `warden-strength` after Sabrina and falls back to `erika-badge`.
-    ("Erika", 8090.0, 46, -1, &["warden-strength", "erika-badge"]),
+    // The runner splits "Erika" on arriving at the Warden when the Gold Teeth go in after Erika: WR video
+    // (6 s contact sheets, video = run + 35 s) Erika beaten 8087, Fly 8111, Fuchsia 8117, split 8125,
+    // "A gave the GOLD TEETH to the WARDEN" 8129, HM04 8135. A plan whose Warden comes earlier
+    // (`warden_early`) has no `warden` walk after Sabrina and falls back to `erika-badge`.
+    ("Erika", 8090.0, 46, -1, &["warden", "erika-badge"]),
     ("Giovanni 3", 8633.0, 52, 49, &["giovanni-badge"]),
     ("Start E4R1", 9365.0, 60, 50, &["indigo-heal"]),
     ("Lorelei 1", 9538.0, -1, -1, &["lorelei"]),
