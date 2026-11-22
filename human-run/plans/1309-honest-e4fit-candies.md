@@ -1259,3 +1259,22 @@ WR-level League fit (on 1305: -592 / -668 h WR+2m, -1627 / -2097 h WR). Model ke
  "mewtwo_candies": 0
 }
 ```
+
+## Score (combined honest model of record; paired, child - parent, negative = child better)
+
+Against 1423-boss-turns-whole (which lacks the honest shop stops and the WR-level League), seeds 7761/7762:
+
+| cell | 1309 | 1423 | diff [95% CI] |
+| --- | --- | --- | --- |
+| WR+2m seed 7761 R 3.2M | 715.5 (1067 fin) | 450.4 | +265.0 [+224.8, +311.7] |
+| WR+2m seed 7762 R 3.2M | 741.2 (1031 fin) | 472.4 | +268.8 [+224.2, +312.5] |
+| WR seed 7761 R 3.2M | 1751.8 (407 fin) | 965.0 | +786.8 [+616.6, +956.4] |
+| WR seed 7762 R 3.2M | 1716.0 (416 fin) | 993.7 | +722.3 [+589.5, +886.3] |
+| WR+2m lp 1.0 / lp 1.4 R 1.6M | 610.4 / 418.8 | 444.0 / 341.1 | +166 / +78 |
+| WR+2m mp 1.0 / mp 1.3 | 1503.9 / 626.3 | 967.2 / 444.0 | +537 / +182 |
+| WR+2m door ~.10 | 1623.5 | 950.5 | +673 |
+
+**Worse, and adopted as CURRENT anyway (coordinator: it is the honest model).** The difference is model honesty, not
+plan: 1308 (same, candies held) is +914 / +944 h (WR+2m) and +2133 / +2372 h (WR) vs 1423; eating the candies (1309 vs
+1308, seeds 7763/7764) is a confirmed plan gain of -606 [-719, -521] / -651 [-765, -545] h (WR+2m) and -1363 / -1639 h
+(WR). Fight-price sensitivity: see NEXT.md and the journal.
