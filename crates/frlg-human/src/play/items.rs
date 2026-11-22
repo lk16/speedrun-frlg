@@ -446,3 +446,49 @@ pub fn fly(s: &mut Session, mapsec: &str) -> PResult<()> {
     );
     Ok(())
 }
+
+const STARTMENU_OPTION: u8 = 5;
+
+/// Switch the battle style to SET (`decompiled/src/option_menu.c`: rows `MENUITEM_*` 0-6,
+/// `MENUITEM_BATTLESTYLE` = 2 with two values; LEFT/RIGHT change the working value, A or B closes
+/// and `CloseAndSaveOptionMenu` writes it back). The s11 save is on SHIFT from `new_game.c:65`.
+pub fn set_battle_style_set(s: &mut Session) -> PResult<()> {
+    if super::battle_ram::battle_style_set(&s.obs, s.hf.rec.emu()) {
+        return Ok(());
+    }
+    menu::open_start(s)?;
+    let r = start_row(s, STARTMENU_OPTION)?;
+    menu::start_menu_pick(s, r)?;
+    let obs = s.obs.clone();
+    wait_until(s, "the option menu", 600, |s| {
+        obs.option_menu_accepting_input(s.hf.rec.emu())
+    })?;
+    for _ in 0..12 {
+        let cur = obs.option_menu_cursor(s.hf.rec.emu()).unwrap_or(0);
+        if cur == 2 {
+            break;
+        }
+        s.hf.press(keys::DOWN)?;
+        s.hf.idle(1)?;
+    }
+    for _ in 0..4 {
+        if obs.option_menu_setting(s.hf.rec.emu(), 2) == Some(1) {
+            break;
+        }
+        s.hf.press(keys::RIGHT)?;
+        s.hf.idle(1)?;
+    }
+    s.hf.press(keys::B)?;
+    close_to_field(s)?;
+    let set = super::battle_ram::battle_style_set(&s.obs, s.hf.rec.emu());
+    s.event(
+        "model-vs-actual",
+        format!(
+            "battle style set to SET in the options (was SHIFT, new_game.c:65); the model never \
+             pays the 'Will you change?' prompts; now {}",
+            if set { "SET" } else { "still SHIFT" }
+        ),
+        json!({"battle_style_set": set}),
+    );
+    Ok(())
+}

@@ -21,6 +21,9 @@ pub struct Mon {
     pub max_hp: u16,
     /// atk, def, spe, spa, spd.
     pub stats: [u16; 5],
+    /// The decrypted block sums to the stored checksum (`CalculateBoxMonChecksum`,
+    /// `decompiled/src/pokemon.c`; checksum at 0x1C). False on a mon read mid-update.
+    pub valid: bool,
 }
 
 impl Mon {
@@ -74,6 +77,10 @@ pub fn read_mon(emu: &mut Emu, addr: u32) -> Mon {
         let v = u32_at(0x20 + w * 4) ^ key;
         sec[w * 4..w * 4 + 4].copy_from_slice(&v.to_le_bytes());
     }
+    let sum = (0..24).fold(0u16, |a, i| {
+        a.wrapping_add(u16::from_le_bytes([sec[2 * i], sec[2 * i + 1]]))
+    });
+    let valid = sum == u16_at(0x1C);
     let ord = ORDER[(personality % 24) as usize];
     let sub = |t: usize| ord[t] as usize * 12;
     let s16 = |o: usize| u16::from_le_bytes([sec[o], sec[o + 1]]);
@@ -90,6 +97,7 @@ pub fn read_mon(emu: &mut Emu, addr: u32) -> Mon {
         hp: u16_at(86),
         max_hp: u16_at(88),
         stats: std::array::from_fn(|i| u16_at(90 + 2 * i)),
+        valid,
     }
 }
 

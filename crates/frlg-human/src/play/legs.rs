@@ -381,7 +381,8 @@ fn lavender_heal(s: &mut Session) -> PResult<()> {
         "model has no heal before the tower; healing at the Lavender center (Blastoise half HP, paralysed)",
         json!({"segment": "tower-walk"}),
     );
-    center_heal(s, "MAP_LAVENDER_TOWN_POKEMON_CENTER_1F")
+    center_heal(s, "MAP_LAVENDER_TOWN_POKEMON_CENTER_1F")?;
+    super::items::set_battle_style_set(s)
 }
 
 fn fly_celadon(s: &mut Session) -> PResult<()> {

@@ -28,6 +28,9 @@ pub fn print(rom: &Path, sym: &Path, state: &Path, _dex: &Dex) {
     let ram = Ram::new(&obs);
     let n = names();
     for (i, m) in ram.party(emu).iter().enumerate() {
+        if !m.valid {
+            println!("party {i}: checksum mismatch");
+        }
         println!(
             "party {i}: {} L{} hp {}/{} status {:#x} held {} moves {}",
             n.species(m.species),
