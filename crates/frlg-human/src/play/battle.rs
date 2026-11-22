@@ -580,6 +580,8 @@ struct Ctl<'a, 'b> {
     /// HP of both sides at the last action menu (fighter slot, HP, foe slot, foe HP), for the
     /// turn-result note of the next line.
     last: Option<(usize, i32, usize, i32)>,
+    /// The foe on the field at the last menu, its bench, and the fighter then (the send-out check).
+    last_foe: Option<(Mon, Vec<Mon>, Mon)>,
 }
 
 impl Ctl<'_, '_> {
@@ -669,6 +671,7 @@ pub fn fight(
         rng: GameRng::from_u32(seed),
         armed: std::cell::Cell::new(false),
         last: None,
+        last_foe: None,
     };
     if trainer {
         let id = c.ram.trainer_id(f.emu());
@@ -916,6 +919,25 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
             .map(|i| sc.me.pp[i]),
         _ => None,
     };
+    // A new foe after a faint: is it the one the model's `most_suitable` sends?
+    if let Some((old, old_bench, old_me)) = c.last_foe.take() {
+        if old.slot != sc.foe.slot && old_bench.len() > 1 {
+            let fainted = Mon { hp: 0, ..old };
+            let i = sim_battle::predict_next(dex, &old_me, &fainted, c.fs.as_ref().unwrap(), &old_bench);
+            let model = old_bench[i].species;
+            let text = format!(
+                "trainer sent {} (model's most_suitable: {})",
+                species_name(dex, sc.foe.species),
+                species_name(dex, model)
+            );
+            if model == sc.foe.species {
+                log.push(f.frame(), "battle", text, json!({"match": true}));
+            } else {
+                log.push(f.frame(), "model-vs-actual", text, json!({"match": false}));
+            }
+        }
+    }
+    c.last_foe = Some((sc.foe.clone(), sc.bench.clone(), sc.me.clone()));
     // What the last turn did, as the human saw it: HP lost on both sides (same mons only).
     let (dealt, took) = match c.last {
         Some((ms, mh, fs_, fh)) => (
