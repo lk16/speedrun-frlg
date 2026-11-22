@@ -1511,16 +1511,8 @@ fn celio_ruby(s: &mut Session) -> PResult<()> {
 fn mt_ember(s: &mut Session) -> PResult<()> {
     s.seg = "kindle-road-in".into();
     let t0 = s.timer().unwrap_or(0.0);
-    // The Ether ball on Kindle Road (`OneIsland_KindleRoad/map.json` (15, 70),
-    // `FLAG_HIDE_ONE_ISLAND_KINDLE_ROAD_ETHER`): Mewtwo's Psychic for the League.
-    pickup(
-        s,
-        "MAP_ONE_ISLAND_KINDLE_ROAD",
-        15,
-        70,
-        "FLAG_HIDE_ONE_ISLAND_KINDLE_ROAD_ETHER",
-        "ITEM_ETHER",
-    )?;
+    // (Kindle Road's Ether ball at (15, 70) sits behind three Rock Smash rocks at (15, 73..75),
+    // `OneIsland_KindleRoad/map.json`; the plan has no Rock Smash user: not taken.)
     go_map(s, "MAP_MT_EMBER_EXTERIOR", &hm_opts())?;
     for (seg, script, tr) in [
         (
