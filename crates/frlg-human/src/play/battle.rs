@@ -1120,6 +1120,22 @@ fn execute(
         }
         Action::Heal | Action::FullRestore => {
             let (model, pick) = heal_pick(&sc.items, sc.me.level, a == Action::FullRestore);
+            // A potion on a fighter at full HP "won't have any effect" and the bag stays open: the
+            // policy's Full Restore for a status (Freeze) with only HP potions in the bag. Attack
+            // (the frozen turn passes, with its thaw chance) instead.
+            let pick = pick.filter(|&id| sc.me.hp < sc.me.max_hp || id == ITEM_FULL_RESTORE);
+            if pick.is_none() && sc.me.hp >= sc.me.max_hp {
+                log.push(
+                    f.frame(),
+                    "model-vs-actual",
+                    "Full Restore chosen for a status at full HP, the bag has only HP potions \
+                     (league_heals are Max Potions): attacking instead",
+                    json!({"status": format!("{:?}", sc.me.status)}),
+                );
+                let mv = best_move(dex, sc);
+                use_move(f, c, sc, mv)?;
+                return Ok(Action::Move(mv));
+            }
             match pick {
                 Some(id) => {
                     if id != model {

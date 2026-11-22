@@ -1792,20 +1792,30 @@ fn e4_door(s: &mut Session) -> PResult<()> {
 }
 
 /// The League heals (`league_heals` 14: "heal items the bag holds at the start of each League
-/// round ... the Indigo mart tops up to this many at `league_heal_price`", `params.rs`): Max
-/// Potions from the Indigo Plateau clerk at (0, 7) (`IndigoPlateau_PokemonCenter_1F_Items`),
-/// counting the Hyper and Max Potions already in the bag, as far as the money goes.
+/// round ... the Indigo mart tops up to this many at `league_heal_price`", `params.rs`) from the
+/// Indigo Plateau clerk at (0, 7) (`IndigoPlateau_PokemonCenter_1F_Items`), counting the heals
+/// already in the bag, as far as the money goes. Full Restores, not the model's Max Potions
+/// (2500): with Max Potions every branch reached Lance paralysed (Agatha's Gengar / Lance's
+/// dragons) with only HP heals, and the policy's `FullRestore` action for a status found none
+/// (8 of 8 branches lost to Lance from the Agatha checkpoint).
 fn indigo_mart(s: &mut Session) -> PResult<()> {
     s.seg = "indigo-heal".into();
+    s.event(
+        "model-vs-actual",
+        "League heals bought as Full Restores (3000), not Max Potions (league_heal_price 2500): \
+         the policy's status heals need them",
+        json!({"segment": "indigo-heal"}),
+    );
     let want = s.plan.params.league_heals as u16;
-    let have_now = have(s, "ITEM_HYPER_POTION") + have(s, "ITEM_MAX_POTION");
+    let have_now =
+        have(s, "ITEM_HYPER_POTION") + have(s, "ITEM_MAX_POTION") + have(s, "ITEM_FULL_RESTORE");
     let n = want.saturating_sub(have_now);
     if n > 0 {
         let _ = super::shop::buy(
             s,
             "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F",
             Some((0, 7)),
-            &[("ITEM_MAX_POTION", n)],
+            &[("ITEM_FULL_RESTORE", n)],
         )?;
     }
     Ok(())
