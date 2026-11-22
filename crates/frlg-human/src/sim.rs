@@ -630,6 +630,13 @@ fn strength_carrier(ctx: &Ctx, st: &mut State) -> &'static str {
         return "carry-forced";
     };
     let seq = st.catch_seq[d as usize];
+    if std::env::var_os("FRLG_SIM_TRACE").is_some() {
+        let pc = st
+            .pc_seg
+            .and_then(|i| ctx.segs.get(i))
+            .map(|s| s.name.as_str());
+        eprintln!("strength-carrier dex {d} seq {seq} last-pc {pc:?}");
+    }
     if seq <= 6 {
         return "party";
     }
