@@ -1220,3 +1220,22 @@ Same step-by-step description as `001-crude.md` except where the parameters belo
  }
 }
 ```
+
+## Score (1253 model of record, paired against 1253-runner-fights-tf; child - parent, negative = 1300 better)
+
+The two steps were found by the `--set earlymid` descent from 1132 (1212/1213: Mt. Moon Miguel potions 1 -> 2 -> 5,
+screens -9.6 / -5.2 and -1.3 / -2.1 h; 1214: Koga heal_below .55, -2.2 / -2.2 h) and are confirmed here on 1253:
+
+| cell | 1300 | 1253 | diff [95% CI] |
+| --- | --- | --- | --- |
+| WR+2m seed 7551 R 3.2M | 269.87 | 285.16 | -15.29 [-19.08, -11.80] |
+| WR+2m seed 7552 R 3.2M | 283.44 | 295.04 | -11.60 [-15.27, -7.85] |
+| WR seed 7551 R 3.2M | 477.19 | 506.33 | -29.14 [-37.58, -20.35] |
+| WR seed 7552 R 3.2M | 487.13 | 509.59 | -22.45 [-31.06, -14.24] |
+| WR+2m lp 1.4 R 800k | 183.04 | 194.37 | -11.33 [-15.48, -6.85] |
+| WR+2m mp 1.15 | 271.19 | 283.08 | -11.89 [-19.47, -4.67] |
+| WR+2m mp 1.45 | 271.62 | 286.42 | -14.80 [-23.09, -7.42] |
+| WR+2m cp 1.7 | 1300.6 | 1326.7 | -26 [-95, +42] (121 finishes) |
+| WR+2m door survival ~.10 | 637.5 | 667.9 | -30.4 [-58.1, -5.9] |
+
+Journal `2026-11-22-12-00-optimisation.md`.
