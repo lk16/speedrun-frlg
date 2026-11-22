@@ -1,5 +1,22 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 21:00 WR fight timing (read first; journal `journal/2026-11-22-21-00-wr-fight-timing.md`)
+
+67 WR trainer fights (Sammy -> Route 22 rival) frame-timed off the VOD with a colour-cell battle detector
+(`video-analysis/tools/battle-timeline.py`, validated against RAM on the played render), 47 of them paired with the
+same fight in the played run. Per component: overhead and per-KO equal (pre-battle speech identical to the frame),
+the WR is faster in battle text and slower in menus; **at the WR's own decision counts the WR = 0.944 [0.910, 0.987]
+x `trainer_cost`**. The x0.9 of 1283 (two fights) is not supported. Two model errors partly cancel: the 1280 sim plays
+rival/leader fights in fewer decisions than the WR (202 vs 237 over the 67 fights: X items, switches, extra hits) and
+counts level-up text twice (inside the fitted `trainer_cost` and again as `level_up`); with both, x0.944 makes the
+model's total fight time equal the WR's (3696 vs 3684 s). **MODEL CHANGE 1285-wr-fight-speed** (`trainer_cost`
+[791, 547, 211], `plans/1285-wr-fight-speed.md`): WR+2m **276.2 h, -777 [-945, -654] vs 1280** (seed 7401, R 800k);
+the factor's CI ends score 691 h (x0.987, 1286) and 167 h (x0.910, 1287). **Recommended as model of record.** With
+fights at the WR's price the no-reset clock runs ~2.5 min ahead of the WR by Giovanni 3 (-151 s; 1280: +38): the
+non-fight time is now the optimistic part. Next: (1) fix the sim's boss/rival decision count and the level-up double
+count together (refit `trainer_cost` with a level-up term: [798, 536, 251] at 240 f/level); (2) find the ~150 s of
+non-fight optimism before Giovanni 3; (3) League fight timing from the VOD with the same tool (League agent).
+
 ## 2026-11-22 19:40 main session: CURRENT = 1280-wr-faithful (model of record)
 
 1280 replaces 1301 as the model of record: the WR's own trainer list and Rare Candies (VOD-read), the emulator
