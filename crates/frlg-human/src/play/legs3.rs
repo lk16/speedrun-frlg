@@ -433,6 +433,12 @@ fn greedy_site(s: &mut Session, tried: &[String]) -> Option<crate::params::Hunt>
         if !s.graph().by_id.contains_key(site) {
             continue;
         }
+        // Kanto only: no Fly across regions, and the hunt walks from the Fly point.
+        if !fly_point(s, site, area)
+            .is_some_and(|(_, sec)| region_cell(&sec).is_some_and(|c| c.0 == 0))
+        {
+            continue;
+        }
         let (k, share) = site_new(s, site, area);
         if k == 0 {
             continue;
@@ -469,7 +475,36 @@ fn leave_to_fly(s: &mut Session, town: &str) -> PResult<()> {
             return Ok(());
         }
     }
-    go_map(s, town, &hm_opts())
+    // Walk out to the nearest outdoor map (not all the way to `town`: a cave hunt ends far from
+    // it), then Fly.
+    let _ = town;
+    let g = s.graph();
+    let out: std::collections::HashSet<MapId> = g
+        .maps
+        .iter()
+        .filter(|(_, m)| map_is_outdoors(&m.name))
+        .map(|(id, _)| *id)
+        .collect();
+    go_to(
+        s,
+        "outdoors",
+        &move |n: &Node| out.contains(&n.0),
+        &hm_opts(),
+    )
+}
+
+/// `map_type` of a map folder allows Fly (see [`outdoors`]).
+fn map_is_outdoors(name: &str) -> bool {
+    std::fs::read_to_string(decomp().join(format!("data/maps/{name}/map.json")))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|j| j["map_type"].as_str().map(str::to_string))
+        .is_some_and(|t| {
+            matches!(
+                t.as_str(),
+                "MAP_TYPE_TOWN" | "MAP_TYPE_CITY" | "MAP_TYPE_ROUTE" | "MAP_TYPE_OCEAN_ROUTE"
+            )
+        })
 }
 
 fn oak_lab_id(s: &Session) -> u8 {
@@ -1747,7 +1782,31 @@ fn pp_lead(s: &mut Session) -> PResult<()> {
     party_swap(s, b, 0)
 }
 
+/// Put the first party mon of `species` in front (if it can fight).
+fn lead_species(s: &mut Session, species: &str) -> PResult<()> {
+    let Some(i) = party_slot(s, species) else {
+        return Ok(());
+    };
+    let m = Ram::new(&s.obs).party(s.hf.rec.emu())[i].clone();
+    if i == 0 || m.hp == 0 || attack_pp(s, &m) < 8 {
+        return Ok(());
+    }
+    s.event(
+        "model-vs-actual",
+        format!(
+            "{} leads this room (Mewtwo's PP is the round's budget: 25 attacks, no Elixirs)",
+            species.trim_start_matches("SPECIES_")
+        ),
+        json!({"species": species}),
+    );
+    party_swap(s, i, 0)
+}
+
+/// Lorelei 2 and Bruno 2 go to the carry, so Mewtwo's 25 attacks (Psychic 10, Fire Blast 5,
+/// Earthquake 10) last for Agatha, Lance and the Champion; the sim's Mewtwo has the plan's PP Ups
+/// and Max Elixirs for all five, which the played route never collected.
 fn lorelei2(s: &mut Session) -> PResult<()> {
+    lead_species(s, "SPECIES_BLASTOISE")?;
     pp_lead(s)?;
     super::legs2::e4_member(
         s,
@@ -1760,6 +1819,7 @@ fn lorelei2(s: &mut Session) -> PResult<()> {
 }
 
 fn bruno2(s: &mut Session) -> PResult<()> {
+    lead_species(s, "SPECIES_BLASTOISE")?;
     pp_lead(s)?;
     super::legs2::e4_member(
         s,
@@ -1772,6 +1832,7 @@ fn bruno2(s: &mut Session) -> PResult<()> {
 }
 
 fn agatha2(s: &mut Session) -> PResult<()> {
+    lead_species(s, "SPECIES_MEWTWO")?;
     pp_lead(s)?;
     super::legs2::e4_member(
         s,
