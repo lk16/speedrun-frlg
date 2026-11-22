@@ -732,6 +732,25 @@ pub(crate) fn leg_tower(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
             )],
         );
     }
+    if p.marowak_fight {
+        // MODEL CHANGE `marowak_fight`: the Silph Scope reveals the ghost and it must be beaten (fleeing
+        // replays the scene): `PokemonTower_6F/scripts.inc:9` `setwildbattle SPECIES_MAROWAK, 30`.
+        b.push(
+            "tower-marowak",
+            Src::Guess,
+            10,
+            Kind::Special {
+                special: crate::params::Special {
+                    after: String::new(),
+                    kind: "fight".into(),
+                    species: vec!["SPECIES_MAROWAK".into()],
+                    level: 30,
+                    frames: 400,
+                    ..Default::default()
+                },
+            },
+        );
+    }
     b.maps_group("tower-rockets", &["PokemonTower_7F"], 3);
     b.text("fuji-flute", 1500, Src::Guess);
 }

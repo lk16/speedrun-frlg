@@ -914,13 +914,18 @@ pub struct Params {
     /// `decompiled/src/field_specials.c:552`; `VermilionCity_Gym/scripts.inc`: a wrong second can resets
     /// both). The human checks the 15 cans in order until the first switch, then one random neighbour
     /// (+-1 in the row, +-5 in the column); a miss re-rolls. Cost `cans_fixed + checks * can_frames`
-    /// after `surge-walk`, fitted to the two played branches (13 cans 117 s, 53 cans 199 s).
+    /// after `surge-walk`: 170 frames a check (walk to the next can + "Nope, there's only trash"), the
+    /// 53-can played branch's ~9000 frames / 53; fixed 0 (the 13-can branch's 117 s holds controller
+    /// overhead a line fit would turn into a 90 s constant, more than the WR's whole window allows).
     pub trash_cans: bool,
     pub can_frames: u32,
     pub cans_fixed: u32,
     /// MODEL CHANGE (same run): frames added at the end of the named segment, measured by the playing
     /// controller against the model (one sample each; `calibration.md`).
     pub played_extra: std::collections::HashMap<String, f64>,
+    /// MODEL CHANGE (same run): the Pokemon Tower 6F Marowak ghost is a forced wild battle (Marowak L30,
+    /// `PokemonTower_6F/scripts.inc:9`), fought by the sim's engine after the channelers. Off = not modelled.
+    pub marowak_fight: bool,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1119,9 +1124,10 @@ impl Default for Params {
             fly_badge_gate: false,
             coin_case_frames: 0,
             trash_cans: false,
-            can_frames: 122,
-            cans_fixed: 5410,
+            can_frames: 170,
+            cans_fixed: 0,
             played_extra: Default::default(),
+            marowak_fight: false,
         }
     }
 }

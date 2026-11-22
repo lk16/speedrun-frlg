@@ -3297,6 +3297,33 @@ pub fn attempt(
                         }
                     }
                 }
+                Kind::Special { special } if special.kind == "fight" => {
+                    // MODEL CHANGE `marowak_fight`: a forced one-off wild battle (the Marowak ghost,
+                    // `PokemonTower_6F/scripts.inc:9` `setwildbattle SPECIES_MAROWAK, 30`).
+                    bump(&mut st, special.frames as f64 * ctx.p.text_factor);
+                    for n in &special.species {
+                        let foe = wild_mon(ctx, &mut st, ctx.dex.id(n), special.level);
+                        let ok = sim_battle(
+                            ctx,
+                            &mut st,
+                            &mut rng,
+                            &BattleArgs {
+                                name: &seg.name,
+                                foes: &[foe],
+                                trainer: false,
+                                intro: 0,
+                                ai: 0,
+                                heals: 0,
+                                yield_: None,
+                                league: false,
+                                wild: true,
+                            },
+                        );
+                        if !ok || st.abandoned {
+                            break;
+                        }
+                    }
+                }
                 Kind::Special { special }
                     if special.requires.iter().any(|r| {
                         let d = ctx.dex.species[ctx.dex.id(r)].dex;
