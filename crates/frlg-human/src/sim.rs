@@ -2171,12 +2171,14 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         bump(st, jitter(ctx, rng, turns * 2 + 3) as f64);
         if a.trainer && std::env::var_os("FRLG_DBG_EXTRA").is_some() {
             eprintln!(
-                "extra {} pre {} battle {} turns {} kos {}",
+                "extra {} pre {} battle {} turns {} kos {} sacs {} events {}",
                 a.name,
                 t_in - t0,
                 st.clock - t_in,
                 turns,
-                out.kos.len()
+                out.kos.len(),
+                out.sacs_used + out.sacs_survived,
+                out.events
             );
         }
         if let Some(l) = st.fight_log.last_mut() {
