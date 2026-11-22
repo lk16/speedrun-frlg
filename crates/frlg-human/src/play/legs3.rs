@@ -550,7 +550,8 @@ fill_stages!(
     fill01, fill02, fill03, fill04, fill05, fill06, fill07, fill08, fill09, fill10, fill11, fill12,
     fill13, fill14, fill15, fill16, fill17, fill18, fill19, fill20, fill21, fill22, fill23, fill24
 );
-const FILL: [(&str, fn(&mut Session) -> PResult<()>); 24] = [
+type StageFn = (&'static str, fn(&mut Session) -> PResult<()>);
+const FILL: [StageFn; 24] = [
     ("dex-fill-01", fill01),
     ("dex-fill-02", fill02),
     ("dex-fill-03", fill03),
@@ -587,7 +588,7 @@ macro_rules! finish_stages {
 finish_stages!(fin1, fin2, fin3, fin4, fin5, fin6, fin7, fin8);
 /// The end of the dex fill (`dexfin.rs`): one place of the cheapest evolution / trade / gift plan
 /// per stage.
-const FINISH: [(&str, fn(&mut Session) -> PResult<()>); 8] = [
+const FINISH: [StageFn; 8] = [
     ("dex-finish-1", fin1),
     ("dex-finish-2", fin2),
     ("dex-finish-3", fin3),
