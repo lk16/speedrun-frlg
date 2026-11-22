@@ -1870,7 +1870,7 @@ pub fn league_prep(s: &mut Session) -> PResult<()> {
         );
     }
     let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
-    if (m.hp * 2 < m.max_hp || m.status != 0) && have(s, "ITEM_FULL_RESTORE") > 0 {
+    if (m.hp * 2 < m.max_hp || m.status != 0) && have(s, "ITEM_FULL_RESTORE") > fr_reserve(s) {
         super::shop::use_item_on(s, "ITEM_FULL_RESTORE", 0)?;
         s.event(
             "model-vs-actual",
@@ -1879,6 +1879,16 @@ pub fn league_prep(s: &mut Session) -> PResult<()> {
         );
     }
     Ok(())
+}
+
+/// Full Restores the between-room heals leave for the round-2 Champion: round-2 rooms
+/// (`e4-transit-<who>-2`) keep `battle::CHAMPION2_RESERVE`, the Champion's own prep keeps none.
+fn fr_reserve(s: &Session) -> u16 {
+    if s.seg.starts_with("e4-transit-") && s.seg.ends_with("-2") {
+        super::battle::CHAMPION2_RESERVE as u16
+    } else {
+        0
+    }
 }
 
 /// Max PP of move slot `i` (`gBattleMoves[].pp` plus a fifth per PP Up, `CalculatePPWithBonus`,
@@ -1910,7 +1920,11 @@ fn mewtwo_pp_prep(s: &mut Session, m: &super::ram::Mon) -> PResult<()> {
         .map(|&i| max_pp(s, m, i).saturating_sub(m.pp[i] as u32))
         .max()
         .unwrap_or(0);
-    if max > 0 && cur * 100 < max * 45 {
+    let psychic_pp = m
+        .knows(super::names::id("MOVE_PSYCHIC"))
+        .map_or(u8::MAX, |k| m.pp[k]);
+    let no_ether = have(s, "ITEM_ETHER") + have(s, "ITEM_MAX_ETHER") == 0;
+    if max > 0 && (cur * 100 < max * 45 || (psychic_pp <= 2 && no_ether)) {
         // The plain Elixir first when 10 PP a move covers the gap.
         let order = if deficit <= 10 {
             ["ITEM_ELIXIR", "ITEM_MAX_ELIXIR"]
@@ -1950,7 +1964,7 @@ fn mewtwo_pp_prep(s: &mut Session, m: &super::ram::Mon) -> PResult<()> {
         }
     }
     let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
-    if (m.hp * 2 < m.max_hp || m.status != 0) && have(s, "ITEM_FULL_RESTORE") > 0 {
+    if (m.hp * 2 < m.max_hp || m.status != 0) && have(s, "ITEM_FULL_RESTORE") > fr_reserve(s) {
         super::shop::use_item_on(s, "ITEM_FULL_RESTORE", 0)?;
         s.event(
             "model-vs-actual",

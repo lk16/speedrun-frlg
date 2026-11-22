@@ -440,8 +440,10 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
     // model (its League heals are a pool the fights share); played, the rooms spent all 13 and every
     // Champion-2 branch started with none (dev `pg-dev-fin5`, 0 of 9).
     if matches!(seg, "lorelei-2" | "bruno-2" | "agatha-2" | "lance-2") {
+        // Potions and Super Potions count for nothing at Lv 70 (the heals that matter are Hyper
+        // and Max Potions).
         let fr = count(&sc.items, ITEM_FULL_RESTORE);
-        let others = heal_count(&sc.items) - fr;
+        let others = count(&sc.items, ITEM_HYPER_POTION) + count(&sc.items, ITEM_MAX_POTION);
         tac.heal_stock = tac
             .heal_stock
             .min(others + fr.saturating_sub(CHAMPION2_RESERVE));
