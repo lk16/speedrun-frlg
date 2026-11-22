@@ -2459,16 +2459,21 @@ const EVO_STONE_SHOP: u32 = 800;
 
 /// One `Evolve` event (see `params::Evolve`). Skipped for free when the evolved form is already in
 /// the dex, the pre-evolution is not, or the stone / candies / money are not there.
-fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
+/// The stone an `Evolve` uses, as an item constant (`ITEM_MOON_STONE`), if it names one.
+pub fn evo_item(evo: &Evolve) -> Option<String> {
+    (!evo.item.is_empty()).then(|| format!("ITEM_{}_STONE", evo.item))
+}
+
+/// `evolve`'s pre-evolution: the Kanto species whose `evo` list reaches `evo.species` the way the
+/// plan says (`EVO_ITEM` with the plan's stone, else `EVO_LEVEL`; candies count as levels), among
+/// the species the human has a body of (`has`, by national number). Returns its national number
+/// and the evolution parameter (the level, or the item). Shared with the playing controller
+/// (`play/dex.rs`), which passes the party and the boxes.
+pub fn evo_source(ctx: &Ctx, evo: &Evolve, has: &dyn Fn(u32) -> bool) -> Option<(u32, String)> {
     let t = ctx.dex.id(&evo.species);
-    let tdex = ctx.dex.species[t].dex;
-    if tdex == 0 || st.caught.has(tdex) {
-        return;
-    }
-    // The pre-evolution and the way it evolves: the species whose `evo` list reaches `t`.
-    let item = (!evo.item.is_empty()).then(|| format!("ITEM_{}_STONE", evo.item));
-    let found = ctx.dex.species.iter().find_map(|sp| {
-        if sp.dex == 0 || st.bodies[sp.dex as usize] == 0 {
+    let item = evo_item(evo);
+    ctx.dex.species.iter().find_map(|sp| {
+        if sp.dex == 0 || !has(sp.dex) {
             return None;
         }
         sp.evo.iter().find_map(|(k, param, target)| {
@@ -2479,8 +2484,19 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
                 };
             ok.then(|| (sp.dex, param.clone()))
         })
-    });
-    let Some((pre, param)) = found else { return };
+    })
+}
+
+fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
+    let t = ctx.dex.id(&evo.species);
+    let tdex = ctx.dex.species[t].dex;
+    if tdex == 0 || st.caught.has(tdex) {
+        return;
+    }
+    let item = evo_item(evo);
+    let Some((pre, param)) = evo_source(ctx, evo, &|d| st.bodies[d as usize] > 0) else {
+        return;
+    };
     let lv = st.catch_lv[pre as usize] as u32;
     let mut frames = evo.frames;
     match evo.via.as_str() {
