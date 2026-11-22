@@ -226,6 +226,23 @@ impl Recorder {
         InputLog::new(self.rom_sha1, self.frames.clone())
     }
 
+    /// The masks recorded so far.
+    pub fn masks(&self) -> &[u16] {
+        &self.frames
+    }
+
+    /// Drop every recorded mask after the first `len`. Only meaningful
+    /// together with restoring the core to the state it had at `len` -- a
+    /// rollback to a checkpoint does both.
+    pub fn truncate(&mut self, len: usize) {
+        self.frames.truncate(len);
+    }
+
+    /// sha1 of the ROM this recorder runs.
+    pub fn rom_sha1(&self) -> [u8; 20] {
+        self.rom_sha1
+    }
+
     pub fn save_state(&mut self) -> Result<SaveState, RouteError> {
         Ok(self.emu.save_state()?)
     }
