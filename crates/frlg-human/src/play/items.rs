@@ -492,7 +492,7 @@ fn forget_for_teach(s: &mut Session, item: u16, slot: usize) -> PResult<()> {
 
 /// Fly map cursor (`struct MapCursor`, `decompiled/src/region_map.c:208-226`; `sMapCursor` is a
 /// pointer): `s16 x, y` at 0 and 2.
-fn fly_cursor(s: &mut Session) -> Option<(i16, i16)> {
+pub fn fly_cursor(s: &mut Session) -> Option<(i16, i16)> {
     let p = s.sym("sMapCursor");
     let emu = s.hf.rec.emu();
     let ptr = emu.read32(p);

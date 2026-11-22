@@ -1178,9 +1178,9 @@ fn floor_switches(map_name: &str) -> Vec<FloorSwitch> {
 
 /// One push of a Strength boulder: the player stands on `stand` and walks `dir`.
 #[derive(Clone, Copy, Debug)]
-struct Push {
-    stand: (i16, i16),
-    dir: (i16, i16),
+pub struct Push {
+    pub stand: (i16, i16),
+    pub dir: (i16, i16),
 }
 
 /// Shortest (in player moves) sequence of pushes on the current map that puts a boulder on a
@@ -1627,7 +1627,7 @@ fn champion(s: &mut Session) -> PResult<()> {
 
 /// Walk to each push's standing tile, face the boulder, (switch Strength on), and walk into it
 /// until it has moved.
-fn do_pushes(s: &mut Session, mid: MapId, pushes: &[Push]) -> PResult<()> {
+pub fn do_pushes(s: &mut Session, mid: MapId, pushes: &[Push]) -> PResult<()> {
     for p in pushes {
         let stand = p.stand;
         go_to(
