@@ -1509,6 +1509,7 @@ fn e4_member(
     // In through the door; the room's entry scene walks the player in (`EnterRoom`, the entrance
     // row is wall in the layout until then).
     let mid = s.graph().id(map);
+    league_prep(s)?;
     e4_door(s)?;
     go_to(s, map, &move |n: &Node| n.0 == mid, &Opts::default())?;
     settle(s)?;
@@ -1584,16 +1585,18 @@ fn lance(s: &mut Session) -> PResult<()> {
 fn champion(s: &mut Session) -> PResult<()> {
     s.seg = "champion".into();
     let room = s.graph().id("MAP_POKEMON_LEAGUE_CHAMPIONS_ROOM");
+    let hof = s.graph().id("MAP_POKEMON_LEAGUE_HALL_OF_FAME");
+    league_prep(s)?;
     e4_door(s)?;
     go_to(
         s,
         "the Champion's room",
-        &move |n: &Node| n.0 == room,
+        &move |n: &Node| n.0 == room || n.0 == hof,
         &Opts::default(),
     )?;
     let start = s.frame();
     loop {
-        if s.obs.callback2_is(s.hf.rec.emu(), "CB2_DoHallOfFameScreen") {
+        if super::prims::in_hall_of_fame(s) {
             break;
         }
         if s.frame() - start > 60_000 {
@@ -1817,6 +1820,39 @@ fn indigo_mart(s: &mut Session) -> PResult<()> {
             Some((0, 7)),
             &[("ITEM_FULL_RESTORE", n)],
         )?;
+    }
+    Ok(())
+}
+
+/// Between League rooms (no center): the human tops the carry up from the bag. An Elixir when a
+/// move is at 5 PP or less (`elixirs` kind elixir: the plan picks one up, the Mansion's hidden one;
+/// it restores 10 PP to each move), a Full Restore when the carry is below half HP or has a
+/// status. Not in the model: its League fights start from the policy's own item use in battle,
+/// and every branch with Blizzard at 3 PP lost to Lance's last mons (10 of 10).
+fn league_prep(s: &mut Session) -> PResult<()> {
+    let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    let low_pp = m
+        .moves
+        .iter()
+        .zip(m.pp.iter())
+        .any(|(&mv, &pp)| mv != 0 && pp <= 5);
+    if low_pp && have(s, "ITEM_ELIXIR") > 0 {
+        super::shop::use_item_on(s, "ITEM_ELIXIR", 0)?;
+        let pp = Ram::new(&s.obs).party(s.hf.rec.emu())[0].pp;
+        s.event(
+            "model-vs-actual",
+            "Elixir on the carry between League rooms (low PP; not in the model)",
+            json!({"pp_before": m.pp, "pp_after": pp}),
+        );
+    }
+    let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    if (m.hp * 2 < m.max_hp || m.status != 0) && have(s, "ITEM_FULL_RESTORE") > 0 {
+        super::shop::use_item_on(s, "ITEM_FULL_RESTORE", 0)?;
+        s.event(
+            "model-vs-actual",
+            "Full Restore on the carry between League rooms (not in the model)",
+            json!({"hp": m.hp, "max_hp": m.max_hp, "status": m.status}),
+        );
     }
     Ok(())
 }

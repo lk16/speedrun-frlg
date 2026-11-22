@@ -78,6 +78,10 @@ pub fn settle(s: &mut Session) -> PResult<()> {
             super::fallback_battle::battle(s)?;
             continue;
         }
+        if in_hall_of_fame(s) {
+            // The run's first Hall of Fame: the caller takes the split here.
+            return Ok(());
+        }
         if is_free(s) {
             // Free for a few frames in a row: scripts can release and re-lock between commands.
             free_run += 1;
@@ -120,6 +124,15 @@ pub fn settle(s: &mut Session) -> PResult<()> {
         s.hf.step(keys::A)?;
         s.hf.step(0)?;
     }
+}
+
+/// The Hall of Fame screen or the credits after it (`CB2_DoHallOfFameScreen`, then `CB2_HofIdle`,
+/// `decompiled/src/hall_of_fame.c:352,361`; `CB2_Credits`).
+pub fn in_hall_of_fame(s: &mut Session) -> bool {
+    let emu = s.hf.rec.emu();
+    ["CB2_DoHallOfFameScreen", "CB2_HofIdle", "CB2_Credits"]
+        .iter()
+        .any(|c| s.obs.callback2_is(emu, c))
 }
 
 /// Press `key` (late by `U{0..N}`) until `pred` holds, settling nothing else.
