@@ -325,3 +325,26 @@ per turn): per Water Pulse on Muk the hit rate by Muk's evasion stage is the sam
 full HP. Remaining gap (~12 points): the engine's Muk picks Toxic more often (5.6% of its turns vs 2.9%), so the carry is
 poisoned more (31% of Muk turns vs 16%) and more often dies at the second Koffing / Weezing after Muk (12.7% vs 5%). Not
 located in the AI port (`AI_CV_Toxic`, `AI_CBM_Poison` checked); open.
+
+## Post-game, played (controller S8, `play/legs3.rs`, 2026-11-22)
+
+Development legs on LeafGreen seed 11, started from the `fwd-canon2` first Hall of Fame; the dex was **poked to 60
+in RAM (dev only)** to get past Oak, so the legs after the National Dex are measured segments but not a run. Model
+column = difference of the model's no-reset p50 clocks between the named segments (`model-vs-actual` events).
+
+| stretch | played | model | note |
+| --- | --- | --- | --- |
+| HoF 1 -> continue (soft reset after the HoF save) | 15 s | 12 s | `hall-of-fame-1` -> `fly-pallet-2` |
+| continue -> National Dex (Oak's scenes only) | 58 s | 50 s | needs >= 60 caught (`PalletTown/scripts.inc:51-57`) |
+| National Dex -> Celio asks for the Ruby | 53 s | 82 s | fly Vermilion + Seagallop (Fly cannot cross regions) |
+| Kindle Road + 2 grunts + Ruby Path in | 343 s | 169 s | Strength boulders on B2F/B3F (15 pushes) |
+| Ruby Path out + fly + Rainbow Pass | 134 s | 80 s | boulders again on the way up (8 pushes), no Escape Rope |
+| Icefall Cave (Seagallop, ropes, HM07, Lorelei) | 335 s | 156 s | HM07 + waterfall + 2 Escape Ropes not in the model |
+| Six Island, Dotted Hole, Sapphire scene | 227 s | 0 s | not in the model: the warehouse password |
+| Five Island, Meadow, warehouse to Gideon | 660 s | 600 s | 9 fights (model 5) |
+| Sapphire to Celio | 71 s | 98 s | |
+| Vermilion, Cerulean Cave, Mewtwo, 3 TMs, lead swap | 368 s | 181 s | 52 planner bumps in Cerulean Cave 1F |
+| fly Indigo, heal, Full Restores | 40 s | 55 s | |
+
+Dex at the first Hall of Fame: 16 caught (fwd-canon2), 18 (v2) against the plan's 60; the post-HoF fill measured
+~5-6 s per frame-budget step, Seafoam B3F 4-5 new species in ~20 000 frames.

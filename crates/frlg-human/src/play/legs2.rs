@@ -1180,9 +1180,9 @@ fn floor_switches(map_name: &str) -> Vec<FloorSwitch> {
 
 /// One push of a Strength boulder: the player stands on `stand` and walks `dir`.
 #[derive(Clone, Copy, Debug)]
-struct Push {
-    stand: (i16, i16),
-    dir: (i16, i16),
+pub struct Push {
+    pub stand: (i16, i16),
+    pub dir: (i16, i16),
 }
 
 /// Shortest (in player moves) sequence of pushes on the current map that puts a boulder on a
@@ -1516,7 +1516,7 @@ fn victory_road(s: &mut Session) -> PResult<()> {
 /// One Elite Four room: walk in from the previous room (or the Indigo center's north door), face
 /// the member and talk; the battle; the door behind them opens (`PokemonLeague_*Room/scripts.inc`).
 /// Positions from `PokemonLeague_*Room/map.json`: Lorelei, Bruno, Agatha at (6, 5), Lance (6, 8).
-fn e4_member(
+pub fn e4_member(
     s: &mut Session,
     map: &str,
     who: &str,
@@ -1646,7 +1646,7 @@ fn champion(s: &mut Session) -> PResult<()> {
 
 /// Walk to each push's standing tile, face the boulder, (switch Strength on), and walk into it
 /// until it has moved.
-fn do_pushes(s: &mut Session, mid: MapId, pushes: &[Push]) -> PResult<()> {
+pub fn do_pushes(s: &mut Session, mid: MapId, pushes: &[Push]) -> PResult<()> {
     for p in pushes {
         let stand = p.stand;
         go_to(
@@ -1796,7 +1796,7 @@ fn vr_hole(s: &mut Session) -> PResult<()> {
 /// swapped by the room's script after the win, and the planner only reads the live collision, not
 /// the new warp behavior): stand below it and hold UP until the map changes. Exits: (6, 2) in
 /// Lorelei's, Bruno's and Agatha's rooms, (6, 5) in Lance's (`PokemonLeague_*Room/map.json`).
-fn e4_door(s: &mut Session) -> PResult<()> {
+pub fn e4_door(s: &mut Session) -> PResult<()> {
     let rooms: [(&str, i16, i16); 4] = [
         ("MAP_POKEMON_LEAGUE_LORELEIS_ROOM", 6, 2),
         ("MAP_POKEMON_LEAGUE_BRUNOS_ROOM", 6, 2),
@@ -1820,7 +1820,7 @@ fn e4_door(s: &mut Session) -> PResult<()> {
 /// (2500): with Max Potions every branch reached Lance paralysed (Agatha's Gengar / Lance's
 /// dragons) with only HP heals, and the policy's `FullRestore` action for a status found none
 /// (8 of 8 branches lost to Lance from the Agatha checkpoint).
-fn indigo_mart(s: &mut Session) -> PResult<()> {
+pub fn indigo_mart(s: &mut Session) -> PResult<()> {
     s.seg = "indigo-heal".into();
     s.event(
         "model-vs-actual",
@@ -1848,7 +1848,7 @@ fn indigo_mart(s: &mut Session) -> PResult<()> {
 /// it restores 10 PP to each move), a Full Restore when the carry is below half HP or has a
 /// status. Not in the model: its League fights start from the policy's own item use in battle,
 /// and every branch with Blizzard at 3 PP lost to Lance's last mons (10 of 10).
-fn league_prep(s: &mut Session) -> PResult<()> {
+pub fn league_prep(s: &mut Session) -> PResult<()> {
     let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
     let low_pp = m
         .moves
