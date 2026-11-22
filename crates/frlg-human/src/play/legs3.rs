@@ -182,19 +182,13 @@ fn national_dex(s: &mut Session) -> PResult<()> {
         if std::env::var_os("FRLG_PG_DEV_DEX").is_some() {
             dev_poke_dex(s, 60);
         }
-        for h in s.plan.params.fill.clone() {
-            if super::dex::caught_count(s) >= 60 {
-                break;
-            }
-            let rep = super::dex::hunt(s, &h)?;
-            s.event(
-                "model-vs-actual",
-                format!("fill hunt {}: {:?}", h.site, rep),
-                json!({"site": h.site}),
-            );
-        }
+        fill_to_60(s)?;
         if super::dex::caught_count(s) < 60 {
             return Err(PlayError::Fatal("still fewer than 60 caught".into()));
+        }
+        leave_to_fly(s, "MAP_PALLET_TOWN")?;
+        if here(s).is_none_or(|n| n.0 != s.graph().id("MAP_PALLET_TOWN")) {
+            super::items::fly(s, "MAPSEC_PALLET_TOWN")?;
         }
         talk_to(s, "MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB", oak_lab_id(s))?;
         settle_until_lab(s)?;
@@ -252,6 +246,230 @@ fn dev_poke_dex(s: &mut Session, want: u32) {
         format!("DEV: Pokedex owned flags poked to {n} (not a run)"),
         json!({"dev": true, "caught": n}),
     );
+}
+
+/// Is the map outdoors (Fly works: `MAP_TYPE_TOWN/CITY/ROUTE/OCEAN_ROUTE`, `map.json`
+/// `map_type`; `Overworld_MapTypeAllowsTeleportAndFly`, `decompiled/src/overworld.c`)?
+fn outdoors(s: &mut Session) -> bool {
+    let Some(n) = here(s) else { return false };
+    let name = s.graph().maps[&n.0].name.clone();
+    std::fs::read_to_string(decomp().join(format!("data/maps/{name}/map.json")))
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|j| j["map_type"].as_str().map(str::to_string))
+        .is_some_and(|t| {
+            matches!(
+                t.as_str(),
+                "MAP_TYPE_TOWN" | "MAP_TYPE_CITY" | "MAP_TYPE_ROUTE" | "MAP_TYPE_OCEAN_ROUTE"
+            )
+        })
+}
+
+/// `MAP_FOO_BAR` -> its `data/maps/<Folder>` (the folder whose `map.json` has that id).
+fn map_folder(s: &Session, id: &str) -> Option<String> {
+    let g = s.graph();
+    g.by_id.get(id).map(|m| g.maps[m].name.clone())
+}
+
+/// The fly point nearest a hunt site (`human-run/data/flydist.json`, `HEAL_LOCATION_*`) as
+/// (heal location map, its `MAPSEC_*`).
+fn fly_point(s: &Session, site: &str, area: &str) -> Option<(String, String)> {
+    let fd: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string("human-run/data/flydist.json").ok()?).ok()?;
+    let e = fd.get(format!("{site}|{area}"))?;
+    let hl = e["from"].as_str()?.to_string();
+    let heal: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(decomp().join("src/data/heal_locations.json")).ok()?,
+    )
+    .ok()?;
+    let map = heal["heal_locations"]
+        .as_array()?
+        .iter()
+        .find(|h| h["id"] == hl.as_str())?["map"]
+        .as_str()?
+        .to_string();
+    let folder = map_folder(s, &map)?;
+    let j: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(decomp().join(format!("data/maps/{folder}/map.json"))).ok()?,
+    )
+    .ok()?;
+    Some((map, j["region_map_section"].as_str()?.to_string()))
+}
+
+/// How many uncaught Kanto species a site's area offers, and their share of the encounters.
+fn site_new(s: &mut Session, site: &str, area: &str) -> (u32, f64) {
+    let a = match area {
+        "water" => crate::data::Area::Water,
+        _ => crate::data::Area::Land,
+    };
+    let lg = s.plan.params.version == "LG";
+    let Some((_, slots, w)) = s.plan.dex.area(site, a, lg, "none") else {
+        return (0, 0.0);
+    };
+    let owned = super::dex::owned_set(s);
+    let mut seen = std::collections::HashSet::new();
+    let mut share = 0.0;
+    let tot: u32 = w.iter().sum::<u32>().max(1);
+    for (i, sl) in slots.iter().enumerate() {
+        let sp = &s.plan.dex.species[sl.species];
+        if sp.dex == 0 || sp.dex > 151 || owned[sp.dex as usize] {
+            continue;
+        }
+        share += w.get(i).copied().unwrap_or(0) as f64 / tot as f64;
+        seen.insert(sl.species);
+    }
+    (seen.len() as u32, share)
+}
+
+/// Not in the model's run: the plan's 60 for Oak's check are caught before the League
+/// (`route_wr.rs`: "All 60 were caught before the League"), but the played route reached the Hall
+/// of Fame far short of it, and the plan's `fill` hunts are never anchored (`dex::dex_hook` runs
+/// `hunts`, not `fill`). The human catches up here: Great Balls at the Celadon store (2F,
+/// `CeladonCity_DepartmentStore_2F/scripts.inc`), the plan's `fill` sites in order, then the Kanto
+/// site with the most uncaught species (greedy), each reached by flying to its nearest Fly point
+/// (`human-run/data/flydist.json`), until 60 are caught. Every hunt is the dex module's
+/// (`dex::hunt`: `sim::wants_catch`, the plan's ball rules).
+fn fill_to_60(s: &mut Session) -> PResult<()> {
+    let t0 = s.timer().unwrap_or(0.0);
+    let start_n = super::dex::caught_count(s);
+    let mut tried: Vec<String> = vec![];
+    let fill: Vec<crate::params::Hunt> = s.plan.params.fill.clone();
+    for round in 0..40 {
+        let n = super::dex::caught_count(s);
+        if n >= 60 {
+            break;
+        }
+        let balls =
+            have(s, "ITEM_GREAT_BALL") + have(s, "ITEM_POKE_BALL") + have(s, "ITEM_ULTRA_BALL");
+        if balls < 8 {
+            let want = (2 * (60 - n) as u16).clamp(12, 50);
+            let money = Ram::new(&s.obs).money(s.hf.rec.emu());
+            // Keep the League's Full Restores (`league_heals`) and four Escape Ropes.
+            let keep = s.plan.params.league_heals as u32 * 3000 + 4 * 550;
+            let afford = (money.saturating_sub(keep) / 600) as u16;
+            let k = want.saturating_sub(balls).min(afford);
+            if k == 0 {
+                return Err(PlayError::Fatal(format!(
+                    "dex fill: {n} caught, no balls and no money for them"
+                )));
+            }
+            leave_to_fly(s, "MAP_CELADON_CITY")?;
+            super::items::fly(s, "MAPSEC_CELADON_CITY")?;
+            super::shop::buy(
+                s,
+                "MAP_CELADON_CITY_DEPARTMENT_STORE_2F",
+                Some((1, 8)),
+                &[("ITEM_GREAT_BALL", k)],
+            )?;
+        }
+        let mut next = None;
+        for h in &fill {
+            if !tried.contains(&h.site) && site_new(s, &h.site, &h.area).0 > 0 {
+                next = Some(h.clone());
+                break;
+            }
+        }
+        let next = match next {
+            Some(h) => Some(h),
+            None => greedy_site(s, &tried),
+        };
+        let Some(mut h) = next else {
+            return Err(PlayError::Fatal(format!(
+                "dex fill: {n} caught, no site left"
+            )));
+        };
+        tried.push(h.site.clone());
+        if h.steps == 0 {
+            h.steps = 120;
+        }
+        if let Some((map, sec)) = fly_point(s, &h.site, &h.area) {
+            let fl = format!("FLAG_WORLD_MAP_{}", map.trim_start_matches("MAP_"));
+            let known = super::names::names().get(&fl).is_some();
+            if (!known || flag(s, &fl)) && region_cell(&sec).is_some_and(|c| c.0 == 0) {
+                leave_to_fly(s, &map)?;
+                super::items::fly(s, &sec)?;
+            }
+        }
+        let (k, share) = site_new(s, &h.site, &h.area);
+        s.event(
+            "decision",
+            format!(
+                "dex fill {round}: {} ({k} uncaught species, {:.0}% of encounters), {n} caught",
+                h.site.trim_start_matches("MAP_"),
+                share * 100.0
+            ),
+            json!({"site": h.site, "new_species": k, "share": share, "caught": n}),
+        );
+        super::dex::hunt(s, &h)?;
+    }
+    let n = super::dex::caught_count(s);
+    s.event(
+        "model-vs-actual",
+        format!(
+            "dex fill after the Hall of Fame: {start_n} -> {n} caught in {:.0}s (the model has none here)",
+            s.timer().unwrap_or(0.0) - t0
+        ),
+        json!({"from": start_n, "to": n, "seconds": s.timer().unwrap_or(0.0) - t0}),
+    );
+    if n < 60 {
+        return Err(PlayError::Fatal(format!("dex fill stopped at {n} caught")));
+    }
+    Ok(())
+}
+
+/// The not-yet-tried Kanto site (land or water, `flydist.json`) with the most uncaught species;
+/// ties go to the larger encounter share, then the shorter walk from its Fly point.
+fn greedy_site(s: &mut Session, tried: &[String]) -> Option<crate::params::Hunt> {
+    let fd: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string("human-run/data/flydist.json").ok()?).ok()?;
+    let mut best: Option<(u32, f64, i64, String, String)> = None;
+    for (key, v) in fd.as_object()? {
+        let Some((site, area)) = key.split_once('|') else {
+            continue;
+        };
+        if area == "fish" || tried.iter().any(|t| t == site) || site.contains("SAFARI") {
+            continue;
+        }
+        if !s.graph().by_id.contains_key(site) {
+            continue;
+        }
+        let (k, share) = site_new(s, site, area);
+        if k == 0 {
+            continue;
+        }
+        let tiles = v["tiles"].as_i64().unwrap_or(999);
+        let better = match &best {
+            None => true,
+            Some(b) => (k, share, -tiles) > (b.0, b.1, b.2),
+        };
+        if better {
+            best = Some((k, share, -tiles, site.to_string(), area.to_string()));
+        }
+    }
+    let (_, _, _, site, area) = best?;
+    Some(crate::params::Hunt {
+        site,
+        area,
+        steps: 120,
+        ..Default::default()
+    })
+}
+
+/// Get somewhere Fly works: outdoors already, else an Escape Rope if the bag has one, else walk
+/// to `town` (out of the cave or building the last hunt ended in).
+fn leave_to_fly(s: &mut Session, town: &str) -> PResult<()> {
+    if outdoors(s) {
+        return Ok(());
+    }
+    if have(s, "ITEM_ESCAPE_ROPE") > 0 {
+        let from = here(s);
+        super::shop::use_item(s, "ITEM_ESCAPE_ROPE")?;
+        super::legs2::settle_until(s, "the Escape Rope", 3000, move |s| here(s) != from)?;
+        if outdoors(s) {
+            return Ok(());
+        }
+    }
+    go_map(s, town, &hm_opts())
 }
 
 fn oak_lab_id(s: &Session) -> u8 {
@@ -1483,7 +1701,54 @@ fn league2_entry(s: &mut Session) -> PResult<()> {
     Ok(())
 }
 
+/// Attacking PP (moves with power) of a party mon, weighted by nothing: the number of attacks left.
+fn attack_pp(s: &Session, m: &super::ram::Mon) -> u32 {
+    m.moves
+        .iter()
+        .zip(m.pp.iter())
+        .filter(|(&mv, _)| {
+            mv != 0
+                && super::battle::move_index(s.plan.dex, mv)
+                    .is_some_and(|i| s.plan.dex.moves[i].power > 0)
+        })
+        .map(|(_, &pp)| pp as u32)
+        .sum()
+}
+
+/// Between League rooms (no center, and this run has no Elixir left): when the lead has fewer
+/// than 8 attacks left, the party mon with the most leads instead. Not in the model: its Mewtwo
+/// keeps its PP topped up with the plan's Max Elixirs and PP Ups (`mewtwo_pp`,
+/// `apply_pp_ups`), which the played route never picked up; Mewtwo reached Lance 2 with Psychic
+/// and Fire Blast at 0 and lost 12 of 12 branches using Calm Mind only.
+fn pp_lead(s: &mut Session) -> PResult<()> {
+    let party = Ram::new(&s.obs).party(s.hf.rec.emu());
+    let lead = attack_pp(s, &party[0]);
+    if lead >= 8 {
+        return Ok(());
+    }
+    let best = (1..party.len())
+        .filter(|&i| party[i].hp > 0 && party[i].level >= 40)
+        .max_by_key(|&i| attack_pp(s, &party[i]));
+    let Some(b) = best else { return Ok(()) };
+    let pp_b = attack_pp(s, &party[b]);
+    if pp_b <= lead {
+        return Ok(());
+    }
+    s.event(
+        "model-vs-actual",
+        format!(
+            "lead has {lead} attacks left (no Elixir in the bag): {} leads ({pp_b} attacks)",
+            super::names::names()
+                .species(party[b].species)
+                .trim_start_matches("SPECIES_")
+        ),
+        json!({"lead_pp": lead, "new_lead_pp": pp_b, "slot": b}),
+    );
+    party_swap(s, b, 0)
+}
+
 fn lorelei2(s: &mut Session) -> PResult<()> {
+    pp_lead(s)?;
     super::legs2::e4_member(
         s,
         "MAP_POKEMON_LEAGUE_LORELEIS_ROOM",
@@ -1495,6 +1760,7 @@ fn lorelei2(s: &mut Session) -> PResult<()> {
 }
 
 fn bruno2(s: &mut Session) -> PResult<()> {
+    pp_lead(s)?;
     super::legs2::e4_member(
         s,
         "MAP_POKEMON_LEAGUE_BRUNOS_ROOM",
@@ -1506,6 +1772,7 @@ fn bruno2(s: &mut Session) -> PResult<()> {
 }
 
 fn agatha2(s: &mut Session) -> PResult<()> {
+    pp_lead(s)?;
     super::legs2::e4_member(
         s,
         "MAP_POKEMON_LEAGUE_AGATHAS_ROOM",
@@ -1517,6 +1784,7 @@ fn agatha2(s: &mut Session) -> PResult<()> {
 }
 
 fn lance2(s: &mut Session) -> PResult<()> {
+    pp_lead(s)?;
     super::legs2::e4_member(
         s,
         "MAP_POKEMON_LEAGUE_LANCES_ROOM",
@@ -1533,6 +1801,7 @@ fn lance2(s: &mut Session) -> PResult<()> {
 /// first frame of the Hall of Fame screen (`CB2_DoHallOfFameScreen`).
 fn champion2(s: &mut Session) -> PResult<()> {
     s.seg = "champion-2".into();
+    pp_lead(s)?;
     let room = s.graph().id("MAP_POKEMON_LEAGUE_CHAMPIONS_ROOM");
     let hof = s.graph().id("MAP_POKEMON_LEAGUE_HALL_OF_FAME");
     super::legs2::league_prep(s)?;
