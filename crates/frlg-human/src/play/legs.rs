@@ -340,16 +340,11 @@ fn tower_fuji(s: &mut Session) -> PResult<()> {
     talk_to(s, "MAP_POKEMON_TOWER_7F", 1)?;
     settle(s)?;
     let flute = super::names::id("ITEM_POKE_FLUTE");
-    for _ in 0..3 {
-        if super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), flute) > 0 {
-            break;
-        }
-        // Fuji's house: he talks on arrival; if not, talk to him.
+    // In the Volunteer House he has to be talked to (object 1,
+    // `LavenderTown_VolunteerPokemonHouse/scripts.inc` `MrFuji`: `giveitem_msg ... ITEM_POKE_FLUTE`).
+    if super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), flute) == 0 {
+        talk_to(s, "MAP_LAVENDER_TOWN_VOLUNTEER_POKEMON_HOUSE", 1)?;
         settle(s)?;
-        if super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), flute) == 0 {
-            s.hf.press(keys::A)?;
-            settle(s)?;
-        }
     }
     if super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), flute) == 0 {
         return Err(super::session::PlayError::Fatal(
