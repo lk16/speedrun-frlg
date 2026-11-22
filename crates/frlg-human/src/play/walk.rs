@@ -32,6 +32,16 @@ pub type MapId = (u8, u8);
 const MB_WATER: [u16; 9] = [0x10, 0x11, 0x12, 0x13, 0x15, 0x19, 0x1A, 0x1B, 0x22];
 /// Warp tiles are enterable despite their collision bit: `MB_CAVE_DOOR` 0x60 .. 0x6F except
 /// `MB_LAVARIDGE_1F_WARP` 0x68 (`metatile_behaviors.h`).
+fn spin_dir(b: u16) -> Option<(i16, i16)> {
+    match b {
+        0x54 => Some((1, 0)),
+        0x55 => Some((-1, 0)),
+        0x56 => Some((0, -1)),
+        0x57 => Some((0, 1)),
+        _ => None,
+    }
+}
+
 fn is_warp_tile(b: u16) -> bool {
     (0x60..0x70).contains(&b) && b != 0x68
 }
@@ -284,6 +294,9 @@ pub struct Opts {
     /// Collision of other maps as a script will have left it when the player gets there (the
     /// Mansion's switch doors): (map, x, y, blocked). The current map's live grid wins.
     pub patch: Vec<(&'static str, i16, i16, bool)>,
+    /// Fail with a `Death("blocked: ...")` at once when the live view has no path (the caller
+    /// knows a way to reset the blocker, e.g. leaving and re-entering the map).
+    pub strict: bool,
 }
 
 pub type Node = (MapId, i16, i16);
@@ -580,6 +593,48 @@ impl Graph {
                     continue;
                 }
                 let Some(t) = m.tile(nx, ny) else { continue };
+                // Spin tiles (`MB_SPIN_RIGHT/LEFT/UP/DOWN` 0x54-0x57, `MB_STOP_SPINNING` 0x58,
+                // `decompiled/include/constants/metatile_behaviors.h:66-70`): stepping on one
+                // slides the player its way, turning on every further spin tile, until a stop tile
+                // or something solid (`field_player_avatar.c` forced movement). The node is where
+                // the slide ends.
+                if spin_dir(t.behavior).is_some() && !surfing && !blk.contains(&(nx, ny)) {
+                    let (mut cx, mut cy) = (nx, ny);
+                    let mut d = spin_dir(t.behavior).unwrap();
+                    let mut n = 0;
+                    loop {
+                        n += 1;
+                        if n > 64 {
+                            break;
+                        }
+                        let (tx, ty) = (cx + d.0, cy + d.1);
+                        let free = self.passable(m, tx, ty, false) == Some(false)
+                            && !blk.contains(&(tx, ty));
+                        if !free {
+                            break;
+                        }
+                        cx = tx;
+                        cy = ty;
+                        let b = m.tile(cx, cy).map_or(0, |t| t.behavior);
+                        if b == 0x58 {
+                            break;
+                        }
+                        if let Some(nd) = spin_dir(b) {
+                            d = nd;
+                        }
+                    }
+                    if n <= 64 {
+                        push(
+                            &mut q,
+                            &mut dist,
+                            &mut prev,
+                            ((mid, cx, cy), di as u8, false),
+                            STEP * (1 + n as u32 / 2) + turn,
+                            Move::Step(key),
+                        );
+                    }
+                    continue;
+                }
                 if let Some(hop) = ledge(t.behavior) {
                     if hop == (dx, dy) && !surfing {
                         let (lx, ly) = (nx + dx, ny + dy);
@@ -794,7 +849,13 @@ pub fn go_to(
             )));
         }
         let v = view(s, &temp_block);
-        let plan = s.graph().plan(&v, cur, goal, opts).or_else(|| {
+        let live = s.graph().plan(&v, cur, goal, opts);
+        if live.is_none() && opts.strict {
+            return Err(PlayError::Death(format!(
+                "blocked: {what}: no path around live objects"
+            )));
+        }
+        let plan = live.or_else(|| {
             // Which live input closed the way? Try the layout's own collision, then no people.
             let mut v2 = view(s, &temp_block);
             v2.cur_live = None;

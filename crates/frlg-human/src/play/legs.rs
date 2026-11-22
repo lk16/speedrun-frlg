@@ -358,7 +358,11 @@ fn tower_fuji(s: &mut Session) -> PResult<()> {
 /// Heal at a Pokémon Center: walk in, stand two tiles below the nurse (the counter between),
 /// face up, talk, and let the script run (its yes/no defaults to YES).
 pub fn center_heal(s: &mut Session, center_map: &str) -> PResult<()> {
-    let o = Opts::default();
+    // Cut usable (a gym behind Cut trees, e.g. Celadon's, has to be left the same way).
+    let o = Opts {
+        cut: true,
+        ..Opts::default()
+    };
     let g = s.graph();
     let mid = g.id(center_map);
     let nurse = g.maps[&mid]

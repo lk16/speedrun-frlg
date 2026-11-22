@@ -61,10 +61,10 @@ pub fn talk_at(s: &mut Session, map: &str, x: i16, y: i16) -> PResult<()> {
     .map(|&(dx, dy, k)| (x + 2 * dx, y + 2 * dy, k))
     .collect();
     if let Some(&(sx, sy, k)) = across.first() {
-        go(s, map, sx, sy, &Opts::default())?;
+        go(s, map, sx, sy, &walk_opts())?;
         face(s, k)?;
     } else {
-        go_face(s, map, x, y, &Opts::default())?;
+        go_face(s, map, x, y, &walk_opts())?;
     }
     s.hf.press(keys::A)?;
     for _ in 0..12 {
@@ -370,7 +370,7 @@ fn open_storage(s: &mut Session, center_map: &str, row: i8) -> PResult<()> {
             .find(|&(x, y)| m.tile(x, y).is_some_and(|t| t.behavior == MB_PC))
             .ok_or_else(|| PlayError::Fatal(format!("no PC on {center_map}")))?;
         // The PC sits in the back wall: use it from the tile below, facing up.
-        go(s, center_map, pc.0, pc.1 + 1, &Opts::default())?;
+        go(s, center_map, pc.0, pc.1 + 1, &walk_opts())?;
         face(s, keys::UP)?;
         s.hf.press(keys::A)?;
         // "Booted up the PC." -> "Which PC should be accessed?" (`CreatePCMenu`,
@@ -418,9 +418,22 @@ pub fn pc(s: &mut Session, center_map: &str, ops: &[PcOp]) -> PResult<()> {
                 })?;
             }
             open_storage(s, center_map, row)?;
-            wait_until(s, "the storage screen", 900, |s| {
-                storage_ready(s, "Task_PokeStorageMain")
-            })?;
+            // The PC menu's A can be dropped: press it again while that menu still waits.
+            let start = s.hf.fed();
+            while !storage_ready(s, "Task_PokeStorageMain") {
+                if s.hf.fed() - start > 900 {
+                    return Err(PlayError::Death(
+                        "soft-lock: waited 900 frames for the storage screen".into(),
+                    ));
+                }
+                if menu::task(s, "Task_PCMainMenu") && menu::menu_cursor(s) == row {
+                    s.hf.late()?;
+                    s.hf.press(keys::A)?;
+                    s.hf.idle(20)?;
+                } else {
+                    s.hf.step(0)?;
+                }
+            }
             s.hf.idle(8)?;
             // `gStorage->boxOption` (offset 1): OPTION_WITHDRAW 0, OPTION_DEPOSIT 1.
             let g = s.sym("gStorage");
@@ -465,8 +478,8 @@ fn deposit(s: &mut Session, slot: usize) -> PResult<()> {
         s.hf.press(k)?;
         s.hf.idle(6)?;
     }
-    s.hf.press(keys::A)?;
-    wait_until(s, "the mon's storage menu", 300, selection_menu_up)?;
+    // A until the menu opens (a single press is dropped while the cursor still glides).
+    press_until(s, "the mon's storage menu", keys::A, 300, selection_menu_up)?;
     menu::choose(s, 0)?; // STORE
     wait_until(s, "the box chooser", 300, |s| {
         menu::task(s, "Task_DepositMenu") && storage_state(s) == 1
@@ -572,8 +585,8 @@ fn withdraw(s: &mut Session, species: u16) -> PResult<()> {
         s.hf.press(k)?;
         s.hf.idle(6)?;
     }
-    s.hf.press(keys::A)?;
-    wait_until(s, "the mon's storage menu", 300, selection_menu_up)?;
+    // A until the menu opens (a single press is dropped while the cursor still glides).
+    press_until(s, "the mon's storage menu", keys::A, 300, selection_menu_up)?;
     menu::choose(s, 0)?; // WITHDRAW
     wait_until(s, "the withdraw", 600, |s| {
         storage_ready(s, "Task_PokeStorageMain")
@@ -678,4 +691,12 @@ pub fn use_item_on(s: &mut Session, item: &str, slot: usize) -> PResult<u16> {
     );
     let _ = here(s);
     Ok(now)
+}
+
+/// The walk to a clerk or a PC may start far away (after a hunt): Cut trees on the way are cut.
+fn walk_opts() -> Opts {
+    Opts {
+        cut: true,
+        ..Opts::default()
+    }
 }

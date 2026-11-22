@@ -102,6 +102,16 @@ pub fn settle(s: &mut Session) -> PResult<()> {
             s.hf.idle(2)?;
             continue;
         }
+        // A party menu or bag left open (a teach that already happened): back out with B; an A
+        // there would pick the mon or the item again ("already knows" loops).
+        if s.obs.callback2_is(s.hf.rec.emu(), "CB2_UpdatePartyMenu")
+            || s.obs.callback2_is(s.hf.rec.emu(), "CB2_BagMenuRun")
+        {
+            s.hf.late()?;
+            s.hf.step(keys::B)?;
+            s.hf.idle(8)?;
+            continue;
+        }
         // One human press of A, then a release frame.
         s.hf.late()?;
         if s.obs.in_battle(s.hf.rec.emu()) || is_free(s) {

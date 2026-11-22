@@ -1009,6 +1009,113 @@ fn sabrina(s: &mut Session) -> PResult<()> {
     dex_hook(s, "sabrina-badge")
 }
 
+/// "fly-celadon-3", `erika_leg`: Erika at (6, 4) behind the gym's Cut trees
+/// (`CeladonCity_Gym/map.json`) -> the "Erika" split; the plan's heal and evolutions after the
+/// badge (`extra_heals`, `evolutions` after erika-badge).
+fn erika(s: &mut Session) -> PResult<()> {
+    s.seg = "fly-celadon-3".into();
+    fly_from_here(s, "MAP_SAFFRON_CITY", "MAPSEC_CELADON_CITY")?;
+    s.seg = "erika-walk".into();
+    let _ = super::items::mount_bike(s)?;
+    go_face(s, "MAP_CELADON_CITY_GYM", 6, 4, &hm_opts())?;
+    s.seg = "erika".into();
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    if !flag(s, "FLAG_BADGE04_GET") {
+        return Err(PlayError::Fatal("no Rainbow Badge after Erika".into()));
+    }
+    split(s, "Erika", "erika-badge")?;
+    center_heal(s, "MAP_CELADON_CITY_POKEMON_CENTER_1F")?;
+    dex_hook(s, "erika-badge")
+}
+
+/// HM04 needs a carrier (see `teach_surf`): Lapras, the Silph 7F gift (it went to the PC with a
+/// full party; `tmhm_learnsets.h` Lapras HM04). At the Viridian center the human deposits Doduo
+/// (no role left in the plan: `evo-dodrio@koga-badge` needs Lv31, it is Lv26 and never fights)
+/// and withdraws Lapras, then teaches Strength for Victory Road
+/// (`VictoryRoad_*F/map.json` `EventScript_StrengthBoulder`).
+fn strength_carrier(s: &mut Session) -> PResult<()> {
+    let lapras = id("SPECIES_LAPRAS");
+    let party = Ram::new(&s.obs).party(s.hf.rec.emu());
+    if !party.iter().any(|m| m.species == lapras) {
+        let slot = party
+            .iter()
+            .position(|m| m.species == id("SPECIES_DODUO"))
+            .unwrap_or(party.len() - 1);
+        // Two PC sessions: switching from deposit to withdraw inside one sometimes closes the PC.
+        if party.len() >= 6 {
+            super::shop::pc(
+                s,
+                "MAP_VIRIDIAN_CITY_POKEMON_CENTER_1F",
+                &[super::shop::PcOp::Deposit(slot)],
+            )?;
+        }
+        super::shop::pc(
+            s,
+            "MAP_VIRIDIAN_CITY_POKEMON_CENTER_1F",
+            &[super::shop::PcOp::Withdraw(lapras)],
+        )?;
+    }
+    let party = Ram::new(&s.obs).party(s.hf.rec.emu());
+    let Some(slot) = party.iter().position(|m| m.species == lapras) else {
+        return Err(PlayError::Fatal("no Lapras for Strength".into()));
+    };
+    if party[slot].knows(id("MOVE_STRENGTH")).is_none() {
+        super::items::teach_tmhm(s, "ITEM_HM04", slot)?;
+    }
+    s.event(
+        "model-vs-actual",
+        "Strength carrier: Lapras withdrawn at Viridian (PC visit not in the model) and taught HM04",
+        json!({"segment": "fly-viridian"}),
+    );
+    Ok(())
+}
+
+/// `leg_viridian`: "fly-viridian" (and the plan's trade and Diglett's Cave hunt after it), the
+/// Strength carrier, the gym (spin tiles: the planner treats them as floor and replans after
+/// each slide), Giovanni at (2, 2) -> the "Giovanni" split.
+fn giovanni(s: &mut Session) -> PResult<()> {
+    s.seg = "fly-viridian".into();
+    fly_from_here(s, "MAP_CELADON_CITY", "MAPSEC_VIRIDIAN_CITY")?;
+    dex_hook(s, "fly-viridian")?;
+    strength_carrier(s)?;
+    s.seg = "viridian-gym-walk".into();
+    // A gym trainer who walked up to the player stays where the battle left him
+    // (`trainerbattle` approach, no walk back) and can wall off a spinner pocket (Takashi at
+    // (10, 2) ends on (10, 4), the only way out of the x 9-10 pocket). The human steps out of the
+    // gym and back in, which reloads the trainers at their map positions.
+    let strict = Opts {
+        strict: true,
+        ..hm_opts()
+    };
+    let mut reentries = 0;
+    loop {
+        match go_face(s, "MAP_VIRIDIAN_CITY_GYM", 2, 2, &strict) {
+            Ok(()) => break,
+            Err(PlayError::Death(m)) if m.starts_with("blocked") && reentries < 3 => {
+                reentries += 1;
+                s.event(
+                    "model-vs-actual",
+                    "Viridian Gym: a beaten trainer blocks the way back; out of the gym and in \
+                     again to reset him (not in the model)",
+                    json!({"reentry": reentries}),
+                );
+                go_map(s, "MAP_VIRIDIAN_CITY", &hm_opts())?;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    s.seg = "giovanni".into();
+    s.hf.press(keys::A)?;
+    settle(s)?;
+    if !flag(s, "FLAG_BADGE08_GET") {
+        return Err(PlayError::Fatal("no Earth Badge after Giovanni".into()));
+    }
+    split(s, "Giovanni", "giovanni-badge")?;
+    center_heal(s, "MAP_VIRIDIAN_CITY_POKEMON_CENTER_1F")?;
+    dex_hook(s, "giovanni-badge")
+}
+
 pub fn stages() -> Vec<Stage> {
     vec![
         Stage {
@@ -1074,6 +1181,14 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "sabrina",
             run: sabrina,
+        },
+        Stage {
+            name: "erika",
+            run: erika,
+        },
+        Stage {
+            name: "giovanni",
+            run: giovanni,
         },
     ]
 }
