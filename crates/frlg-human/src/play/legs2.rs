@@ -297,7 +297,9 @@ fn mansion_to(s: &mut Session, what: &str, goal: &dyn Fn(&Node) -> bool) -> PRes
             ),
             json!({"statue": i, "switch_on": now, "est_steps": cost}),
         );
-        last = Some(i);
+        if now != on {
+            last = Some(i);
+        }
     }
     Err(PlayError::Death(format!(
         "soft-lock: Mansion: 8 switch rounds toward {what}"
@@ -1485,8 +1487,25 @@ fn victory_road(s: &mut Session) -> PResult<()> {
     dex_hook(s, "route23")?;
     s.seg = "victory-road".into();
     go_map(s, "MAP_VICTORY_ROAD_1F", &hm_opts())?;
+    // Out on Route 23's north part, where the plan's Max Elixir lies hidden (`elixirs` kind max
+    // after route23: the bg event at (9, 8) of `Route23/map.json`); it feeds the League's PP.
+    let r23 = s.graph().id("MAP_ROUTE23");
     let plateau = s.graph().id("MAP_INDIGO_PLATEAU_EXTERIOR");
-    strength_to(s, "Indigo Plateau", &move |n: &Node| n.0 == plateau)?;
+    strength_to(s, "Route 23 north", &move |n: &Node| {
+        (n.0 == r23 && n.2 < 25) || n.0 == plateau
+    })?;
+    if !flag(s, "FLAG_HIDDEN_ITEM_ROUTE23_MAX_ELIXIR") && here(s).is_some_and(|n| n.0 == r23) {
+        go_face(s, "MAP_ROUTE23", 9, 8, &hm_opts())?;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        let n = have(s, "ITEM_MAX_ELIXIR");
+        s.event(
+            "decision",
+            "Route 23: hidden Max Elixir",
+            json!({"max_elixir": n}),
+        );
+    }
+    go_map(s, "MAP_INDIGO_PLATEAU_EXTERIOR", &hm_opts())?;
     dex_hook(s, "victory-road")?;
     dex_hook(s, "dex-fill")?;
     s.seg = "indigo-heal".into();
@@ -1836,8 +1855,11 @@ fn league_prep(s: &mut Session) -> PResult<()> {
         .iter()
         .zip(m.pp.iter())
         .any(|(&mv, &pp)| mv != 0 && pp <= 5);
-    if low_pp && have(s, "ITEM_ELIXIR") > 0 {
-        super::shop::use_item_on(s, "ITEM_ELIXIR", 0)?;
+    let elixir = ["ITEM_MAX_ELIXIR", "ITEM_ELIXIR"]
+        .into_iter()
+        .find(|it| have(s, it) > 0);
+    if let (true, Some(it)) = (low_pp, elixir) {
+        super::shop::use_item_on(s, it, 0)?;
         let pp = Ram::new(&s.obs).party(s.hf.rec.emu())[0].pp;
         s.event(
             "model-vs-actual",
