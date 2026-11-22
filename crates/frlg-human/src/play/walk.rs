@@ -494,10 +494,8 @@ impl Graph {
             let warp_here = m
                 .tile(x, y)
                 .is_some_and(|t| is_warp_tile(t.behavior) || arrow_dir(t.behavior).is_some());
-            if let Some(&(_, _, Some(dm), wid)) = m
-                .warps
-                .iter()
-                .find(|w| warp_here && (w.0, w.1) == (x, y))
+            if let Some(&(_, _, Some(dm), wid)) =
+                m.warps.iter().find(|w| warp_here && (w.0, w.1) == (x, y))
             {
                 if let Some(dmap) = self.maps.get(&dm) {
                     if let Some(&(dx, dy, _, _)) = dmap.warps.get(wid) {

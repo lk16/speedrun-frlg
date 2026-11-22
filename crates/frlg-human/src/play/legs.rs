@@ -437,7 +437,13 @@ fn safari_trip(s: &mut Session) -> PResult<()> {
     go_map(s, "MAP_FUCHSIA_CITY_SAFARI_ZONE_ENTRANCE", &Opts::default())?;
     // Stand below the trigger row, step up onto it, and answer the fee's yes/no explicitly
     // (`AskEnterSafariZone`: a NO walks the player back down).
-    go(s, "MAP_FUCHSIA_CITY_SAFARI_ZONE_ENTRANCE", 4, 4, &Opts::default())?;
+    go(
+        s,
+        "MAP_FUCHSIA_CITY_SAFARI_ZONE_ENTRANCE",
+        4,
+        4,
+        &Opts::default(),
+    )?;
     s.hf.late()?;
     let mut fed = 0;
     while !s.obs.field_controls_locked(s.hf.rec.emu()) {
@@ -454,7 +460,9 @@ fn safari_trip(s: &mut Session) -> PResult<()> {
     settle(s)?;
     let center = s.graph().id("MAP_SAFARI_ZONE_CENTER");
     if here(s).map(|n| n.0) != Some(center) {
-        return Err(super::session::PlayError::Fatal("not in the Safari Zone after the fee".into()));
+        return Err(super::session::PlayError::Fatal(
+            "not in the Safari Zone after the fee".into(),
+        ));
     }
     Ok(())
 }
