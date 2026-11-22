@@ -749,8 +749,15 @@ pub(super) fn pickup(
     let before = have(s, item);
     let t0 = s.frame();
     go_face(s, map, x, y, &hm_opts())?;
-    s.hf.press(keys::A)?;
-    settle(s)?;
+    // A press can be dropped on the frame the walk ends: retry while the flag is still clear.
+    for _ in 0..4 {
+        s.hf.late()?;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        if flag(s, gone_flag) {
+            break;
+        }
+    }
     let after = have(s, item);
     s.event(
         if after > before { "decision" } else { "warn" },
@@ -987,7 +994,22 @@ fn seagallop(s: &mut Session, from: u8, to: u8) -> PResult<()> {
     }
     // "Where do you want to sail?" is `message` + `waitmessage`: the list opens by itself, and a
     // mashed A would take its first row (`OneIsland_Harbor/scripts.inc` `Sailor`).
-    wait_until(s, "the Seagallop list", 900, menu::multichoice_up)?;
+    // Vermilion's sailor prints "Ah, you have a TRI-PASS.\p..." first: the page break waits for A
+    // (`VermilionCity_Text_BoardSeagallopTriPass`, `VermilionCity/text.inc:77-80`). A is pressed
+    // only while no list is up (the list ignores input on its first frames anyway).
+    let start = s.hf.fed();
+    while !menu::multichoice_up(s) {
+        if s.hf.fed() - start > 1200 {
+            return Err(PlayError::Death(
+                "soft-lock: waited 1200 frames for the Seagallop list".into(),
+            ));
+        }
+        if (s.hf.fed() - start) % 40 == 39 {
+            s.hf.step(keys::A)?;
+        } else {
+            s.hf.step(0)?;
+        }
+    }
     if celio_var(s) < 5 {
         let row = if from == 0 { to as i8 - 1 } else { -1 };
         if row < 0 {
@@ -1935,7 +1957,8 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
             )?;
         }
         s.seg = "cerulean-cave".into();
-        // 1F's Full Restore (11, 16), Max Elixir (25, 5) and Nugget (7, 3) balls
+        // 1F's Full Restore (11, 16) and Max Elixir (25, 5) balls (the Nugget at (7, 3) is not
+        // reachable on foot from the way to B1F: the walker gave up after 60 re-plans)
         // (`CeruleanCave_1F/map.json`, `FLAG_HIDE_CERULEAN_CAVE_1F_*`): the League's PP and heals.
         for (x, y, f, it) in [
             (
@@ -1950,7 +1973,6 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
                 "FLAG_HIDE_CERULEAN_CAVE_1F_MAX_ELIXIR",
                 "ITEM_MAX_ELIXIR",
             ),
-            (7, 3, "FLAG_HIDE_CERULEAN_CAVE_1F_NUGGET", "ITEM_NUGGET"),
         ] {
             pickup(s, "MAP_CERULEAN_CAVE_1F", x, y, f, it)?;
         }
