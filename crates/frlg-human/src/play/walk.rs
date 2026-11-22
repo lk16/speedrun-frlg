@@ -773,10 +773,9 @@ impl Graph {
                     cost += GRASS;
                 }
                 if sight.contains(&(nx, ny)) {
-                    if opts.cone_walls {
-                        continue;
-                    }
-                    cost += SIGHT;
+                    // An unbeaten trainer's sight line costs about a battle (~60 steps of
+                    // walking) when asked, so only a shorter detour avoids the fight.
+                    cost += if opts.cone_walls { 60 * STEP } else { SIGHT };
                 }
                 let mv = if water && !surfing {
                     cost += CUT_COST;
