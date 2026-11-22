@@ -92,6 +92,10 @@ pub fn battle(s: &mut Session) -> PResult<()> {
     if s.fallback {
         return stand_in(s);
     }
+    // Wild battles: catch or run by the dex fill's rules (`play/dex.rs`), Safari included.
+    if let Some(r) = super::dex::wild_battle(s) {
+        return r;
+    }
     let wild = s.wild_plan;
     let cfg = super::battle::BattleCfg {
         wild,

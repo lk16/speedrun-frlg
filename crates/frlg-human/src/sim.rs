@@ -298,6 +298,8 @@ struct State {
     repel_ok: bool,
     /// MODEL CHANGE `Params::awakenings`: Awakenings in the bag.
     awakenings: u32,
+    /// MODEL CHANGE `Params::coin_case_frames`: the Coin Case has been fetched.
+    coin_case: bool,
     /// Battle simulation: the carry's IVs and nature (rolled at the starter), effort values earned,
     /// HP as a fraction, badges (bit 0 Boulder, 4 Soul, 6 Volcano) and whether Surf is known.
     ivs: [u32; 6],
@@ -859,64 +861,170 @@ fn status_odds(odds: u32, status: Status1) -> u32 {
 /// balls or the mon flees. A rock doubles the catch factor and the flee factor for 2-6 turns (the
 /// counter runs down once per enemy turn, then the catch factor resets), a ball uses the current
 /// factor (`decompiled/src/battle_main.c:4339-4408`, `battle_ai_script_commands.c:1715-1732`,
-/// `battle_script_commands.c:9497`, ball multiplier 15 at `:808-814`).
+/// `battle_script_commands.c:9497`, ball multiplier 15 at `:808-814`). The throw order is
+/// [`SafariMon::next`], shared with the playing controller (`play/dex.rs`).
 fn safari_catch(ctx: &Ctx, st: &mut State, rng: &mut Rng, sp: &crate::data::Species) -> bool {
-    let base = sp.catch_rate * 100 / 1275;
-    let mut factor = base;
-    let esc = (sp.safari_flee * 100 / 1275).max(2);
-    let mut counter = 0u32;
-    let mut bait = 0u32;
-    let mut rocks = ctx.p.safari_rocks;
-    let mut bait_pending = ctx.p.safari_bait_from > 0 && esc >= ctx.p.safari_bait_from;
+    let mut m = SafariMon::new(ctx, sp);
     loop {
-        if bait_pending {
-            bait_pending = false;
-            bait = (bait + rng.range(2, 6)).min(6);
-            counter = 0;
-            bump(st, THROW as f64 * 0.6);
-            factor = (factor >> 1).max(3);
-        } else if rocks > 0 {
-            rocks -= 1;
-            bump(st, THROW as f64 * 0.6);
-            counter = (counter + rng.range(2, 6)).min(6);
-            factor = (factor * 2).min(20);
-        } else {
-            if st.safari_balls == 0 {
-                return false;
+        match m.next() {
+            SafariAct::Bait => {
+                m.bait = (m.bait + rng.range(2, 6)).min(6);
+                m.counter = 0;
+                bump(st, THROW as f64 * 0.6);
+                m.factor = (m.factor >> 1).max(3);
             }
-            st.safari_balls -= 1;
-            bump(st, ctx.throw_cost());
-            let rate = (factor * 1275 / 100).min(255);
-            let odds = (rate * 15 / 10) * 100 / 300;
-            let mut g = st.game;
-            let caught = shakes_catch(&mut g, odds);
-            st.game = g;
-            if caught {
-                bump(st, ctx.catch_end());
-                return true;
+            SafariAct::Rock => {
+                bump(st, THROW as f64 * 0.6);
+                m.counter = (m.counter + rng.range(2, 6)).min(6);
+                m.factor = (m.factor * 2).min(20);
             }
-            bump(st, react(ctx, rng) as f64);
+            SafariAct::Ball => {
+                if st.safari_balls == 0 {
+                    return false;
+                }
+                st.safari_balls -= 1;
+                bump(st, ctx.throw_cost());
+                let odds = safari_ball_odds(m.factor);
+                let mut g = st.game;
+                let caught = shakes_catch(&mut g, odds);
+                st.game = g;
+                if caught {
+                    bump(st, ctx.catch_end());
+                    return true;
+                }
+                bump(st, react(ctx, rng) as f64);
+            }
         }
-        let flee_factor = if counter > 0 {
-            (esc * 2).min(20)
-        } else if bait > 0 {
-            (esc / 4).max(1)
-        } else {
-            esc
-        };
-        if rng.below(100) < flee_factor * 5 {
+        if rng.below(100) < m.flee_factor() * 5 {
             bump(st, FLEE as f64);
             return false;
         }
-        if counter > 0 {
-            counter -= 1;
-            if counter == 0 {
-                factor = base;
+        if m.counter > 0 {
+            m.counter -= 1;
+            if m.counter == 0 {
+                m.factor = m.base;
             }
         } else {
-            bait = bait.saturating_sub(1);
+            m.bait = m.bait.saturating_sub(1);
         }
     }
+}
+
+/// What the human throws next in a Safari battle (the menu is BALL, BAIT, ROCK, RUN:
+/// `decompiled/src/battle_controller_safari.c:168-182`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SafariAct {
+    Bait,
+    Rock,
+    Ball,
+}
+
+/// One Safari encounter as the plan plays it: the catch and escape factors the game sets when the
+/// battle starts (`decompiled/src/battle_main.c:2282-2287`), the rock / bait counters, and what is
+/// left of the plan's opening (one bait first when `safari_bait_from` says the mon flees easily,
+/// `safari_rocks` rocks, then balls).
+#[derive(Clone, Copy, Debug)]
+pub struct SafariMon {
+    pub base: u32,
+    pub factor: u32,
+    pub esc: u32,
+    pub counter: u32,
+    pub bait: u32,
+    pub rocks: u32,
+    pub bait_pending: bool,
+}
+
+impl SafariMon {
+    pub fn new(ctx: &Ctx, sp: &crate::data::Species) -> Self {
+        let base = sp.catch_rate * 100 / 1275;
+        let esc = (sp.safari_flee * 100 / 1275).max(2);
+        SafariMon {
+            base,
+            factor: base,
+            esc,
+            counter: 0,
+            bait: 0,
+            rocks: ctx.p.safari_rocks,
+            bait_pending: ctx.p.safari_bait_from > 0 && esc >= ctx.p.safari_bait_from,
+        }
+    }
+
+    /// The plan's next throw: the bait (once), then the rocks, then balls.
+    pub fn next(&mut self) -> SafariAct {
+        if self.bait_pending {
+            self.bait_pending = false;
+            SafariAct::Bait
+        } else if self.rocks > 0 {
+            self.rocks -= 1;
+            SafariAct::Rock
+        } else {
+            SafariAct::Ball
+        }
+    }
+
+    /// Flee check at the end of the turn passes below `flee_factor * 5` in 100: doubled while a
+    /// rock counter runs, quartered while eating bait (`battle_ai_script_commands.c:1715-1732`).
+    pub fn flee_factor(&self) -> u32 {
+        if self.counter > 0 {
+            (self.esc * 2).min(20)
+        } else if self.bait > 0 {
+            (self.esc / 4).max(1)
+        } else {
+            self.esc
+        }
+    }
+}
+
+/// Money a Game Corner prize really costs (`buy` specials price coins at 20 each): with the Coin Case
+/// model (`Params::coin_case_frames`) the coins come in purchases of 50 for 1,000 (`strings.c:425`).
+fn buy_cost(ctx: &Ctx, cost: u32) -> u32 {
+    if ctx.p.coin_case_frames > 0 {
+        (cost / 20).div_ceil(50) * 1000
+    } else {
+        cost
+    }
+}
+
+/// The number of trash cans the human checks in the Vermilion Gym (`Params::trash_cans`): the switch
+/// layout of `SetVermilionTrashCans` (`field_specials.c:552`: first switch 1..15 uniform, the second a
+/// neighbour +-1 in the row or +-5 in the column with equal odds), checked in order 1..15 until the first
+/// switch, then one guess among the neighbours; a wrong guess re-rolls both (`VermilionCity_Gym/scripts.inc`
+/// `TrySwitchTwo`).
+pub fn trash_can_checks(rng: &mut Rng) -> u32 {
+    let mut checks = 0;
+    loop {
+        let first = 1 + (rng.next_u64() % 15) as i32;
+        let col = (first - 1) % 5;
+        let mut nb: Vec<i32> = vec![];
+        if col > 0 {
+            nb.push(first - 1);
+        }
+        if col < 4 {
+            nb.push(first + 1);
+        }
+        if first > 5 {
+            nb.push(first - 5);
+        }
+        if first <= 10 {
+            nb.push(first + 5);
+        }
+        let second = nb[(rng.next_u64() % nb.len() as u64) as usize];
+        checks += first as u32;
+        // The human guesses a neighbour uniformly (he cannot see which one the game picked).
+        let guess = nb[(rng.next_u64() % nb.len() as u64) as usize];
+        checks += 1;
+        if guess == second {
+            return checks;
+        }
+    }
+}
+
+/// The odds of one Safari Ball at catch factor `factor`: the factor back to a catch rate
+/// (`* 1275 / 100`), the ball's x1.5 (`battle_script_commands.c:808-814`), a full-HP mon
+/// (`:9497,9549-9556`).
+pub fn safari_ball_odds(factor: u32) -> u32 {
+    let rate = (factor * 1275 / 100).min(255);
+    (rate * 15 / 10) * 100 / 300
 }
 
 /// Mart prices, `decompiled/src/data/items.json`.
@@ -1060,6 +1168,69 @@ fn throw_balls(
     false
 }
 
+/// `encounter`'s catch rule: a Kanto species (`dex != 0`) not owned yet, not in the hunt's skip
+/// list, on an encounter where the human catches at all (`want_catch`: a hunt, or a passing
+/// catch the plan allows). Shared with the playing controller (`play/dex.rs`), which reads
+/// `owned` from the Pokédex flags in RAM.
+pub fn wants_catch(
+    ctx: &Ctx,
+    species: usize,
+    owned: bool,
+    skip: &[usize],
+    want_catch: bool,
+) -> bool {
+    want_catch && ctx.dex.species[species].dex != 0 && !owned && !skip.contains(&species)
+}
+
+/// `hunt`'s area by the plan's word (`land`, `water`, `fish`).
+pub fn hunt_area(h: &Hunt) -> Area {
+    match h.area.as_str() {
+        "water" => Area::Water,
+        "fish" => Area::Fish,
+        _ => Area::Land,
+    }
+}
+
+/// `hunt`'s skip list: the plan's `skip` plus every species below `hunt_min_catch`.
+pub fn hunt_skip(ctx: &Ctx, h: &Hunt) -> Vec<usize> {
+    let mut skip: Vec<usize> = h.skip.iter().map(|s| ctx.dex.id(s)).collect();
+    if ctx.p.hunt_min_catch > 0 {
+        skip.extend(
+            (0..ctx.dex.species.len())
+                .filter(|&i| ctx.dex.species[i].catch_rate < ctx.p.hunt_min_catch),
+        );
+    }
+    skip
+}
+
+/// A Safari Zone hunt under the plan's Safari model (`hunt`, `run_encounters`).
+pub fn is_safari_hunt(ctx: &Ctx, h: &Hunt) -> bool {
+    ctx.p.safari_model && h.site.starts_with("MAP_SAFARI_ZONE")
+}
+
+/// `hunt`'s cap on new species this visit: `stop_after`, tightened by what is left of
+/// `safari_stop` in the zone (`safari_new` = new species caught there so far). 0 = no cap.
+pub fn hunt_stop_new(ctx: &Ctx, h: &Hunt, safari_new: u32) -> u32 {
+    let mut stop_new = h.stop_after;
+    if is_safari_hunt(ctx, h) && ctx.p.safari_stop > 0 {
+        let left = ctx.p.safari_stop.saturating_sub(safari_new);
+        stop_new = if stop_new == 0 {
+            left
+        } else {
+            stop_new.min(left)
+        };
+    }
+    stop_new
+}
+
+/// `run_encounters`' stop rule (`stop_when_done`): every slot of the site is owned or skipped.
+pub fn site_done(ctx: &Ctx, slots: &[Slot], owned: &dyn Fn(u32) -> bool, skip: &[usize]) -> bool {
+    slots.iter().all(|s| {
+        let sp = &ctx.dex.species[s.species];
+        sp.dex == 0 || owned(sp.dex) || skip.contains(&s.species)
+    })
+}
+
 #[allow(clippy::too_many_arguments)]
 /// One wild encounter on arrival: catch if it is a new Kanto species the human wants, else
 /// flee or fight. `skip` lists species left alone.
@@ -1075,8 +1246,7 @@ fn encounter(
 ) {
     let sp = &ctx.dex.species[slot.species];
     bump(st, ctx.enc_intro() + react(ctx, rng) as f64);
-    let wanted =
-        want_catch && sp.dex != 0 && !st.caught.has(sp.dex) && !skip.contains(&slot.species);
+    let wanted = wants_catch(ctx, slot.species, st.caught.has(sp.dex), skip, want_catch);
     if wanted && safari {
         if safari_catch(ctx, st, rng, sp) {
             got(st, sp.dex, level);
@@ -1286,12 +1456,7 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
     let mut left = steps as u64;
     let mut used = 0u32;
     loop {
-        if stop_when_done
-            && slots.iter().all(|s| {
-                let sp = &ctx.dex.species[s.species];
-                sp.dex == 0 || st.caught.has(sp.dex) || skip.contains(&s.species)
-            })
-        {
+        if stop_when_done && site_done(ctx, &slots, &|d| st.caught.has(d), skip) {
             break;
         }
         // Steps inside the cooldown window roll at 5% of the rate; afterwards at full rate.
@@ -2374,16 +2539,21 @@ const EVO_STONE_SHOP: u32 = 800;
 
 /// One `Evolve` event (see `params::Evolve`). Skipped for free when the evolved form is already in
 /// the dex, the pre-evolution is not, or the stone / candies / money are not there.
-fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
+/// The stone an `Evolve` uses, as an item constant (`ITEM_MOON_STONE`), if it names one.
+pub fn evo_item(evo: &Evolve) -> Option<String> {
+    (!evo.item.is_empty()).then(|| format!("ITEM_{}_STONE", evo.item))
+}
+
+/// `evolve`'s pre-evolution: the Kanto species whose `evo` list reaches `evo.species` the way the
+/// plan says (`EVO_ITEM` with the plan's stone, else `EVO_LEVEL`; candies count as levels), among
+/// the species the human has a body of (`has`, by national number). Returns its national number
+/// and the evolution parameter (the level, or the item). Shared with the playing controller
+/// (`play/dex.rs`), which passes the party and the boxes.
+pub fn evo_source(ctx: &Ctx, evo: &Evolve, has: &dyn Fn(u32) -> bool) -> Option<(u32, String)> {
     let t = ctx.dex.id(&evo.species);
-    let tdex = ctx.dex.species[t].dex;
-    if tdex == 0 || st.caught.has(tdex) {
-        return;
-    }
-    // The pre-evolution and the way it evolves: the species whose `evo` list reaches `t`.
-    let item = (!evo.item.is_empty()).then(|| format!("ITEM_{}_STONE", evo.item));
-    let found = ctx.dex.species.iter().find_map(|sp| {
-        if sp.dex == 0 || st.bodies[sp.dex as usize] == 0 {
+    let item = evo_item(evo);
+    ctx.dex.species.iter().find_map(|sp| {
+        if sp.dex == 0 || !has(sp.dex) {
             return None;
         }
         sp.evo.iter().find_map(|(k, param, target)| {
@@ -2394,8 +2564,19 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
                 };
             ok.then(|| (sp.dex, param.clone()))
         })
-    });
-    let Some((pre, param)) = found else { return };
+    })
+}
+
+fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
+    let t = ctx.dex.id(&evo.species);
+    let tdex = ctx.dex.species[t].dex;
+    if tdex == 0 || st.caught.has(tdex) {
+        return;
+    }
+    let item = evo_item(evo);
+    let Some((pre, param)) = evo_source(ctx, evo, &|d| st.bodies[d as usize] > 0) else {
+        return;
+    };
     let lv = st.catch_lv[pre as usize] as u32;
     let mut frames = evo.frames;
     match evo.via.as_str() {
@@ -2471,33 +2652,15 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
 }
 
 fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
-    let area = match h.area.as_str() {
-        "water" => Area::Water,
-        "fish" => Area::Fish,
-        _ => Area::Land,
-    };
-    let mut skip: Vec<usize> = h.skip.iter().map(|s| ctx.dex.id(s)).collect();
-    if ctx.p.hunt_min_catch > 0 {
-        skip.extend(
-            (0..ctx.dex.species.len())
-                .filter(|&i| ctx.dex.species[i].catch_rate < ctx.p.hunt_min_catch),
-        );
-    }
-    let safari = ctx.p.safari_model && h.site.starts_with("MAP_SAFARI_ZONE");
+    let area = hunt_area(h);
+    let skip = hunt_skip(ctx, h);
+    let safari = is_safari_hunt(ctx, h);
     if safari && h.on_route && st.safari_done {
         // The plan's `safari_stop` was reached: the zone was left for good.
         return;
     }
     let c_before = st.caught.count();
-    let mut stop_new = h.stop_after;
-    if safari && ctx.p.safari_stop > 0 {
-        let left = ctx.p.safari_stop.saturating_sub(st.safari_new);
-        stop_new = if stop_new == 0 {
-            left
-        } else {
-            stop_new.min(left)
-        };
-    }
+    let stop_new = hunt_stop_new(ctx, h, st.safari_new);
     let mut steps = h.steps;
     if !safari {
         st.safari_open = false;
@@ -2813,6 +2976,7 @@ pub fn attempt(
         repel_left: 0,
         repel_ok: false,
         awakenings: 0,
+        coin_case: false,
         ivs: [15; 6],
         nature: 0,
         quiet_hits_left: u32::MAX,
@@ -3250,6 +3414,33 @@ pub fn attempt(
                         }
                     }
                 }
+                Kind::Special { special } if special.kind == "fight" => {
+                    // MODEL CHANGE `marowak_fight`: a forced one-off wild battle (the Marowak ghost,
+                    // `PokemonTower_6F/scripts.inc:9` `setwildbattle SPECIES_MAROWAK, 30`).
+                    bump(&mut st, special.frames as f64 * ctx.p.text_factor);
+                    for n in &special.species {
+                        let foe = wild_mon(ctx, &mut st, ctx.dex.id(n), special.level);
+                        let ok = sim_battle(
+                            ctx,
+                            &mut st,
+                            &mut rng,
+                            &BattleArgs {
+                                name: &seg.name,
+                                foes: &[foe],
+                                trainer: false,
+                                intro: 0,
+                                ai: 0,
+                                heals: 0,
+                                yield_: None,
+                                league: false,
+                                wild: true,
+                            },
+                        );
+                        if !ok || st.abandoned {
+                            break;
+                        }
+                    }
+                }
                 Kind::Special { special }
                     if special.requires.iter().any(|r| {
                         let d = ctx.dex.species[ctx.dex.id(r)].dex;
@@ -3261,10 +3452,15 @@ pub fn attempt(
                             .species
                             .iter()
                             .all(|n| st.caught.has(ctx.dex.species[ctx.dex.id(n)].dex))
-                            || (ctx.p.money_model && st.money < special.cost)) => {}
+                            || (ctx.p.money_model && st.money < buy_cost(ctx, special.cost))) => {}
                 Kind::Special { special } => {
                     if special.kind == "buy" && ctx.p.money_model {
-                        st.money -= special.cost;
+                        st.money -= buy_cost(ctx, special.cost);
+                    }
+                    if special.kind == "buy" && ctx.p.coin_case_frames > 0 && !st.coin_case {
+                        // MODEL CHANGE `coin_case_frames`: the restaurant's Coin Case first.
+                        st.coin_case = true;
+                        bump(&mut st, ctx.p.coin_case_frames as f64 * ctx.p.text_factor);
                     }
                     if special.kind == "sell" && ctx.p.money_model {
                         // Items sold at a Poke Mart: `cost` is the money received.
@@ -3642,6 +3838,19 @@ pub fn attempt(
                 }
                 st.mystic = true;
                 bump(&mut st, ctx.p.mystic_frames as f64 * ctx.p.text_factor);
+            }
+            // MODEL CHANGE `trash_cans`: the Vermilion Gym switches, after the walk into the gym.
+            if ctx.p.trash_cans && seg.name == "surge-walk" {
+                let mut r = Rng::new(seed, idx, hash_str("surge-cans"));
+                let n = trash_can_checks(&mut r);
+                bump(
+                    &mut st,
+                    ctx.p.cans_fixed as f64 + n as f64 * ctx.p.can_frames as f64,
+                );
+            }
+            // MODEL CHANGE `played_extra`: controller-measured time the segment model misses.
+            if let Some(&x) = ctx.p.played_extra.get(&seg.name) {
+                bump(&mut st, x);
             }
             match seg.name.as_str() {
                 "black-glasses-swap" => st.glasses = true,

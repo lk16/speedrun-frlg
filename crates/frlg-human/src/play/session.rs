@@ -121,6 +121,8 @@ pub struct Session<'p> {
     pub fallback: bool,
     /// What to do with wild encounters right now (flee unless a hunt says otherwise).
     pub wild_plan: super::battle::WildPlan,
+    /// The dex fill's hunt state (`play/dex.rs`): which wild mons to catch, Safari counts.
+    pub dex: super::dex::DexState,
     pub model: Model,
     pub cfg: PlayCfg,
     prefix: Vec<u16>,
@@ -279,6 +281,7 @@ impl<'p> Session<'p> {
             seg: String::new(),
             fallback: false,
             wild_plan: super::battle::WildPlan::Flee,
+            dex: Default::default(),
             model,
             cfg,
             prefix,
