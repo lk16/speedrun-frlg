@@ -302,7 +302,12 @@ pub fn mart_topup(
 ) -> PResult<()> {
     let want: Vec<(&str, u16)> = targets
         .iter()
-        .map(|&(it, n)| (it, n.saturating_sub(Ram::new(&s.obs).count(s.hf.rec.emu(), id(it)))))
+        .map(|&(it, n)| {
+            (
+                it,
+                n.saturating_sub(Ram::new(&s.obs).count(s.hf.rec.emu(), id(it))),
+            )
+        })
         .filter(|&(_, k)| k > 0)
         .collect();
     let money = Ram::new(&s.obs).money(s.hf.rec.emu());

@@ -1066,8 +1066,9 @@ pub fn errands(s: &mut Session, center: &str, place: Option<Place>, reserve: u32
 /// Do `acts` (all in `center`'s town): Pc evolutions in party-sized batches, the trades (the
 /// mons to give withdrawn first), gifts, stones bought and used, fossils.
 fn execute(s: &mut Session, acts: &[Action], center: &str) -> PResult<()> {
-    let is_pc_evo =
-        |a: &Action| matches!(a.kind, Kind::Stone { .. } | Kind::Candy { .. }) && a.place == Place::Pc;
+    let is_pc_evo = |a: &Action| {
+        matches!(a.kind, Kind::Stone { .. } | Kind::Candy { .. }) && a.place == Place::Pc
+    };
     let evos: Vec<Action> = acts.iter().filter(|a| is_pc_evo(a)).cloned().collect();
     if !evos.is_empty() {
         do_evolutions(s, &evos, center)?;

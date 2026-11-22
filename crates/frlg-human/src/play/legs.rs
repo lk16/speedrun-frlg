@@ -521,7 +521,10 @@ fn safari_walk(s: &mut Session) -> PResult<()> {
         .cloned()
         .collect();
     hunts.sort_by_key(|h| h.site != "MAP_SAFARI_ZONE_WEST");
-    if hunts.first().is_some_and(|h| h.site == "MAP_SAFARI_ZONE_WEST") {
+    if hunts
+        .first()
+        .is_some_and(|h| h.site == "MAP_SAFARI_ZONE_WEST")
+    {
         s.event(
             "model-vs-actual",
             "Safari hunts: West before East (the Secret House is in the West area; plan order East, West)",
@@ -529,11 +532,8 @@ fn safari_walk(s: &mut Session) -> PResult<()> {
         );
     }
     for h in &hunts {
-        let inside = here(s).is_some_and(|n| {
-            s.graph().maps[&n.0]
-                .id
-                .starts_with("MAP_SAFARI_ZONE")
-        });
+        let inside =
+            here(s).is_some_and(|n| s.graph().maps[&n.0].id.starts_with("MAP_SAFARI_ZONE"));
         if !inside {
             break;
         }
