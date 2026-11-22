@@ -1956,6 +1956,9 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
                 &[super::shop::PcOp::Deposit(slot)],
             )?;
         }
+        // Heal before the cave (its wild mons are Lv 46-58, and the lead comes from the
+        // warehouse fights: two dev branches blacked out fleeing in the cave).
+        center_heal(s, "MAP_CERULEAN_CITY_POKEMON_CENTER_1F")?;
         s.seg = "cerulean-cave".into();
         // 1F's Max Elixir ball (25, 5) (`CeruleanCave_1F/map.json`,
         // `FLAG_HIDE_CERULEAN_CAVE_1F_MAX_ELIXIR`): Mewtwo's PP for the League. Not taken: the
@@ -2081,6 +2084,26 @@ fn league2_entry(s: &mut Session) -> PResult<()> {
     )?;
     s.seg = "league-entry".into();
     center_heal(s, "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F")?;
+    // Valuables to money for League heals (Nugget ¥5000 resale, pearls, star pieces).
+    let got = super::shop::sell(
+        s,
+        "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F",
+        Some((0, 7)),
+        &[
+            "ITEM_NUGGET",
+            "ITEM_BIG_PEARL",
+            "ITEM_PEARL",
+            "ITEM_STAR_PIECE",
+            "ITEM_STARDUST",
+        ],
+    )?;
+    if got > 0 {
+        s.event(
+            "model-vs-actual",
+            format!("sold valuables for ¥{got} before the League heals (not in the model)"),
+            json!({"money": got}),
+        );
+    }
     super::legs2::indigo_mart(s)?;
     // Revives for the second fighter (`IndigoPlateau_PokemonCenter_1F/scripts.inc` sells them):
     // Mewtwo's 25 attacks do not cover the round (see `pp_lead`), so Blastoise fights twice.
@@ -2258,6 +2281,40 @@ fn champion2(s: &mut Session) -> PResult<()> {
             ),
             json!({"hp": m.hp, "max_hp": m.max_hp}),
         );
+    }
+    // Blastoise is the second fighter (Surf hits Tyranitar and Arcanine 2x): its PP and HP
+    // before the door, from what Mewtwo's prep left (a Max Elixir when its attacks are below
+    // half, a Hyper Potion below 60 % HP). Not in the model (its fighter is Mewtwo alone).
+    if let Some(b) = party_slot(s, "SPECIES_BLASTOISE") {
+        let m = Ram::new(&s.obs).party(s.hf.rec.emu())[b].clone();
+        let att = attack_pp(s, &m);
+        if m.hp > 0 && att < 20 {
+            if let Some(it) = ["ITEM_ELIXIR", "ITEM_MAX_ELIXIR"]
+                .into_iter()
+                .find(|it| have(s, it) > 0)
+            {
+                super::shop::use_item_on(s, it, b)?;
+                s.event(
+                    "model-vs-actual",
+                    format!(
+                        "{} on Blastoise before the Champion ({att} attacks left)",
+                        it.trim_start_matches("ITEM_")
+                    ),
+                    json!({"pp": m.pp}),
+                );
+            }
+        }
+        if m.hp > 0 && m.hp * 10 < m.max_hp * 6 && have(s, "ITEM_HYPER_POTION") > 0 {
+            super::shop::use_item_on(s, "ITEM_HYPER_POTION", b)?;
+            s.event(
+                "model-vs-actual",
+                format!(
+                    "Hyper Potion on Blastoise before the Champion ({}/{} HP)",
+                    m.hp, m.max_hp
+                ),
+                json!({"hp": m.hp}),
+            );
+        }
     }
     super::legs2::e4_door(s)?;
     go_to(
