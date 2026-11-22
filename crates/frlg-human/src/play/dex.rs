@@ -532,7 +532,9 @@ fn cast(s: &mut Session) -> PResult<()> {
     settle(s)?;
     s.hf.press(keys::SELECT)?;
     wait_until(s, "the rod cast", 120, |s| menu::task(s, "Task_Fishing"))?;
-    wait_until(s, "the fishing result", 1200, |s| {
+    // The dots take no input; the result text ("on the hook!" / "Not even a nibble...") waits
+    // for A. A is mashed throughout (`Fishing5` ignores it).
+    super::prims::press_until(s, "the fishing result", keys::A, 1200, |s| {
         !menu::task(s, "Task_Fishing")
     })?;
     // A bite starts the battle (`FishingWildEncounter`); otherwise "Not even a nibble...".
