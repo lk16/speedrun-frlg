@@ -167,9 +167,9 @@ pub struct Probe {
     /// The carry's level after each segment (filled when a probe is passed).
     pub level_at: Vec<u32>,
     /// Trainer fights of the attempt: (segment name, player actions, whether it was won, frames from
-    /// the intro to the last faint without outro and level-up text). Only recorded when a probe is
-    /// passed.
-    pub fights: Vec<(String, u32, bool, f64)>,
+    /// the intro to the last faint without outro and level-up text, the carry's level-ups in it). Only
+    /// recorded when a probe is passed.
+    pub fights: Vec<(String, u32, bool, f64, u32)>,
     /// National numbers still missing when the fill gave up (an abandoned attempt).
     pub missing: Vec<u32>,
     /// National numbers missing when the fill (or Oak's check) starts.
@@ -353,7 +353,7 @@ struct State {
     log_fights: bool,
     /// Rare Candies eaten on the spot so far (`candy_early_n` caps it).
     candies_eaten: u32,
-    fight_log: Vec<(String, u32, bool, f64)>,
+    fight_log: Vec<(String, u32, bool, f64, u32)>,
     /// Index of the segment being played, and the poison HP not yet charged (frames).
     seg_i: usize,
     poison_acc: f64,
@@ -2047,6 +2047,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 }
             }
         }
+        let t_in = st.clock;
         let start_frac = if mewtwo_now { st.mewtwo_hp } else { st.hp_frac };
         me.hp = ((me.max_hp as f64 * start_frac).round() as i32).clamp(1, me.max_hp);
         let tac = fight_tactics(
@@ -2076,9 +2077,40 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             risk_healed = healed;
             lost
         };
+        // MODEL CHANGE `turn_power`: the clock's player actions come from a copy of the fight with the
+        // carry's attacking stats at `turn_power` instead of `carry_power` (same RNG state).
+        let cp_used = if a.league && ctx.p.league_power > 0.0 {
+            ctx.p.league_power
+        } else if ctx.power_early_end.is_some_and(|e| st.seg_i <= e) {
+            ctx.p.carry_power_early
+        } else {
+            ctx.p.carry_power
+        } * cfg.power;
+        let turn_copy =
+            (a.trainer && !a.league && !mewtwo_now && ctx.p.turn_power > 0.0).then(|| {
+                let mut m2 = me.clone();
+                let tp = if ctx.p.turn_power_boss > 0.0 && crate::params::is_boss(a.name) {
+                    ctx.p.turn_power_boss
+                } else {
+                    ctx.p.turn_power
+                };
+                let f = tp / cp_used;
+                m2.stat[0] = (m2.stat[0] as f64 * f) as i32;
+                m2.stat[3] = (m2.stat[3] as f64 * f) as i32;
+                let mut g2 = st.game;
+                let o2 = fight(dex, &mut m2, &tac, a.foes, a.ai, a.heals, a.wild, &mut g2);
+                if std::env::var_os("FRLG_DBG_COPY").is_some() {
+                    eprintln!(
+                        "copy {} f {:.3} stats {:?} won {} turns {}",
+                        a.name, f, m2.stat, o2.won, o2.turns
+                    );
+                }
+                o2.turns
+            });
         let mut g = st.game;
         let out = fight(dex, &mut me, &tac, a.foes, a.ai, a.heals, a.wild, &mut g);
         st.game = g;
+        let turns = turn_copy.unwrap_or(out.turns);
         if !mewtwo_now {
             st.persim &= me.persim;
         }
@@ -2088,14 +2120,14 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         if a.trainer && st.log_fights {
             st.fight_log
-                .push((a.name.to_string(), out.turns, out.won, 0.0));
+                .push((a.name.to_string(), turns, out.won, 0.0, 0));
         }
         if a.trainer && std::env::var_os("FRLG_SIM_TRACE").is_some() {
             eprintln!(
-                "fight {} L{} hp{:.2} hi{} mhp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} x_used {} sacs_used {} kos {} heals {} frs {} end_hp {:.2} stats {:?}/{}",
+                "fight {} L{} hp{:.2} hi{} mhp{:.2} x{:?} sacs{} pp{:?} moves{:?} -> won {} turns {} copy {:?} x_used {} sacs_used {} kos {} heals {} frs {} end_hp {:.2} stats {:?}/{}",
                 a.name, me.level, st.hp_frac, st.heal_items, st.mewtwo_hp, st.x_stock, tac.sacs, me.pp,
                 me.moves.iter().map(|&m| dex.moves[m].name.trim_start_matches("MOVE_").to_string()).collect::<Vec<_>>(),
-                out.won, out.turns, out.x_used, out.sacs_used, out.kos.len(), out.heals_used, out.full_restores_used, out.hp_frac, me.stat, me.max_hp
+                out.won, out.turns, turn_copy, out.x_used, out.sacs_used, out.kos.len(), out.heals_used, out.full_restores_used, out.hp_frac, me.stat, me.max_hp
             );
         }
         for x in xs
@@ -2107,7 +2139,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         }
         bump(
             st,
-            out.turns as f64 * tcost.map_or_else(|| ctx.turn(), |(_, t, _)| t),
+            turns as f64 * tcost.map_or_else(|| ctx.turn(), |(_, t, _)| t),
         );
         if mewtwo_now && ctx.p.mewtwo_hp_bar > 0.0 {
             bump(st, out.hp_bar * ctx.p.mewtwo_hp_bar);
@@ -2136,7 +2168,17 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         for _ in 0..out.events {
             bump(st, react(ctx, rng) as f64);
         }
-        bump(st, jitter(ctx, rng, out.turns * 2 + 3) as f64);
+        bump(st, jitter(ctx, rng, turns * 2 + 3) as f64);
+        if a.trainer && std::env::var_os("FRLG_DBG_EXTRA").is_some() {
+            eprintln!(
+                "extra {} pre {} battle {} turns {} kos {}",
+                a.name,
+                t_in - t0,
+                st.clock - t_in,
+                turns,
+                out.kos.len()
+            );
+        }
         if let Some(l) = st.fight_log.last_mut() {
             if l.0 == a.name && l.3 == 0.0 {
                 l.3 = (st.clock - t0) as f64;
@@ -2206,6 +2248,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                     let e = exp_gain(yld as u8, lvl as u8, a.trainer);
                     let g = add_exp(ctx, st, e);
                     bump(st, g as f64 * ctx.level_up());
+                    if a.trainer && st.log_fights {
+                        if let Some(l) = st.fight_log.last_mut() {
+                            l.4 += g;
+                        }
+                    }
                 }
             }
             if a.trainer {

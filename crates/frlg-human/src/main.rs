@@ -1075,7 +1075,7 @@ fn main() {
                 println!(
                     "{}",
                     serde_json::json!({"i": i, "finished": o.finished, "run": o.run, "kind": o.kind, "end_seg": o.end_seg,
-                    "fights": pr.fights.iter().map(|f| serde_json::json!([f.0, f.1, f.2, f.3])).collect::<Vec<_>>()})
+                    "fights": pr.fights.iter().map(|f| serde_json::json!([f.0, f.1, f.2, f.3, f.4])).collect::<Vec<_>>()})
                 );
             }
         }

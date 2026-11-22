@@ -984,6 +984,21 @@ pub struct Params {
     /// played episode, which `trainer_fit` < 1 stood in for. Non-empty replaces `trainer_fit` and the
     /// `calib_wr` intro / turn / mon terms for non-League trainers. Empty = off.
     pub trainer_cost: Vec<f64>,
+    /// MODEL CHANGE (boss turns, journal 2026-11-22 boss-turns): the clock of a non-League trainer fight pays
+    /// the player actions of a copy of the fight in which the carry's Attack / Sp. Atk are scaled by this
+    /// factor instead of `carry_power` (same moves, items, HP and game RNG); the outcome, HP, items and exp
+    /// stay with the fight at `carry_power`. `carry_power` 2.0 was fitted (16 WR fights, an older engine)
+    /// to make the carry win like the WR; at 2.0 it one-shots every rival / leader mon (Cerulean rival 4
+    /// actions for 4 mons; the WR: 7), and the sim takes 202 actions on the WR's 67 VOD-timed fights where
+    /// the WR took 237 (`video-analysis/data/wr-fight-timing.json`). The factor is fitted so the sim's
+    /// actions on that list equal the WR's: a FIT on 67 fights, not a mechanism. 0 = off.
+    pub turn_power: f64,
+    /// MODEL CHANGE (boss turns): `turn_power` for the rivals, gym leaders and Giovanni ([`is_boss`]); 0 = the
+    /// same as `turn_power`. The WR's rival / leader fights take more actions per mon than its route fights
+    /// (X items, a weak lead switched out, Torrent play at low HP, a not-best move): one factor cannot fit
+    /// both, so the two are fitted separately on the same 67 fights (14 boss fights, 92 WR actions; 53 route
+    /// fights, 145).
+    pub turn_power_boss: f64,
     /// MODEL CHANGE (exp-economy audit 2026-11-22): the trainers the human actually fights, per segment, by
     /// trainer id (`decompiled/include/constants/opponents.h`, parties `src/data/trainer_parties.h`). A named
     /// `Parties`/`Group` segment gets exactly this list (fought in the given order); any other named segment
@@ -1210,6 +1225,8 @@ impl Default for Params {
             persim_held: false,
             viridian_warren: false,
             trainer_cost: Vec::new(),
+            turn_power: 0.0,
+            turn_power_boss: 0.0,
             fight_lists: Default::default(),
             ai_cure_items: false,
         }
@@ -1235,4 +1252,22 @@ impl Params {
         p.manip.validate()?;
         Ok(p)
     }
+}
+
+/// A rival, gym leader or Giovanni fight, by segment name (the non-League fights `turn_power_boss` prices).
+pub fn is_boss(name: &str) -> bool {
+    name.starts_with("rival-")
+        || matches!(
+            name,
+            "brock"
+                | "misty"
+                | "surge"
+                | "erika"
+                | "koga"
+                | "sabrina"
+                | "blaine"
+                | "giovanni"
+                | "hideout-giovanni"
+                | "silph-giovanni"
+        )
 }
