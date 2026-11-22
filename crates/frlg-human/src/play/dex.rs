@@ -886,6 +886,29 @@ const SPECIALS: &[(&str, &str, &str)] = &[
         "MAP_VERMILION_CITY_HOUSE2",
         "VermilionCity_House2_EventScript_Elyssa",
     ),
+    // `INGAME_TRADE_NIDORINOA` (LG Nidorino, FR Nidorina), `Route11_EastEntrance_2F/scripts.inc:22-37`.
+    (
+        "SPECIES_NIDORINO",
+        "MAP_ROUTE11_EAST_ENTRANCE_2F",
+        "Route11_EastEntrance_2F_EventScript_Turner",
+    ),
+    (
+        "SPECIES_NIDORINA",
+        "MAP_ROUTE11_EAST_ENTRANCE_2F",
+        "Route11_EastEntrance_2F_EventScript_Turner",
+    ),
+    // `INGAME_TRADE_LICKITUNG`, `Route18_EastEntrance_2F/scripts.inc:12-27`.
+    (
+        "SPECIES_LICKITUNG",
+        "MAP_ROUTE18_EAST_ENTRANCE_2F",
+        "Route18_EastEntrance_2F_EventScript_Haden",
+    ),
+    // `INGAME_TRADE_JYNX`, `CeruleanCity_House3/scripts.inc:11`.
+    (
+        "SPECIES_JYNX",
+        "MAP_CERULEAN_CITY_HOUSE3",
+        "CeruleanCity_House3_EventScript_Dontae",
+    ),
 ];
 
 /// The local id of the object on `map` running `script` (`walk::ObjInfo::local_id`).
@@ -909,7 +932,7 @@ pub fn party_slot(s: &mut Session, species: u16) -> Option<usize> {
 /// Run an NPC's script to its end, answering its yes/no boxes the human way: YES while the mon
 /// has not been received yet (take it, buy it, trade), NO once it is owned (the nickname
 /// prompt); a party menu (the trade's "which mon?") gets `trade_slot`.
-fn run_npc(s: &mut Session, got: u32, trade_slot: Option<usize>) -> PResult<()> {
+pub(super) fn run_npc(s: &mut Session, got: u32, trade_slot: Option<usize>) -> PResult<()> {
     let start = s.hf.fed();
     loop {
         if s.hf.fed() - start > 20_000 {

@@ -550,7 +550,8 @@ fill_stages!(
     fill01, fill02, fill03, fill04, fill05, fill06, fill07, fill08, fill09, fill10, fill11, fill12,
     fill13, fill14, fill15, fill16, fill17, fill18, fill19, fill20, fill21, fill22, fill23, fill24
 );
-const FILL: [(&str, fn(&mut Session) -> PResult<()>); 24] = [
+type StageFn = (&'static str, fn(&mut Session) -> PResult<()>);
+const FILL: [StageFn; 24] = [
     ("dex-fill-01", fill01),
     ("dex-fill-02", fill02),
     ("dex-fill-03", fill03),
@@ -575,6 +576,27 @@ const FILL: [(&str, fn(&mut Session) -> PResult<()>); 24] = [
     ("dex-fill-22", fill22),
     ("dex-fill-23", fill23),
     ("dex-fill-24", fill24),
+];
+
+macro_rules! finish_stages {
+    ($($f:ident),*) => {
+        $(fn $f(s: &mut Session) -> PResult<()> {
+            super::dexfin::finish_round(s)
+        })*
+    };
+}
+finish_stages!(fin1, fin2, fin3, fin4, fin5, fin6, fin7, fin8);
+/// The end of the dex fill (`dexfin.rs`): one place of the cheapest evolution / trade / gift plan
+/// per stage.
+const FINISH: [StageFn; 8] = [
+    ("dex-finish-1", fin1),
+    ("dex-finish-2", fin2),
+    ("dex-finish-3", fin3),
+    ("dex-finish-4", fin4),
+    ("dex-finish-5", fin5),
+    ("dex-finish-6", fin6),
+    ("dex-finish-7", fin7),
+    ("dex-finish-8", fin8),
 ];
 
 /// The not-yet-tried Kanto site (land or water, `flydist.json`) with the most uncaught species;
@@ -623,7 +645,7 @@ fn greedy_site(s: &mut Session, tried: &[String]) -> Option<crate::params::Hunt>
 
 /// Get somewhere Fly works: outdoors already, else an Escape Rope if the bag has one, else walk
 /// to `town` (out of the cave or building the last hunt ended in).
-fn leave_to_fly(s: &mut Session, town: &str) -> PResult<()> {
+pub(super) fn leave_to_fly(s: &mut Session, town: &str) -> PResult<()> {
     if outdoors(s) {
         return Ok(());
     }
@@ -708,8 +730,85 @@ fn trainer_beaten(s: &mut Session, trainer: &str) -> bool {
     s.obs.flag(s.hf.rec.emu(), base + id).unwrap_or(false)
 }
 
+/// Pick up an item ball (stand next to the object, face it, A) or a hidden item (face the tile, A:
+/// hidden items need no Itemfinder, `decompiled/src/field_control_avatar.c` `TryStartHiddenItem`
+/// scripts) unless its `flag` says it is gone. Not in the model's post-game: the plan's PP items
+/// (`elixirs`: Max Elixirs, PP Ups, Rare Candies) are main-route pickups the played route did not
+/// make; the human takes the League-relevant ones the post-game legs pass instead
+/// (`model-vs-actual`). `item` is the `ITEM_*` it gives (`map.json` / the item script).
+pub(super) fn pickup(
+    s: &mut Session,
+    map: &str,
+    x: i16,
+    y: i16,
+    gone_flag: &str,
+    item: &str,
+) -> PResult<()> {
+    if flag(s, gone_flag) {
+        return Ok(());
+    }
+    let before = have(s, item);
+    let t0 = s.frame();
+    // A dry plan first: a ball the planner cannot reach (Rock Smash rocks, ledges) is left, as a
+    // human who knows the map would.
+    let mid = s.graph().id(map);
+    let reach = super::walk::plan_len(
+        s,
+        None,
+        &move |n: &Node| n.0 == mid && (n.1 - x).abs() + (n.2 - y).abs() == 1,
+        &hm_opts(),
+    );
+    if reach.is_none() {
+        s.event(
+            "warn",
+            format!(
+                "{} at {} ({x}, {y}) not reachable on foot: left",
+                item.trim_start_matches("ITEM_"),
+                map.trim_start_matches("MAP_")
+            ),
+            json!({"item": item, "map": map}),
+        );
+        return Ok(());
+    }
+    go_face(s, map, x, y, &hm_opts())?;
+    // A press can be dropped on the frame the walk ends: retry while the flag is still clear.
+    for _ in 0..4 {
+        s.hf.late()?;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        if flag(s, gone_flag) {
+            break;
+        }
+    }
+    let after = have(s, item);
+    s.event(
+        if after > before { "decision" } else { "warn" },
+        format!(
+            "picked up {} at {} ({x}, {y}): {} in the bag",
+            item.trim_start_matches("ITEM_"),
+            map.trim_start_matches("MAP_"),
+            after
+        ),
+        json!({"item": item, "map": map, "x": x, "y": y, "have": after, "frames": s.frame() - t0}),
+    );
+    if !s
+        .log
+        .events
+        .iter()
+        .any(|e| e.kind == "model-vs-actual" && e.text.starts_with("post-game pickups"))
+    {
+        s.event(
+            "model-vs-actual",
+            "post-game pickups: the plan's Max Elixirs / PP Ups were main-route items the played \
+             route never took; the human picks up the League items on the post-game legs instead",
+            json!({}),
+        );
+    }
+    Ok(())
+}
+
 /// The local id of the object of `map` whose script contains `script` (`map.json`).
-fn obj_id(s: &Session, map: &str, script: &str) -> PResult<u8> {
+pub(super) fn obj_id(s: &Session, map: &str, script: &str) -> PResult<u8> {
     let g = s.graph();
     g.maps[&g.id(map)]
         .objects
@@ -917,7 +1016,22 @@ fn seagallop(s: &mut Session, from: u8, to: u8) -> PResult<()> {
     }
     // "Where do you want to sail?" is `message` + `waitmessage`: the list opens by itself, and a
     // mashed A would take its first row (`OneIsland_Harbor/scripts.inc` `Sailor`).
-    wait_until(s, "the Seagallop list", 900, menu::multichoice_up)?;
+    // Vermilion's sailor prints "Ah, you have a TRI-PASS.\p..." first: the page break waits for A
+    // (`VermilionCity_Text_BoardSeagallopTriPass`, `VermilionCity/text.inc:77-80`). A is pressed
+    // only while no list is up (the list ignores input on its first frames anyway).
+    let start = s.hf.fed();
+    while !menu::multichoice_up(s) {
+        if s.hf.fed() - start > 1200 {
+            return Err(PlayError::Death(
+                "soft-lock: waited 1200 frames for the Seagallop list".into(),
+            ));
+        }
+        if (s.hf.fed() - start) % 40 == 39 {
+            s.hf.step(keys::A)?;
+        } else {
+            s.hf.step(0)?;
+        }
+    }
     if celio_var(s) < 5 {
         let row = if from == 0 { to as i8 - 1 } else { -1 };
         if row < 0 {
@@ -1353,16 +1467,32 @@ fn ice_go(s: &mut Session, what: &str, goal: &dyn Fn(&Node) -> bool) -> PResult<
         "MAP_FOUR_ISLAND_ICEFALL_CAVE_B1F",
         "MAP_FOUR_ISLAND_ICEFALL_CAVE_BACK",
     ];
-    settle(s)?;
-    let cur = here(s).ok_or("no position")?;
-    let plan = ice_plan(s, &MAPS, cur, goal)
-        .ok_or_else(|| PlayError::Fatal(format!("{what}: no ice route from {cur:?}")))?;
-    s.event(
-        "decision",
-        format!("Icefall Cave: {} moves to {what}", plan.len()),
-        json!({"moves": plan.len()}),
-    );
-    ice_follow(s, &plan)
+    // A slide that ends off the plan (the Entrance's row 30 slid one tile further than the layout
+    // says, canonical state) is re-planned from where the player stands, as a human would.
+    for attempt in 0..6 {
+        settle(s)?;
+        let cur = here(s).ok_or("no position")?;
+        let plan = ice_plan(s, &MAPS, cur, goal)
+            .ok_or_else(|| PlayError::Fatal(format!("{what}: no ice route from {cur:?}")))?;
+        s.event(
+            "decision",
+            format!("Icefall Cave: {} moves to {what}", plan.len()),
+            json!({"moves": plan.len(), "replan": attempt}),
+        );
+        match ice_follow(s, &plan) {
+            Err(PlayError::Death(m)) if m.starts_with("ice route: at") && attempt < 5 => {
+                s.event(
+                    "warn",
+                    format!("Icefall Cave: {m}; re-planning"),
+                    json!({"replan": attempt + 1}),
+                );
+            }
+            r => return r,
+        }
+    }
+    Err(PlayError::Death(format!(
+        "{what}: ice route re-planned 6 times"
+    )))
 }
 
 const CELIO_PC: &str = "MAP_ONE_ISLAND_POKEMON_CENTER_1F";
@@ -1419,6 +1549,8 @@ fn celio_ruby(s: &mut Session) -> PResult<()> {
 fn mt_ember(s: &mut Session) -> PResult<()> {
     s.seg = "kindle-road-in".into();
     let t0 = s.timer().unwrap_or(0.0);
+    // (Kindle Road's Ether ball at (15, 70) sits behind three Rock Smash rocks at (15, 73..75),
+    // `OneIsland_KindleRoad/map.json`; the plan has no Rock Smash user: not taken.)
     go_map(s, "MAP_MT_EMBER_EXTERIOR", &hm_opts())?;
     for (seg, script, tr) in [
         (
@@ -1536,6 +1668,16 @@ fn icefall(s: &mut Session) -> PResult<()> {
     s.seg = "sail-to-four".into();
     let t0 = s.timer().unwrap_or(0.0);
     seagallop(s, 1, 4)?;
+    // Four Island's Star Piece ball (5, 6) (`FourIsland/map.json`, `FLAG_HIDE_FOUR_ISLAND_STAR_PIECE`):
+    // ¥4900 at a mart, for the League's Full Restores (the dex fill spent the money on balls).
+    pickup(
+        s,
+        "MAP_FOUR_ISLAND",
+        5,
+        6,
+        "FLAG_HIDE_FOUR_ISLAND_STAR_PIECE",
+        "ITEM_STAR_PIECE",
+    )?;
     let n = ROPES.saturating_sub(have(s, "ITEM_ESCAPE_ROPE"));
     if n > 0 {
         super::shop::buy(s, "MAP_FOUR_ISLAND_MART", None, &[("ITEM_ESCAPE_ROPE", n)])?;
@@ -1630,6 +1772,8 @@ fn dotted_hole(s: &mut Session) -> PResult<()> {
             json!({}),
         );
     }
+    // (Ruin Valley's Full Restore ball at (19, 11), `SixIsland_RuinValley/map.json`: the walk
+    // planner finds no path to it from the braille; not taken.)
     // The door's open metatile is set by the script (`CutMoveOpenDottedHoleDoor`); the planner
     // reads the layout's closed door: walk in by hand.
     take_warp(s, "MAP_SIX_ISLAND_RUIN_VALLEY", 24, 25, keys::UP)?;
@@ -1674,6 +1818,24 @@ fn warehouse(s: &mut Session) -> PResult<()> {
     s.seg = "five-island-approach".into();
     let t0 = s.timer().unwrap_or(0.0);
     seagallop(s, 6, 5)?;
+    // The Meadow's PP Up (3, 22) and Max Potion (12, 11) balls, next to the warehouse door
+    // (`FiveIsland_Meadow/map.json`, `FLAG_HIDE_FIVE_ISLAND_MEADOW_PP_UP` / `_MAX_POTION`).
+    pickup(
+        s,
+        "MAP_FIVE_ISLAND_MEADOW",
+        3,
+        22,
+        "FLAG_HIDE_FIVE_ISLAND_MEADOW_PP_UP",
+        "ITEM_PP_UP",
+    )?;
+    pickup(
+        s,
+        "MAP_FIVE_ISLAND_MEADOW",
+        12,
+        11,
+        "FLAG_HIDE_FIVE_ISLAND_MEADOW_MAX_POTION",
+        "ITEM_MAX_POTION",
+    )?;
     if !flag(s, "FLAG_UNLOCKED_ROCKET_WAREHOUSE") {
         go_face(s, "MAP_FIVE_ISLAND_MEADOW", 12, 21, &hm_opts())?;
         s.hf.press(keys::A)?;
@@ -1684,6 +1846,25 @@ fn warehouse(s: &mut Session) -> PResult<()> {
     }
     s.seg = "warehouse-interior".into();
     take_warp(s, "MAP_FIVE_ISLAND_MEADOW", 12, 22, keys::UP)?;
+    // The warehouse's Big Pearl (8, 25) and Pearl (1, 16) balls (`FiveIsland_RocketWarehouse/map.json`):
+    // ¥3750 + ¥700 at a mart, League money.
+    s.seg = "warehouse-interior".into();
+    pickup(
+        s,
+        "MAP_FIVE_ISLAND_ROCKET_WAREHOUSE",
+        8,
+        25,
+        "FLAG_HIDE_FIVE_ISLAND_ROCKET_WAREHOUSE_BIG_PEARL",
+        "ITEM_BIG_PEARL",
+    )?;
+    pickup(
+        s,
+        "MAP_FIVE_ISLAND_ROCKET_WAREHOUSE",
+        1,
+        16,
+        "FLAG_HIDE_FIVE_ISLAND_ROCKET_WAREHOUSE_PEARL",
+        "ITEM_PEARL",
+    )?;
     s.seg = "warehouse-gideon".into();
     talk_script(s, "MAP_FIVE_ISLAND_ROCKET_WAREHOUSE", "EventScript_Gideon")?;
     if !flag(s, "FLAG_RECOVERED_SAPPHIRE") {
@@ -1826,7 +2007,23 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
                 &[super::shop::PcOp::Deposit(slot)],
             )?;
         }
+        // Heal before the cave (its wild mons are Lv 46-58, and the lead comes from the
+        // warehouse fights: two dev branches blacked out fleeing in the cave).
+        center_heal(s, "MAP_CERULEAN_CITY_POKEMON_CENTER_1F")?;
         s.seg = "cerulean-cave".into();
+        // 1F's Max Elixir ball (25, 5) (`CeruleanCave_1F/map.json`,
+        // `FLAG_HIDE_CERULEAN_CAVE_1F_MAX_ELIXIR`): Mewtwo's PP for the League. Not taken: the
+        // Nugget (7, 3) (the walker found no way to it in 60 re-plans) and the Full Restore
+        // (11, 16), elevation 3 among the Rock Smash rocks at (9, 18), (11, 21): reached only from
+        // a tile of another elevation, where A does not pick it up (4 presses, 3 940 frames, dev).
+        pickup(
+            s,
+            "MAP_CERULEAN_CAVE_1F",
+            25,
+            5,
+            "FLAG_HIDE_CERULEAN_CAVE_1F_MAX_ELIXIR",
+            "ITEM_MAX_ELIXIR",
+        )?;
         go_face(s, "MAP_CERULEAN_CAVE_B1F", 7, 12, &hm_opts())?;
         s.seg = "mewtwo".into();
         s.wild_plan = super::battle::WildPlan::Master;
@@ -1844,6 +2041,23 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
         if !tm.mewtwo {
             continue;
         }
+        // Shock Wave (TM34, in the bag since Surge) instead of the plan's Fire Blast: 20 PP of a
+        // never-missing Electric move against 5 PP; it hits Lance's and the rival's Gyarados 4x
+        // and Aerodactyl 2x, while Psychic already covers what Fire Blast was for (Heracross,
+        // Venusaur). The played route has no PP Ups / Max Elixirs from the main route (bug 7).
+        let tm = if tm.mv == "MOVE_FIRE_BLAST" && have(s, "ITEM_TM34") > 0 {
+            s.event(
+                "model-vs-actual",
+                "Mewtwo learns Shock Wave (TM34, 20 PP) instead of the plan's Fire Blast (5 PP): \
+                 the played route reaches the League without the plan's PP Ups and Max Elixirs",
+                json!({"plan": "MOVE_FIRE_BLAST", "played": "MOVE_SHOCK_WAVE"}),
+            );
+            let mut t2 = tm.clone();
+            t2.mv = "MOVE_SHOCK_WAVE".into();
+            t2
+        } else {
+            tm
+        };
         let mv = super::names::id(&tm.mv);
         let slot = party_slot(s, "SPECIES_MEWTWO").ok_or("no Mewtwo")?;
         let m = Ram::new(&s.obs).party(s.hf.rec.emu())[slot].clone();
@@ -1868,6 +2082,25 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
         }
         super::items::teach_tmhm(s, &item, slot)?;
     }
+    // PP Ups on Psychic (its main attack: +2 PP each, `ItemUseCB_PPUp`).
+    while have(s, "ITEM_PP_UP") > 0 {
+        let slot = party_slot(s, "SPECIES_MEWTWO").ok_or("no Mewtwo")?;
+        let m = Ram::new(&s.obs).party(s.hf.rec.emu())[slot].clone();
+        let Some(k) = m.knows(super::names::id("MOVE_PSYCHIC")) else {
+            break;
+        };
+        let pp0 = m.pp[k];
+        super::shop::use_item_on_move(s, "ITEM_PP_UP", slot, Some(k))?;
+        let pp1 = Ram::new(&s.obs).party(s.hf.rec.emu())[slot].pp[k];
+        s.event(
+            "decision",
+            format!("PP Up on Mewtwo's Psychic: {pp0} -> {pp1} PP"),
+            json!({"before": pp0, "after": pp1}),
+        );
+        if pp1 <= pp0 {
+            break;
+        }
+    }
     let slot = party_slot(s, "SPECIES_MEWTWO").ok_or("no Mewtwo")?;
     if slot != 0 {
         party_swap(s, slot, 0)?;
@@ -1889,13 +2122,49 @@ fn league2_entry(s: &mut Session) -> PResult<()> {
     s.seg = "fly-indigo".into();
     let t0 = s.timer().unwrap_or(0.0);
     super::items::fly(s, "MAPSEC_INDIGO_PLATEAU")?;
+    // The plan's Route 23 Max Elixir (`elixirs` max after route23; hidden at (9, 8) of
+    // `Route23/map.json`, `FLAG_HIDDEN_ITEM_ROUTE23_MAX_ELIXIR`), a few tiles south of the
+    // plateau, if the first pass left it.
+    pickup(
+        s,
+        "MAP_ROUTE23",
+        9,
+        8,
+        "FLAG_HIDDEN_ITEM_ROUTE23_MAX_ELIXIR",
+        "ITEM_MAX_ELIXIR",
+    )?;
     s.seg = "league-entry".into();
     center_heal(s, "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F")?;
-    super::legs2::indigo_mart(s)?;
-    // Revives for the second fighter (`IndigoPlateau_PokemonCenter_1F/scripts.inc` sells them):
-    // Mewtwo's 25 attacks do not cover the round (see `pp_lead`), so Blastoise fights twice.
+    // Valuables to money for League heals (Nugget ¥5000 resale, pearls, star pieces).
+    let got = super::shop::sell(
+        s,
+        "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F",
+        Some((0, 7)),
+        &[
+            "ITEM_NUGGET",
+            "ITEM_BIG_PEARL",
+            "ITEM_PEARL",
+            "ITEM_STAR_PIECE",
+            "ITEM_STARDUST",
+            // Useless at Lv 70 / no target left: Potions, Super Potions, the spare Water Stone.
+            "ITEM_POTION",
+            "ITEM_SUPER_POTION",
+            "ITEM_WATER_STONE",
+        ],
+    )?;
+    if got > 0 {
+        s.event(
+            "model-vs-actual",
+            format!("sold valuables for ¥{got} before the League heals (not in the model)"),
+            json!({"money": got}),
+        );
+    }
+    // Revives for the second fighter first (`IndigoPlateau_PokemonCenter_1F/scripts.inc` sells
+    // them), then Full Restores with the rest: with the canonical money (¥30 462 after the
+    // Nugget) Full Restores first left nothing for a Revive, and every Champion-2 branch was
+    // Mewtwo alone after Blastoise fell at Lance (dev `pg-dev-fin15`).
     let money = Ram::new(&s.obs).money(s.hf.rec.emu());
-    let n = (money / 1500).min(3) as u16;
+    let n = (money / 1500).min(2) as u16;
     if n > 0 {
         super::shop::buy(
             s,
@@ -1904,6 +2173,7 @@ fn league2_entry(s: &mut Session) -> PResult<()> {
             &[("ITEM_REVIVE", n)],
         )?;
     }
+    super::legs2::indigo_mart(s)?;
     mva(s, "to the League", t0, "mewtwo", "league-entry");
     Ok(())
 }
@@ -1931,7 +2201,9 @@ fn pp_lead(s: &mut Session) -> PResult<()> {
     // A fainted fighter (level >= 40) gets a Revive between rooms, if the bag has one.
     let party = Ram::new(&s.obs).party(s.hf.rec.emu());
     for (i, m) in party.iter().enumerate() {
-        if m.hp == 0 && m.level >= 40 && have(s, "ITEM_REVIVE") > 0 {
+        // One Revive stays for the Champion (the rooms before it revive only above that).
+        let keep = if s.seg.starts_with("champion") { 0 } else { 1 };
+        if m.hp == 0 && m.level >= 40 && have(s, "ITEM_REVIVE") > keep {
             super::shop::use_item_on(s, "ITEM_REVIVE", i)?;
             s.event(
                 "model-vs-actual",
@@ -2055,6 +2327,64 @@ fn champion2(s: &mut Session) -> PResult<()> {
     let room = s.graph().id("MAP_POKEMON_LEAGUE_CHAMPIONS_ROOM");
     let hof = s.graph().id("MAP_POKEMON_LEAGUE_HALL_OF_FAME");
     super::legs2::league_prep(s)?;
+    // Into the Champion at full HP: a Full Restore from the reserve the rooms left
+    // (`battle::CHAMPION2_RESERVE`) on a lead below full (a Revive leaves it at half).
+    let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    if m.hp > 0 && m.hp < m.max_hp && have(s, "ITEM_FULL_RESTORE") > 1 {
+        super::shop::use_item_on(s, "ITEM_FULL_RESTORE", 0)?;
+        s.event(
+            "model-vs-actual",
+            format!(
+                "Full Restore on the lead before the Champion ({}/{} HP)",
+                m.hp, m.max_hp
+            ),
+            json!({"hp": m.hp, "max_hp": m.max_hp}),
+        );
+    }
+    // Blastoise is the second fighter (Surf hits Tyranitar and Arcanine 2x): its PP and HP
+    // before the door, from what Mewtwo's prep left (a Max Elixir when its attacks are below
+    // half, a Hyper Potion below 60 % HP). Not in the model (its fighter is Mewtwo alone).
+    if let Some(b) = party_slot(s, "SPECIES_BLASTOISE") {
+        let m = Ram::new(&s.obs).party(s.hf.rec.emu())[b].clone();
+        let att = attack_pp(s, &m);
+        // Surf is the attack that matters (Tyranitar, Arcanine): its PP decides, not the total
+        // (Bite's 24 PP made a dry Surf look like 42 attacks, dev `pg-dev-fin16`).
+        let surf = m
+            .knows(super::names::id("MOVE_SURF"))
+            .map_or(u8::MAX, |k| m.pp[k]);
+        if m.hp > 0 && (att < 20 || surf <= 5) {
+            if let Some(it) = ["ITEM_ELIXIR", "ITEM_MAX_ELIXIR"]
+                .into_iter()
+                .find(|it| have(s, it) > 0)
+            {
+                super::shop::use_item_on(s, it, b)?;
+                s.event(
+                    "model-vs-actual",
+                    format!(
+                        "{} on Blastoise before the Champion ({att} attacks left, Surf {surf})",
+                        it.trim_start_matches("ITEM_")
+                    ),
+                    json!({"pp": m.pp}),
+                );
+            }
+        }
+        let potion = ["ITEM_HYPER_POTION", "ITEM_MAX_POTION"]
+            .into_iter()
+            .find(|it| have(s, it) > 0);
+        if let (true, Some(it)) = (m.hp > 0 && m.hp * 10 < m.max_hp * 6, potion) {
+            super::shop::use_item_on(s, it, b)?;
+            s.event(
+                "model-vs-actual",
+                format!(
+                    "{} on Blastoise before the Champion ({}/{} HP)",
+                    it.trim_start_matches("ITEM_"),
+                    m.hp,
+                    m.max_hp
+                ),
+                json!({"hp": m.hp}),
+            );
+        }
+    }
     super::legs2::e4_door(s)?;
     go_to(
         s,
@@ -2185,7 +2515,12 @@ pub fn stages() -> Vec<Stage> {
     ]
     .into_iter()
     .chain(FILL.iter().map(|&(name, run)| Stage { name, run }))
+    .chain(FINISH.iter().map(|&(name, run)| Stage { name, run }))
     .chain(vec![
+        Stage {
+            name: "dex-finish-party",
+            run: super::dexfin::finish_party,
+        },
         Stage {
             name: "national-dex",
             run: national_dex,

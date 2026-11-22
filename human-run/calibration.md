@@ -348,3 +348,34 @@ column = difference of the model's no-reset p50 clocks between the named segment
 
 Dex at the first Hall of Fame: 16 caught (fwd-canon2), 18 (v2) against the plan's 60; the post-HoF fill measured
 ~5-6 s per frame-budget step, Seafoam B3F 4-5 new species in ~20 000 frames.
+
+## Post-game, canonical run of record (`runs/human-play/pg-canon5`, 2026-11-22, journal `2026-11-22-23-00-finish.md`)
+
+One continuous pure-input log from boot (no RAM pokes; resumed from `pg-canon4` `dex-fill-24`, the post-game legs from
+its own `celio-rainbow` checkpoint after the last controller changes). Seconds between checkpoints (frames / 59.7275);
+model = difference of the model's p50 clocks where a `model-vs-actual` names one.
+
+| stretch | played | model | note |
+| --- | --- | --- | --- |
+| dex finish: stones x3, Rare Candy, Magikarp (Route 4 center, 2 PC sessions) | 244 s | - | `dexfin.rs`, not in the model |
+| Farfetch'd trade (Vermilion) | 58 s | - | |
+| Nidorino trade + Moon Stone -> Nidoking (Route 11 gate) | 136 s | - | |
+| Omanyte (Cinnabar lab, Helix Fossil) | 67 s | - | caught 60 at 18 263 s |
+| party back (Cinnabar PC) | 42 s | - | |
+| National Dex (fly Pallet, Oak) | 62 s | 50 s | split 18 357 s vs p50 10 032 s |
+| Celio's request (fly Vermilion + Seagallop) | 52 s | 82 s | |
+| Kindle Road + grunts + Ruby Path in | 384 s | 169 s | |
+| Ruby Path out + Rainbow Pass | 147 s | 80 s | |
+| Icefall Cave | 287 s | 156 s | ice route re-planned once (Entrance row 30) |
+| Six Island, Dotted Hole | 243 s | 0 s | |
+| Five Island, Meadow pickups, warehouse pearls, Gideon | 906 s | 600 s | pickups ~150 s |
+| Sapphire to Celio | 71 s | 98 s | |
+| Cerulean (heal, Max Elixir), Mewtwo, TMs, PP Up | 448 s | 181 s | |
+| fly Indigo, Route 23 Max Elixir, heal, sell, 2 Revives + 12 Full Restores | 73 s | 55 s | |
+| Lorelei 2 / Bruno 2 / Agatha 2 / Lance 2 | 364 / 224 / 150 / 178 s | 167 / 143 / 126 / 173 s | |
+| Champion 2 (to the HoF screen) / HoF 2 to the black frame | 332 / 32 s | - / - | |
+| **finish** | **22 247 s (6:10:47)** | p50 12 279 s | +9 968 s; WR 12 325 s |
+
+Rollbacks after `dex-fill-24` (first survivor kept): Lance 2 x2 (from the Agatha-2 checkpoint), Champion 2 x4 (from
+the Lance-2 checkpoint); none in the dex finish and the Sevii legs. Over the whole log 48 (42 before, mostly
+controller soft-locks in the dex fill).

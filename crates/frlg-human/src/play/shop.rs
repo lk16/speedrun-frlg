@@ -270,7 +270,8 @@ pub fn buy(
     }
     // CANCEL out of the list (B), SEE YA on the shop menu (B), the clerk's goodbye.
     press_until(s, "the shop menu again", keys::B, 900, |s| {
-        menu::task(s, "Task_ShopMenu")
+        // Two quick B presses can leave the shop menu before its task is seen: free counts too.
+        menu::task(s, "Task_ShopMenu") || is_free(s)
     })?;
     s.hf.idle(4)?;
     press_until(s, "out of the shop menu", keys::B, 300, |s| {
@@ -284,6 +285,121 @@ pub fn buy(
         json!({"map": map, "spent": spent}),
     );
     Ok(out)
+}
+
+/// Sell every one of `items` in the bag at the mart on `map` (SELL on the shop menu, the bag in
+/// sell mode, `decompiled/src/item_menu.c:1787-1960`: `Task_ItemContext_Sell`, the quantity box
+/// `Task_SelectQuantityToSell` (DOWN from 1 wraps to the stack size,
+/// `AdjustQuantityAccordingToDPadInput`, `menu_helpers.c:169-200`), the yes/no, then
+/// `Task_WaitPressAB_AfterSell`). Returns the money received.
+pub fn sell(s: &mut Session, map: &str, clerk: Option<(i16, i16)>, items: &[&str]) -> PResult<u32> {
+    let todo: Vec<&str> = items
+        .iter()
+        .copied()
+        .filter(|it| Ram::new(&s.obs).count(s.hf.rec.emu(), id(it)) > 0)
+        .collect();
+    if todo.is_empty() {
+        return Ok(0);
+    }
+    let (cx, cy) = match clerk {
+        Some(p) => p,
+        None => {
+            let g = s.graph();
+            let m = &g.maps[&g.id(map)];
+            m.objects
+                .iter()
+                .find(|o| o.graphics.contains("CLERK"))
+                .map(|o| (o.x, o.y))
+                .ok_or_else(|| PlayError::Fatal(format!("no clerk on {map}")))?
+        }
+    };
+    let money0 = Ram::new(&s.obs).money(s.hf.rec.emu());
+    talk_at(s, map, cx, cy)?;
+    if wait_until(s, "the shop menu", 400, |s| menu::task(s, "Task_ShopMenu")).is_err() {
+        press_until(s, "the shop menu", keys::A, 3000, |s| {
+            menu::task(s, "Task_ShopMenu")
+        })?;
+    }
+    menu::choose(s, 1)?; // SELL
+    wait_until(s, "the sell bag", 600, super::items::bag_input)?;
+    for it in todo {
+        let item = id(it);
+        let Some((pocket, idx)) = super::items::pocket_of(s, item) else {
+            continue;
+        };
+        for tries in 0.. {
+            wait_until(s, "the bag", 200, super::items::bag_input)?;
+            let cur = super::items::bag_pocket(s) as usize;
+            if cur == pocket {
+                break;
+            }
+            if tries > 8 {
+                return Err(PlayError::Death("soft-lock: sell bag pocket".into()));
+            }
+            s.hf.press(if pocket > cur {
+                keys::RIGHT
+            } else {
+                keys::LEFT
+            })?;
+            s.hf.idle(2)?;
+        }
+        list_goto(s, idx as u16)?;
+        press_until(s, "the sale started", keys::A, 300, |s| {
+            !super::items::bag_input(s)
+        })?;
+        let start = s.hf.fed();
+        let mut adjusted = false;
+        let mut confirmed = false;
+        loop {
+            if s.hf.fed() - start > 1500 {
+                return Err(PlayError::Death(format!("soft-lock: selling {it}")));
+            }
+            if confirmed && super::items::bag_input(s) {
+                break;
+            }
+            if menu::task(s, "Task_SelectQuantityToSell") {
+                if !adjusted {
+                    s.hf.idle(4)?;
+                    s.hf.press(keys::DOWN)?;
+                    s.hf.idle(4)?;
+                    adjusted = true;
+                }
+                s.hf.press(keys::A)?;
+                s.hf.idle(2)?;
+                continue;
+            }
+            if menu::task(s, "Task_CallYesOrNoCallback") {
+                menu::answer(s, true)?;
+                confirmed = true;
+                continue;
+            }
+            if menu::task(s, "Task_WaitPressAB_AfterSell") {
+                confirmed = true;
+                s.hf.late()?;
+                s.hf.step(keys::A)?;
+                s.hf.step(0)?;
+                continue;
+            }
+            s.hf.step(0)?;
+        }
+        let money = Ram::new(&s.obs).money(s.hf.rec.emu());
+        s.event(
+            "decision",
+            format!("sold {} (¥{money} now)", it.trim_start_matches("ITEM_")),
+            json!({"item": it, "money": money}),
+        );
+    }
+    press_until(s, "the shop menu again", keys::B, 900, |s| {
+        menu::task(s, "Task_ShopMenu") || is_free(s)
+    })?;
+    s.hf.idle(4)?;
+    press_until(s, "out of the shop menu", keys::B, 300, |s| {
+        !menu::task(s, "Task_ShopMenu")
+    })?;
+    settle(s)?;
+    Ok(Ram::new(&s.obs)
+        .money(s.hf.rec.emu())
+        .saturating_sub(money0))
 }
 
 /// One PC operation.
@@ -641,6 +757,18 @@ pub fn use_item(s: &mut Session, item: &str) -> PResult<()> {
 /// USE -> the party menu -> the mon. An evolution scene is mashed with A only (B stops it:
 /// `decompiled/src/evolution_scene.c`). Returns the mon's species afterwards.
 pub fn use_item_on(s: &mut Session, item: &str, slot: usize) -> PResult<u16> {
+    use_item_on_move(s, item, slot, None)
+}
+
+/// [`use_item_on`] for items that ask which move (an Ether, a PP Up: `ShowMoveSelectWindow` and
+/// `Task_HandleRestoreWhichMoveInput`, a standard menu, `decompiled/src/party_menu.c:4548-4590,4709-4715`):
+/// `mv` is the move slot 0..3.
+pub fn use_item_on_move(
+    s: &mut Session,
+    item: &str,
+    slot: usize,
+    mv: Option<usize>,
+) -> PResult<u16> {
     let it = id(item);
     let ram_party = Ram::new(&s.obs).party(s.hf.rec.emu());
     let before = ram_party
@@ -650,6 +778,24 @@ pub fn use_item_on(s: &mut Session, item: &str, slot: usize) -> PResult<u16> {
     open_bag(s)?;
     super::items::bag_use(s, it, 0)?;
     super::items::party_choose(s, slot as i8)?;
+    if let Some(m) = mv {
+        // The A on the mon can be dropped while its cursor still glides: press again while the
+        // party menu still asks "Use on which POKéMON?".
+        let start = s.hf.fed();
+        while !menu::task(s, "Task_HandleRestoreWhichMoveInput") {
+            if s.hf.fed() - start > 900 {
+                return Err(PlayError::Death(
+                    "soft-lock: waited 900 frames for the which-move list".into(),
+                ));
+            }
+            if (s.hf.fed() - start) % 45 == 44 && menu::task(s, "Task_HandleChooseMonInput") {
+                s.hf.step(keys::A)?;
+            } else {
+                s.hf.step(0)?;
+            }
+        }
+        menu::choose(s, m as i8)?;
+    }
     // Evolution scene (A only), the "grew to Lv" / "evolved" text, back to the bag or the field.
     let start = s.hf.fed();
     loop {

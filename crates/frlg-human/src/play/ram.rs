@@ -15,6 +15,8 @@ pub struct Mon {
     pub exp: u32,
     pub moves: [u16; 4],
     pub pp: [u8; 4],
+    /// `ppBonuses` (growth substruct byte 8, two bits per move: `decompiled/include/pokemon.h`).
+    pub pp_bonuses: u8,
     pub status: u32,
     pub level: u8,
     pub hp: u16,
@@ -92,6 +94,7 @@ pub fn read_mon(emu: &mut Emu, addr: u32) -> Mon {
         exp: u32::from_le_bytes([sec[g + 4], sec[g + 5], sec[g + 6], sec[g + 7]]),
         moves: std::array::from_fn(|i| s16(a + 2 * i)),
         pp: std::array::from_fn(|i| sec[a + 8 + i]),
+        pp_bonuses: sec[g + 8],
         status: u32_at(80),
         level: raw[84],
         hp: u16_at(86),

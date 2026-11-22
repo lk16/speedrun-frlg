@@ -1,5 +1,16 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 23:00 canonical run finished (read first; journal `journal/2026-11-22-23-00-finish.md`)
+
+**`runs/human-play/pg-canon5`: one pure-input run from boot to the first full black frame of the second Hall of
+Fame, 22 247.4 s (6:10:47)**, model p50 12 279 s (+9 968 s). Dex 51 -> 60 by `play/dexfin.rs` (stones, Rare Candy,
+trades, Magikarp, fossil: 505 s, 0 rollbacks), National Dex 18 357 s. League 2 made winnable by post-game pickups
+(Meadow PP Up / Max Potion, Cerulean Cave + Route 23 Max Elixirs, warehouse pearls), Shock Wave over Fire Blast,
+selling valuables, 2 Revives + 12 Full Restores, a 4-Full-Restore reserve for the Champion and a Blastoise prep before
+it. Rollbacks after the fill: Lance 2 x2, Champion 2 x4. Biggest losses vs the model: the post-HoF dex fill (~5 400 s,
+and it spent the League money) and the post-game lumps (`calibration.md`, last section). Next: move the fill upstream
+(route agent), calibrate the post-game lumps, a stronger second League fighter.
+
 ## 2026-11-22 22:05 non-fight windows (read first; journal `journal/2026-11-22-22-05-nonfight-windows.md`)
 
 The whole WR VOD classified per frame (`video-analysis/data/wr-battle-chains.jsonl`, `tools/nonfight/`), each WR window

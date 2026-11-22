@@ -281,7 +281,7 @@ times go into `calibration.md` and, as a labelled MODEL CHANGE, into the model.
   model update. *Check:* every split reached; the deltas against the model listed in the journal.
 - [ ] **S7. Dex fill.** Encounter loops, catch rules, Safari Zone, fishing, evolutions, all 60
   species in the plan's order. *Check:* National Dex unlock condition met (cite the script).
-- [ ] **S8. Post-game.** Sevii Islands, Rocket Warehouse, National Dex, Elite Four Round 2 and the
+- [x] **S8. Post-game.** (canonical `runs/human-play/pg-canon5`, finish 22 247 s; journal `2026-11-22-23-00-finish.md`) Sevii Islands, Rocket Warehouse, National Dex, Elite Four Round 2 and the
   Champion, up to the first full black frame of the second Hall of Fame. *Check:* finish frame
   reached and the timer stopped by the category rule.
 - [ ] **S9. Full run and video.** `frlg-human video <plan> --seed S` runs (or reuses) the full

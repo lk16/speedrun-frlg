@@ -52,14 +52,14 @@ pub fn list_goto(s: &mut Session, want: u16) -> PResult<()> {
 
 /// `gBagMenuState` (`decompiled/include/item_menu.h:12-20`): `u16 pocket` at 6 (0 items, 1 key
 /// items, 2 balls: `OPEN_BAG_*`).
-fn bag_pocket(s: &mut Session) -> u16 {
+pub(super) fn bag_pocket(s: &mut Session) -> u16 {
     let a = s.sym("gBagMenuState");
     s.hf.rec.emu().read16(a + 6)
 }
 
 /// The bag takes input: its task runs and is not returning early for a palette fade or the window
 /// animation (`Task_BagMenu_HandleInput`, `decompiled/src/item_menu.c:1037-1046`).
-fn bag_input(s: &mut Session) -> bool {
+pub(super) fn bag_input(s: &mut Session) -> bool {
     menu::task(s, "Task_BagMenu_HandleInput")
         && !super::prims::fade_active(s)
         && !menu::task(s, "Task_AnimateWin0v")
@@ -108,7 +108,7 @@ pub fn close_to_field(s: &mut Session) -> PResult<()> {
 }
 
 /// Bag pocket (save order: 0 items, 1 key items, 2 balls, 3 TM/HM, 4 berries) holding `item`.
-fn pocket_of(s: &mut Session, item: u16) -> Option<(usize, usize)> {
+pub(super) fn pocket_of(s: &mut Session, item: u16) -> Option<(usize, usize)> {
     let ram = Ram::new(&s.obs);
     let emu = s.hf.rec.emu();
     (0..3).find_map(|p| {

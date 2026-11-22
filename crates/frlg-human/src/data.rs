@@ -107,6 +107,8 @@ pub struct Species {
     pub catch_rate: u32,
     pub exp_yield: u32,
     pub medium_slow: bool,
+    /// `GROWTH_*` (`species_info.h` `.growthRate`).
+    pub growth: String,
     /// National number if in the Kanto dex (1..=151), else 0.
     pub dex: u32,
     pub evo: Vec<(String, String, usize)>,
@@ -423,6 +425,7 @@ impl Dex {
                     catch_rate: s.catch,
                     exp_yield: s.yield_,
                     medium_slow: s.growth == "GROWTH_MEDIUM_SLOW",
+                    growth: s.growth.clone(),
                     dex: s.dex,
                     types: (type_num(&s.types.0), type_num(&s.types.1)),
                     safari_flee: s.safari_flee,

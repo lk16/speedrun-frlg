@@ -75,4 +75,50 @@ pub fn print(rom: &Path, sym: &Path, state: &Path, _dex: &Dex) {
         );
     }
     println!("facing {}", ram.player_facing(emu));
+    // Pokédex owned & seen (`struct Pokedex` at SaveBlock2 + 0x18, owned 0x10, seen 0x44,
+    // `decompiled/include/global.h:193-204`), and the PC boxes (`gPokemonStoragePtr`,
+    // `decompiled/include/pokemon_storage_system.h:44-50`: currentBox, then 14 x 30 BoxPokemon).
+    if let Some(sb2) = obs.save_block2(emu) {
+        let own = emu.read_bytes(sb2 + 0x28, 49);
+        let seen = emu.read_bytes(sb2 + 0x5C, 49);
+        let has = |i: usize| (own[i / 8] & seen[i / 8]) & (1 << (i % 8)) != 0;
+        let caught = (0..386).filter(|&i| has(i)).count();
+        let missing: Vec<String> = (0..151)
+            .filter(|&i| !has(i))
+            .map(|i| {
+                _dex.species
+                    .iter()
+                    .find(|sp| sp.dex as usize == i + 1)
+                    .map_or(format!("#{}", i + 1), |sp| sp.name.clone())
+            })
+            .collect();
+        println!(
+            "caught {caught}; Kanto missing {}: {}",
+            missing.len(),
+            missing.join(" ")
+        );
+    }
+    if let Some(p) = obs.symbols().get("gPokemonStoragePtr") {
+        let st = emu.read32(p.addr);
+        for b in 0..14u32 {
+            let v: Vec<String> = (0..30u32)
+                .filter_map(|i| {
+                    let a = st + 4 + (b * 30 + i) * 80;
+                    if emu.read32(a) == 0 && emu.read32(a + 4) == 0 {
+                        None
+                    } else {
+                        let m = super::ram::read_mon(emu, a);
+                        Some(format!(
+                            "{i}:{}:L{}",
+                            n.species(m.species).trim_start_matches("SPECIES_"),
+                            m.level
+                        ))
+                    }
+                })
+                .collect();
+            if !v.is_empty() {
+                println!("box {b}: {}", v.join(" "));
+            }
+        }
+    }
 }
