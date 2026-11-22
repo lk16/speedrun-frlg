@@ -401,6 +401,9 @@ fn heal_count(items: &[(u16, u16)]) -> u32 {
     .sum()
 }
 
+/// Full Restores the round-2 Elite Four rooms leave in the bag for the Champion (a played rule).
+pub const CHAMPION2_RESERVE: u32 = 4;
+
 /// The fight's tactics from the plan and the real party and bag (`sim::fight_tactics`).
 pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
     let league = sim::is_league(seg);
@@ -433,6 +436,16 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
     // The real bag rations the heals (the sim leaves them unlimited outside the League), and the
     // potion it holds is the one the policy can count on.
     tac.heal_stock = tac.heal_stock.min(heal_count(&sc.items));
+    // Round 2: the rooms leave CHAMPION2_RESERVE Full Restores for the rematch Champion. Not in the
+    // model (its League heals are a pool the fights share); played, the rooms spent all 13 and every
+    // Champion-2 branch started with none (dev `pg-dev-fin5`, 0 of 9).
+    if matches!(seg, "lorelei-2" | "bruno-2" | "agatha-2" | "lance-2") {
+        let fr = count(&sc.items, ITEM_FULL_RESTORE);
+        let others = heal_count(&sc.items) - fr;
+        tac.heal_stock = tac
+            .heal_stock
+            .min(others + fr.saturating_sub(CHAMPION2_RESERVE));
+    }
     if let (_, Some(id)) = heal_pick(&sc.items, sc.me.level, false) {
         tac.heal = item_hp(id);
     }

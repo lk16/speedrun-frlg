@@ -1445,16 +1445,32 @@ fn ice_go(s: &mut Session, what: &str, goal: &dyn Fn(&Node) -> bool) -> PResult<
         "MAP_FOUR_ISLAND_ICEFALL_CAVE_B1F",
         "MAP_FOUR_ISLAND_ICEFALL_CAVE_BACK",
     ];
-    settle(s)?;
-    let cur = here(s).ok_or("no position")?;
-    let plan = ice_plan(s, &MAPS, cur, goal)
-        .ok_or_else(|| PlayError::Fatal(format!("{what}: no ice route from {cur:?}")))?;
-    s.event(
-        "decision",
-        format!("Icefall Cave: {} moves to {what}", plan.len()),
-        json!({"moves": plan.len()}),
-    );
-    ice_follow(s, &plan)
+    // A slide that ends off the plan (the Entrance's row 30 slid one tile further than the layout
+    // says, canonical state) is re-planned from where the player stands, as a human would.
+    for attempt in 0..6 {
+        settle(s)?;
+        let cur = here(s).ok_or("no position")?;
+        let plan = ice_plan(s, &MAPS, cur, goal)
+            .ok_or_else(|| PlayError::Fatal(format!("{what}: no ice route from {cur:?}")))?;
+        s.event(
+            "decision",
+            format!("Icefall Cave: {} moves to {what}", plan.len()),
+            json!({"moves": plan.len(), "replan": attempt}),
+        );
+        match ice_follow(s, &plan) {
+            Err(PlayError::Death(m)) if m.starts_with("ice route: at") && attempt < 5 => {
+                s.event(
+                    "warn",
+                    format!("Icefall Cave: {m}; re-planning"),
+                    json!({"replan": attempt + 1}),
+                );
+            }
+            r => return r,
+        }
+    }
+    Err(PlayError::Death(format!(
+        "{what}: ice route re-planned 6 times"
+    )))
 }
 
 const CELIO_PC: &str = "MAP_ONE_ISLAND_POKEMON_CENTER_1F";
@@ -2237,6 +2253,20 @@ fn champion2(s: &mut Session) -> PResult<()> {
     let room = s.graph().id("MAP_POKEMON_LEAGUE_CHAMPIONS_ROOM");
     let hof = s.graph().id("MAP_POKEMON_LEAGUE_HALL_OF_FAME");
     super::legs2::league_prep(s)?;
+    // Into the Champion at full HP: a Full Restore from the reserve the rooms left
+    // (`battle::CHAMPION2_RESERVE`) on a lead below full (a Revive leaves it at half).
+    let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    if m.hp > 0 && m.hp < m.max_hp && have(s, "ITEM_FULL_RESTORE") > 1 {
+        super::shop::use_item_on(s, "ITEM_FULL_RESTORE", 0)?;
+        s.event(
+            "model-vs-actual",
+            format!(
+                "Full Restore on the lead before the Champion ({}/{} HP)",
+                m.hp, m.max_hp
+            ),
+            json!({"hp": m.hp, "max_hp": m.max_hp}),
+        );
+    }
     super::legs2::e4_door(s)?;
     go_to(
         s,
