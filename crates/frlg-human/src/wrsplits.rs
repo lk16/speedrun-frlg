@@ -35,7 +35,11 @@ pub const WR_SPLITS: &[(&str, f64, i32, i32, &[&str])] = &[
         &["sevii-return", "blaine-badge-and-sevii-scene"],
     ),
     ("Sabrina", 7914.0, 45, 46, &["sabrina-badge"]),
-    ("Erika", 8090.0, 46, -1, &["erika-badge"]),
+    // The runner splits "Erika" on arriving at the Warden when the Gold Teeth go in after Erika: WR video
+    // (6 s contact sheets, video = run + 35 s) Erika beaten 8087, Fly 8111, Fuchsia 8117, split 8125,
+    // "A gave the GOLD TEETH to the WARDEN" 8129, HM04 8135. A plan whose Warden comes earlier
+    // (`warden_early`) has no `warden` walk after Sabrina and falls back to `erika-badge`.
+    ("Erika", 8090.0, 46, -1, &["warden", "erika-badge"]),
     ("Giovanni 3", 8633.0, 52, 49, &["giovanni-badge"]),
     ("Start E4R1", 9365.0, 60, 50, &["indigo-heal"]),
     ("Lorelei 1", 9538.0, -1, -1, &["lorelei"]),
@@ -73,26 +77,31 @@ fn hms(s: f64) -> String {
 
 /// Segment index for each WR split (None when the plan has no matching segment).
 pub fn split_indices(plan: &Plan) -> Vec<Option<usize>> {
+    match_splits(&plan.segs)
+}
+
+/// For each WR split the first candidate segment that lies after the previous matched split.
+fn match_splits(segs: &[crate::route::Seg]) -> Vec<Option<usize>> {
+    let mut prev: Option<usize> = None;
     WR_SPLITS
         .iter()
         .map(|(_, _, _, _, cands)| {
-            cands
-                .iter()
-                .find_map(|c| plan.segs.iter().position(|s| s.name == *c))
+            let m = cands.iter().find_map(|c| {
+                segs.iter()
+                    .enumerate()
+                    .position(|(i, s)| s.name == *c && prev.is_none_or(|p| i > p))
+            });
+            if m.is_some() {
+                prev = m;
+            }
+            m
         })
         .collect()
 }
 
 /// Segment indices that end a WR split window (the same matching as `split_indices`).
 pub fn window_ends(segs: &[crate::route::Seg]) -> Vec<usize> {
-    WR_SPLITS
-        .iter()
-        .filter_map(|(_, _, _, _, cands)| {
-            cands
-                .iter()
-                .find_map(|c| segs.iter().position(|s| s.name == *c))
-        })
-        .collect()
+    match_splits(segs).into_iter().flatten().collect()
 }
 
 type Row = (

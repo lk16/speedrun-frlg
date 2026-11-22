@@ -43,6 +43,8 @@ SKIP_FIRST = opt('--skip', 0)
 FIXED_RUNG = opt('--rung', '')
 R1 = opt('--r1', 0)  # fixed start R for screening (0 = grow from 10000)
 R2 = opt('--r2', 0)  # fixed R for the seed-2 confirmation
+# --num-from N: number promoted plans inside an assigned block N..N+99 (agents share plans/)
+NUM_FROM = opt('--num-from', 0)
 os.environ['FRLG_POINTER'] = POINTER
 
 
@@ -55,7 +57,10 @@ def load(name):
 
 
 def next_number():
-    return max(int(f.split('-')[0]) for f in os.listdir(PLANS) if f[:3].isdigit()) + 1
+    nums = [int(f.split('-')[0]) for f in os.listdir(PLANS) if f[:3].isdigit() and f.split('-')[0].isdigit()]
+    if NUM_FROM:
+        return max([n for n in nums if NUM_FROM <= n < NUM_FROM + 100] + [NUM_FROM - 1]) + 1
+    return max(nums) + 1
 
 
 _SEGS = None
@@ -459,8 +464,13 @@ def gen(p):
         cands = skipknobs.candidates(p)
     elif SET == 'earlymid':
         sys.path.insert(0, HERE)
-        import earlyknobs, manipknobs, midknobs
-        cands = earlyknobs.candidates(p) + manipknobs.candidates(p) + midknobs.candidates(p)
+        import earlyknobs, fightknobs, manipknobs, midknobs
+        cands = fightknobs.candidates(p) + earlyknobs.candidates(p) + manipknobs.candidates(p) + midknobs.candidates(p)
+    elif SET == 'fights':
+        # Optional trainers per segment (fight_lists, plan 1253+): the exp-vs-time trade-off.
+        sys.path.insert(0, HERE)
+        import fightknobs
+        cands = fightknobs.candidates(p)
     elif SET == 'early':
         sys.path.insert(0, HERE)
         import earlyknobs, manipknobs
@@ -505,6 +515,9 @@ def gen(p):
         sys.path.insert(0, HERE)
         import dexknobs
         cands = dexknobs.candidates(p) + (candidates(p) if SET == 'all' else [])
+        if SET == 'all':
+            import fightknobs
+            cands = fightknobs.candidates(p) + cands
     else:
         cands = candidates(p)
     if p.get('sac_honest'):

@@ -134,9 +134,15 @@ pub struct Session<'p> {
     pub stage: usize,
     pub retry: u32,
     forced_done: Vec<String>,
+    /// Added to the human key after a rollback past a dead-end checkpoint, so the earlier stage is
+    /// replayed with inputs it has not had before; cleared once the run is past that stage.
+    key_offset: u64,
+    /// Stage index up to which `key_offset` applies, and how many deep rollbacks happened.
+    deep_until: usize,
+    deep: u32,
 }
 
-fn read_ilog(path: &Path) -> Result<InputLog, String> {
+pub(crate) fn read_ilog(path: &Path) -> Result<InputLog, String> {
     let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
     InputLog::decode(&bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
@@ -291,6 +297,9 @@ impl<'p> Session<'p> {
             stage: 0,
             retry: 0,
             forced_done: vec![],
+            key_offset: 0,
+            deep_until: 0,
+            deep: 0,
         })
     }
 
@@ -353,7 +362,11 @@ impl<'p> Session<'p> {
         }
         while i < stages.len() {
             self.stage = i;
-            self.hf.rekey(i as u64 * 1000 + self.retry as u64);
+            if i > self.deep_until {
+                self.key_offset = 0;
+            }
+            self.hf
+                .rekey(i as u64 * 1000 + self.retry as u64 + self.key_offset);
             let st = &stages[i];
             eprintln!(
                 "== stage {i} {} (retry {}) at frame {}",
@@ -382,6 +395,39 @@ impl<'p> Session<'p> {
                 }
                 Err(PlayError::Death(cause)) => {
                     self.dump(&format!("{}-r{}", st.name, self.retry));
+                    // Every branch from this checkpoint dies: it is a dead end (e.g. Lance with
+                    // the PP and items the earlier rooms left). Roll back one checkpoint further,
+                    // with human keys not used there before (at most 3 times per session).
+                    let n = self.ckpts.len();
+                    if self.retry + 1 >= self.cfg.max_retries
+                        && self.deep < 3
+                        && n >= 2
+                        && self.ckpts[n - 2].stage != usize::MAX
+                    {
+                        let dead = self.ckpts.pop().unwrap();
+                        self.deep += 1;
+                        // The k-th dead end goes k checkpoints back (one more each time).
+                        for _ in 1..self.deep {
+                            let m = self.ckpts.len();
+                            if m >= 2 && self.ckpts[m - 2].stage != usize::MAX {
+                                self.ckpts.pop();
+                            }
+                        }
+                        let back = self.ckpts.last().unwrap();
+                        let j = back.stage + 1;
+                        let msg = format!(
+                            "{cause}; checkpoint {} is a dead end ({} deaths): back to {}",
+                            dead.rec.name,
+                            self.retry + 1,
+                            back.rec.name
+                        );
+                        self.rollback(&msg)?;
+                        self.retry = 0;
+                        self.key_offset = 100 * self.deep as u64;
+                        self.deep_until = i;
+                        i = j;
+                        continue;
+                    }
                     if self.retry + 1 >= self.cfg.max_retries {
                         self.write_outputs()?;
                         return Err(PlayError::Fatal(format!(

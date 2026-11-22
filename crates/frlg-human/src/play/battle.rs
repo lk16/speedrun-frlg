@@ -762,7 +762,9 @@ pub fn fight(
             .to_string();
         let fight = dex.fight(&name);
         c.ai = fight.ai;
-        c.ai_heals = fight.heals;
+        // The game decides the real item use; for the model's predictions a Full Heal is no HP heal
+        // (`Params::ai_cure_items`, `battle_ai_switch_items.c:606-638`).
+        c.ai_heals = fight.heals.saturating_sub(fight.cures);
         c.trainer = Some(name);
     }
     if !battle_ram::battle_style_set(obs, f.emu()) && trainer {
@@ -1042,6 +1044,11 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
         attacked: matches!(taken, Action::Move(mv) if dex.moves[mv].power > 0),
         ..now
     });
+    // Diagnostics for engine-vs-emulator comparisons: the foe's last move (`gLastMoves[1]`) and both
+    // battlers' raw stat stages (`gBattleMons[].statStages`, 6 = neutral).
+    let foe_last = c.ram.last_move(f.emu(), 1);
+    let my_stages = c.ram.battle_mon(f.emu(), 0).stages;
+    let foe_stages = c.ram.battle_mon(f.emu(), 1).stages;
     let st = |m: &Mon| match m.status {
         Status1::None => String::new(),
         s => format!(" [{s:?}]"),
@@ -1072,6 +1079,8 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
             "win_prob": win, "exp_turns": exp_turns, "hp_left_on_win": hp_left,
             "rollouts": d.rollouts.iter().map(|(a, w)| format!("{} {w}", describe(dex, &sc, *a))).collect::<Vec<_>>(),
             "bench": sc.bench.len(),
+            "foe_last_move": if foe_last == 0 || foe_last == u16::MAX { format!("#{foe_last}") } else { super::names::names().mv(foe_last).trim_start_matches("MOVE_").to_string() },
+            "my_stages": my_stages, "foe_stages": foe_stages,
         }),
     );
     let fs = c.fs.as_mut().unwrap();

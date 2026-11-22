@@ -37,6 +37,15 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
     leg_nugget_bill(b, p, h);
     b.split(); // "Bill"
     leg_bill_return(b, p, h);
+    if p.variant("dig_after_bill") {
+        // Variant: the Cerulean Rocket (`CeruleanCity/scripts.inc` `CeruleanCity_EventScript_Grunt`,
+        // TRAINER_TEAM_ROCKET_GRUNT_5: Machop 17, Drowzee 17) right after Bill, as the WR does (video run
+        // time 0:39:00: a Lv17 Drowzee hit super-effectively, between Bill's ticket at 0:38 and Route 6's
+        // Camper Jeff at 0:40; no other Drowzee Lv17 exists before Silph in `trainer_parties.h` or
+        // `wild_encounters.json`). TM28 is picked up (`GruntDefeated`), not taught. Use with `no_dig`.
+        b.trainer("dig-grunt", "TRAINER_TEAM_ROCKET_GRUNT_5", 600);
+        b.text("tm28-dig", 900, Src::Guess);
+    }
     leg_ssanne(b, p, h);
     if p.variant("surge_early") {
         // Variant: Surge right after the S.S. Anne (Cut is in the bag: `captain-hm01`), in the town
@@ -74,6 +83,9 @@ pub fn wr_order(b: &mut B<'_>, p: &Params, h: &Helpers<'_>) {
         leg_surge(b, p, h);
     }
     leg_cycling(b, p, h);
+    // The WR's "Snorlax" split is pressed on the Cycling Road at the Max Elixir, ~35 s after Snorlax
+    // (video 1:20:22 = run 1:19:47, 6 s contact sheets, journal 2026-11-22 route-windows), so the road
+    // belongs in this window.
     b.split(); // "Snorlax"
 
     // Safari, Koga.

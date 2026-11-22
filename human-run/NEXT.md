@@ -1,5 +1,62 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-22 19:40 main session: CURRENT = 1280-wr-faithful (model of record)
+
+1280 replaces 1301 as the model of record: the WR's own trainer list and Rare Candies (VOD-read), the emulator
+`trainer_cost`, windows refit; the carry matches the WR's level at every split. WR+2m ~1053 h (vs 1270's 371 h, same
+policy) -- the honest answer under this model. The two biggest open model uncertainties now dominate every plan knob:
+(1) per-fight speed of a WR-level human vs the bot's played fights (0.9 factor = 1283, 146 h; grounded only by two
+timed WR fights -> time 10-20 more WR route fights from the VOD); (2) the League fit relies on Rare Candies the WR
+never eats (WR enters at Lv50; holding them back is +5609 h) -> refit the League stand-ins at the WR's League level.
+1301's confirmed tactics (Miguel potions 5, Koga heal_below .55, League heal bundle) should be re-applied on 1280 once
+(2) is done.
+
+## 2026-11-22 WR-faithful model (read first; journal `journal/2026-11-22-19-30-wr-faithful.md`)
+
+Every trainer the WR fights from Route 3 to the League read off the VOD (10 s / 2-7 s contact sheets): vs 1270 the WR fights
+no Cerulean gym trainer, Greg (not Sally) on Route 3, Robby (not Miriam) in Mt. Moon, Route 25 x4, the Cerulean Rocket after
+Bill, Route 6 Jeff only, Route 9/RT x10, Route 8 Rich only, hideout grunts 7/18/16/17 (not 13), no Aroma Lady Nikki, Celadon
+Tamia + Lori; everything else matches. Its candies: two eaten in Cerulean (Mt. Moon + hidden Cerulean City), three in the
+hideout before Giovanni (Route 9, Route 6 hidden, B3F). **1280-wr-faithful** = 1270 + that list + those candies +
+`trainer_cost` (no `trainer_fit` 0.6) + windows refit: the carry has the WR's level at every split Brock -> Giovanni 3, and
+scores **WR+2m 1053 h, +682 [547, 868] vs 1270** (seed 7401, R 800k). **Recommended as model of record** (honest, worse).
+No candidate passes the +-60 s window check (1280: 7 windows out, total +269 s; on the WR's structure 1281: 4 out, +319 s;
+the bot's fights are ~7 % slower than the WR's: x0.9 on `trainer_cost` = 1283, -225 h vs 1270, a FIT on two WR fights).
+Safari / Power Plant per-species cost matches the WR (~51 s); the Koga gap is the plan (East+West, stop 5 vs the WR's
+North+West, 7 species). League finding (1284): at the WR's League level (no candy dump at Indigo, Lv51 vs 55) finishes fall
+171 -> 27: the League fit leans on held candies the WR does not eat. Ranked next: League refit at WR levels; time more WR
+route fights for the skill factor; Safari North alone as a plan; Sevii/fill dex split.
+
+## 2026-11-22 route windows (read first; journal `journal/2026-11-22-17-30-route-windows.md`)
+
+Structural causes of 1253's window errors, read off the WR VOD with contact sheets (the 60 s scene log is too coarse; it misled
+twice): Warren fought in the Viridian Gym (MODEL CHANGE `viridian_warren`, 1270: +81 h [57, 109] vs 1253); the runner splits
+"Erika" at the Warden's door (split mapping fixed, reporting only); the WR gives the Gold Teeth after Erika, fights the
+Cerulean Rocket after Bill, catches on Route 3/4, skips Hitmonlee (plan 1271 with all of them: +3443 h, refuted as a plan);
+Snorlax split checked (on the Cycling Road: the model was right). **trainer_fit 0.6 conflict resolved**: the played 79 fights
+fit `a 838 + 579/action + 223/KO` (MODEL CHANGE `trainer_cost`): one-shot fights are 0.85 of `calib_wr`, multi-turn 1.12, so
+the formula's 630/KO overprices route trainers; and 1253's list fights 7 vs the WR's 4 trainers on Route 25 and 16 vs 10 on
+Route 9 / Rock Tunnel (video). With the WR's lists Bill/Rock Tunnel match at `trainer_cost` or 0.75, but the carry is then 2
+levels short (the WR's exp comes later: 5-6 hideout grunts + two Rare Candies before Giovanni 1), deaths rise (1272 +559 h).
+**Recommendation: keep 1253 as model of record for now; adopt `viridian_warren` (1270) as a model change (it is evidence,
+not a choice), and replace `trainer_fit` 0.6 only together with video-derived fight lists for Giovanni 1 -> Koga and a risk-
+window refit** (next step 1). No candidate passes the +-60 s per-window check (1275: 5 windows out, total +456 s).
+
+Next, ranked: (1) fight lists Giovanni 1 -> Koga from the VOD (Route 8: Rich only; hideout door grunt + 5; two candies),
+then `trainer_cost`, refit risk windows, re-score; (2) Safari/Power Plant hunting time (WR ~30 s per Safari species, model
+~60-80 s at the margin with matching per-event costs: the search/unwanted-encounter part); (3) dex re-plan toward the WR's
+early sites (Route 3/4 done in 1271; costs exp-free time in this model).
+
+## 2026-11-22 16:55 main session: CURRENT = 1253-runner-fights-tf (model of record)
+
+Switched from 1132 because 1253 is the more honest model: the carry fights the trainers the runner
+and the played run fight, and matches the WR's levels at every split, and the risk windows refit to
+~1.0 (they had been standing in for missing exp). Its score (WR+2m 301 h) is worse, and that is the
+honest answer. One open conflict: `trainer_fit` 0.6 is a FIT to the WR splits, while the emulator
+measured 52 trainer battles at 0.95-1.02x the `calib_wr` formula (calibration.md). Resolve it in the
+route-windows work (more battles in the model than the runner actually fights there? or shorter
+battles from a higher level?) before trusting 0.6. All descents from now on start from 1253.
+
 ## 2026-11-22 segment-cost calibration: model of record stays 1132 (read first)
 
 Journal `journal/2026-11-22-14-00-calibration.md`, `calibration.md` ("Segment-cost calibration" and
@@ -24,6 +81,21 @@ Ranked next steps: (1) the structural window errors that 1132 already has and th
 route/plan differences against the WR, not constants: fix those first, then re-run the reconciliation; (2) measure
 more guessed text lumps on the played run (`tools/cal_decompose.py` per stage) instead of one global scale;
 (3) the controller agent's inefficiency list (journal) before the next played pass.
+## 2026-11-22 exp economy and Koga (read first; journal `journal/2026-11-22-16-50-exp-and-koga.md`)
+
+The sim's carry was 4-5 levels short because it fought only the sight-cone minimum; the played s11 run and the runner fight
+~20-36 more trainers (exp formula verified exact against the played run). **1253-runner-fights-tf** = 1132 + MODEL CHANGE:
+`fight_lists` (runner-level list: the sim now matches the WR's level at every split), `risk_windows` refit
+(**2.565 -> 1.04, 1.35 -> 0.99**, .773 -> .674, 1.572 -> 1.06, 2.314 -> 2.17; first window kept 1.111), `trainer_fit`
+0.81 -> 0.6 (pre-door splits back to the WR's). **WR+2m 301.0 h / WR 477.4 h** vs 1132's 182.3 / 287.9 under the old model
+(seed 7402 / 7401, R 1.6M). Under 1253 dropping the extra fights costs +132 h (1254); the full s11 list has no WR+2m finishes
+(1255). Koga: the audit's 35% was a CLI mismatch (setup-min 1); engine 60.5% at the plan's policy vs emulator 73/100; the
+residual is Muk's Toxic frequency (open). `ai_cure_items` (Full Heal is no HP heal) is correct and nil.
+
+**Coordination**: everything is behind default-off keys; 1132 scores unchanged. CURRENT not switched (League descents run on
+1132). Proposed: descents move to 1253's keys (`fight_lists`, `risk_windows`, `trainer_fit` 0.6); a League refit of
+`risk_windows` should start from 1253, not 1132. Open, ranked: optional-trainer descent per segment under 1253; measure
+route-trainer fight time on the emulator (replaces the 0.6 fit); first window not identifiable; Koga Toxic AI term.
 
 ## 2026-11-22 stand-in audit: descend from 1211 (read first)
 
@@ -37,20 +109,31 @@ WR 335.4 h; **1211-cerulean-potions** (plan response: 3 potions, heal below .35 
 2. Koga's Muk: engine 35% vs emulator 15/20 at identical stats; the 1.35 window stands in for an engine bug.
 3. The 0.773 Blaine/Sevii window is deadlier than the honest engine (-21 h at 1.0); refit windows under 1211.
 
-## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1131-honest-fheal
+## 2026-11-22 optimisation (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1301-warren-potkoga
 
 | plan | what | WR+2m | WR | model |
 | --- | --- | --- | --- | --- |
 | 1127-fheal1 | 1122 + League heal_below bundle (bruno .65, champion .35, champion-2 .5, lance-2 0) | 79.3-80.2 | 103.4-104.5 | old (fitted League) |
 | 1130-honest-fheal | 1200 + the bundle | 125.3-126.0 | 166.3-169.9 | honest 1200 |
-| **1131-honest-fheal (CURRENT)** | **1202 + the bundle** | **152.0 (R 3.2M, seeds 7521/7522; -9.8 / -12.5 vs 1202)** | **241.8-243.7 (-18.4 / -20.3)** | **honest controller model** |
+| 1131-honest-fheal | 1202 + the bundle | 152.0 (-9.8 / -12.5 vs 1202) | 241.8-243.7 | controller model |
+| 1132-standin-fheal | 1211 + the bundle | 184.1 / 187.2 (-13.0 / -15.6 vs 1211) | 291.3 / 294.7 | stand-in audit model |
+| 1300-runner-potkoga | 1253 + Mt. Moon Miguel potions 5 + Koga heal_below .55 | 269.9 / 283.4 (-15.3 / -11.6 vs 1253) | 477.2 / 487.1 | 1253 model |
+| **1301-warren-potkoga (CURRENT)** | **1270 (Viridian Warren) + the 1300 steps** | **353.6 / 343.7 (R 3.2M, seeds 7561/7562; -18.9 / -17.3 vs 1270)** | **672.6 / 651.0 (-39.9 / -29.9)** | **1270 model** |
 
-* NEXT item 1 done: the League pass is finished (tail: lance-2 / champion-2 queues, pp floor, all per-fight
-  heal_below); 1120 and 1114 confirmed by undoing them on 1127 (R 3.2M two seeds both rungs + corners).
-* NEXT item 2: reset_table refit on 1131 (train 3M, eval 1.6M, seed 7611): WR+2m -0.4 h [-0.9, +0.1] n.s., WR table
-  unchanged by the best-iterate guard: not adopted, the table is at its optimum. `fit_post_evidence.py` /
-  `fit_lane.py --check` not re-run under the honest model (the honesty agent owns the stand-ins).
-* Pointer `plans/CURRENT-OPT` is the descent pointer (descend.py `--pointer CURRENT-OPT`).
+* League pass finished (lance-2 / champion-2 queues, pp floor, every per-fight heal_below); 1120 and 1114 confirmed
+  by undoing them on 1127 (R 3.2M two seeds both rungs + corners). Mewtwo teaches stay dropped (0.001 h).
+* reset_table refit on 1131: not adopted (WR+2m -0.4 h n.s., WR table unchanged). Re-run only after a big model move.
+* Plan responses of 1201 re-screened on 1131 (Awakenings 2/4/5, S.S. Anne potions 7/12, heal_below .2/.45): all refuted.
+* `risk_windows` under 1132 (`fit_lane.py`, R 1.6M seed 7651): `--check` has every lane window inside the runner's
+  CI (only forest-brock .589 vs [.30, .54] outside, independent of powers). The refit saturates the first window at the
+  4.5 cap (it also governs Brock / Mt Moon, standin-audit finding 6) and gives the Blaine/Sevii window 0.766 again (the
+  shrunk runner target .724 asks for it). **Not adopted**; capping that window at 1.0 (-21 h) is a modelling call, not a fit.
+* Optional-trainer dimension: `tools/fightknobs.py` (`descend.py --set fights`; first in `earlymid`, also in `all`).
+  On 1300 every drop was refuted (+29..+163 h; exp outweighs fight time at ~1.0 windows), s11 Route 3 list +206 h;
+  additions untried. Re-run after the WR-read fight lists / `trainer_cost` land.
+* Pointer `plans/CURRENT-OPT` is the descent pointer (`descend.py --pointer CURRENT-OPT --num-from 1300`). Running:
+  `--set league` from 1301. Next: `--set earlymid --notkinds fights` (tactics), then `--set all` / `pp` / `dex`,
+  fill/hunt orders; reset_table refit after the model settles (EHT moved 170 -> 350 h).
 
 ## 2026-11-22 model honesty: later descents must use the new model
 

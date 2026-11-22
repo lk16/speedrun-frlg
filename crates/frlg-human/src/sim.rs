@@ -777,6 +777,12 @@ fn apply_pp_ups(ctx: &Ctx, st: &mut State) -> f64 {
     frames
 }
 
+/// `FRLG_EXP_TRACE`: print the carry's level and exp at the start of every segment.
+fn exp_trace() -> bool {
+    static T: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *T.get_or_init(|| std::env::var_os("FRLG_EXP_TRACE").is_some())
+}
+
 /// `EXP_SLOW(n)` (`decompiled/src/data/pokemon/experience_tables.h:4`), Mewtwo's growth rate.
 fn slow_exp(n: u32) -> u32 {
     5 * n * n * n / 4
@@ -1790,8 +1796,18 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     } else {
         1.0
     };
+    // MODEL CHANGE `trainer_cost`: the played run's per-battle / per-action / per-KO frames.
+    let tcost = (a.trainer && !a.league && ctx.p.trainer_cost.len() == 3).then(|| {
+        let c = &ctx.p.trainer_cost;
+        (c[0], c[1], c[2])
+    });
+    let fit = if tcost.is_some() { 1.0 } else { fit };
     if a.trainer {
-        bump(st, ctx.trainer_intro(a.intro) * fit);
+        match tcost {
+            // The outro is paid at the end as usual: `a` covers both.
+            Some((a0, _, _)) => bump(st, (a0 - ctx.outro()).max(0.0)),
+            None => bump(st, ctx.trainer_intro(a.intro) * fit),
+        }
         bump(st, jitter(ctx, rng, 8) as f64);
     }
     let cfg = ctx.tactics.get(a.name).cloned().unwrap_or_default();
@@ -2089,7 +2105,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         {
             st.x_stock[x_index(*x)] -= 1;
         }
-        bump(st, out.turns as f64 * ctx.turn());
+        bump(
+            st,
+            out.turns as f64 * tcost.map_or_else(|| ctx.turn(), |(_, t, _)| t),
+        );
         if mewtwo_now && ctx.p.mewtwo_hp_bar > 0.0 {
             bump(st, out.hp_bar * ctx.p.mewtwo_hp_bar);
         }
@@ -2099,7 +2118,10 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 (out.heals_used + out.full_restores_used) as f64 * ctx.p.mewtwo_heal_extra,
             );
         }
-        bump(st, out.kos.len() as f64 * ctx.mon_overhead() * fit);
+        bump(
+            st,
+            out.kos.len() as f64 * tcost.map_or_else(|| ctx.mon_overhead() * fit, |(_, _, m)| m),
+        );
         // A sacrifice costs its faint animation and the send-outs both ways. guess.
         bump(st, (out.sacs_used + out.sacs_survived) as f64 * 900.0);
         st.fodder = st.fodder.saturating_sub(out.sacs_used);
@@ -3140,6 +3162,12 @@ pub fn attempt(
             let before = st.clock;
             let wo_before = st.whiteouts;
             st.seg_i = i;
+            if exp_trace() {
+                eprintln!(
+                    "exp-trace {idx} {} {} {} {}",
+                    seg.name, st.carry, st.exp, st.clock
+                );
+            }
             if seg.name == "indigo-heal" || seg.name == "league-entry" {
                 st.league_t0 = st.clock;
             }
@@ -3251,7 +3279,13 @@ pub fn attempt(
                     full,
                     ai,
                     heals,
+                    cures,
                 } => {
+                    let heals = &if ctx.p.ai_cure_items {
+                        heals.saturating_sub(*cures)
+                    } else {
+                        *heals
+                    };
                     if ctx.p.battle_sim && !full.is_empty() {
                         let foes: Vec<_> = full
                             .iter()

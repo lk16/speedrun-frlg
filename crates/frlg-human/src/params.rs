@@ -967,6 +967,37 @@ pub struct Params {
     /// Before this the berry was priced (frames) but had no battle effect, and Misty's `risk_power` 2.0
     /// stood in for it among other things. Needs `persim`. Off = the old model.
     pub persim_held: bool,
+    /// MODEL CHANGE (route windows, journal 2026-11-22 route-windows): Cooltrainer Warren (Marowak 37,
+    /// Marowak 37, Rhyhorn 38, Nidorina 39, Nidoqueen 39, `src/data/trainer_parties.h`
+    /// `sParty_CooltrainerWarren`) is fought in the Viridian Gym next to Takashi. `forced.py` treats the
+    /// gym's spin tiles as plain floor (`bin/frlg-mapgraph`), so its "Takashi only" is not a proof; the WR
+    /// fights him (video run time 2:20 Marowak Lv37, 2:21 Warren's Nidoqueen), so do the 2026-11-14 stream
+    /// run and the played controller run (`events.jsonl` of `fwd-main`). Off = Takashi only.
+    pub viridian_warren: bool,
+    /// MODEL CHANGE (route windows, journal 2026-11-22 route-windows): the frames of a non-League trainer
+    /// battle as `[a, t, m]` = a per battle (sighting, swirl, intro, defeat text, prize, back to the field),
+    /// t per player action, m per enemy mon knocked out (send-out, faint, exp text), level-ups at
+    /// `level_up` on top. Least squares over the 79 trainer episodes of the played s11 run
+    /// (`tools/cal_battles.py` episodes x the `play-battles` parties x the events' turn lines, start of the
+    /// run to Victory Road): a 838, t 579, m 223, rms 450 frames. `calib_wr`'s 720 + 345 t + 630 m came
+    /// from 16 long WR fights where t and m are collinear; it prices a one-shot route trainer ~1.2x the
+    /// played episode, which `trainer_fit` < 1 stood in for. Non-empty replaces `trainer_fit` and the
+    /// `calib_wr` intro / turn / mon terms for non-League trainers. Empty = off.
+    pub trainer_cost: Vec<f64>,
+    /// MODEL CHANGE (exp-economy audit 2026-11-22): the trainers the human actually fights, per segment, by
+    /// trainer id (`decompiled/include/constants/opponents.h`, parties `src/data/trainer_parties.h`). A named
+    /// `Parties`/`Group` segment gets exactly this list (fought in the given order); any other named segment
+    /// gets a new `<seg>+fights` segment right after it. The sight-cone lists (`forced-audit.md`) are the
+    /// fewest fights a perfect dodger needs; the played s11 controller and the runner's stream (Giovanni 1
+    /// at Lv36, Koga at Lv41/42) fight about 35 more, which is why the sim's carry was 4-5 levels short.
+    /// Empty = the old model (cone-forced trainers only).
+    pub fight_lists: std::collections::BTreeMap<String, Vec<String>>,
+    /// MODEL CHANGE (Koga audit 2026-11-22): a trainer's `ITEM_FULL_HEAL` is not an HP heal. The engine counted
+    /// every heal item as a full HP restore at < 1/4 HP; the game's AI uses a Full Heal only as a status /
+    /// confusion cure (`AI_ITEM_CURE_CONDITION`, `decompiled/src/battle_ai_switch_items.c:606-638`; Hyper Potion
+    /// is `AI_ITEM_HEAL_HP`, `:599-605`). Misty, Surge, Erika, Koga, Sabrina and Blaine carry one
+    /// (`src/data/trainers.h`). On = their HP heals drop by one (the cure itself is not modelled). Off = old.
+    pub ai_cure_items: bool,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1177,6 +1208,10 @@ impl Default for Params {
             fly_frames: 0,
             guess_text_scale: 0.0,
             persim_held: false,
+            viridian_warren: false,
+            trainer_cost: Vec::new(),
+            fight_lists: Default::default(),
+            ai_cure_items: false,
         }
     }
 }
