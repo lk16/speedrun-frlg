@@ -164,9 +164,8 @@ fn hof1_reset(s: &mut Session) -> PResult<()> {
 /// than 60 the scene ends early and the lab's Oak re-checks when talked to
 /// (`PalletTown_ProfessorOaksLab_EventScript_TryStartNationalDexScene`, same file :904-911): the
 /// plan's `fill` hunts are run first.
-fn national_dex(s: &mut Session) -> PResult<()> {
+fn oak_scene(s: &mut Session) -> PResult<()> {
     s.seg = "oak-national-dex".into();
-    let t0 = s.timer().unwrap_or(0.0);
     let lab_done = |s: &mut Session| var(s, "VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB") >= 8;
     settle(s)?;
     if !lab_done(s) {
@@ -176,7 +175,7 @@ fn national_dex(s: &mut Session) -> PResult<()> {
         let n = super::dex::caught_count(s);
         s.event(
             "model-vs-actual",
-            format!("Oak's check failed: {n} caught < 60; running the plan's fill hunts"),
+            format!("Oak's check failed: {n} caught < 60; the dex fill follows (dex-fill-NN)"),
             json!({"caught": n}),
         );
         if std::env::var_os("FRLG_PG_DEV_DEX").is_some() {
@@ -195,7 +194,25 @@ fn national_dex(s: &mut Session) -> PResult<()> {
             }
             dev_poke_dex(s, 60);
         }
-        fill_to_60(s)?;
+    }
+    Ok(())
+}
+
+/// Oak in the lab once 60 are caught (`TryStartNationalDexScene`, same file :904-911), unless
+/// the scene on the continue warp already gave the National Dex.
+fn national_dex(s: &mut Session) -> PResult<()> {
+    s.seg = "oak-national-dex".into();
+    // From the end of the Hall of Fame reset (the continue), across the whole dex fill.
+    let t0 = s
+        .log
+        .events
+        .iter()
+        .rev()
+        .find(|e| e.nums.get("checkpoint").and_then(|v| v.as_str()) == Some("hof1-reset"))
+        .and_then(|e| e.t)
+        .unwrap_or_else(|| s.timer().unwrap_or(0.0));
+    let lab_done = |s: &mut Session| var(s, "VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB") >= 8;
+    if !lab_done(s) {
         if super::dex::caught_count(s) < 60 {
             return Err(PlayError::Fatal("still fewer than 60 caught".into()));
         }
@@ -219,7 +236,7 @@ fn national_dex(s: &mut Session) -> PResult<()> {
     );
     mva(
         s,
-        "continue -> National Dex",
+        "continue -> National Dex (incl. the dex fill)",
         t0,
         "fly-pallet-2",
         "oak-national-dex",
@@ -337,99 +354,156 @@ fn site_new(s: &mut Session, site: &str, area: &str) -> (u32, f64) {
 /// Not in the model's run: the plan's 60 for Oak's check are caught before the League
 /// (`route_wr.rs`: "All 60 were caught before the League"), but the played route reached the Hall
 /// of Fame far short of it, and the plan's `fill` hunts are never anchored (`dex::dex_hook` runs
-/// `hunts`, not `fill`). The human catches up here: Great Balls at the Celadon store (2F,
-/// `CeladonCity_DepartmentStore_2F/scripts.inc`), the plan's `fill` sites in order, then the Kanto
-/// site with the most uncaught species (greedy), each reached by flying to its nearest Fly point
-/// (`human-run/data/flydist.json`), until 60 are caught. Every hunt is the dex module's
-/// (`dex::hunt`: `sim::wants_catch`, the plan's ball rules).
-fn fill_to_60(s: &mut Session) -> PResult<()> {
-    let t0 = s.timer().unwrap_or(0.0);
-    let start_n = super::dex::caught_count(s);
-    let mut tried: Vec<String> = vec![];
+/// `hunts`, not `fill`). The human catches up here, one site per stage (`dex-fill-NN`, so a
+/// death costs one hunt): Great Balls at the Celadon store (2F,
+/// `CeladonCity_DepartmentStore_2F/scripts.inc`) when the bag runs low, the plan's `fill` sites
+/// in order, then the Kanto site with the most uncaught species (greedy), each reached by flying
+/// to its nearest Fly point (`human-run/data/flydist.json`), with a Pokémon Center heal there
+/// when the lead is below half HP (no center otherwise in a fill). Every hunt is the dex
+/// module's (`dex::hunt`: `sim::wants_catch`, the plan's ball rules).
+fn fill_round(s: &mut Session) -> PResult<()> {
+    s.seg = "oak-national-dex".into();
+    let n = super::dex::caught_count(s);
+    if n >= 60 || var(s, "VAR_MAP_SCENE_PALLET_TOWN_PROFESSOR_OAKS_LAB") >= 8 {
+        return Ok(());
+    }
+    // Sites already hunted: this run's own `dex fill` decisions.
+    let tried: Vec<String> = s
+        .log
+        .events
+        .iter()
+        .filter(|e| e.kind == "decision" && e.text.starts_with("dex fill"))
+        .filter_map(|e| {
+            e.nums
+                .get("site")
+                .and_then(|v| v.as_str())
+                .map(str::to_string)
+        })
+        .collect();
+    let round = tried.len();
+    let balls = have(s, "ITEM_GREAT_BALL") + have(s, "ITEM_POKE_BALL") + have(s, "ITEM_ULTRA_BALL");
+    if balls < 8 {
+        let want = (2 * (60 - n) as u16).clamp(12, 50);
+        let money = Ram::new(&s.obs).money(s.hf.rec.emu());
+        // The 60 are mandatory, the League's Full Restores are not: keep ¥15000 (five of them);
+        // the Sevii trainers pay the rest back before the League.
+        let afford = (money.saturating_sub(15_000) / 600) as u16;
+        let k = want.saturating_sub(balls).min(afford);
+        if k == 0 {
+            return Err(PlayError::Fatal(format!(
+                "dex fill: {n} caught, no balls and no money for them"
+            )));
+        }
+        leave_to_fly(s, "MAP_CELADON_CITY")?;
+        super::items::fly(s, "MAPSEC_CELADON_CITY")?;
+        center_heal(s, "MAP_CELADON_CITY_POKEMON_CENTER_1F")?;
+        super::shop::buy(
+            s,
+            "MAP_CELADON_CITY_DEPARTMENT_STORE_2F",
+            Some((1, 8)),
+            &[("ITEM_GREAT_BALL", k)],
+        )?;
+    }
     let fill: Vec<crate::params::Hunt> = s.plan.params.fill.clone();
-    for round in 0..40 {
-        let n = super::dex::caught_count(s);
-        if n >= 60 {
+    let mut next = None;
+    for h in &fill {
+        if !tried.contains(&h.site) && site_new(s, &h.site, &h.area).0 > 0 {
+            next = Some(h.clone());
             break;
         }
-        let balls =
-            have(s, "ITEM_GREAT_BALL") + have(s, "ITEM_POKE_BALL") + have(s, "ITEM_ULTRA_BALL");
-        if balls < 8 {
-            let want = (2 * (60 - n) as u16).clamp(12, 50);
-            let money = Ram::new(&s.obs).money(s.hf.rec.emu());
-            // The 60 are mandatory, the League's Full Restores are not: keep ¥15000 (five of
-            // them); the Sevii trainers pay the rest back before the League.
-            let keep = 15_000;
-            let afford = (money.saturating_sub(keep) / 600) as u16;
-            let k = want.saturating_sub(balls).min(afford);
-            if k == 0 {
-                return Err(PlayError::Fatal(format!(
-                    "dex fill: {n} caught, no balls and no money for them"
-                )));
-            }
-            leave_to_fly(s, "MAP_CELADON_CITY")?;
-            super::items::fly(s, "MAPSEC_CELADON_CITY")?;
-            super::shop::buy(
-                s,
-                "MAP_CELADON_CITY_DEPARTMENT_STORE_2F",
-                Some((1, 8)),
-                &[("ITEM_GREAT_BALL", k)],
-            )?;
-        }
-        let mut next = None;
-        for h in &fill {
-            if !tried.contains(&h.site) && site_new(s, &h.site, &h.area).0 > 0 {
-                next = Some(h.clone());
-                break;
-            }
-        }
-        let next = match next {
-            Some(h) => Some(h),
-            None => greedy_site(s, &tried),
-        };
-        let Some(mut h) = next else {
-            return Err(PlayError::Fatal(format!(
-                "dex fill: {n} caught, no site left"
-            )));
-        };
-        tried.push(h.site.clone());
-        if h.steps == 0 {
-            h.steps = 120;
-        }
-        if let Some((map, sec)) = fly_point(s, &h.site, &h.area) {
-            let fl = format!("FLAG_WORLD_MAP_{}", map.trim_start_matches("MAP_"));
-            let known = super::names::names().get(&fl).is_some();
-            if (!known || flag(s, &fl)) && region_cell(&sec).is_some_and(|c| c.0 == 0) {
-                leave_to_fly(s, &map)?;
-                super::items::fly(s, &sec)?;
-            }
-        }
-        let (k, share) = site_new(s, &h.site, &h.area);
-        s.event(
-            "decision",
-            format!(
-                "dex fill {round}: {} ({k} uncaught species, {:.0}% of encounters), {n} caught",
-                h.site.trim_start_matches("MAP_"),
-                share * 100.0
-            ),
-            json!({"site": h.site, "new_species": k, "share": share, "caught": n}),
-        );
-        super::dex::hunt(s, &h)?;
     }
-    let n = super::dex::caught_count(s);
+    let next = match next {
+        Some(h) => Some(h),
+        None => greedy_site(s, &tried),
+    };
+    let Some(mut h) = next else {
+        return Err(PlayError::Fatal(format!(
+            "dex fill: {n} caught, no site left"
+        )));
+    };
+    if h.steps == 0 {
+        h.steps = 120;
+    }
+    let (k, share) = site_new(s, &h.site, &h.area);
     s.event(
-        "model-vs-actual",
+        "decision",
         format!(
-            "dex fill after the Hall of Fame: {start_n} -> {n} caught in {:.0}s (the model has none here)",
-            s.timer().unwrap_or(0.0) - t0
+            "dex fill {round}: {} ({k} uncaught species, {:.0}% of encounters), {n} caught",
+            h.site.trim_start_matches("MAP_"),
+            share * 100.0
         ),
-        json!({"from": start_n, "to": n, "seconds": s.timer().unwrap_or(0.0) - t0}),
+        json!({"site": h.site, "new_species": k, "share": share, "caught": n}),
     );
-    if n < 60 {
-        return Err(PlayError::Fatal(format!("dex fill stopped at {n} caught")));
+    if let Some((map, sec)) = fly_point(s, &h.site, &h.area) {
+        let fl = format!("FLAG_WORLD_MAP_{}", map.trim_start_matches("MAP_"));
+        let known = super::names::names().get(&fl).is_some();
+        if (!known || flag(s, &fl)) && region_cell(&sec).is_some_and(|c| c.0 == 0) {
+            leave_to_fly(s, &map)?;
+            super::items::fly(s, &sec)?;
+            let lead = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+            if lead.hp * 2 < lead.max_hp {
+                if let Some(pc) = center_of(s, &map) {
+                    center_heal(s, &pc)?;
+                }
+            }
+        }
     }
+    super::dex::hunt(s, &h)?;
     Ok(())
 }
+
+/// The Pokémon Center of a heal location's map (`heal_locations.json` `respawn_map`).
+fn center_of(_s: &Session, map: &str) -> Option<String> {
+    let heal: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(decomp().join("src/data/heal_locations.json")).ok()?,
+    )
+    .ok()?;
+    heal["heal_locations"]
+        .as_array()?
+        .iter()
+        .find(|h| h["map"] == map)?["respawn_map"]
+        .as_str()
+        .filter(|m| m.contains("POKEMON_CENTER"))
+        .map(str::to_string)
+}
+
+macro_rules! fill_stages {
+    ($($f:ident),*) => {
+        $(fn $f(s: &mut Session) -> PResult<()> {
+            fill_round(s)
+        })*
+    };
+}
+fill_stages!(
+    fill01, fill02, fill03, fill04, fill05, fill06, fill07, fill08, fill09, fill10, fill11, fill12,
+    fill13, fill14, fill15, fill16, fill17, fill18, fill19, fill20, fill21, fill22, fill23, fill24
+);
+const FILL: [(&str, fn(&mut Session) -> PResult<()>); 24] = [
+    ("dex-fill-01", fill01),
+    ("dex-fill-02", fill02),
+    ("dex-fill-03", fill03),
+    ("dex-fill-04", fill04),
+    ("dex-fill-05", fill05),
+    ("dex-fill-06", fill06),
+    ("dex-fill-07", fill07),
+    ("dex-fill-08", fill08),
+    ("dex-fill-09", fill09),
+    ("dex-fill-10", fill10),
+    ("dex-fill-11", fill11),
+    ("dex-fill-12", fill12),
+    ("dex-fill-13", fill13),
+    ("dex-fill-14", fill14),
+    ("dex-fill-15", fill15),
+    ("dex-fill-16", fill16),
+    ("dex-fill-17", fill17),
+    ("dex-fill-18", fill18),
+    ("dex-fill-19", fill19),
+    ("dex-fill-20", fill20),
+    ("dex-fill-21", fill21),
+    ("dex-fill-22", fill22),
+    ("dex-fill-23", fill23),
+    ("dex-fill-24", fill24),
+];
 
 /// The not-yet-tried Kanto site (land or water, `flydist.json`) with the most uncaught species;
 /// ties go to the larger encounter share, then the shorter walk from its Fly point.
@@ -2033,6 +2107,14 @@ pub fn stages() -> Vec<Stage> {
             run: hof1_reset,
         },
         Stage {
+            name: "oak-scene",
+            run: oak_scene,
+        },
+    ]
+    .into_iter()
+    .chain(FILL.iter().map(|&(name, run)| Stage { name, run }))
+    .chain(vec![
+        Stage {
             name: "national-dex",
             run: national_dex,
         },
@@ -2096,5 +2178,6 @@ pub fn stages() -> Vec<Stage> {
             name: "hall-of-fame-2",
             run: hall_of_fame2,
         },
-    ]
+    ])
+    .collect()
 }
