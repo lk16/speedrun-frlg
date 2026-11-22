@@ -587,7 +587,15 @@ fn koga(s: &mut Session) -> PResult<()> {
             "no Soul Badge after Koga".into(),
         ));
     }
-    split(s, "Koga", "koga-badge")
+    split(s, "Koga", "koga-badge")?;
+    // The model's own heal is after the badge (`center-heal@koga-badge`). With the heal moved
+    // before the fight it is skipped unless the lead came out below half HP (v3 dev: Blastoise
+    // fainted to Koga and the Power Plant was walked with Nidoqueen in front).
+    let lead = super::ram::Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    if lead.hp * 2 < lead.max_hp {
+        center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
+    }
+    Ok(())
 }
 
 /// The dex module's hook: the plan's evolutions, specials (gifts, trades, statics, buys) and hunts
