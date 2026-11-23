@@ -559,12 +559,12 @@ fn pace_pairs(s: &Session, map: &str, water: bool, from: (i16, i16)) -> Vec<[(i1
             .any(|&(ox, oy)| (ox - x).abs() + (oy - y).abs() <= 1)
     };
     // Only tiles connected to where the player stands on this map (a flood fill over the
-    // layout's passable tiles, water included when surfing). An unreachable pair made every
+    // layout's passable tiles and water: Route 23's grass is across water from the plateau). An unreachable pair made every
     // `go` a whole-world search: the v3 fill spent 20+ CPU minutes in Diglett's Cave B1F.
     let mut reach = vec![false; (m.w as usize) * (m.h as usize)];
     let pass = |x: i16, y: i16| {
         m.tile(x, y)
-            .is_some_and(|t| t.collision == 0 && (water || !is_water(t.behavior)))
+            .is_some_and(|t| t.collision == 0 || is_water(t.behavior))
     };
     let mut stack = vec![from];
     while let Some((x, y)) = stack.pop() {
