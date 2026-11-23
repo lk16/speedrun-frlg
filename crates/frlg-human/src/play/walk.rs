@@ -966,6 +966,12 @@ pub fn go_to(
             let _ = super::items::mount_bike(s)?;
         }
         plans += 1;
+        if std::env::var_os("FRLG_WALK_DEBUG").is_some() {
+            eprintln!(
+                "walk: {what}: plan {plans} from {cur:?} at frame {}",
+                s.frame()
+            );
+        }
         if plans > 60 {
             return Err(PlayError::Death(format!(
                 "soft-lock: {what}: 60 re-plans without arriving"

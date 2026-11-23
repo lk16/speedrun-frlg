@@ -335,7 +335,21 @@ pub fn wild_battle(s: &mut Session) -> Option<PResult<()>> {
         return None;
     }
     let (species, _) = wild_mon(s);
-    let plan = wild_plan(s, s.wild_plan);
+    let mut plan = wild_plan(s, s.wild_plan);
+    // Arena Trap (Diglett, Dugtrio in Kanto) blocks RUN for a grounded player mon
+    // (`decompiled/src/battle_main.c:3031,3203`): "Can't escape!" every turn, and the flee loop
+    // spun forever in the v3 fill (Diglett's Cave B1F). The human knocks it out instead.
+    if plan == WildPlan::Flee {
+        let name = names().species(species);
+        if name == "SPECIES_DIGLETT" || name == "SPECIES_DUGTRIO" {
+            s.event(
+                "decision",
+                format!("wild {}: Arena Trap, cannot run: fighting", short(name)),
+                json!({"species": name}),
+            );
+            plan = WildPlan::Fight;
+        }
+    }
     let safari = flags & (1 << 7) != 0; // BATTLE_TYPE_SAFARI, `include/constants/battle.h:52`
     if safari {
         return Some(safari_battle(s, plan == WildPlan::Catch));
