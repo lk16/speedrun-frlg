@@ -269,6 +269,19 @@ fn pass_plan(s: &mut Session, default: WildPlan) -> WildPlan {
     if !sim::wants_catch(&s.ctx, idx, is_owned, &[], allowed) {
         return default;
     }
+    // Cerulean Cave: the last party slot is Mewtwo's (a catch there would send Mewtwo to the PC:
+    // v3 lost two branches to "Mewtwo not in the party after the battle").
+    if s.seg == "cerulean-cave" && Ram::new(&s.obs).party(s.hf.rec.emu()).len() >= 5 {
+        s.event(
+            "decision",
+            format!(
+                "passing {} Lv{level}: not caught, the last party slot is for Mewtwo",
+                short(&name)
+            ),
+            json!({"species": name, "level": level, "seg": s.seg}),
+        );
+        return default;
+    }
     let flags = s.obs.battle_type_flags(s.hf.rec.emu());
     let safari = flags & (1 << 7) != 0;
     let balls = if safari {

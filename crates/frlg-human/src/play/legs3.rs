@@ -2015,7 +2015,17 @@ fn mewtwo(s: &mut Session) -> PResult<()> {
         super::items::fly(s, "MAPSEC_CERULEAN_CITY")?;
         let party = Ram::new(&s.obs).party(s.hf.rec.emu());
         if party.len() >= 6 {
-            let slot = party_slot(s, "SPECIES_WEEDLE").unwrap_or(2);
+            // v3: the route's errands already boxed the Weedle; never a keep slot (the lead,
+            // Fly / Cut / Surf / Strength users).
+            let keep = super::dexfin::keep_slots(s);
+            let slot = party_slot(s, "SPECIES_WEEDLE")
+                .filter(|i| !keep.contains(i))
+                .unwrap_or_else(|| {
+                    (0..party.len())
+                        .rev()
+                        .find(|i| !keep.contains(i))
+                        .unwrap_or(5)
+                });
             super::shop::pc(
                 s,
                 "MAP_CERULEAN_CITY_POKEMON_CENTER_1F",
