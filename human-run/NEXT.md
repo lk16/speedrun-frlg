@@ -1,4 +1,28 @@
-# Handoff for the next session (written at the end of the 2026-11-17/18 session)
+# Handoff for the next session
+
+## 2026-11-23 09:30 session end (main session; read this first)
+
+Branch `human-run-play` (cut from `human-run` 2026-11-22). The session ran the PROMPT "Next phase" S0-S9 and
+then the optimisation loop with parallel agents; all agent branches are merged.
+
+- **Played run of record:** `$FRLG_ARTIFACTS/runs/human-play/1122-lgdescent-s11-v4`, plan 1122-lgdescent, LG,
+  seed 11: second-HoF black frame at **20 472 s (5:41:11)**, `play-verify` from boot matches 97 checkpoints;
+  14 rollbacks from Giovanni 1. Prefix to Giovanni 1 is the surviving Nov-21 log (`1122-lgdescent-s11`).
+  Journals: `2026-11-23-04-00-controller-v4.md` (newest), v3, finish, postgame, controller-2, battle-bridge.
+- **Review video:** `$FRLG_ARTIFACTS/videos/1122-lgdescent-s11-v4-full.mp4` (the earlier 6:10:47 run is
+  `1122-lgdescent-s11-full.mp4`, journal `2026-11-23-03-05-full-video.md`). Render: `human-run/VIDEO.md`.
+- **Model of record / CURRENT: 1507-honest4**, WR+2m ~2800 h, WR ~7500-8000 h (R 3.2M). Much worse than the
+  pre-session 1122 (~85 h) because of model-honesty work (emulator- and VOD-measured fights, non-fight costs,
+  shop stops, level evolutions, League at the WR level); every plan step adopted this session lowered it.
+  The WR fight-speed factor's CI alone moves the score x0.45..x4.7.
+- **Controller next:** spend the ~¥15 800 left at Indigo, the round-2 sell soft-lock, Surf before Koga is now in
+  (honesty 4), weight the post-HoF fill by catch chance (v4 journal).
+- **Optimiser next:** League refit on the honest carry (then retest Lance +X special, fragile across
+  league_power), WR and WR+2m reset-table refits on 1507, `--set earlymid --notkinds fights`, `--set dex`.
+- **Process:** rebuild `frlg-human` after every merge (a stale binary silently ignored new keys; those rows are
+  INVALID in scores.jsonl); never poll with `pgrep -f` (matches itself); the API spend limit stopped all agents
+  three times, so agents must commit every step.
+
 
 ## 2026-11-23 optimiser B: dex fill (journal `journal/2026-11-23-07-00-optimisation-b.md`)
 
