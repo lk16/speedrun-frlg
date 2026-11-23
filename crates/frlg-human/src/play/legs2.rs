@@ -132,6 +132,32 @@ fn to_cinnabar(s: &mut Session) -> PResult<()> {
     Ok(())
 }
 
+/// v3, between the Mansion and Blaine (not in the model as such): the Cinnabar mart (plan 1413
+/// `marts` surf-route21-s: Great Balls to 30, 5 potions; Hyper Potions, `potion_tiers` 200 HP
+/// from surf-cinnabar; `CinnabarIsland_Mart/scripts.inc`), then the dex errands of the town: the
+/// stones in the bag on party and boxed mons (the Power Plant's Thunder Stone), the lab's
+/// trades (`INGAME_TRADE_ELECTRODE` for Raichu, `_TANGELA` for Venonat,
+/// `CinnabarIsland_PokemonLab_Lounge/scripts.inc:11,45`) and the fossil revival
+/// (`CinnabarIsland_PokemonLab_ExperimentRoom/scripts.inc`), which the plan banks at its own
+/// anchors (`stones`, `blaine-badge-and-sevii-scene`).
+fn cinnabar_dex(s: &mut Session) -> PResult<()> {
+    s.seg = "cinnabar-dex".into();
+    super::shop::mart_topup(
+        s,
+        "MAP_CINNABAR_ISLAND_MART",
+        None,
+        &[("ITEM_GREAT_BALL", 30), ("ITEM_HYPER_POTION", 5)],
+        "plan 1413 surf-route21-s",
+    )?;
+    super::dexfin::errands(
+        s,
+        "MAP_CINNABAR_ISLAND_POKEMON_CENTER_1F",
+        Some(super::dexfin::Place::Cinnabar),
+        0,
+    )?;
+    Ok(())
+}
+
 const MANSION: [&str; 4] = [
     "MAP_POKEMON_MANSION_1F",
     "MAP_POKEMON_MANSION_2F",
@@ -707,12 +733,13 @@ fn celadon_shopping(s: &mut Session) -> PResult<()> {
     }
     let heals: u32 = xb.iter().map(|x| x.heals).sum();
     let revives: u32 = xb.iter().map(|x| x.revives).sum();
-    let balls = s.plan.params.ball_batch.max(10) as u16;
-    let _ = super::shop::buy(
+    // v3: a top-up to plan 1413's sabrina-badge stop (35), not `ball_batch` on top of the bag.
+    super::shop::mart_topup(
         s,
         "MAP_CELADON_CITY_DEPARTMENT_STORE_2F",
         Some((1, 8)),
-        &[("ITEM_GREAT_BALL", balls)],
+        &[("ITEM_GREAT_BALL", 35)],
+        "plan 1413 sabrina-badge (Celadon is on the way)",
     )?;
     let mut stones: Vec<String> = vec![];
     for e in &s.plan.params.evolutions {
@@ -741,6 +768,14 @@ fn celadon_shopping(s: &mut Session) -> PResult<()> {
             &x_items,
         )?;
     }
+    // v3: the dex errands of Celadon: stones bought at 4F for party and boxed mons (Leaf:
+    // Weepinbell, Exeggcute; Fire: Vulpix; ...), keeping the League's money in hand.
+    super::dexfin::errands(
+        s,
+        "MAP_CELADON_CITY_POKEMON_CENTER_1F",
+        Some(super::dexfin::Place::Celadon),
+        30_000,
+    )?;
     if s.model
         .names
         .iter()
@@ -754,6 +789,8 @@ fn celadon_shopping(s: &mut Session) -> PResult<()> {
         );
     }
     let mut saffron: Vec<(&str, u16)> = vec![];
+    // v3: plan 1413's potion stops (sabrina-badge 3, silph-walk 4) on top of the xbuy heals.
+    let heals = heals + 7;
     if heals > 0 {
         saffron.push(("ITEM_HYPER_POTION", heals as u16));
     }
@@ -1040,10 +1077,19 @@ fn strength_carrier(s: &mut Session) -> PResult<()> {
     let lapras = id("SPECIES_LAPRAS");
     let party = Ram::new(&s.obs).party(s.hf.rec.emu());
     if !party.iter().any(|m| m.species == lapras) {
+        // v3: with the route's catches the party is no longer the v2 one; never deposit the
+        // lead, the Fly / Cut / Surf users or a pending stone evolution (`dexfin::keep_slots`).
+        let keep = super::dexfin::keep_slots(s);
         let slot = party
             .iter()
             .position(|m| m.species == id("SPECIES_DODUO"))
-            .unwrap_or(party.len() - 1);
+            .filter(|i| !keep.contains(i))
+            .unwrap_or_else(|| {
+                (0..party.len())
+                    .rev()
+                    .find(|i| !keep.contains(i))
+                    .unwrap_or(party.len() - 1)
+            });
         // Two PC sessions: switching from deposit to withdraw inside one sometimes closes the PC.
         if party.len() >= 6 {
             super::shop::pc(
@@ -1996,6 +2042,10 @@ pub fn stages() -> Vec<Stage> {
         Stage {
             name: "mansion",
             run: mansion,
+        },
+        Stage {
+            name: "cinnabar-dex",
+            run: cinnabar_dex,
         },
         Stage {
             name: "blaine",

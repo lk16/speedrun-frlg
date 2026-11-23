@@ -395,7 +395,16 @@ fn lavender_heal(s: &mut Session) -> PResult<()> {
         json!({"segment": "tower-walk"}),
     );
     center_heal(s, "MAP_LAVENDER_TOWN_POKEMON_CENTER_1F")?;
-    super::items::set_battle_style_set(s)
+    super::items::set_battle_style_set(s)?;
+    // v3: the first ball stop (plan 1413 `marts` walk-lavender: Great Balls to 15), so passing
+    // catches (the tower's Gastly / Cubone) and the Power Plant hunt have balls.
+    super::shop::mart_topup(
+        s,
+        "MAP_LAVENDER_TOWN_MART",
+        None,
+        &[("ITEM_GREAT_BALL", 15)],
+        "plan 1413 walk-lavender",
+    )
 }
 
 fn fly_celadon(s: &mut Session) -> PResult<()> {
@@ -476,7 +485,9 @@ fn safari_trip(s: &mut Session) -> PResult<()> {
 /// (`SafariZone_West/map.json`, `SafariZone_SecretHouse/scripts.inc`). Wild Pokémon met on the way
 /// are thrown at (`WildPlan::Catch`; the bridge plays the Safari ball/bait/rock policy).
 fn safari_walk(s: &mut Session) -> PResult<()> {
-    s.wild_plan = super::battle::WildPlan::Catch;
+    // Passing encounters: new species only (`dex::wild_plan`'s pass rule; the v2 run threw at
+    // everything here and caught an owned Paras and a second Nidorina).
+    s.wild_plan = super::battle::WildPlan::Flee;
     s.seg = "safari-walk".into();
     let o = Opts::default();
     go_face(s, "MAP_SAFARI_ZONE_WEST", 28, 14, &o)?;
@@ -497,6 +508,36 @@ fn safari_walk(s: &mut Session) -> PResult<()> {
         return Err(super::session::PlayError::Fatal(
             "no HM03 from the Secret House".into(),
         ));
+    }
+    // The plan's two Safari hunts (`hunts` after safari-walk: East 90, West 100), with HM03
+    // already in the bag so the Safari's 600 steps can run out without losing it. The human is
+    // in the West area for the Secret House: West first, then East (plan order is East, West).
+    let mut hunts: Vec<crate::params::Hunt> = s
+        .plan
+        .params
+        .hunts
+        .iter()
+        .filter(|h| h.after == "safari-walk")
+        .cloned()
+        .collect();
+    hunts.sort_by_key(|h| h.site != "MAP_SAFARI_ZONE_WEST");
+    if hunts
+        .first()
+        .is_some_and(|h| h.site == "MAP_SAFARI_ZONE_WEST")
+    {
+        s.event(
+            "model-vs-actual",
+            "Safari hunts: West before East (the Secret House is in the West area; plan order East, West)",
+            json!({"segment": "safari-walk"}),
+        );
+    }
+    for h in &hunts {
+        let inside =
+            here(s).is_some_and(|n| s.graph().maps[&n.0].id.starts_with("MAP_SAFARI_ZONE"));
+        if !inside {
+            break;
+        }
+        super::dex::hunt(s, h)?;
     }
     // Out: walk back toward the gate; when the steps run out the game sends the player there.
     s.wild_plan = super::battle::WildPlan::Flee;
@@ -530,6 +571,9 @@ fn koga(s: &mut Session) -> PResult<()> {
         json!({"segment": "koga-walk"}),
     );
     center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
+    // v3: the Safari's catches evolve here with the stones in the bag (Moon Stone: Nidorina /
+    // Nidorino), at the PC of the center the human is standing in.
+    super::dexfin::errands(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F", None, 0)?;
     let _ = super::items::mount_bike(s)?;
     s.seg = "fuchsia-gym-trainers".into();
     go_map(s, "MAP_FUCHSIA_CITY_GYM", &Opts::default())?;
@@ -543,7 +587,15 @@ fn koga(s: &mut Session) -> PResult<()> {
             "no Soul Badge after Koga".into(),
         ));
     }
-    split(s, "Koga", "koga-badge")
+    split(s, "Koga", "koga-badge")?;
+    // The model's own heal is after the badge (`center-heal@koga-badge`). With the heal moved
+    // before the fight it is skipped unless the lead came out below half HP (v3 dev: Blastoise
+    // fainted to Koga and the Power Plant was walked with Nidoqueen in front).
+    let lead = super::ram::Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    if lead.hp * 2 < lead.max_hp {
+        center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
+    }
+    Ok(())
 }
 
 /// The dex module's hook: the plan's evolutions, specials (gifts, trades, statics, buys) and hunts

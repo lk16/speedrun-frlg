@@ -196,7 +196,7 @@ fn needed_at(s: &mut Session, slots: &[crate::data::Slot], skip: &[usize]) -> Ve
 /// Logged as a `decision` with the numbers behind it.
 pub fn wild_plan(s: &mut Session, default: WildPlan) -> WildPlan {
     let Some(h) = s.dex.hunt.clone() else {
-        return default;
+        return pass_plan(s, default);
     };
     let (game_id, level) = wild_mon(s);
     let Some((idx, national)) = dex_species(s, game_id) else {
@@ -237,6 +237,84 @@ pub fn wild_plan(s: &mut Session, default: WildPlan) -> WildPlan {
     }
 }
 
+/// Balls in the bag the human throws at a passing mon (the Master Ball is kept for Mewtwo).
+pub fn ball_count(s: &mut Session) -> u16 {
+    let master = id("ITEM_MASTER_BALL");
+    Ram::new(&s.obs)
+        .pocket(s.hf.rec.emu(), 2)
+        .iter()
+        .filter(|&&(it, _)| it != master)
+        .map(|&(_, n)| n)
+        .sum()
+}
+
+/// A passing encounter outside a hunt (the stage's own plan is `Flee`): the sim's rule for
+/// encounters on the way (`sim::run_encounters`: `want_catch` = `catch_on_pass` and the species'
+/// catch rate at least `pass_min_catch`, never on the plan's `pass_off` segments), through the
+/// same [`sim::wants_catch`] as a hunt, with the Pokédex flags from RAM. The controller adds the
+/// one thing the sim abstracts: a ball in the bag (Safari Balls in the Safari Zone).
+fn pass_plan(s: &mut Session, default: WildPlan) -> WildPlan {
+    if default != WildPlan::Flee {
+        return default;
+    }
+    let (game_id, level) = wild_mon(s);
+    let Some((idx, national)) = dex_species(s, game_id) else {
+        return default;
+    };
+    let p = &s.plan.params;
+    let sp = &s.plan.dex.species[idx];
+    let (name, rate) = (sp.name.clone(), sp.catch_rate);
+    let allowed = p.catch_on_pass && rate >= p.pass_min_catch && !p.pass_off.contains(&s.seg);
+    let is_owned = owned(s, national);
+    if !sim::wants_catch(&s.ctx, idx, is_owned, &[], allowed) {
+        return default;
+    }
+    // Cerulean Cave: the last party slot is Mewtwo's (a catch there would send Mewtwo to the PC:
+    // v3 lost two branches to "Mewtwo not in the party after the battle").
+    if s.seg == "cerulean-cave" && Ram::new(&s.obs).party(s.hf.rec.emu()).len() >= 5 {
+        s.event(
+            "decision",
+            format!(
+                "passing {} Lv{level}: not caught, the last party slot is for Mewtwo",
+                short(&name)
+            ),
+            json!({"species": name, "level": level, "seg": s.seg}),
+        );
+        return default;
+    }
+    let flags = s.obs.battle_type_flags(s.hf.rec.emu());
+    let safari = flags & (1 << 7) != 0;
+    let balls = if safari {
+        safari_counters(s).0 as u16
+    } else {
+        ball_count(s)
+    };
+    let caught_n = caught_count(s);
+    if balls == 0 {
+        s.event(
+            "model-vs-actual",
+            format!(
+                "passing {} Lv{level} (new, catch rate {rate}): no ball in the bag, fled",
+                short(&name)
+            ),
+            json!({"species": name, "level": level, "catch_rate": rate, "seg": s.seg}),
+        );
+        return default;
+    }
+    s.event(
+        "decision",
+        format!(
+            "passing {} Lv{level} on {}: catch (new, catch rate {rate} >= pass_min_catch {}; {balls} balls)",
+            short(&name),
+            s.seg,
+            p.pass_min_catch
+        ),
+        json!({"species": name, "level": level, "catch": true, "reason": "pass", "catch_rate": rate,
+               "owned_total": caught_n, "balls": balls, "seg": s.seg}),
+    );
+    WildPlan::Catch
+}
+
 /// After a wild battle of a hunt: count the catch.
 pub fn after_wild(s: &mut Session, end: BattleEnd, species: u16) {
     if end != BattleEnd::Caught {
@@ -270,7 +348,21 @@ pub fn wild_battle(s: &mut Session) -> Option<PResult<()>> {
         return None;
     }
     let (species, _) = wild_mon(s);
-    let plan = wild_plan(s, s.wild_plan);
+    let mut plan = wild_plan(s, s.wild_plan);
+    // Arena Trap (Diglett, Dugtrio in Kanto) blocks RUN for a grounded player mon
+    // (`decompiled/src/battle_main.c:3031,3203`): "Can't escape!" every turn, and the flee loop
+    // spun forever in the v3 fill (Diglett's Cave B1F). The human knocks it out instead.
+    if plan == WildPlan::Flee {
+        let name = names().species(species);
+        if name == "SPECIES_DIGLETT" || name == "SPECIES_DUGTRIO" {
+            s.event(
+                "decision",
+                format!("wild {}: Arena Trap, cannot run: fighting", short(name)),
+                json!({"species": name}),
+            );
+            plan = WildPlan::Fight;
+        }
+    }
     let safari = flags & (1 << 7) != 0; // BATTLE_TYPE_SAFARI, `include/constants/battle.h:52`
     if safari {
         return Some(safari_battle(s, plan == WildPlan::Catch));
@@ -479,7 +571,40 @@ fn pace_pairs(s: &Session, map: &str, water: bool, from: (i16, i16)) -> Vec<[(i1
             .iter()
             .any(|&(ox, oy)| (ox - x).abs() + (oy - y).abs() <= 1)
     };
-    let mut v = vec![];
+    // Only tiles connected to where the player stands on this map (a flood fill over the
+    // layout's passable tiles and water: Route 23's grass is across water from the plateau). An unreachable pair made every
+    // `go` a whole-world search: the v3 fill spent 20+ CPU minutes in Diglett's Cave B1F.
+    let mut reach = vec![false; (m.w as usize) * (m.h as usize)];
+    let pass = |x: i16, y: i16| {
+        m.tile(x, y)
+            .is_some_and(|t| t.collision == 0 || is_water(t.behavior))
+    };
+    let mut stack = vec![from];
+    while let Some((x, y)) = stack.pop() {
+        if x < 0 || y < 0 || x >= m.w || y >= m.h {
+            continue;
+        }
+        let i = (x as usize) + (y as usize) * (m.w as usize);
+        if reach[i] || !(pass(x, y) || (x, y) == from) {
+            continue;
+        }
+        reach[i] = true;
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            stack.push((x + dx, y + dy));
+        }
+    }
+    // A start the layout itself calls blocked (a connection edge, Route 23 (11, 0) from the
+    // plateau) floods nothing: then every pair stays a candidate, as before.
+    let flooded = reach.iter().filter(|&&b| b).count() >= 20;
+    let reachable = |x: i16, y: i16| {
+        !flooded
+            || x >= 0
+                && y >= 0
+                && x < m.w
+                && y < m.h
+                && reach[(x as usize) + (y as usize) * (m.w as usize)]
+    };
+    let mut all = vec![];
     for y in 0..m.h {
         for x in 0..m.w {
             if !ok(x, y) {
@@ -487,13 +612,24 @@ fn pace_pairs(s: &Session, map: &str, water: bool, from: (i16, i16)) -> Vec<[(i1
             }
             for (dx, dy) in [(1, 0), (0, 1)] {
                 if ok(x + dx, y + dy) {
-                    v.push([(x, y), (x + dx, y + dy)]);
+                    all.push([(x, y), (x + dx, y + dy)]);
                 }
             }
         }
     }
-    v.sort_by_key(|p| (p[0].0 - from.0).abs() + (p[0].1 - from.1).abs());
-    v
+    all.sort_by_key(|p| (p[0].0 - from.0).abs() + (p[0].1 - from.1).abs());
+    let near: Vec<[(i16, i16); 2]> = all
+        .iter()
+        .filter(|p| reachable(p[0].0, p[0].1) && reachable(p[1].0, p[1].1))
+        .copied()
+        .collect();
+    // The flood is the layout's view only (ledges and elevation can connect what it splits):
+    // with no pair in the player's component, every pair stays a candidate, as before.
+    if near.is_empty() {
+        all
+    } else {
+        near
+    }
 }
 
 /// A fishing spot on `map`: a walkable tile next to water, and the direction facing it.
@@ -531,6 +667,7 @@ fn go_first(s: &mut Session, map: &str, cands: &[(i16, i16)], opts: &Opts) -> PR
         match go(s, map, x, y, opts) {
             Ok(()) => return Ok(i),
             Err(PlayError::Fatal(e)) if e.contains("no path") => last = Some(e),
+            Err(PlayError::Death(e)) if e.contains("goal tile bumped") => last = Some(e),
             Err(e) => return Err(e),
         }
     }
@@ -813,13 +950,38 @@ fn hunt_loop(
         if area == Area::Fish {
             cast(s)?;
         } else {
+            // A pacing tile the walker bumped into (the layout calls it walkable, the game does
+            // not: Victory Road 2F (33, 17), 57 bumps in one hunt of the 11-22 run): pace
+            // somewhere else.
+            let bumped = |s: &Session, t: (i16, i16)| s.bumped.contains_key(&(site, t.0, t.1));
+            if bumped(s, pair[0]) || bumped(s, pair[1]) {
+                let me = here(s).map_or((0, 0), |n| (n.1, n.2));
+                let pairs: Vec<[(i16, i16); 2]> = pace_pairs(s, &h.site, water, me)
+                    .into_iter()
+                    .filter(|p| !bumped(s, p[0]) && !bumped(s, p[1]))
+                    .collect();
+                let cands: Vec<(i16, i16)> = pairs.iter().map(|p| p[0]).collect();
+                let i = go_first(s, &h.site, &cands, &opts)?;
+                s.event(
+                    "warn",
+                    format!(
+                        "hunt: pacing pair {:?} bumped; pacing {:?} instead",
+                        pair, pairs[i]
+                    ),
+                    json!({"site": h.site}),
+                );
+                pair = pairs[i];
+            }
             let cur = here(s).map(|n| (n.1, n.2));
             let target = if cur == Some(pair[0]) {
                 pair[1]
             } else {
                 pair[0]
             };
-            go(s, &h.site, target.0, target.1, &opts)?;
+            match go(s, &h.site, target.0, target.1, &opts) {
+                Err(PlayError::Death(m)) if m.contains("goal tile bumped") => continue,
+                r => r?,
+            }
         }
         // The plan's `steps` are the sim's encounter rolls (one per step). Pacing a pair of tiles
         // rolls twice per tile, at the turn and at the step (`checkStandardWildEncounter` runs at
