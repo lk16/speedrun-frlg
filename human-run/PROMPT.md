@@ -265,26 +265,26 @@ times go into `calibration.md` and, as a labelled MODEL CHANGE, into the model.
   *Check:* the same seed gives a byte-identical `.ilog`; the replay matches the checkpoint RAM
   hashes; a forced rollback produces a different continuation, and the stitched `.ilog` still
   verifies from boot.
-- [ ] **S3. Primitives.** Advance text (mash with jitter), walk a tile path (mapgraph route, step
+- [x] **S3. Primitives.** (`play/walk.rs`, `prims.rs`, `menu.rs`, `items.rs`, `shop.rs`; exercised over the whole canonical run `pg-canon5`, journals `2026-11-22-12-30-controller.md`, `2026-11-22-13-15-dex-shop.md`) Advance text (mash with jitter), walk a tile path (mapgraph route, step
   until the position changes, handle bumps, NPCs and warps), menus by cursor position read from RAM
   (start, bag, party, shop, PC), HM field moves, Fly. Use `frlg-route` readers where they exist.
   *Check:* scripted mini-segments (Pallet → Viridian, buy at a mart, Fly) reach their target state.
-- [ ] **S4. Battles and catches.** Read the battle state from RAM and drive the sim's policy:
+- [x] **S4. Battles and catches.** (`play/battle.rs` on the sim's `battle::decide`; checked on Misty, both early rivals and a wild Paras rather than Brock, whose fight is in the surviving Nov-21 prefix; journal `2026-11-22-11-57-battle-bridge.md`) Read the battle state from RAM and drive the sim's policy:
   moves, switches, X items, heals, run, ball throws. Log each choice with its numbers. *Check:*
   Brock and a wild catch, with the decisions in the log matching what the sim's policy says for
   that state.
-- [ ] **S5. Starter phase and opening to Brock.** Starter reset loop to the plan's thresholds, then
+- [x] **S5. Starter phase and opening to Brock.** (played by the lost 2026-11-21 controller; its surviving `.ilog` prefix to Giovanni 1 replays from boot to the saved state's RAM hash and is reused, journal `2026-11-22-10-00-controller-restart.md`; Brock 1074 s vs model p50 877 s; review video `videos/1122-lgdescent-s11-giovanni1.mp4`) Starter reset loop to the plan's thresholds, then
   New Game through Brock. *Check:* played split vs the model's Brock split, and vs the TAS
   `defeat-brock` time as a floor. **First full review video** of this stretch (S1 renderer).
-- [ ] **S6. Main story to the first Hall of Fame,** one WR split at a time, in the plan's order
+- [x] **S6. Main story to the first Hall of Fame,** (v2 run `1122-lgdescent-s11-v2`, first HoF 12 874 s vs p50 9 970 s, verified at 45 checkpoints; journal `2026-11-22-14-00-controller-2.md`) one WR split at a time, in the plan's order
   (`route_wr.rs`). Each split gets a savestate checkpoint, a measured time against the model, and a
   model update. *Check:* every split reached; the deltas against the model listed in the journal.
-- [ ] **S7. Dex fill.** Encounter loops, catch rules, Safari Zone, fishing, evolutions, all 60
+- [x] **S7. Dex fill.** (done in the post-game in the played run, not in the plan's order: 18 species at the first HoF, 60 at 18 357 s via hunts + `dexfin` evolutions/trades/fossil; National Dex per `PalletTown/scripts.inc:41-57`; journals `2026-11-22-17-00-postgame.md`, `2026-11-22-23-00-finish.md`) Encounter loops, catch rules, Safari Zone, fishing, evolutions, all 60
   species in the plan's order. *Check:* National Dex unlock condition met (cite the script).
 - [x] **S8. Post-game.** (canonical `runs/human-play/pg-canon5`, finish 22 247 s; journal `2026-11-22-23-00-finish.md`) Sevii Islands, Rocket Warehouse, National Dex, Elite Four Round 2 and the
   Champion, up to the first full black frame of the second Hall of Fame. *Check:* finish frame
   reached and the timer stopped by the category rule.
-- [ ] **S9. Full run and video.** `frlg-human video <plan> --seed S` runs (or reuses) the full
+- [x] **S9. Full run and video.** (`pg-canon5`, finish 22 247 s = 6:10:47, verified from boot at 96 checkpoints; video `$FRLG_ARTIFACTS/videos/1122-lgdescent-s11-full.mp4`, 4.2 GiB, 22 260 s, rendered with `frlg video --overlay` rather than a `frlg-human video` wrapper; journal `2026-11-23-03-05-full-video.md`) `frlg-human video <plan> --seed S` runs (or reuses) the full
   `.ilog` and `events.jsonl` and writes `$FRLG_ARTIFACTS/videos/<plan>-<seed>.mp4`. *Check:* the
   replay from boot verifies. The journal states the played finish time against the model's
   no-reset distribution, plus every segment where they disagree.
