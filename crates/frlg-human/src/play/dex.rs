@@ -544,14 +544,43 @@ fn pace_pairs(s: &Session, map: &str, water: bool, from: (i16, i16)) -> Vec<[(i1
             .iter()
             .any(|&(ox, oy)| (ox - x).abs() + (oy - y).abs() <= 1)
     };
+    // Only tiles connected to where the player stands on this map (a flood fill over the
+    // layout's passable tiles, water included when surfing). An unreachable pair made every
+    // `go` a whole-world search: the v3 fill spent 20+ CPU minutes in Diglett's Cave B1F.
+    let mut reach = vec![false; (m.w as usize) * (m.h as usize)];
+    let pass = |x: i16, y: i16| {
+        m.tile(x, y)
+            .is_some_and(|t| t.collision == 0 && (water || !is_water(t.behavior)))
+    };
+    let mut stack = vec![from];
+    while let Some((x, y)) = stack.pop() {
+        if x < 0 || y < 0 || x >= m.w || y >= m.h {
+            continue;
+        }
+        let i = (x as usize) + (y as usize) * (m.w as usize);
+        if reach[i] || !(pass(x, y) || (x, y) == from) {
+            continue;
+        }
+        reach[i] = true;
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            stack.push((x + dx, y + dy));
+        }
+    }
+    let reachable = |x: i16, y: i16| {
+        x >= 0
+            && y >= 0
+            && x < m.w
+            && y < m.h
+            && reach[(x as usize) + (y as usize) * (m.w as usize)]
+    };
     let mut v = vec![];
     for y in 0..m.h {
         for x in 0..m.w {
-            if !ok(x, y) {
+            if !ok(x, y) || !reachable(x, y) {
                 continue;
             }
             for (dx, dy) in [(1, 0), (0, 1)] {
-                if ok(x + dx, y + dy) {
+                if ok(x + dx, y + dy) && reachable(x + dx, y + dy) {
                     v.push([(x, y), (x + dx, y + dy)]);
                 }
             }
