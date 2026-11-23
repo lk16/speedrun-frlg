@@ -888,6 +888,7 @@ fn main() {
                     scarce: arg(&args, "--scarce", 0.6f64),
                     awakenings: arg(&args, "--awakenings", 0u32),
                     sleep_no_potion: args.iter().any(|a| a == "--sleep-fix"),
+                    cures: arg(&args, "--cures", 0u32),
                 };
                 let mut g = frlg_human::rng::GameRng::from_u32(
                     (seed as u32).wrapping_mul(2654435761) ^ (i as u32).wrapping_mul(0x9E3779B9),

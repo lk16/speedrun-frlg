@@ -302,6 +302,8 @@ struct State {
     repel_ok: bool,
     /// MODEL CHANGE `Params::awakenings`: Awakenings in the bag.
     awakenings: u32,
+    /// PLAN `Params::full_heals`: poison cures in the bag.
+    cures: u32,
     /// MODEL CHANGE `Params::coin_case_frames`: the Coin Case has been fetched.
     coin_case: bool,
     /// Battle simulation: the carry's IVs and nature (rolled at the starter), effort values earned,
@@ -1408,6 +1410,20 @@ fn encounter(
         let tier = ball_tier(ctx, sp.catch_rate);
         st.ball_tier = Some(tier);
         let ball = (!ctx.p.money_model).then(|| BALL_MULT[tier]);
+        // PLAN `low_chance_throws`: fewer throws at a mon the first ball catches rarely.
+        let max_throws = if ctx.p.low_chance_throws > 0
+            && catch_prob(catch_odds(
+                sp.catch_rate,
+                BALL_MULT[tier.min(st.max_tier)],
+                (hp * 100.0) as u32,
+                100,
+                Status1::None,
+            )) < ctx.p.low_chance_below
+        {
+            ctx.p.low_chance_throws
+        } else {
+            MAX_THROWS
+        };
         let ok = throw_balls(
             ctx,
             st,
@@ -1416,7 +1432,7 @@ fn encounter(
             hp,
             Status1::None,
             ball,
-            MAX_THROWS,
+            max_throws,
         );
         st.ball_tier = None;
         if ok {
@@ -1654,6 +1670,15 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
                 continue;
             }
         }
+        let safari = ctx.p.safari_model && site.starts_with("MAP_SAFARI_ZONE");
+        let rate_s = ctx.dex.species[slot.species].catch_rate;
+        // MODEL CHANGE `pass_reserve`: a hard passing catch leaves the last balls for the next hunt.
+        let reserve_ok = stop_when_done
+            || safari
+            || ctx.p.pass_reserve == 0
+            || !ctx.p.money_model
+            || rate_s >= ctx.p.pass_reserve_rate
+            || st.balls.iter().sum::<u32>() > ctx.p.pass_reserve;
         encounter(
             ctx,
             st,
@@ -1663,9 +1688,10 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
             skip,
             stop_when_done
                 || (pass_catch
+                    && reserve_ok
                     && ctx.p.catch_on_pass
-                    && ctx.dex.species[slot.species].catch_rate >= ctx.p.pass_min_catch),
-            ctx.p.safari_model && site.starts_with("MAP_SAFARI_ZONE"),
+                    && rate_s >= ctx.p.pass_min_catch),
+            safari,
         );
         if stop_new > 0 && st.caught.count() - c0 >= stop_new {
             break;
@@ -1832,6 +1858,8 @@ pub struct TacIn<'a> {
     pub mewtwo_now: bool,
     /// Awakenings in the bag (`Tactics::awakenings`).
     pub awakenings: u32,
+    /// Poison cures in the bag (`Tactics::cures`).
+    pub cures: u32,
 }
 
 /// The [`Tactics`] of the fight named `name` (`Params::fight_tactics`, the global knobs): the one
@@ -1886,6 +1914,7 @@ pub fn fight_tactics(ctx: &Ctx, name: &str, league: bool, t: &TacIn) -> crate::b
         scarce: ctx.p.scarce_factor,
         sleep_no_potion: ctx.p.sleep_no_potion,
         awakenings: t.awakenings,
+        cures: t.cures,
     }
 }
 
@@ -2198,6 +2227,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 heal_items: st.heal_items,
                 mewtwo_now,
                 awakenings: st.awakenings,
+                cures: st.cures,
             },
         );
         let xs = tac.x_items.clone();
@@ -2249,6 +2279,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         // Awakenings: the honest lane spent its own (in `risk_fight`); outside it, this fight's.
         if !in_lane {
             st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
+            st.cures = st.cures.saturating_sub(out.cures_used);
         }
         if a.trainer && st.log_fights {
             st.fight_log
@@ -2619,6 +2650,7 @@ fn risk_fight(
     // A berry eaten in either lane is gone.
     st.persim &= me.persim;
     st.awakenings = st.awakenings.saturating_sub(out.awakenings_used);
+    st.cures = st.cures.saturating_sub(out.cures_used);
     healed |= out.heals_used > 0;
     if bag {
         let n = out.heals_used.min(potions);
@@ -2994,7 +3026,15 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
             st.safari_balls = 30;
         }
         st.safari_steps = st.safari_steps.saturating_sub(h.detour_tiles * 2);
+        // MODEL CHANGE `safari_walk_steps`: the in-zone walk to this hunt also runs the counter.
+        if let Some(&w) = ctx.p.safari_walk_steps.get(&h.site) {
+            st.safari_steps = st.safari_steps.saturating_sub(w);
+        }
         if area == Area::Land {
+            // PLAN `safari_drain`: this hunt takes what is left on the counter.
+            if ctx.p.safari_drain == h.site {
+                steps = st.safari_steps;
+            }
             steps = steps.min(st.safari_steps);
         }
     }
@@ -3106,6 +3146,18 @@ fn hunt(ctx: &Ctx, st: &mut State, rng: &mut Rng, h: &Hunt, era: Era) {
         }
         let stop = ctx.p.safari_stop > 0 && st.safari_new >= ctx.p.safari_stop;
         if stop {
+            st.safari_done = true;
+        }
+        // PLAN `safari_drain`: the counter ran out in the drain hunt, the game warps the player to the gate
+        // (`SafariZone_EventScript_TimesUp`, `safari_zone.c:42-53`): the route's walk back out is not walked.
+        if !ctx.p.safari_drain.is_empty()
+            && ctx.p.safari_drain == h.site
+            && area == Area::Land
+            && st.safari_steps == 0
+        {
+            let back =
+                ctx.p.safari_exit_tiles as f64 * Era::Run.frames_per_tile() * ctx.p.path_overhead;
+            st.clock = st.clock.saturating_sub(back.round() as u64);
             st.safari_done = true;
         }
         if stop || st.safari_steps == 0 || st.safari_balls == 0 {
@@ -3285,6 +3337,7 @@ pub fn attempt(
         repel_left: 0,
         repel_ok: false,
         awakenings: 0,
+        cures: 0,
         coin_case: false,
         ivs: [15; 6],
         nature: 0,
@@ -4318,6 +4371,21 @@ pub fn attempt(
                 }
                 "lavender-heal" => st.max_tier = st.max_tier.max(1),
                 _ => {}
+            }
+            // PLAN `full_heals`: Full Heals bought at a mart on this segment's way (Fuchsia: `FuchsiaCity_Mart/
+            // scripts.inc:28`, 600 each, `items.json`), one mart visit.
+            if ctx.p.full_heals > 0 && seg.name == ctx.p.full_heal_at {
+                let price = ctx.p.full_heal_price.max(1);
+                let n = if ctx.p.money_model {
+                    ctx.p.full_heals.min(st.money / price)
+                } else {
+                    ctx.p.full_heals
+                };
+                if ctx.p.money_model {
+                    st.money -= n * price;
+                }
+                st.cures += n;
+                bump(&mut st, ctx.p.full_heal_frames * ctx.p.text_factor);
             }
             // Poison outside battle: 1 HP per 5 steps while walking or reading text.
             if ctx.p.poison_frames_per_hp > 0.0

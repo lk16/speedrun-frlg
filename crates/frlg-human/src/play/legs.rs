@@ -398,11 +398,18 @@ fn lavender_heal(s: &mut Session) -> PResult<()> {
     super::items::set_battle_style_set(s)?;
     // v3: the first ball stop (plan 1413 `marts` walk-lavender: Great Balls to 15), so passing
     // catches (the tower's Gastly / Cubone) and the Power Plant hunt have balls.
+    // PLAN `full_heals` at `walk-lavender` (honesty 4): Antidotes for Koga's poison in the same stop
+    // (`LavenderTown_Mart/scripts.inc:32`, 100 each).
+    let fh = s.plan.params.full_heals;
+    let mut want = vec![("ITEM_GREAT_BALL", 15u16)];
+    if fh > 0 && s.plan.params.full_heal_at == "walk-lavender" {
+        want.push(("ITEM_ANTIDOTE", fh as u16));
+    }
     super::shop::mart_topup(
         s,
         "MAP_LAVENDER_TOWN_MART",
         None,
-        &[("ITEM_GREAT_BALL", 15)],
+        &want,
         "plan 1413 walk-lavender",
     )
 }
@@ -606,6 +613,18 @@ fn koga(s: &mut Session) -> PResult<()> {
         .any(|m| m.knows(surf).is_some())
     {
         super::items::teach_tmhm(s, "ITEM_HM03", 0)?;
+    }
+    // PLAN `full_heals` (honesty 4): Full Heals for Koga's Toxic / Sludge poison, at the Fuchsia mart
+    // (`FuchsiaCity_Mart/scripts.inc:28`), two screens from the center and the gym.
+    let fh = s.plan.params.full_heals;
+    if fh > 0 && s.plan.params.full_heal_at == "koga-walk" {
+        super::shop::mart_topup(
+            s,
+            "MAP_FUCHSIA_CITY_MART",
+            None,
+            &[("ITEM_FULL_HEAL", fh as u16)],
+            "plan full_heals: Full Heals for Koga's poison",
+        )?;
     }
     // v3: the Safari's catches evolve here with the stones in the bag (Moon Stone: Nidorina /
     // Nidorino), at the PC of the center the human is standing in.

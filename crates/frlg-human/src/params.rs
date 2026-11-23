@@ -1084,6 +1084,39 @@ pub struct Params {
     /// PLAN (model honesty 3): `center-heal@` anchors (from `extra_heals`) that run even inside the Torrent
     /// phase (which otherwise walks past every Pokemon Center), e.g. a Fuchsia Pokemon Center heal at Koga.
     pub torrent_heals: Vec<String>,
+    /// MODEL CHANGE (model honesty 4, controller-v4 bug 1): a passing catch (not a hunt) of a species with
+    /// catch rate below `pass_reserve_rate` is not thrown at while the bag holds at most this many balls
+    /// (Safari excepted): the human keeps them for the next hunt, as the playing controller does
+    /// (`play/dex.rs` `PASS_RESERVE` 8; v4 pass 1 spent 7 Great Balls on a 9 % Onix and fled from the Power
+    /// Plant's 4 species). 0 = off (the old sim: passing catches eat the bag down to zero).
+    pub pass_reserve: u32,
+    pub pass_reserve_rate: u32,
+    /// PLAN (model honesty 4): at most this many throws at a wild mon whose per-ball catch chance (first
+    /// ball, `catch_prob`) is below `low_chance_below` (0 = off: `MAX_THROWS` 8 for every catch).
+    pub low_chance_throws: u32,
+    pub low_chance_below: f64,
+    /// MODEL CHANGE (model honesty 4, controller-v4 bug 4): Safari steps walked inside the zone before the
+    /// hunt at this site (the 600-step counter, `decompiled/src/safari_zone.c` `SafariZoneTakeStep`, counts
+    /// every step). The route prices the walk in time (`safari-walk` 460 tiles) but the counter never saw
+    /// it. Played v4 (East first): ~100 steps gate -> East grass, ~260 East hunt -> West hunt (items
+    /// included; `frlg-mapgraph` 72 / 123 tiles are lower bounds: the hunt ends deep in the grass). Empty =
+    /// the old ledger (only the hunts' steps count).
+    pub safari_walk_steps: std::collections::HashMap<String, u32>,
+    /// PLAN (model honesty 4): the hunt at this Safari site takes every step left on the counter; when the
+    /// counter runs out the game warps the player to the gate ("time's up", `safari_zone.c`), so the walk
+    /// back (`safari_exit_tiles` run tiles, `frlg-mapgraph` West (28,15) -> Center gate 195) is not walked.
+    /// Empty = off.
+    pub safari_drain: String,
+    pub safari_exit_tiles: u32,
+    /// PLAN (model honesty 4, Koga): Full Heals bought on the segment `full_heal_at` (Fuchsia mart, 600 each;
+    /// a mart visit), used by the fight policy on a poisoned fighter (`Tactics::cures`). 0 = none.
+    pub full_heals: u32,
+    pub full_heal_at: String,
+    /// Price of one cure and the frames of buying them (default: Full Heal 600 and a whole mart visit, 900;
+    /// an Antidote, 100, added to a mart stop the plan already makes, e.g. Lavender's
+    /// `LavenderTown_Mart/scripts.inc:32`: one more buy row, ~150 frames, guess).
+    pub full_heal_price: u32,
+    pub full_heal_frames: f64,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1312,6 +1345,17 @@ impl Default for Params {
             level_evo_max_candies: 0,
             risk_entry_paid: false,
             torrent_heals: vec![],
+            pass_reserve: 0,
+            pass_reserve_rate: 100,
+            low_chance_throws: 0,
+            low_chance_below: 0.0,
+            safari_walk_steps: Default::default(),
+            safari_drain: String::new(),
+            safari_exit_tiles: 195,
+            full_heals: 0,
+            full_heal_at: String::new(),
+            full_heal_price: 600,
+            full_heal_frames: 900.0,
         }
     }
 }

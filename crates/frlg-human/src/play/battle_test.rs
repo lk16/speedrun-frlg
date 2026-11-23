@@ -62,6 +62,20 @@ pub fn run(dex: &'static Dex, args: &[String]) -> Result<(), String> {
     rec.emu()
         .load_state_file(Path::new(&state))
         .map_err(|e| format!("{state}: {e}"))?;
+    // `--give ITEM_X:qty`: an experiment's bag change (items pocket), e.g. a Full Heal before Koga.
+    if let Some(g) = flag(args, "--give") {
+        let (name, q) = g.split_once(':').ok_or("--give ITEM:qty")?;
+        let item = super::names::id(name) as u16;
+        let ok = super::ram::Ram::new(&obs).give(
+            rec.emu(),
+            0,
+            item,
+            q.parse().map_err(|_| "--give qty")?,
+        );
+        if !ok {
+            return Err("--give: no empty item slot".into());
+        }
+    }
     let base = rec.emu().frame() as u64;
     let mut f = HumanFeed::new(rec, InputModel::from_params(&plan.params), seed, 0, base);
     let mut log = EventLog::default();
