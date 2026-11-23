@@ -463,7 +463,12 @@ fn fill_round(s: &mut Session) -> PResult<()> {
             } else {
                 sec.clone()
             };
-            super::items::fly(s, &fly_sec)?;
+            // Already there (v4: the Mansion 3F hunt walked out onto Cinnabar, and Fly to the
+            // town the player stands in never changes the map: 15 soft-locks).
+            let target = s.graph().id(&map);
+            if here(s).map(|n| n.0) != Some(target) {
+                super::items::fly(s, &fly_sec)?;
+            }
             let lead = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
             if lead.hp * 2 < lead.max_hp {
                 if let Some(pc) = center_of(s, &map) {
