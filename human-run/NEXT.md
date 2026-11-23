@@ -1,29 +1,40 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
-## 2026-11-23 optimisation on the honest-3 model: CURRENT = 1504-reset1612 (journal `journal/2026-11-23-02-00-optimisation.md`)
+## 2026-11-23 optimisation (op5, wrap-up 09:15): CURRENT = 1507-honest4 (journal `journal/2026-11-23-02-00-optimisation.md`)
 
-| plan | what | WR+2m | WR |
+| plan | what | WR+2m (R 3.2M unless noted) | WR |
 | --- | --- | --- | --- |
-| 1316-shops16 | previous CURRENT (pre-honesty-3) | ~816-858 | ~2400 |
-| 1612-honest3-cap1 | 1316 + honesty-3 keys + 1 candy per evolution | 3237 / 3296 (R 9.6M seeds 7945/7946) | ~8500-10000 |
-| **1504-reset1612 (CURRENT)** | **1612 + `reset_aggr_at` all -0.2 + WR+2m `reset_table` refit (optstop, train 26M)** | **3171 / 3146 (-66 [-125, -9] / -150 [-226, -83])** | unchanged (WR table not refit) |
+| 1316-shops16 | pre-honesty-3 CURRENT | ~816-858 | ~2400 |
+| 1612-honest3-cap1 | 1316 + honesty-3 keys + 1 candy per evolution | 3237 / 3296 (R 9.6M) | ~8500-10000 |
+| 1504-reset1612 | 1612 + `reset_aggr_at` all -0.2 + WR+2m `reset_table` refit (optstop train 26M) | 3171 / 3146 (R 9.6M; -66 [-125, -9] / -150 [-226, -83] vs 1612) | = 1612 (WR table not refit) |
+| **1507-honest4 (CURRENT)** | **1504 + honesty-4 keys (2 Antidotes at Lavender, ball reserve 8, Safari in-zone steps)** | **2790 / 2803 (-812 [-1173, -478] / -437 [-760, -131] vs 1504; seeds 7951/7952)** | **7459 / 7974 (-1500 / -884)** |
 
-* Reset retune: 1612's `reset_aggr_at` gave 0 finishes at WR+10m / WR+5m; -0.2 on every threshold: 529 h / 2081 h.
-  The WR+2m table refit is significant at R 9.6M (not at 3.2M); corners lp1.4 / mp1.3 better, lp1.0 / mp1.0 / door n.s.
-* Refuted on the honest model: Lorelei +X Special (+340 / +321 h; it was -125 / -93 on 1316). On 1316 (now obsolete):
-  1302 / 1303 re-screens n.s.; extra X purchases, revives, setup_min_turns edits much worse; Mewtwo teaches are
-  -0.009 h artefacts (ignore near-zero "accepts"; run League descents with `--notkinds tm`).
+1507 corners vs 1504 (R 3.2M): lp1.0 -633 n.s., lp1.4 -544*, mp1.0 -2167*, mp1.3 -579*, door .10 -975*. Spread across
+later seeds: WR+2m ~2550-3000 h at R 3.2M (seed scatter about +-8%).
+
+* **Not adopted (fragile): Lance +X Special on 1507** (the 1302 / 1506 step): main -381 / -282 / -260 h (WR -1141 /
+  -714), mp / door corners better, but league_power corners lp1.0 +954*, lp1.1 -8, lp1.3 +265*, lp1.4 +327*: the gain
+  exists only at the fit's point estimate lp 1.2 and is zero or negative across its interval [1.1, 1.3]. Re-test after
+  a League refit on the honest carry. Lavender Great 15 -> 20: -0.77 / -0.74 h (significant, 0.03%; not adopted, nil).
+* Refuted on the honest model (1504 / 1507): Lorelei +X Special (+340 / +321); no Mr. Mime trade (+576 / +666 on 1507);
+  a mart stop before the dex fill (after giovanni-badge or victory-road, Great 10/20/30, Ultra 10: 0 .. +3463 h: the
+  money is worth more than the balls the fill runs out of); shops pass 2 (only Lavender 20, nil); League descent on
+  1504/1507 (all lorelei..champion, round-2, xbuys, setup_min_turns, preheal, revives, ~110 of 171 tail candidates
+  before the wrap-up stop): nothing else passed; extra X purchases +370..+650, revives +1440, setup_min_turns +13700.
+  That is about 9 refuted ideas in a row after 1507 apart from the fragile Lance step: the knob space around the
+  honest plan is close to converged; the next gains are model / structure items below.
 * **Always rebuild `frlg-human` after merging**: an old binary silently ignores new plan keys (8 rows marked INVALID).
-* **Evidence hygiene (controller v4):** the controller's bag reader stopped at the first emptied slot, so all bot
-  League / boss death counts before v4 understate survival (Lance 0/30 -> 7/12). Discount them: the League fit's
-  "controller upper bound", Champion-2 0/28, Lance 8 / Champion 7 deaths. No refit or plan decision here leans on them.
-  Open model bugs from v4: Koga first-try deadliness (Muk Minimize + poison) vs the model's ~0.9; no ball rationing
-  between passing catches and hunts.
-* Fight-price uncertainty unchanged in kind: the WR speed factor's 95% CI (`trainer_cost` x0.904 .. x0.981) spans
-  about x0.45 .. x4.7 on the score (measured on 1309); not re-measured on 1504.
-* Next, ranked: (1) `--set shops` and `--set league --notkinds tm` from 1504 (running); (2) WR `reset_table` refit
-  (needs ~80M training at the WR finish rate); (3) no-Mr.-Mime retest; (4) `--set dex` (candy economy changed);
-  (5) League refit on the honest carry (Lv 52.4); (6) earlymid without fight knobs.
+* **Evidence hygiene (controller v4):** bot League / boss death counts before v4 understate survival (bag reader bug;
+  Lance 0/30 -> 7/12): discount the League fit's "controller upper bound", Champion-2 0/28, Lance 8 / Champion 7 deaths.
+  No refit or plan decision here leans on them.
+* Fight-price uncertainty: the WR speed factor's 95% CI (`trainer_cost` x0.904 .. x0.981) spans about x0.45 .. x4.7 on
+  the score (measured on 1309); not re-measured on 1507.
+* Next, ranked: (1) League refit on the honest carry (Lv 52.4, `tools/league_fit_grid.py`), then re-test Lance +X
+  Special across the refit interval; (2) WR `reset_table` refit (~80M training at the WR finish rate) and a WR+2m
+  refit on 1507 (the Antidotes changed the finish rate); (3) `--set dex` (candy economy); (4) the League descent tail
+  from `lance: last x accuracy->calm` on (`--skip ~95` on 1507's 171-candidate list) and the 45 per-fight heal_below
+  candidates; (5) earlymid without fight knobs (`--set earlymid --notkinds fights`).
+
 ## 2026-11-23 06:40 model honesty 4 (read first; journal `journal/2026-11-23-06-40-model-honesty-4.md`)
 
 The controller-v4 bugs, measured with v4 code only (pre-battle states cut from the v4 `run.ilog`, `examples/
