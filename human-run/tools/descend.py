@@ -466,6 +466,11 @@ def gen(p):
         sys.path.insert(0, HERE)
         import earlyknobs, fightknobs, manipknobs, midknobs
         cands = fightknobs.candidates(p) + earlyknobs.candidates(p) + manipknobs.candidates(p) + midknobs.candidates(p)
+    elif SET == 'dexfill':
+        # Pre-League dex fill: ball stops before it, the fill list, then the dex economy (dexmartknobs.py).
+        sys.path.insert(0, HERE)
+        import dexknobs, dexmartknobs
+        cands = dexmartknobs.candidates(p, candidates(p)) + dexknobs.candidates(p)
     elif SET == 'shops':
         # Shop-stop quantities (marts top-up targets, potion bag, league_heals; model honesty 2, plan 1413+).
         sys.path.insert(0, HERE)
