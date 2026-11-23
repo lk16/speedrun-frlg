@@ -428,3 +428,21 @@ second X Accuracy every item behind that slot (Max Elixir, Full Restores) was in
 `heal_stock` was 0 and `Heal` became an attack. Also, a plain `Heal` looked only at the potion tiers (never a
 Max Potion / Full Restore), and 20 HP Potions counted as League heals. The model's per-try Lance survival
 (`salvage_at` 0.9) is still above the played 7/12 (95% CI ~[0.28, 0.85]).
+
+## Controller v4 run of record (`runs/human-play/1122-lgdescent-s11-v4`, verified from boot at 97 checkpoints)
+
+| split | v3 | v4 | model p50 | v4 - p50 |
+| --- | --- | --- | --- | --- |
+| Koga | 7 936 | 7 731 | 5 103 | +2 628 |
+| Blaine | 9 673 | 9 452 | 5 890 | +3 562 |
+| Giovanni | 12 452 | 12 068 | 8 198 | +3 870 |
+| Victory Road | 13 669 | 13 145 | 9 175 | +3 970 |
+| Hall of Fame 1 | 14 716 (45 caught) | 14 222 (39 caught) | 9 970 | +4 253 |
+| National Dex | 17 123 | 17 072 | 10 032 | +7 039 |
+| Mewtwo | 19 701 | 19 356 | 11 397 | +7 959 |
+| **Finish** | **20 975** | **20 472 (5:41:11)** | 12 279 | **+8 193** |
+
+Stretches: Safari (East first) 26 718 frames vs 31 655 (5 species vs 7); post-HoF fill (greedy by species per second)
+39 -> 56 caught in ~2 535 s, ~149 s per species (v3 ~160); round 1 Lorelei -> Hall of Fame 1 077 s (v3 1 047) with 1
+Lance rollback instead of 20. Rollbacks Giovanni 1 -> finish: 14 (v3 40): Koga 2, Silph rival 1, Victory Road
+Colby 2, Lance 1, Gideon 2, Indigo sell soft-lock 2 (controller), plus the 4 before `safari-trip` inherited from v3.
