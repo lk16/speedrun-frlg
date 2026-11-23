@@ -489,7 +489,63 @@ fn safari_walk(s: &mut Session) -> PResult<()> {
     // everything here and caught an owned Paras and a second Nidorina).
     s.wild_plan = super::battle::WildPlan::Flee;
     s.seg = "safari-walk".into();
+    // The plan's two Safari hunts (`hunts` after safari-walk: East 90, West 100) in the plan's
+    // order (v4, model honesty 3: East first; East adds Paras / Parasect / Pinsir, West then only
+    // Venonat / Venomoth / Tauros). Center -> West has no walkable warp: the walk to the Secret
+    // House (West) passes through East and North anyway (`bin/frlg-mapgraph`: 195 tiles), so the
+    // East hunt is on the way. HM03 and the Gold Teeth are fetched before the first West hunt.
+    // A hunt rolls twice per paced tile (`dex::hunt_loop`), so 90 + 100 rolls are ~95 Safari
+    // steps; with the ~200-tile walk that stays far inside the zone's 600 (`safari_counters`).
+    let hunts: Vec<crate::params::Hunt> = s
+        .plan
+        .params
+        .hunts
+        .iter()
+        .filter(|h| h.after == "safari-walk")
+        .cloned()
+        .collect();
+    let mut house = false;
+    for h in &hunts {
+        let inside =
+            here(s).is_some_and(|n| s.graph().maps[&n.0].id.starts_with("MAP_SAFARI_ZONE"));
+        if !inside && house {
+            break;
+        }
+        if h.site == "MAP_SAFARI_ZONE_WEST" && !house {
+            safari_house(s)?;
+            house = true;
+        }
+        if !house {
+            // Keep the steps the Secret House walk needs (~200 tiles from East, plus margin).
+            let (_, steps) = super::dex::safari_counters(s);
+            if steps < 320 {
+                s.event(
+                    "warn",
+                    format!(
+                        "Safari: {steps} steps left, skipping the {} hunt to keep the Secret House walk",
+                        h.site.trim_start_matches("MAP_")
+                    ),
+                    json!({"steps": steps, "site": h.site}),
+                );
+                continue;
+            }
+        }
+        super::dex::hunt(s, h)?;
+    }
+    if !house {
+        safari_house(s)?;
+    }
+    // Out: walk back toward the gate; when the steps run out the game sends the player there.
+    s.wild_plan = super::battle::WildPlan::Flee;
+    go_map(s, "MAP_FUCHSIA_CITY", &Opts::default())
+}
+
+/// The Safari's Gold Teeth (`SafariZone_West/map.json` (28, 14)) and HM03 from the Secret House
+/// (`SafariZone_SecretHouse/scripts.inc`).
+fn safari_house(s: &mut Session) -> PResult<()> {
     let o = Opts::default();
+    s.wild_plan = super::battle::WildPlan::Flee;
+    s.seg = "safari-walk".into();
     go_face(s, "MAP_SAFARI_ZONE_WEST", 28, 14, &o)?;
     s.hf.press(keys::A)?;
     settle(s)?;
@@ -509,39 +565,7 @@ fn safari_walk(s: &mut Session) -> PResult<()> {
             "no HM03 from the Secret House".into(),
         ));
     }
-    // The plan's two Safari hunts (`hunts` after safari-walk: East 90, West 100), with HM03
-    // already in the bag so the Safari's 600 steps can run out without losing it. The human is
-    // in the West area for the Secret House: West first, then East (plan order is East, West).
-    let mut hunts: Vec<crate::params::Hunt> = s
-        .plan
-        .params
-        .hunts
-        .iter()
-        .filter(|h| h.after == "safari-walk")
-        .cloned()
-        .collect();
-    hunts.sort_by_key(|h| h.site != "MAP_SAFARI_ZONE_WEST");
-    if hunts
-        .first()
-        .is_some_and(|h| h.site == "MAP_SAFARI_ZONE_WEST")
-    {
-        s.event(
-            "model-vs-actual",
-            "Safari hunts: West before East (the Secret House is in the West area; plan order East, West)",
-            json!({"segment": "safari-walk"}),
-        );
-    }
-    for h in &hunts {
-        let inside =
-            here(s).is_some_and(|n| s.graph().maps[&n.0].id.starts_with("MAP_SAFARI_ZONE"));
-        if !inside {
-            break;
-        }
-        super::dex::hunt(s, h)?;
-    }
-    // Out: walk back toward the gate; when the steps run out the game sends the player there.
-    s.wild_plan = super::battle::WildPlan::Flee;
-    go_map(s, "MAP_FUCHSIA_CITY", &o)
+    Ok(())
 }
 
 /// `leg_warden` (variant `warden_early`): the Warden takes the Gold Teeth and gives HM04
