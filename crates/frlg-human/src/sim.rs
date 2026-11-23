@@ -340,6 +340,8 @@ struct State {
     /// the end of the last fight (a rise since then, a heal or a rest, is applied to the risk lane).
     risk_hp: f64,
     risk_real: f64,
+    /// MODEL CHANGE `risk_entry_paid`: this fight's timing lane drank free pre-fight potions.
+    free_heal: bool,
     /// A risk-lane heal took the carry out of the Torrent window (`Params::risk_adopt`): the Torrent
     /// phase (Center skips, the Torrent tactic) pauses until damage brings it back to <= 1/3 HP.
     torrent_lost: bool,
@@ -1908,6 +1910,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     use crate::battle::{fight, make_mon, Status1};
     let dex = ctx.dex;
     let t0 = st.clock;
+    st.free_heal = false;
     if a.trainer && hazard_death(ctx, st, rng, a.name) {
         return false;
     }
@@ -2136,6 +2139,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 st.hp_frac = ((cur + uses * per) as f64 / me.max_hp as f64).min(1.0);
                 // The timing lane's potions are free; the risk lane does not inherit them.
                 st.risk_real += st.hp_frac - before;
+                st.free_heal = true;
             }
         } else if st.hp_frac < ctx.p.preheal_below && !mewtwo_now && !torrent {
             let uses = (((0.85 - st.hp_frac) * me.max_hp as f64)
@@ -2144,6 +2148,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             bump(st, uses * ctx.turn());
             st.risk_real += 0.85 - st.hp_frac;
             st.hp_frac = 0.85;
+            st.free_heal = true;
         }
         // Between League fights: one item when the fighter is low (Mewtwo carries its damage
         // from fight to fight like the carry does).
@@ -2552,7 +2557,9 @@ fn risk_fight(
     }
     // Lane sync: what the timing lane gained since the last fight (a heal, a rest) the lane gains
     // too; what it lost between fights (field poison) it loses too.
-    st.risk_hp = if st.hp_frac >= 0.999 {
+    // MODEL CHANGE `risk_entry_paid`: the timing lane's free pre-fight potions are no real heal.
+    let free = std::mem::take(&mut st.free_heal);
+    st.risk_hp = if st.hp_frac >= 0.999 && !(ctx.p.risk_entry_paid && free) {
         1.0
     } else {
         (st.risk_hp + st.hp_frac - st.risk_real).clamp(0.0, 1.0)
@@ -2900,6 +2907,25 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
                 frames = base + EVO_CANDY_EACH * need;
             }
         }
+        _ if ctx.p.level_evo_honest => {
+            // MODEL CHANGE `level_evo_honest`: a non-fighting mon levels only by Rare Candy.
+            let at: u32 = param.parse().unwrap_or(1);
+            let need = at.saturating_sub(lv).max(1);
+            if st.candies < need
+                || (ctx.p.level_evo_max_candies > 0 && need > ctx.p.level_evo_max_candies)
+            {
+                return;
+            }
+            st.candies -= need;
+            if frames == 0 {
+                let base = if ctx.p.evo_candy_frames > 0 {
+                    ctx.p.evo_candy_frames
+                } else {
+                    EVO_CANDY
+                };
+                frames = base + EVO_CANDY_EACH * need;
+            }
+        }
         _ => {
             let at: u32 = param.parse().unwrap_or(1);
             if lv + ctx.p.level_gap < at {
@@ -2922,6 +2948,7 @@ fn evolve(ctx: &Ctx, st: &mut State, rng: &mut Rng, evo: &Evolve, seg: &Seg) {
     st.cur_src = match evo.via.as_str() {
         "stone" => 4,
         "candy" => 5,
+        _ if ctx.p.level_evo_honest => 5,
         _ => 6,
     };
     got(st, tdex, at_lv);
@@ -3272,6 +3299,7 @@ pub fn attempt(
         hp_frac: 1.0,
         risk_hp: 1.0,
         risk_real: 1.0,
+        free_heal: false,
         torrent_lost: false,
         helpers_dead: 0,
         badges: 0,
@@ -3404,9 +3432,15 @@ pub fn attempt(
                 }
             }
             // The Torrent phase walks past the Pokémon Centers it would have stopped at.
+            // PLAN `torrent_heals`: these Centers are visited even in the Torrent phase.
             let skip_heal = seg.name.starts_with("center-heal@")
                 && ctx.torrent_end.is_some_and(|e| i <= e)
-                && !st.torrent_lost;
+                && !st.torrent_lost
+                && !ctx
+                    .p
+                    .torrent_heals
+                    .iter()
+                    .any(|h| seg.name.strip_prefix("center-heal@") == Some(h.as_str()));
             // Save point (`Params::reload_save_at`): the human saves before this segment.
             if target.is_some()
                 && !ctx.p.reload_save_at.is_empty()

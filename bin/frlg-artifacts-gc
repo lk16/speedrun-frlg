@@ -20,7 +20,7 @@ set -euo pipefail
 #   rom            built ROM + .map + .sym, per version/revision
 #   scratch        wiped at the start of every sandbox anyway
 #   videos         lossy review videos (x264) and their .ass panels; human-run/VIDEO.md
-declare -A CAP=( [cache/sccache]=4 [states]=3 [runs]=4 [rom]=1 [scratch]=2 [videos]=8 )
+declare -A CAP=( [cache/sccache]=4 [states]=3 [runs]=4 [rom]=1 [scratch]=2 [videos]=12 )
 HARD=28
 
 ART="${FRLG_ARTIFACTS:-}"

@@ -379,3 +379,35 @@ model = difference of the model's p50 clocks where a `model-vs-actual` names one
 Rollbacks after `dex-fill-24` (first survivor kept): Lance 2 x2 (from the Agatha-2 checkpoint), Champion 2 x4 (from
 the Lance-2 checkpoint); none in the dex finish and the Sevii legs. Over the whole log 48 (42 before, mostly
 controller soft-locks in the dex fill).
+
+## Controller v3: the dex on the main route (`runs/human-play/1122-lgdescent-s11-v3`, 2026-11-23, journal `2026-11-23-00-30-controller-v3.md`)
+
+Giovanni 1 -> finish re-played with passing catches (the sim's `catch_on_pass` / `pass_min_catch` rule), the plan's
+Safari hunts, plan 1413's mart stops and RAM-planned dex errands at the centers the route passes. One continuous
+pure-input log from boot (prefix `1122-lgdescent-s11` to `giovanni1`, then `dev-v3a` -> `dev-v3b` -> `v3` resumes at
+checkpoints). Seconds on the run timer.
+
+| split | v2 / pg-canon5 | v3 | model p50 | v3 - p50 |
+| --- | --- | --- | --- | --- |
+| Koga | 7 353 | 7 936 | 5 103 | +2 833 |
+| Blaine | 8 515 | 9 673 | 5 890 | +3 783 |
+| Sevii | 9 127 | 10 438 | 6 805 | +3 633 |
+| Giovanni | 10 992 | 12 452 | 8 198 | +4 254 |
+| Victory Road | 11 795 | 13 669 | 9 175 | +4 494 |
+| Hall of Fame 1 | 12 874 (18 caught) | 14 716 (**45 caught**) | 9 970 | +4 747 |
+| National Dex | 18 357 | 17 123 | 10 032 | +7 091 |
+| Sevii done | 20 446 | 19 278 | 11 217 | +8 061 |
+| Mewtwo | 20 894 | 19 701 | 11 397 | +8 304 |
+| Lance 2 | 21 884 | 20 617 | 12 006 | +8 611 |
+| **Finish** | **22 247** | **20 975 (5:49:35)** | 12 279 | **+8 696** (WR +8 650) |
+
+Stretches (v2 -> v3, seconds): Safari 251 -> 530 (+5 species incl. the walk's 2), Koga stage (heal, errands, gym)
+338 -> 711 (errands ~85 s; the rest a Kirk sleep line, RNG), Koga -> Power Plant out 474 -> 691 (+8 species
+passing / hunt), Power Plant -> Blaine 687 -> 1 012 (Cinnabar mart + 5 errand species ~300 s), HoF -> National
+Dex ~5 480 -> 2 407 (15 species: 13 hunted, Ninetales, Magikarp). Per species: main-route passing catch / errand
+**~45-70 s**, post-HoF fill **~150 s** (v3) to ~130 s (pg-canon4, from 18). Money at the Indigo mart before round 2:
+¥53 678 (pg-canon5 ¥39 673): 2 Revives + 13 Full Restores.
+
+Rollbacks Giovanni 1 -> finish: 40 logged (warden 2, sevii 1, route22 2, lorelei 1, agatha 20 incl. one dead-end
+step back to bruno 1, lance 2, dotted-hole 8 (warehouse admins), lance-2 3), plus 2 controller-bug deaths at
+Mewtwo (party full) dropped by the resume after the fix.

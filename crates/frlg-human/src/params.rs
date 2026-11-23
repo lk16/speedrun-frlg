@@ -1065,6 +1065,25 @@ pub struct Params {
     /// +20% of the base per PP Up), when picked up or as soon as the carry knows the move. Empty = off (they
     /// wait for Mewtwo, `mewtwo_pp`).
     pub carry_pp_ups: Vec<String>,
+    /// MODEL CHANGE (model honesty 3, controller-v3 bug 2): a `via: "level"` evolution needs the
+    /// pre-evolution to reach the level, and a mon that does not fight gains no exp: `Cmd_getexp` pays only
+    /// the party mons that were sent in (`sentIn`) or hold an Exp. Share
+    /// (`decompiled/src/battle_script_commands.c:3148-3175`); the evolution is checked on a level-up
+    /// (`decompiled/src/battle_main.c:3896`, Rare Candy: `decompiled/src/party_menu.c:5169`) against
+    /// `param <= level` (`decompiled/src/pokemon.c:5076-5078`). On: the human feeds it Rare Candies,
+    /// `max(1, level - catch level)` of them out of the candy stock (a caught mon at or past the level still
+    /// needs one level-up), priced like a `candy` evolution. Off = the old rule (free within `level_gap`).
+    pub level_evo_honest: bool,
+    /// PLAN knob for `level_evo_honest`: the most Rare Candies one `level` evolution may take (0 = no cap).
+    pub level_evo_max_candies: u32,
+    /// MODEL CHANGE (model honesty 3, controller-v3 bug 5): the risk lane inherits a full HP bar only from a
+    /// real heal (a Pokemon Center, a whiteout), not from the timing lane's free pre-fight potions of the
+    /// Torrent phase (`sim_battle` entry heal): the lane pays its own pre-fight potions out of its budget.
+    /// Off = the old sync (any `hp_frac >= .999` resets the lane to full, so the free potions leaked).
+    pub risk_entry_paid: bool,
+    /// PLAN (model honesty 3): `center-heal@` anchors (from `extra_heals`) that run even inside the Torrent
+    /// phase (which otherwise walks past every Pokemon Center), e.g. a Fuchsia Pokemon Center heal at Koga.
+    pub torrent_heals: Vec<String>,
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1289,6 +1308,10 @@ impl Default for Params {
             stone_shops: vec![],
             potion_bag_from: String::new(),
             carry_pp_ups: vec![],
+            level_evo_honest: false,
+            level_evo_max_candies: 0,
+            risk_entry_paid: false,
+            torrent_heals: vec![],
         }
     }
 }

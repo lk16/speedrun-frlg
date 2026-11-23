@@ -3976,6 +3976,15 @@ pub fn weaken_move(dex: &Dex, me: &Mon, e: &Mon) -> Option<usize> {
             .filter(|&&mv| me.has_pp(mv))
             .filter_map(|&mv| {
                 let (_, hi) = damage_range(dex, me, e, mv);
+                // Multi-hit moves: the range is per hit (v3 controller: Double Kick at
+                // "27-32 of 43 HP" knocked a Magnemite out instead of weakening it).
+                let hits = match dex.moves[mv].effect.as_str() {
+                    "EFFECT_DOUBLE_HIT" | "EFFECT_TWINEEDLE" => 2,
+                    "EFFECT_MULTI_HIT" => 5,
+                    "EFFECT_TRIPLE_KICK" => 3,
+                    _ => 1,
+                };
+                let hi = hi * hits;
                 let hi = if crit { 2 * hi } else { hi };
                 let s = player_score(dex, me, e, mv, &Side::default());
                 (s > 0.0 && hi > 0 && hi < e.hp).then_some((mv, s))
