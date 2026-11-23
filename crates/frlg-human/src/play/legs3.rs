@@ -674,7 +674,14 @@ fn greedy_site(s: &mut Session, tried: &[String]) -> Option<crate::params::Hunt>
     }
     let mut best: Option<(f64, f64, f64, crate::params::Hunt)> = None;
     for (mut h, tiles) in cands {
-        if h.area == "fish" || tried.iter().any(|t| *t == h.site) {
+        // Sites `site_reachable` passes but the walker never reaches (v3: Seafoam B4F's currents,
+        // Route 23 south of the plateau's Victory Road exit: 60 re-plans each, ~10 000 and ~4 300
+        // frames lost).
+        const UNREACHED: [&str; 2] = ["MAP_SEAFOAM_ISLANDS_B4F", "MAP_ROUTE23"];
+        if h.area == "fish"
+            || tried.iter().any(|t| *t == h.site)
+            || UNREACHED.contains(&h.site.as_str())
+        {
             continue;
         }
         if !s.graph().by_id.contains_key(h.site.as_str()) {
