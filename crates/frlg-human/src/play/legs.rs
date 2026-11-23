@@ -621,6 +621,17 @@ fn koga(s: &mut Session) -> PResult<()> {
     if lead.hp == 0 {
         center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
     }
+    // v4: the Power Plant hunt (4 species) is next and the Route 10 center the human flies to has
+    // no mart; v4's first pass reached it with no ball. Great Balls to 15 at the Fuchsia mart
+    // (`FuchsiaCity_Mart/scripts.inc:24-31`), two screens from the gym. Not in plan 1413's
+    // `marts` (its Lavender stop, before the Tower, is the model's last before the plant).
+    super::shop::mart_topup(
+        s,
+        "MAP_FUCHSIA_CITY_MART",
+        None,
+        &[("ITEM_GREAT_BALL", 15)],
+        "v4: balls for the Power Plant hunt",
+    )?;
     Ok(())
 }
 
