@@ -65,7 +65,7 @@ pub fn run(dex: &'static Dex, args: &[String]) -> Result<(), String> {
     // `--give ITEM_X:qty`: an experiment's bag change (items pocket), e.g. a Full Heal before Koga.
     if let Some(g) = flag(args, "--give") {
         let (name, q) = g.split_once(':').ok_or("--give ITEM:qty")?;
-        let item = super::names::id(name) as u16;
+        let item = super::names::id(name);
         let ok = super::ram::Ram::new(&obs).give(
             rec.emu(),
             0,
