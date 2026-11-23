@@ -5337,6 +5337,41 @@ mod tests {
         assert!(matches!(pick(&wake), Action::Awaken));
     }
 
+    /// PLAN `full_heals` (model honesty 4): a poisoned fighter at full HP facing a long fight spends an
+    /// item turn on its cure; without one in the bag it attacks.
+    #[test]
+    fn poisoned_fighter_uses_a_cure() {
+        let dex = Dex::load();
+        let mut me = make_mon(&dex, dex.id("SPECIES_BLASTOISE"), 42, [20; 6], [0; 6], 0, 0);
+        me.moves = vec![dex.move_id("MOVE_WATER_GUN")];
+        me.pp = vec![];
+        me.status = Status1::Toxic(1);
+        let mut foe = make_mon(&dex, dex.id("SPECIES_MUK"), 39, [0; 6], [0; 6], 0, 0);
+        foe.moves = vec![dex.move_id("MOVE_SLUDGE")];
+        foe.pp = vec![];
+        let pick = |tac: &Tactics| {
+            let fs = Fs::new(tac, 0);
+            greedy_action(
+                &dex,
+                &me,
+                &foe,
+                tac,
+                &fs,
+                false,
+                None,
+                &mut Outcome::default(),
+            )
+            .0
+        };
+        let none = Tactics::default();
+        assert!(matches!(pick(&none), Action::Move(_)));
+        let cure = Tactics {
+            cures: 1,
+            ..Default::default()
+        };
+        assert!(matches!(pick(&cure), Action::Cure), "{:?}", pick(&cure));
+    }
+
     #[test]
     fn a_held_persim_cures_the_first_confusion_only() {
         let dex = Dex::load();
