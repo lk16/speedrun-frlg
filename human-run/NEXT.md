@@ -1,5 +1,22 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-23 03:50 model honesty 3 (read first; journal `journal/2026-11-23-03-50-model-honesty-3.md`)
+
+The controller-v3 / League-2 model bugs, default-off keys (1316 unchanged), paired at WR+2m. **Level evolutions of
+mons that never fight** (`level_evo_honest`: Rare Candies, `max(1, level - catch level)`; `Cmd_getexp` pays sent-in
+mons only, `battle_script_commands.c:3148-3175`): +1663 h on 1316; the carry reaches E4R1 at Lv 52.4 instead of 55.3
+(the WR's ~51), E4R1 clock +396 s; plan response cap 1 candy per evolution (`level_evo_max_candies` 1) -395 h, drop all
++4160. **Risk lane inherited the timing lane's free Torrent entry potions** (`risk_entry_paid`; the model had no Koga
+heal at all, Koga's lane always started full): +234 h; Fuchsia Center before Koga +54 n.s., Center after the badge +2170
+(refuted: it costs the Torrent window). **League heals act as Full Restores but cost 2500** (`league_heal_price` 3000):
++27 h. Safari East is *not* a duplicate (it is on the walk, `frlg-mapgraph`, and first in plan order; West-only +260).
+Champion-2: AI heals and sandstorm faithful; the played deaths are bot state (`mewtwo_power` 1.0 corner +832 h,
+Shock Wave, fewer FRs), not a model bug. **1612-honest3-cap1 (1316 + the three keys + cap 1): WR+2m 3025 h vs 816
+(+2210 [1819, 2900], seed 7602 R 1.6M), WR 8315 vs 2396: recommended as the honest model of record** (main session
+decides CURRENT). Before descending from it retune resets: `reset_aggr_at` brock 1.0 resets every 1612 attempt at
+WR+10m (no `reset_table` there; its mean remaining is ~200 s longer). Next: reset retune, `--set dex`/`shops` descent
+from 1612, League refit on 1612 (the carry is now at the WR's level by mechanics).
+
 ## 2026-11-22 23:00 canonical run finished (read first; journal `journal/2026-11-22-23-00-finish.md`)
 
 **`runs/human-play/pg-canon5`: one pure-input run from boot to the first full black frame of the second Hall of
