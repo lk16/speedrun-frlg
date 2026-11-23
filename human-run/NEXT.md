@@ -179,9 +179,9 @@ WR 335.4 h; **1211-cerulean-potions** (plan response: 3 potions, heal below .35 
 2. Koga's Muk: engine 35% vs emulator 15/20 at identical stats; the 1.35 window stands in for an engine bug.
 3. The 0.773 Blaine/Sevii window is deadlier than the honest engine (-21 h at 1.0); refit windows under 1211.
 
-## 2026-11-22 optimisation / combined honest model (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1312-honest-nolee
+## 2026-11-22 optimisation / combined honest model (journal `journal/2026-11-22-12-00-optimisation.md`): CURRENT = 1316-shops16
 
-**1312 = 1311 without Hitmonlee; 1311 = 1423 fight clock + 1444 non-fight VOD block + 1413 honest shop stops + the WR-level League refit + candies eaten
+**1316 = 1312 + shop-stop bundle; 1312 = 1311 without Hitmonlee; 1311 = 1423 fight clock + 1444 non-fight VOD block + 1413 honest shop stops + the WR-level League refit + candies eaten
 at Indigo + tactics + Mt. Moon B1F/B2F Repels.** It is the honest model of record; it is worse than the partial models
 because each block made the model more honest, not because a plan step lost.
 
@@ -191,7 +191,8 @@ because each block made the model more honest, not because a plan step lost.
 | 1309-honest-e4fit-candies | 1413 stops + 1423 clock + refit + candies eaten + Miguel 5 / Koga .55 | 715 / 741 (vs 1423 450 / 472) | 1752 / 1716 |
 | 1310-honest-vod | 1309 + 1444 VOD block | 3606 / 3337 (vs 1444 2040 / 1795) | 15104 / 13200 |
 | 1311-honest-mtmoon-repel | 1310 + Mt. Moon Repels | 1326 / 1269 (seeds 7781/7782; -2280 / -2068 vs 1310) | 4171 / 4015 |
-| **1312-honest-nolee (CURRENT)** | **1311 without the Hitmonlee gift (WR choice)** | **1130 / 1104 (seeds 7791/7792; -184 / -154 vs 1311)** | **3222 / 3039 (-583 / -844)** |
+| 1312-honest-nolee | 1311 without the Hitmonlee gift (WR choice) | 1130 / 1104 (seeds 7791/7792; -184 / -154 vs 1311) | 3222 / 3039 |
+| **1316-shops16 (CURRENT)** | **1312 + Route 21 Great Balls 30->20, potions 5->7, Saffron Great Balls 35->25** | **862 / 853 (seeds 7801/7802; -325 / -316 vs 1312)** | **2347 / 2513 (-1073 / -924)** |
 
 * **League refit at the WR's League level** (`tools/league_fit_grid.py`, data `data/league-fit-wr-level-2026-11-22.jsonl`):
   at Lv55 (candies eaten) the grid reproduces the old fit (lp 1.0, mp 1.3); at the WR's Lv51 **lp 1.2 [~1.1, 1.3], mp 1.15
@@ -213,8 +214,14 @@ because each block made the model more honest, not because a plan step lost.
   +744, no Diglett hunt +289, no Mr. Mime -72 [-146, +7] (n.s.; retest on 1312), no Mime + no Diglett +319, all
   together +3834. Post-game bugs: no MODEL CHANGE made (the model already matches the WR's post-game windows within ~1
   min; adding the controller's slower stretch times would double count; the Mewtwo PP items are in the plan and
-  reachable, the controller does not collect them; journal round 6). Running: `--set shops` from 1312; then
-  `--set league`, no-Mr.-Mime retest, `--set earlymid --notkinds fights`.
+  reachable, the controller does not collect them; journal round 6). `--set shops` from 1312: 4 promotions
+  (1313-1316), bundle confirmed in every cell; refuted: Lavender Great Balls 5 (+166) / Ultra 5 (+2552) / drop (+7792),
+  Route 21 potions 3/4 (+117 / +47), Silph potions 6 (+32), league_heals +-2 (0.000), rest n.s.
+  **Next, ranked:** (1) `--set league` from 1316 (League knobs under the WR-level fit; on 1301 lance +x special and
+  champion -x special screened -12 / -16 h but on the old fit); (2) second `--set shops` pass from 1316 (the optimum
+  moved: Route 21 great 20 -> 10?, potions 8?); (3) no-Mr.-Mime retest (-72 n.s. on 1311); (4) `--set earlymid
+  --notkinds fights`; (5) a reset_table refit needs >= 2000 finishes per rung: ~900 per 3.2M at WR+2m now, so train
+  R >= 8M; (6) the window-neutral post-game restructure (route code, post-game agent).
 * Pointer `plans/CURRENT-OPT` is the descent pointer (`descend.py --pointer CURRENT-OPT --num-from 1300`).
 
 
