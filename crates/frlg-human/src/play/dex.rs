@@ -580,12 +580,16 @@ fn pace_pairs(s: &Session, map: &str, water: bool, from: (i16, i16)) -> Vec<[(i1
             stack.push((x + dx, y + dy));
         }
     }
+    // A start the layout itself calls blocked (a connection edge, Route 23 (11, 0) from the
+    // plateau) floods nothing: then every pair stays a candidate, as before.
+    let flooded = reach.iter().filter(|&&b| b).count() >= 20;
     let reachable = |x: i16, y: i16| {
-        x >= 0
-            && y >= 0
-            && x < m.w
-            && y < m.h
-            && reach[(x as usize) + (y as usize) * (m.w as usize)]
+        !flooded
+            || x >= 0
+                && y >= 0
+                && x < m.w
+                && y < m.h
+                && reach[(x as usize) + (y as usize) * (m.w as usize)]
     };
     let mut v = vec![];
     for y in 0..m.h {
