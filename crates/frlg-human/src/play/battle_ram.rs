@@ -412,7 +412,13 @@ pub fn bag_pocket(obs: &Observer, emu: &mut Emu, pocket: u16) -> Vec<(u16, u16)>
             let a = s1 + off + 4 * i;
             (emu.read16(a), emu.read16(a + 2) ^ key)
         })
-        .take_while(|&(id, _)| id != 0)
+        // A stack used up in battle leaves an empty slot (`RemoveBagItem` clears the id,
+        // `decompiled/src/item.c:288-289`) until the bag is opened again and compacts the pocket
+        // (`Pocket_CalculateNItemsAndMaxShowed` -> `BagPocketCompaction`, `item_menu.c:993-997`).
+        // Skip holes rather than stop at them: v3's Lance branches lost their 3 Full Restores
+        // behind the emptied X Accuracy slot ("heal chosen but no heal item in the bag"). The
+        // compacted order is the menu's row order.
+        .filter(|&(id, q)| id != 0 && q != 0)
         .collect()
 }
 

@@ -149,10 +149,25 @@ pub fn buy(
     // The greeting prints with the menu (`pokemart` script, `CreateShopMenu`): wait for it rather
     // than mash, since an A on the menu's first frame picks BUY and the next ones buy whatever
     // the list cursor is on (seen: ¥40000 of X items, the 4F stones bought twice).
-    if wait_until(s, "the shop menu", 400, |s| menu::task(s, "Task_ShopMenu")).is_err() {
+    if wait_until(s, "the shop menu", 900, |s| menu::task(s, "Task_ShopMenu")).is_err() {
+        // v4: stop at any buy-flow task too. Mashing on until the list was "up" again bought the
+        // list's first row over and over (v4 Fuchsia: 25 Ultra Balls for 1 Great Ball wanted,
+        // then "You don't have enough money" and a 20 000-frame soft-lock; v3/v4 Celadon:
+        // 38 extra Great Balls).
+        let buying = |s: &mut Session| {
+            menu::task(s, "Task_BuyMenu")
+                || buy_quantity(s).is_some()
+                || menu::task(s, "Task_CallYesOrNoCallback")
+                || menu::task(s, "Task_ReturnToItemListAfterItemPurchase")
+        };
         press_until(s, "the shop menu", keys::A, 3000, |s| {
-            menu::task(s, "Task_ShopMenu") || buy_list_up(s)
+            menu::task(s, "Task_ShopMenu") || buying(s)
         })?;
+        if !menu::task(s, "Task_ShopMenu") && !buy_list_up(s) {
+            return Err(PlayError::Death(
+                "soft-lock: the shop greeting ran into the buy flow".into(),
+            ));
+        }
     }
     if buy_list_up(s) {
         s.event(

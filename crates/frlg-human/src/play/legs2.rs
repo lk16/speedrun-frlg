@@ -1874,6 +1874,31 @@ pub fn indigo_mart(s: &mut Session) -> PResult<()> {
          the policy's status heals need them",
         json!({"segment": "indigo-heal"}),
     );
+    // v4: valuables to money first, as round 2 already did (`legs3` league entry): the v3 round 1
+    // reached Indigo with ¥34 054 (11 of the 14 Full Restores) and a Nugget in the bag. Potions
+    // heal 20 of a Lv 55+ carry's ~180 HP (`battle::heal_order` no longer uses them there).
+    let got = super::shop::sell(
+        s,
+        "MAP_INDIGO_PLATEAU_POKEMON_CENTER_1F",
+        Some((0, 7)),
+        &[
+            "ITEM_NUGGET",
+            "ITEM_BIG_PEARL",
+            "ITEM_PEARL",
+            "ITEM_STAR_PIECE",
+            "ITEM_STARDUST",
+            "ITEM_TINY_MUSHROOM",
+            "ITEM_BIG_MUSHROOM",
+            "ITEM_POTION",
+        ],
+    )?;
+    if got > 0 {
+        s.event(
+            "model-vs-actual",
+            format!("sold valuables for ¥{got} before the League heals (not in the model)"),
+            json!({"money": got}),
+        );
+    }
     let want = s.plan.params.league_heals as u16;
     let have_now =
         have(s, "ITEM_HYPER_POTION") + have(s, "ITEM_MAX_POTION") + have(s, "ITEM_FULL_RESTORE");
@@ -1899,19 +1924,34 @@ pub fn league_prep(s: &mut Session) -> PResult<()> {
     if super::names::names().species(m.species) == "SPECIES_MEWTWO" {
         return mewtwo_pp_prep(s, &m);
     }
-    let low_pp = m
+    // v4: the sim's own pre-fight PP rule (`sim::pp_low_before_fight`). v3's "any move at 5 PP or
+    // less" fired on a full Blizzard (5 PP) and spent an Elixir at full PP at the Indigo door.
+    let (mvs, pps): (Vec<usize>, Vec<i32>) = m
         .moves
         .iter()
         .zip(m.pp.iter())
-        .any(|(&mv, &pp)| mv != 0 && pp <= 5);
-    // The Max Elixirs are Mewtwo's (the round's fighter): the carry gets the plain Elixir only.
-    let elixir = ["ITEM_ELIXIR"].into_iter().find(|it| have(s, it) > 0);
+        .filter(|(&mv, _)| mv != 0)
+        .filter_map(|(&mv, &pp)| super::battle::move_index(s.plan.dex, mv).map(|k| (k, pp as i32)))
+        .unzip();
+    let low_pp = crate::sim::pp_low_before_fight(s.plan.dex, true, &mvs, &pps);
+    // Round 1: the Max Elixir first, as in the sim (no League reserve). Round 2's Max Elixirs are
+    // Mewtwo's (the round's fighter): the carry gets the plain Elixir only.
+    let round2 = s.seg.ends_with("-2");
+    let order: &[&str] = if round2 {
+        &["ITEM_ELIXIR"]
+    } else {
+        &["ITEM_MAX_ELIXIR", "ITEM_ELIXIR"]
+    };
+    let elixir = order.iter().copied().find(|it| have(s, it) > 0);
     if let (true, Some(it)) = (low_pp, elixir) {
         super::shop::use_item_on(s, it, 0)?;
         let pp = Ram::new(&s.obs).party(s.hf.rec.emu())[0].pp;
         s.event(
             "model-vs-actual",
-            "Elixir on the carry between League rooms (low PP; not in the model)",
+            format!(
+                "{} on the carry between League rooms (the sim's PP rule)",
+                it.trim_start_matches("ITEM_")
+            ),
             json!({"pp_before": m.pp, "pp_after": pp}),
         );
     }

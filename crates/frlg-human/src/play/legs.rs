@@ -398,11 +398,18 @@ fn lavender_heal(s: &mut Session) -> PResult<()> {
     super::items::set_battle_style_set(s)?;
     // v3: the first ball stop (plan 1413 `marts` walk-lavender: Great Balls to 15), so passing
     // catches (the tower's Gastly / Cubone) and the Power Plant hunt have balls.
+    // PLAN `full_heals` at `walk-lavender` (honesty 4): Antidotes for Koga's poison in the same stop
+    // (`LavenderTown_Mart/scripts.inc:32`, 100 each).
+    let fh = s.plan.params.full_heals;
+    let mut want = vec![("ITEM_GREAT_BALL", 15u16)];
+    if fh > 0 && s.plan.params.full_heal_at == "walk-lavender" {
+        want.push(("ITEM_ANTIDOTE", fh as u16));
+    }
     super::shop::mart_topup(
         s,
         "MAP_LAVENDER_TOWN_MART",
         None,
-        &[("ITEM_GREAT_BALL", 15)],
+        &want,
         "plan 1413 walk-lavender",
     )
 }
@@ -489,7 +496,63 @@ fn safari_walk(s: &mut Session) -> PResult<()> {
     // everything here and caught an owned Paras and a second Nidorina).
     s.wild_plan = super::battle::WildPlan::Flee;
     s.seg = "safari-walk".into();
+    // The plan's two Safari hunts (`hunts` after safari-walk: East 90, West 100) in the plan's
+    // order (v4, model honesty 3: East first; East adds Paras / Parasect / Pinsir, West then only
+    // Venonat / Venomoth / Tauros). Center -> West has no walkable warp: the walk to the Secret
+    // House (West) passes through East and North anyway (`bin/frlg-mapgraph`: 195 tiles), so the
+    // East hunt is on the way. HM03 and the Gold Teeth are fetched before the first West hunt.
+    // A hunt rolls twice per paced tile (`dex::hunt_loop`), so 90 + 100 rolls are ~95 Safari
+    // steps; with the ~200-tile walk that stays far inside the zone's 600 (`safari_counters`).
+    let hunts: Vec<crate::params::Hunt> = s
+        .plan
+        .params
+        .hunts
+        .iter()
+        .filter(|h| h.after == "safari-walk")
+        .cloned()
+        .collect();
+    let mut house = false;
+    for h in &hunts {
+        let inside =
+            here(s).is_some_and(|n| s.graph().maps[&n.0].id.starts_with("MAP_SAFARI_ZONE"));
+        if !inside && house {
+            break;
+        }
+        if h.site == "MAP_SAFARI_ZONE_WEST" && !house {
+            safari_house(s)?;
+            house = true;
+        }
+        if !house {
+            // Keep the steps the Secret House walk needs (~200 tiles from East, plus margin).
+            let (_, steps) = super::dex::safari_counters(s);
+            if steps < 320 {
+                s.event(
+                    "warn",
+                    format!(
+                        "Safari: {steps} steps left, skipping the {} hunt to keep the Secret House walk",
+                        h.site.trim_start_matches("MAP_")
+                    ),
+                    json!({"steps": steps, "site": h.site}),
+                );
+                continue;
+            }
+        }
+        super::dex::hunt(s, h)?;
+    }
+    if !house {
+        safari_house(s)?;
+    }
+    // Out: walk back toward the gate; when the steps run out the game sends the player there.
+    s.wild_plan = super::battle::WildPlan::Flee;
+    go_map(s, "MAP_FUCHSIA_CITY", &Opts::default())
+}
+
+/// The Safari's Gold Teeth (`SafariZone_West/map.json` (28, 14)) and HM03 from the Secret House
+/// (`SafariZone_SecretHouse/scripts.inc`).
+fn safari_house(s: &mut Session) -> PResult<()> {
     let o = Opts::default();
+    s.wild_plan = super::battle::WildPlan::Flee;
+    s.seg = "safari-walk".into();
     go_face(s, "MAP_SAFARI_ZONE_WEST", 28, 14, &o)?;
     s.hf.press(keys::A)?;
     settle(s)?;
@@ -509,39 +572,7 @@ fn safari_walk(s: &mut Session) -> PResult<()> {
             "no HM03 from the Secret House".into(),
         ));
     }
-    // The plan's two Safari hunts (`hunts` after safari-walk: East 90, West 100), with HM03
-    // already in the bag so the Safari's 600 steps can run out without losing it. The human is
-    // in the West area for the Secret House: West first, then East (plan order is East, West).
-    let mut hunts: Vec<crate::params::Hunt> = s
-        .plan
-        .params
-        .hunts
-        .iter()
-        .filter(|h| h.after == "safari-walk")
-        .cloned()
-        .collect();
-    hunts.sort_by_key(|h| h.site != "MAP_SAFARI_ZONE_WEST");
-    if hunts
-        .first()
-        .is_some_and(|h| h.site == "MAP_SAFARI_ZONE_WEST")
-    {
-        s.event(
-            "model-vs-actual",
-            "Safari hunts: West before East (the Secret House is in the West area; plan order East, West)",
-            json!({"segment": "safari-walk"}),
-        );
-    }
-    for h in &hunts {
-        let inside =
-            here(s).is_some_and(|n| s.graph().maps[&n.0].id.starts_with("MAP_SAFARI_ZONE"));
-        if !inside {
-            break;
-        }
-        super::dex::hunt(s, h)?;
-    }
-    // Out: walk back toward the gate; when the steps run out the game sends the player there.
-    s.wild_plan = super::battle::WildPlan::Flee;
-    go_map(s, "MAP_FUCHSIA_CITY", &o)
+    Ok(())
 }
 
 /// `leg_warden` (variant `warden_early`): the Warden takes the Gold Teeth and gives HM04
@@ -571,6 +602,30 @@ fn koga(s: &mut Session) -> PResult<()> {
         json!({"segment": "koga-walk"}),
     );
     center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
+    // Honesty 4: the model teaches HM03 Surf right after the Safari (`sim.rs`, "safari-walk"), so
+    // its Koga is fought with Surf; v4 taught it after the badge (`teach-surf`) and fought Muk with
+    // Water Gun in the slot (engine at the v4 stats: 0.61 win with Water Gun, 0.89 with Surf).
+    // Teaching an HM needs no badge (`SafariZone_SecretHouse/scripts.inc` gives HM03).
+    let surf = super::names::id("MOVE_SURF");
+    if !super::ram::Ram::new(&s.obs)
+        .party(s.hf.rec.emu())
+        .iter()
+        .any(|m| m.knows(surf).is_some())
+    {
+        super::items::teach_tmhm(s, "ITEM_HM03", 0)?;
+    }
+    // PLAN `full_heals` (honesty 4): Full Heals for Koga's Toxic / Sludge poison, at the Fuchsia mart
+    // (`FuchsiaCity_Mart/scripts.inc:28`), two screens from the center and the gym.
+    let fh = s.plan.params.full_heals;
+    if fh > 0 && s.plan.params.full_heal_at == "koga-walk" {
+        super::shop::mart_topup(
+            s,
+            "MAP_FUCHSIA_CITY_MART",
+            None,
+            &[("ITEM_FULL_HEAL", fh as u16)],
+            "plan full_heals: Full Heals for Koga's poison",
+        )?;
+    }
     // v3: the Safari's catches evolve here with the stones in the bag (Moon Stone: Nidorina /
     // Nidorino), at the PC of the center the human is standing in.
     super::dexfin::errands(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F", None, 0)?;
@@ -588,13 +643,26 @@ fn koga(s: &mut Session) -> PResult<()> {
         ));
     }
     split(s, "Koga", "koga-badge")?;
-    // The model's own heal is after the badge (`center-heal@koga-badge`). With the heal moved
-    // before the fight it is skipped unless the lead came out below half HP (v3 dev: Blastoise
-    // fainted to Koga and the Power Plant was walked with Nidoqueen in front).
+    // The model's own heal is after the badge (`center-heal@koga-badge`), but it skips it in the
+    // Torrent phase: a heal after the badge lifts the carry out of the Torrent window for Blaine /
+    // Sevii (model honesty 3, plan 1607: +2170 h, refuted). v4: no heal after the badge unless
+    // the lead fainted (v3 dev: Blastoise fainted to Koga and the Power Plant was walked with
+    // Nidoqueen in front); the in-battle potions keep it in the window.
     let lead = super::ram::Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
-    if lead.hp * 2 < lead.max_hp {
+    if lead.hp == 0 {
         center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
     }
+    // v4: the Power Plant hunt (4 species) is next and the Route 10 center the human flies to has
+    // no mart; v4's first pass reached it with no ball. Great Balls to 15 at the Fuchsia mart
+    // (`FuchsiaCity_Mart/scripts.inc:24-31`), two screens from the gym. Not in plan 1413's
+    // `marts` (its Lavender stop, before the Tower, is the model's last before the plant).
+    super::shop::mart_topup(
+        s,
+        "MAP_FUCHSIA_CITY_MART",
+        None,
+        &[("ITEM_GREAT_BALL", 15)],
+        "v4: balls for the Power Plant hunt",
+    )?;
     Ok(())
 }
 

@@ -104,6 +104,7 @@ pub fn settle(s: &mut Session) -> PResult<()> {
         // (`Task_StartMenuHandleInput`, `decompiled/src/start_menu.c`): close it with B, never A.
         if s.obs
             .task_active(s.hf.rec.emu(), "Task_StartMenuHandleInput")
+            || s.obs.task_active(s.hf.rec.emu(), "Task_ShopMenu")
         {
             s.hf.press(keys::B)?;
             s.hf.idle(2)?;
@@ -111,8 +112,12 @@ pub fn settle(s: &mut Session) -> PResult<()> {
         }
         // A party menu or bag left open (a teach that already happened): back out with B; an A
         // there would pick the mon or the item again ("already knows" loops).
+        // v4: also a mart's buy list (`CB2_BuyMenu`, `decompiled/src/shop.c`) a settle walked
+        // into (a clerk talked to by a mashed A): every A buys the first row (Fuchsia: 25 Ultra
+        // Balls, then "You don't have enough money" until the 20 000-frame budget ran out).
         if s.obs.callback2_is(s.hf.rec.emu(), "CB2_UpdatePartyMenu")
             || s.obs.callback2_is(s.hf.rec.emu(), "CB2_BagMenuRun")
+            || s.obs.callback2_is(s.hf.rec.emu(), "CB2_BuyMenu")
         {
             s.hf.late()?;
             s.hf.step(keys::B)?;

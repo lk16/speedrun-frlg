@@ -411,3 +411,38 @@ Dex ~5 480 -> 2 407 (15 species: 13 hunted, Ninetales, Magikarp). Per species: m
 Rollbacks Giovanni 1 -> finish: 40 logged (warden 2, sevii 1, route22 2, lorelei 1, agatha 20 incl. one dead-end
 step back to bruno 1, lance 2, dotted-hole 8 (warehouse admins), lance-2 3), plus 2 controller-bug deaths at
 Mewtwo (party full) dropped by the resume after the fix.
+
+## Controller v4: Lance round 1 from the v3 Agatha checkpoint (2026-11-23, journal `2026-11-23-04-00-controller-v4.md`)
+
+Same savestate (`dev-v3b` `agatha`, frame 853 801: Blastoise Lv 58 102/182 HP, Surf 8, Blizzard 3, 5 Full
+Restores, 3 Potions, X Special 4, X Accuracy 2, Max Elixir 1), one Lance try per human seed:
+
+| code | Lance won | note |
+| --- | --- | --- |
+| v3 (f70490b7) | **0 of 30** (seed 11, 30 retries) | after the 2nd X Accuracy the policy's heals found "no heal item in the bag" with 3 Full Restores left |
+| v4 bag-hole fix + heal fallback (3359d289) | **7 of 12** (seeds 21-32, one try each) | |
+
+Cause: `battle_ram::bag_pocket` stopped at the first empty slot; a stack used up in battle leaves its slot empty
+(`decompiled/src/item.c:288-289`) until the bag compacts on its next opening (`item_menu.c:993-997`). After the
+second X Accuracy every item behind that slot (Max Elixir, Full Restores) was invisible to the policy, its
+`heal_stock` was 0 and `Heal` became an attack. Also, a plain `Heal` looked only at the potion tiers (never a
+Max Potion / Full Restore), and 20 HP Potions counted as League heals. The model's per-try Lance survival
+(`salvage_at` 0.9) is still above the played 7/12 (95% CI ~[0.28, 0.85]).
+
+## Controller v4 run of record (`runs/human-play/1122-lgdescent-s11-v4`, verified from boot at 97 checkpoints)
+
+| split | v3 | v4 | model p50 | v4 - p50 |
+| --- | --- | --- | --- | --- |
+| Koga | 7 936 | 7 731 | 5 103 | +2 628 |
+| Blaine | 9 673 | 9 452 | 5 890 | +3 562 |
+| Giovanni | 12 452 | 12 068 | 8 198 | +3 870 |
+| Victory Road | 13 669 | 13 145 | 9 175 | +3 970 |
+| Hall of Fame 1 | 14 716 (45 caught) | 14 222 (39 caught) | 9 970 | +4 253 |
+| National Dex | 17 123 | 17 072 | 10 032 | +7 039 |
+| Mewtwo | 19 701 | 19 356 | 11 397 | +7 959 |
+| **Finish** | **20 975** | **20 472 (5:41:11)** | 12 279 | **+8 193** |
+
+Stretches: Safari (East first) 26 718 frames vs 31 655 (5 species vs 7); post-HoF fill (greedy by species per second)
+39 -> 56 caught in ~2 535 s, ~149 s per species (v3 ~160); round 1 Lorelei -> Hall of Fame 1 077 s (v3 1 047) with 1
+Lance rollback instead of 20. Rollbacks Giovanni 1 -> finish: 14 (v3 40): Koga 2, Silph rival 1, Victory Road
+Colby 2, Lance 1, Gideon 2, Indigo sell soft-lock 2 (controller), plus the 4 before `safari-trip` inherited from v3.

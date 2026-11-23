@@ -197,6 +197,32 @@ impl<'a> Ram<'a> {
             .collect()
     }
 
+    /// Experiment aid (`battle-test --give`, honesty 4): put `qty` of `item` into the first empty slot of
+    /// `pocket` (quantity XORed with the key's low half, as `pocket` reads it). Never used by a played run.
+    pub fn give(&self, emu: &mut Emu, pocket: usize, item: u16, qty: u16) -> bool {
+        let Some(sb) = self.obs.save_block1(emu) else {
+            return false;
+        };
+        let k = self.key(emu) as u16;
+        let (off, n) = POCKETS[pocket];
+        for i in 0..n {
+            let a = sb + off + i * 4;
+            if emu.read16(a) == 0 {
+                let q = qty ^ k;
+                for (j, b) in item
+                    .to_le_bytes()
+                    .into_iter()
+                    .chain(q.to_le_bytes())
+                    .enumerate()
+                {
+                    emu.write8(a + j as u32, b);
+                }
+                return true;
+            }
+        }
+        false
+    }
+
     /// Quantity of `item` anywhere in the bag.
     pub fn count(&self, emu: &mut Emu, item: u16) -> u16 {
         (0..POCKETS.len())

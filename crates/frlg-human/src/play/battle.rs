@@ -91,6 +91,8 @@ const ITEM_POKE_BALL: u16 = 4;
 const ITEM_POTION: u16 = 13;
 const ITEM_AWAKENING: u16 = 17;
 const ITEM_FULL_RESTORE: u16 = 19;
+const ITEM_ANTIDOTE: u16 = 14;
+const ITEM_FULL_HEAL: u16 = 23;
 const ITEM_MAX_POTION: u16 = 20;
 const ITEM_HYPER_POTION: u16 = 21;
 const ITEM_SUPER_POTION: u16 = 22;
@@ -428,14 +430,15 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
             x_stock: x_stock(&sc.items),
             fodder: alive_others,
             fodder_at_start: alive_others,
-            heal_items: heal_count(&sc.items),
+            heal_items: usable_heals(&sc.items, sc.me.level),
             mewtwo_now: sc.me.species == mewtwo,
             awakenings: count(&sc.items, ITEM_AWAKENING),
+            cures: count(&sc.items, ITEM_FULL_HEAL) + count(&sc.items, ITEM_ANTIDOTE),
         },
     );
     // The real bag rations the heals (the sim leaves them unlimited outside the League), and the
     // potion it holds is the one the policy can count on.
-    tac.heal_stock = tac.heal_stock.min(heal_count(&sc.items));
+    tac.heal_stock = tac.heal_stock.min(usable_heals(&sc.items, sc.me.level));
     // Round 2: the rooms leave CHAMPION2_RESERVE Full Restores for the rematch Champion. Not in the
     // model (its League heals are a pool the fights share); played, the rooms spent all 13 and every
     // Champion-2 branch started with none (dev `pg-dev-fin5`, 0 of 9).
@@ -468,19 +471,47 @@ fn item_hp(id: u16) -> i32 {
 /// The heal item the model means (`heal_amount`'s tier for this level, or a Full Restore), and the
 /// one the bag can pay: that tier, else the nearest other.
 fn heal_pick(items: &[(u16, u16)], level: u32, full: bool) -> (u16, Option<u16>) {
-    let want: [u16; 3] = if full {
-        [ITEM_FULL_RESTORE, ITEM_MAX_POTION, ITEM_HYPER_POTION]
-    } else {
-        match sim_battle::heal_amount(level, false) {
-            20 => [ITEM_POTION, ITEM_SUPER_POTION, ITEM_HYPER_POTION],
-            50 => [ITEM_SUPER_POTION, ITEM_HYPER_POTION, ITEM_POTION],
-            _ => [ITEM_HYPER_POTION, ITEM_SUPER_POTION, ITEM_POTION],
-        }
-    };
+    let want = heal_order(level, full);
     (
         want[0],
         want.iter().copied().find(|&id| count(items, id) > 0),
     )
+}
+
+/// The heal items a fighter of `level` can use, in the order the human reaches for them: the
+/// model's tier first, then the stronger items (Max Potion, Full Restore: v4, the v3 Lance
+/// branches attacked with 3 Full Restores in the bag because a plain heal looked only at the
+/// potion tiers), then the weaker tiers that still heal at least ~1/5 of the bar (a 20 HP Potion
+/// at Lv 58 is a wasted turn).
+fn heal_order(level: u32, full: bool) -> Vec<u16> {
+    if full {
+        return vec![ITEM_FULL_RESTORE, ITEM_MAX_POTION, ITEM_HYPER_POTION];
+    }
+    // ~max HP of a carry at this level (Blastoise: 182 at Lv 58): level x 3.
+    let bar = (level as i32 * 3).max(1);
+    let useful = |id: u16| item_hp(id) * 5 >= bar;
+    let mut v = match sim_battle::heal_amount(level, false) {
+        20 => vec![ITEM_POTION, ITEM_SUPER_POTION, ITEM_HYPER_POTION],
+        50 => vec![ITEM_SUPER_POTION, ITEM_HYPER_POTION, ITEM_POTION],
+        _ => vec![ITEM_HYPER_POTION, ITEM_SUPER_POTION, ITEM_POTION],
+    };
+    let first = v[0];
+    v.retain(|&id| id == first || item_hp(id) > item_hp(first) || useful(id));
+    let k = v
+        .iter()
+        .position(|&id| item_hp(id) < item_hp(first))
+        .unwrap_or(v.len());
+    v.insert(k, ITEM_FULL_RESTORE);
+    v.insert(k, ITEM_MAX_POTION);
+    v
+}
+
+/// Heal items the fighter can actually use (`heal_order`).
+fn usable_heals(items: &[(u16, u16)], level: u32) -> u32 {
+    heal_order(level, false)
+        .iter()
+        .map(|&id| count(items, id))
+        .sum()
 }
 
 /// One frame-by-frame human mash whose key depends on the state: `key(emu)` is pressed, each
@@ -1116,6 +1147,7 @@ fn describe(dex: &Dex, _sc: &Scene, a: Action) -> String {
         Action::Heal => "potion".to_string(),
         Action::FullRestore => "Full Restore".into(),
         Action::Awaken => "Awakening".into(),
+        Action::Cure => "Full Heal".into(),
         Action::Switch => "switch back".into(),
         Action::Sac(_) => "sacrifice switch".into(),
     }
@@ -1180,8 +1212,12 @@ fn execute(
                     log.push(
                         f.frame(),
                         "model-vs-actual",
-                        "heal chosen but no heal item in the bag: attacking instead",
-                        json!({}),
+                        format!(
+                            "heal chosen but no heal item in the bag: attacking instead \
+                             ({a:?}, Lv{}, hp {}/{}, items {:?})",
+                            sc.me.level, sc.me.hp, sc.me.max_hp, sc.items
+                        ),
+                        json!({"action": format!("{a:?}"), "items": sc.items}),
                     );
                     let mv = best_move(dex, sc);
                     use_move(f, c, sc, mv)?;
@@ -1192,6 +1228,16 @@ fn execute(
         Action::Awaken => {
             // `tactics_for` counts the bag's Awakenings, so the policy only picks one the bag holds.
             use_item(f, c, sc, battle_ram::POCKET_ITEMS, ITEM_AWAKENING, true)?;
+            Ok(a)
+        }
+        Action::Cure => {
+            // `tactics_for` counts Full Heals and Antidotes; the cheaper Antidote first.
+            let item = if count(&sc.items, ITEM_ANTIDOTE) > 0 {
+                ITEM_ANTIDOTE
+            } else {
+                ITEM_FULL_HEAL
+            };
+            use_item(f, c, sc, battle_ram::POCKET_ITEMS, item, true)?;
             Ok(a)
         }
         Action::Sac(x) => {

@@ -24,6 +24,20 @@
 * Next, ranked: (1) `--set shops` and `--set league --notkinds tm` from 1504 (running); (2) WR `reset_table` refit
   (needs ~80M training at the WR finish rate); (3) no-Mr.-Mime retest; (4) `--set dex` (candy economy changed);
   (5) League refit on the honest carry (Lv 52.4); (6) earlymid without fight knobs.
+## 2026-11-23 06:40 model honesty 4 (read first; journal `journal/2026-11-23-06-40-model-honesty-4.md`)
+
+The controller-v4 bugs, measured with v4 code only (pre-battle states cut from the v4 `run.ilog`, `examples/
+cut_battle.rs`, `battle-test --plan 1612`). **Koga is a controller bug**: v4 fought Muk with Water Gun (HM03 taught
+after the badge), the model with Surf (taught at `safari-walk`). Water Gun: emulator 11/20, engine at the RAM stats
+0.58; Surf: emulator 21/24, engine 0.89, model lane 0.85 -- engine and emulator agree, no engine change; Toxic
+frequency n.s. Controller now teaches Surf before Koga. **Lance round 1 is not a bug**: 22/24 from the v4 `agatha`
+state vs the model's 0.887 per try. Ball reserve (`pass_reserve` 8, MODEL, 1620) -42 h n.s.; Safari in-zone walk
+steps (`safari_walk_steps`, MODEL, 1621) exactly 0 at 1612's budgets (caps future descents); Safari drain (1622) and
+throw cap (1627) n.s. / 0. New poison cure (`Action::Cure`, `full_heals`, sim + controller): emulator Koga with Surf
+24/24 with one Full Heal. **PLAN 1626-koga-antidote2 (2 Antidotes in the Lavender ball stop): WR+2m -783 h
+[-1028, -552] vs 1612 (546 vs 417 finishes, seed 7602 R 6.4M); recommended as a plan step** (a Fuchsia Full Heal
+mart visit, 1623, is n.s.; a 3rd Antidote adds nothing). The 150-frame purchase cost is a guess. Other finding:
+`dex-fill` runs the ball bag dry (866 empties / 300 attempts): add a mart stop before it in the next descent.
 
 ## 2026-11-23 03:50 model honesty 3 (read first; journal `journal/2026-11-23-03-50-model-honesty-3.md`)
 

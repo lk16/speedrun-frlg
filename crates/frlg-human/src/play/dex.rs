@@ -301,6 +301,22 @@ fn pass_plan(s: &mut Session, default: WildPlan) -> WildPlan {
         );
         return default;
     }
+    // v4: a hard passing catch (catch rate below 100) does not eat the last balls the plan's
+    // next hunt needs (v4 first pass: 7 Great Balls on a 9 % Onix on Route 10 left none for the
+    // Power Plant, whose 4 species were fled from). The sim does not ration balls between passing
+    // catches and hunts (model bug, journal 2026-11-23-04-00).
+    const PASS_RESERVE: u16 = 8;
+    if !safari && rate < 100 && balls <= PASS_RESERVE {
+        s.event(
+            "model-vs-actual",
+            format!(
+                "passing {} Lv{level} (new, catch rate {rate}): {balls} balls kept for the next hunt, fled",
+                short(&name)
+            ),
+            json!({"species": name, "level": level, "catch_rate": rate, "balls": balls, "seg": s.seg}),
+        );
+        return default;
+    }
     s.event(
         "decision",
         format!(
