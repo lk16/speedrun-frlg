@@ -398,11 +398,18 @@ fn lavender_heal(s: &mut Session) -> PResult<()> {
     super::items::set_battle_style_set(s)?;
     // v3: the first ball stop (plan 1413 `marts` walk-lavender: Great Balls to 15), so passing
     // catches (the tower's Gastly / Cubone) and the Power Plant hunt have balls.
+    // PLAN `full_heals` at `walk-lavender` (honesty 4): Antidotes for Koga's poison in the same stop
+    // (`LavenderTown_Mart/scripts.inc:32`, 100 each).
+    let fh = s.plan.params.full_heals;
+    let mut want = vec![("ITEM_GREAT_BALL", 15u16)];
+    if fh > 0 && s.plan.params.full_heal_at == "walk-lavender" {
+        want.push(("ITEM_ANTIDOTE", fh as u16));
+    }
     super::shop::mart_topup(
         s,
         "MAP_LAVENDER_TOWN_MART",
         None,
-        &[("ITEM_GREAT_BALL", 15)],
+        &want,
         "plan 1413 walk-lavender",
     )
 }
@@ -595,6 +602,30 @@ fn koga(s: &mut Session) -> PResult<()> {
         json!({"segment": "koga-walk"}),
     );
     center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
+    // Honesty 4: the model teaches HM03 Surf right after the Safari (`sim.rs`, "safari-walk"), so
+    // its Koga is fought with Surf; v4 taught it after the badge (`teach-surf`) and fought Muk with
+    // Water Gun in the slot (engine at the v4 stats: 0.61 win with Water Gun, 0.89 with Surf).
+    // Teaching an HM needs no badge (`SafariZone_SecretHouse/scripts.inc` gives HM03).
+    let surf = super::names::id("MOVE_SURF");
+    if !super::ram::Ram::new(&s.obs)
+        .party(s.hf.rec.emu())
+        .iter()
+        .any(|m| m.knows(surf).is_some())
+    {
+        super::items::teach_tmhm(s, "ITEM_HM03", 0)?;
+    }
+    // PLAN `full_heals` (honesty 4): Full Heals for Koga's Toxic / Sludge poison, at the Fuchsia mart
+    // (`FuchsiaCity_Mart/scripts.inc:28`), two screens from the center and the gym.
+    let fh = s.plan.params.full_heals;
+    if fh > 0 && s.plan.params.full_heal_at == "koga-walk" {
+        super::shop::mart_topup(
+            s,
+            "MAP_FUCHSIA_CITY_MART",
+            None,
+            &[("ITEM_FULL_HEAL", fh as u16)],
+            "plan full_heals: Full Heals for Koga's poison",
+        )?;
+    }
     // v3: the Safari's catches evolve here with the stones in the bag (Moon Stone: Nidorina /
     // Nidorino), at the PC of the center the human is standing in.
     super::dexfin::errands(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F", None, 0)?;

@@ -91,6 +91,8 @@ const ITEM_POKE_BALL: u16 = 4;
 const ITEM_POTION: u16 = 13;
 const ITEM_AWAKENING: u16 = 17;
 const ITEM_FULL_RESTORE: u16 = 19;
+const ITEM_ANTIDOTE: u16 = 14;
+const ITEM_FULL_HEAL: u16 = 23;
 const ITEM_MAX_POTION: u16 = 20;
 const ITEM_HYPER_POTION: u16 = 21;
 const ITEM_SUPER_POTION: u16 = 22;
@@ -431,6 +433,7 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
             heal_items: usable_heals(&sc.items, sc.me.level),
             mewtwo_now: sc.me.species == mewtwo,
             awakenings: count(&sc.items, ITEM_AWAKENING),
+            cures: count(&sc.items, ITEM_FULL_HEAL) + count(&sc.items, ITEM_ANTIDOTE),
         },
     );
     // The real bag rations the heals (the sim leaves them unlimited outside the League), and the
@@ -1144,6 +1147,7 @@ fn describe(dex: &Dex, _sc: &Scene, a: Action) -> String {
         Action::Heal => "potion".to_string(),
         Action::FullRestore => "Full Restore".into(),
         Action::Awaken => "Awakening".into(),
+        Action::Cure => "Full Heal".into(),
         Action::Switch => "switch back".into(),
         Action::Sac(_) => "sacrifice switch".into(),
     }
@@ -1224,6 +1228,16 @@ fn execute(
         Action::Awaken => {
             // `tactics_for` counts the bag's Awakenings, so the policy only picks one the bag holds.
             use_item(f, c, sc, battle_ram::POCKET_ITEMS, ITEM_AWAKENING, true)?;
+            Ok(a)
+        }
+        Action::Cure => {
+            // `tactics_for` counts Full Heals and Antidotes; the cheaper Antidote first.
+            let item = if count(&sc.items, ITEM_ANTIDOTE) > 0 {
+                ITEM_ANTIDOTE
+            } else {
+                ITEM_FULL_HEAL
+            };
+            use_item(f, c, sc, battle_ram::POCKET_ITEMS, item, true)?;
             Ok(a)
         }
         Action::Sac(x) => {

@@ -902,6 +902,10 @@ pub struct Tactics {
     /// `CeruleanCity_Mart/scripts.inc:30`): a sleeping fighter is woken with one at once (the human
     /// cannot see the sleep counter; the expected sleep is 2.5 lost turns for one item turn).
     pub awakenings: u32,
+    /// Poison cures in the bag (PLAN `Params::full_heals`, model honesty 4: Full Heal, `FuchsiaCity_Mart/
+    /// scripts.inc:28`, cures every status, `item_effects.h`): a poisoned fighter that is not about to
+    /// finish the foe and survives its next hit spends an item turn on one (Koga's Muk / Koffing Toxic).
+    pub cures: u32,
 }
 
 impl Default for Tactics {
@@ -925,6 +929,7 @@ impl Default for Tactics {
             scarce: SCARCE_FACTOR,
             sleep_no_potion: false,
             awakenings: 0,
+            cures: 0,
         }
     }
 }
@@ -985,6 +990,7 @@ pub struct Outcome {
     pub heals_used: u32,
     pub full_restores_used: u32,
     pub awakenings_used: u32,
+    pub cures_used: u32,
     /// Sacrificial faints spent (each costs a faint animation and a send-out).
     pub sacs_used: u32,
     /// Sacrifices whose helper survived the hit (see `Tactics::helper_hp`): two switch turns, no faint.
@@ -1010,6 +1016,8 @@ pub enum Action {
     /// Awakening on the sleeping fighter (`Tactics::awakenings`; `ITEM_AWAKENING` cures sleep,
     /// `item_effects.h`): an item turn, the fighter acts again from the next turn.
     Awaken,
+    /// Full Heal on the poisoned fighter (`Tactics::cures`): an item turn, the status is gone.
+    Cure,
     /// A teammate eats this turn's hit while the fighter acts freely: uses its next X
     /// item, or simply attacks when no setup is pending.
     Sac(Option<XItem>),
@@ -2887,6 +2895,7 @@ pub struct Fs {
     must_switch: bool,
     heals_left: u32,
     awakenings_left: u32,
+    cures_left: u32,
     last_heal: bool,
     /// Full Restores the trainer still holds.
     ai_heals: u32,
@@ -2916,6 +2925,7 @@ impl Fs {
             must_switch: false,
             heals_left: tac.heal_stock,
             awakenings_left: tac.awakenings,
+            cures_left: tac.cures,
             last_heal: false,
             ai_heals,
             others_alive: tac.others_alive,
@@ -3139,6 +3149,14 @@ fn greedy_action(
         // A human only burns a heal turn when the foe can actually reach them
         // within ~2 hits (the WR run heals mid-fight only under real pressure).
         Action::Heal
+    } else if fs.cures_left > 0
+        && matches!(me.status, Status1::Poison | Status1::Toxic(_))
+        && !sure_kill
+        && me.hp > danger
+        && turns_to_kill(dex, me, e, fs, wild) >= 2
+    {
+        // PLAN `full_heals`: the poison would tick through a long fight (Muk's Minimize stack).
+        Action::Cure
     } else if let (Some(x), true) = (
         next_x,
         me.hp * 2 > me.max_hp && !sure_kill && turns_to_kill(dex, me, e, fs, wild) >= tac.setup_min,
@@ -3283,6 +3301,7 @@ fn commit(fs: &mut Fs, action: Action, out: &mut Outcome) {
         Action::XItem(_) => fs.setup_idx += 1,
         Action::Heal | Action::FullRestore => fs.heals_left = fs.heals_left.saturating_sub(1),
         Action::Awaken => fs.awakenings_left = fs.awakenings_left.saturating_sub(1),
+        Action::Cure => fs.cures_left = fs.cures_left.saturating_sub(1),
         Action::Sac(x) => {
             fs.sacs_left -= 1;
             fs.others_alive = fs.others_alive.saturating_sub(1);
@@ -3529,6 +3548,11 @@ fn run(
                             me.status = Status1::None;
                         }
                     }
+                    Action::Cure => {
+                        out.item_turns += 1;
+                        out.cures_used += 1;
+                        me.status = Status1::None;
+                    }
                     Action::FullRestore => {
                         out.item_turns += 1;
                         out.full_restores_used += 1;
@@ -3628,6 +3652,7 @@ fn run(
                     Action::Heal => "Heal".into(),
                     Action::FullRestore => "FullRestore".into(),
                     Action::Awaken => "Awaken".into(),
+                    Action::Cure => "Cure".into(),
                     Action::Sac(x) => format!("Sac {x:?}"),
                 };
                 eprintln!(
@@ -4428,6 +4453,7 @@ mod tests {
                 scarce: SCARCE_FACTOR,
                 sleep_no_potion: false,
                 awakenings: 0,
+                cures: 0,
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
@@ -5309,6 +5335,41 @@ mod tests {
             ..new.clone()
         };
         assert!(matches!(pick(&wake), Action::Awaken));
+    }
+
+    /// PLAN `full_heals` (model honesty 4): a poisoned fighter at full HP facing a long fight spends an
+    /// item turn on its cure; without one in the bag it attacks.
+    #[test]
+    fn poisoned_fighter_uses_a_cure() {
+        let dex = Dex::load();
+        let mut me = make_mon(&dex, dex.id("SPECIES_BLASTOISE"), 42, [20; 6], [0; 6], 0, 0);
+        me.moves = vec![dex.move_id("MOVE_WATER_GUN")];
+        me.pp = vec![];
+        me.status = Status1::Toxic(1);
+        let mut foe = make_mon(&dex, dex.id("SPECIES_MUK"), 39, [0; 6], [0; 6], 0, 0);
+        foe.moves = vec![dex.move_id("MOVE_SLUDGE")];
+        foe.pp = vec![];
+        let pick = |tac: &Tactics| {
+            let fs = Fs::new(tac, 0);
+            greedy_action(
+                &dex,
+                &me,
+                &foe,
+                tac,
+                &fs,
+                false,
+                None,
+                &mut Outcome::default(),
+            )
+            .0
+        };
+        let none = Tactics::default();
+        assert!(matches!(pick(&none), Action::Move(_)));
+        let cure = Tactics {
+            cures: 1,
+            ..Default::default()
+        };
+        assert!(matches!(pick(&cure), Action::Cure), "{:?}", pick(&cure));
     }
 
     #[test]
