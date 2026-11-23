@@ -1,5 +1,30 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-23 optimisation on the honest-3 model: CURRENT = 1504-reset1612 (journal `journal/2026-11-23-02-00-optimisation.md`)
+
+| plan | what | WR+2m | WR |
+| --- | --- | --- | --- |
+| 1316-shops16 | previous CURRENT (pre-honesty-3) | ~816-858 | ~2400 |
+| 1612-honest3-cap1 | 1316 + honesty-3 keys + 1 candy per evolution | 3237 / 3296 (R 9.6M seeds 7945/7946) | ~8500-10000 |
+| **1504-reset1612 (CURRENT)** | **1612 + `reset_aggr_at` all -0.2 + WR+2m `reset_table` refit (optstop, train 26M)** | **3171 / 3146 (-66 [-125, -9] / -150 [-226, -83])** | unchanged (WR table not refit) |
+
+* Reset retune: 1612's `reset_aggr_at` gave 0 finishes at WR+10m / WR+5m; -0.2 on every threshold: 529 h / 2081 h.
+  The WR+2m table refit is significant at R 9.6M (not at 3.2M); corners lp1.4 / mp1.3 better, lp1.0 / mp1.0 / door n.s.
+* Refuted on the honest model: Lorelei +X Special (+340 / +321 h; it was -125 / -93 on 1316). On 1316 (now obsolete):
+  1302 / 1303 re-screens n.s.; extra X purchases, revives, setup_min_turns edits much worse; Mewtwo teaches are
+  -0.009 h artefacts (ignore near-zero "accepts"; run League descents with `--notkinds tm`).
+* **Always rebuild `frlg-human` after merging**: an old binary silently ignores new plan keys (8 rows marked INVALID).
+* **Evidence hygiene (controller v4):** the controller's bag reader stopped at the first emptied slot, so all bot
+  League / boss death counts before v4 understate survival (Lance 0/30 -> 7/12). Discount them: the League fit's
+  "controller upper bound", Champion-2 0/28, Lance 8 / Champion 7 deaths. No refit or plan decision here leans on them.
+  Open model bugs from v4: Koga first-try deadliness (Muk Minimize + poison) vs the model's ~0.9; no ball rationing
+  between passing catches and hunts.
+* Fight-price uncertainty unchanged in kind: the WR speed factor's 95% CI (`trainer_cost` x0.904 .. x0.981) spans
+  about x0.45 .. x4.7 on the score (measured on 1309); not re-measured on 1504.
+* Next, ranked: (1) `--set shops` and `--set league --notkinds tm` from 1504 (running); (2) WR `reset_table` refit
+  (needs ~80M training at the WR finish rate); (3) no-Mr.-Mime retest; (4) `--set dex` (candy economy changed);
+  (5) League refit on the honest carry (Lv 52.4); (6) earlymid without fight knobs.
+
 ## 2026-11-23 03:50 model honesty 3 (read first; journal `journal/2026-11-23-03-50-model-honesty-3.md`)
 
 The controller-v3 / League-2 model bugs, default-off keys (1316 unchanged), paired at WR+2m. **Level evolutions of
