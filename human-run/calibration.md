@@ -411,3 +411,20 @@ Dex ~5 480 -> 2 407 (15 species: 13 hunted, Ninetales, Magikarp). Per species: m
 Rollbacks Giovanni 1 -> finish: 40 logged (warden 2, sevii 1, route22 2, lorelei 1, agatha 20 incl. one dead-end
 step back to bruno 1, lance 2, dotted-hole 8 (warehouse admins), lance-2 3), plus 2 controller-bug deaths at
 Mewtwo (party full) dropped by the resume after the fix.
+
+## Controller v4: Lance round 1 from the v3 Agatha checkpoint (2026-11-23, journal `2026-11-23-04-00-controller-v4.md`)
+
+Same savestate (`dev-v3b` `agatha`, frame 853 801: Blastoise Lv 58 102/182 HP, Surf 8, Blizzard 3, 5 Full
+Restores, 3 Potions, X Special 4, X Accuracy 2, Max Elixir 1), one Lance try per human seed:
+
+| code | Lance won | note |
+| --- | --- | --- |
+| v3 (f70490b7) | **0 of 30** (seed 11, 30 retries) | after the 2nd X Accuracy the policy's heals found "no heal item in the bag" with 3 Full Restores left |
+| v4 bag-hole fix + heal fallback (3359d289) | **7 of 12** (seeds 21-32, one try each) | |
+
+Cause: `battle_ram::bag_pocket` stopped at the first empty slot; a stack used up in battle leaves its slot empty
+(`decompiled/src/item.c:288-289`) until the bag compacts on its next opening (`item_menu.c:993-997`). After the
+second X Accuracy every item behind that slot (Max Elixir, Full Restores) was invisible to the policy, its
+`heal_stock` was 0 and `Heal` became an attack. Also, a plain `Heal` looked only at the potion tiers (never a
+Max Potion / Full Restore), and 20 HP Potions counted as League heals. The model's per-try Lance survival
+(`salvage_at` 0.9) is still above the played 7/12 (95% CI ~[0.28, 0.85]).
