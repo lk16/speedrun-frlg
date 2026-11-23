@@ -1357,6 +1357,17 @@ pub fn hunt_stop_new(ctx: &Ctx, h: &Hunt, safari_new: u32) -> u32 {
 }
 
 /// `run_encounters`' stop rule (`stop_when_done`): every slot of the site is owned or skipped.
+/// The pre-fight PP rule (shared with the playing controller): low on attacking PP before a
+/// trainer fight means fewer than 12 PP in all; before a League fight also any empty slot, or a
+/// scarce slot (base PP <= 5: Blizzard, Fire Blast) below 3. `moves` are dex move indices.
+pub fn pp_low_before_fight(dex: &Dex, league: bool, moves: &[usize], pp: &[i32]) -> bool {
+    let scarce_low = moves
+        .iter()
+        .zip(pp)
+        .any(|(&m, &p)| dex.moves[m].pp <= 5 && dex.moves[m].power > 0 && p < 3);
+    pp.iter().sum::<i32>() < 12 || (league && (pp.contains(&0) || scarce_low))
+}
+
 pub fn site_done(ctx: &Ctx, slots: &[Slot], owned: &dyn Fn(u32) -> bool, skip: &[usize]) -> bool {
     slots.iter().all(|s| {
         let sp = &ctx.dex.species[s.species];
@@ -1987,10 +1998,6 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     } else {
         (st.slots.clone(), st.slot_pp.clone())
     };
-    let scarce_low = pp_moves
-        .iter()
-        .zip(&pp_vals)
-        .any(|(&m, &p)| ctx.dex.moves[m].pp <= 5 && ctx.dex.moves[m].power > 0 && p < 3);
     // `mewtwo_pp_floor`: before a League fight the human tops Mewtwo up when its Psychic PP is
     // below this (a fight spends about 3-6 of them).
     let psychic_low = mw_pp
@@ -2000,9 +2007,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             .iter()
             .zip(&pp_vals)
             .any(|(&m, &p)| m == ctx.dex.move_id("MOVE_PSYCHIC") && p < ctx.p.mewtwo_pp_floor);
-    let pp_low = pp_vals.iter().sum::<i32>() < 12
-        || psychic_low
-        || (a.league && (pp_vals.contains(&0) || scarce_low));
+    let pp_low = psychic_low || pp_low_before_fight(ctx.dex, a.league, &pp_moves, &pp_vals);
     if a.trainer && pp_low {
         // Outside the League the last `league_max_reserve` Max Elixirs stay in the bag.
         let reserve = if a.league {

@@ -612,11 +612,13 @@ fn koga(s: &mut Session) -> PResult<()> {
         ));
     }
     split(s, "Koga", "koga-badge")?;
-    // The model's own heal is after the badge (`center-heal@koga-badge`). With the heal moved
-    // before the fight it is skipped unless the lead came out below half HP (v3 dev: Blastoise
-    // fainted to Koga and the Power Plant was walked with Nidoqueen in front).
+    // The model's own heal is after the badge (`center-heal@koga-badge`), but it skips it in the
+    // Torrent phase: a heal after the badge lifts the carry out of the Torrent window for Blaine /
+    // Sevii (model honesty 3, plan 1607: +2170 h, refuted). v4: no heal after the badge unless
+    // the lead fainted (v3 dev: Blastoise fainted to Koga and the Power Plant was walked with
+    // Nidoqueen in front); the in-battle potions keep it in the window.
     let lead = super::ram::Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
-    if lead.hp * 2 < lead.max_hp {
+    if lead.hp == 0 {
         center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
     }
     Ok(())

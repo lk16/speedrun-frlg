@@ -419,21 +419,11 @@ fn fill_round(s: &mut Session) -> PResult<()> {
             &[("ITEM_GREAT_BALL", k)],
         )?;
     }
-    let fill: Vec<crate::params::Hunt> = s.plan.params.fill.clone();
-    let mut next = None;
-    for h in &fill {
-        if !tried.contains(&h.site)
-            && site_new(s, &h.site, &h.area).0 > 0
-            && site_reachable(s, &h.site, &h.area)
-        {
-            next = Some(h.clone());
-            break;
-        }
-    }
-    let next = match next {
-        Some(h) => Some(h),
-        None => greedy_site(s, &tried),
-    };
+    // v4: the next site is the one with the most expected new species per second (`fill_rate`),
+    // over the plan's `fill` sites and every Kanto land site; v3 took the plan's list in order
+    // and spent rounds on 5-25 % sites (Route 18, Victory Road 2F, Diglett's Cave: 0 species in
+    // 12 700 frames) before the Mansion's 6 at 100 %.
+    let next = greedy_site(s, &tried);
     let Some(mut h) = next else {
         return Err(PlayError::Fatal(format!(
             "dex fill: {n} caught, no site left"
@@ -614,48 +604,117 @@ const FINISH: [StageFn; 8] = [
     ("dex-finish-8", fin8),
 ];
 
-/// The not-yet-tried Kanto site (land or water, `flydist.json`) with the most uncaught species;
-/// ties go to the larger encounter share, then the shorter walk from its Fly point.
+/// Expected new species and expected frames of one fill hunt of `steps` encounter rolls at
+/// `site`, `tiles` from its Fly point. A ranking estimate for the greedy, not a model constant:
+/// the encounter chance per roll is the sim's `rate * 16 / 1600` (`sim::run_encounters`) with
+/// ~15 % lost to the post-battle cooldown; frames from the v3 fill hunts (`calibration.md`, 8 per
+/// paced roll, ~700 per encounter run from, ~1 300 more per catch, ~1 200 for a Fly with its
+/// menus, 10 per walked tile, 2 000 for a Safari entry).
+fn fill_value(s: &mut Session, site: &str, area: &str, steps: u32, tiles: i64) -> (f64, f64) {
+    let a = match area {
+        "water" => crate::data::Area::Water,
+        _ => crate::data::Area::Land,
+    };
+    let lg = s.plan.params.version == "LG";
+    let Some((rate, slots, w)) = s.plan.dex.area(site, a, lg, "none") else {
+        return (0.0, f64::INFINITY);
+    };
+    let owned = super::dex::owned_set(s);
+    let tot: u32 = w.iter().sum::<u32>().max(1);
+    let mut share: std::collections::HashMap<usize, f64> = Default::default();
+    for (i, sl) in slots.iter().enumerate() {
+        let sp = &s.plan.dex.species[sl.species];
+        if sp.dex == 0 || sp.dex > 151 || owned[sp.dex as usize] {
+            continue;
+        }
+        *share.entry(sl.species).or_default() += w.get(i).copied().unwrap_or(0) as f64 / tot as f64;
+    }
+    let p_enc = (rate as f64 * 16.0 / 1600.0).min(1.0) * 0.85;
+    let enc = steps as f64 * p_enc;
+    let ev: f64 = share
+        .values()
+        .map(|&q| 0.9 * (1.0 - (1.0 - q).powf(enc)))
+        .sum();
+    let mut cost = 1200.0 + tiles as f64 * 10.0 + steps as f64 * 8.0 + enc * 700.0 + ev * 1300.0;
+    if site.contains("SAFARI") {
+        cost += 2000.0;
+    }
+    (ev, cost)
+}
+
+/// The not-yet-tried site with the most expected new species per second (`fill_value`): the
+/// plan's `fill` sites and every Kanto land site of `flydist.json` (Safari areas only when the
+/// plan lists them), reachable by the walker from its Fly point.
 fn greedy_site(s: &mut Session, tried: &[String]) -> Option<crate::params::Hunt> {
     let fd: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string("human-run/data/flydist.json").ok()?).ok()?;
-    let mut best: Option<(u32, f64, i64, String, String)> = None;
+    let mut cands: Vec<(crate::params::Hunt, i64)> = vec![];
+    for h in s.plan.params.fill.clone() {
+        let tiles = fd[format!("{}|{}", h.site, h.area)]["tiles"]
+            .as_i64()
+            .unwrap_or(200);
+        cands.push((h, tiles));
+    }
     for (key, v) in fd.as_object()? {
         let Some((site, area)) = key.split_once('|') else {
             continue;
         };
-        if area == "fish" || tried.iter().any(|t| t == site) || site.contains("SAFARI") {
+        if area == "fish" || site.contains("SAFARI") || cands.iter().any(|c| c.0.site == site) {
             continue;
         }
-        if !s.graph().by_id.contains_key(site) {
+        cands.push((
+            crate::params::Hunt {
+                site: site.to_string(),
+                area: area.to_string(),
+                steps: 120,
+                ..Default::default()
+            },
+            v["tiles"].as_i64().unwrap_or(999),
+        ));
+    }
+    let mut best: Option<(f64, f64, f64, crate::params::Hunt)> = None;
+    for (mut h, tiles) in cands {
+        if h.area == "fish" || tried.iter().any(|t| *t == h.site) {
+            continue;
+        }
+        if !s.graph().by_id.contains_key(h.site.as_str()) {
             continue;
         }
         // Kanto only: no Fly across regions, and the hunt walks from the Fly point.
-        if !fly_point(s, site, area)
+        if !fly_point(s, &h.site, &h.area)
             .is_some_and(|(_, sec)| region_cell(&sec).is_some_and(|c| c.0 == 0))
         {
             continue;
         }
-        let (k, share) = site_new(s, site, area);
-        if k == 0 || !site_reachable(s, site, area) {
+        if site_new(s, &h.site, &h.area).0 == 0 {
             continue;
         }
-        let tiles = v["tiles"].as_i64().unwrap_or(999);
-        let better = match &best {
-            None => true,
-            Some(b) => (k, share, -tiles) > (b.0, b.1, b.2),
-        };
-        if better {
-            best = Some((k, share, -tiles, site.to_string(), area.to_string()));
+        if h.steps == 0 {
+            h.steps = 120;
         }
+        let (ev, cost) = fill_value(s, &h.site, &h.area, h.steps, tiles);
+        let r = ev / cost;
+        if best.as_ref().is_some_and(|b| b.0 >= r) {
+            continue;
+        }
+        // The reachability check is a walk plan: only for a site that would win.
+        if !site_reachable(s, &h.site, &h.area) {
+            continue;
+        }
+        best = Some((r, ev, cost, h));
     }
-    let (_, _, _, site, area) = best?;
-    Some(crate::params::Hunt {
-        site,
-        area,
-        steps: 120,
-        ..Default::default()
-    })
+    let (r, ev, cost, h) = best?;
+    s.event(
+        "decision",
+        format!(
+            "greedy fill pick: {} expects {ev:.2} new species in ~{:.0} s ({:.1} species/min)",
+            h.site.trim_start_matches("MAP_"),
+            cost / super::FPS,
+            r * super::FPS * 60.0
+        ),
+        json!({"site": h.site, "expected_new": ev, "expected_frames": cost}),
+    );
+    Some(h)
 }
 
 /// Get somewhere Fly works: outdoors already, else an Escape Rope if the bag has one, else walk
