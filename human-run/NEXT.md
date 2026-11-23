@@ -1,5 +1,16 @@
 # Handoff for the next session (written at the end of the 2026-11-17/18 session)
 
+## 2026-11-23 optimiser B: dex fill (journal `journal/2026-11-23-07-00-optimisation-b.md`)
+
+Base 1700-opb-base == CURRENT 1507-honest4 (same JSON). `descend.py --set dexfill` (new `tools/dexmartknobs.py`):
+**no confirmed improvement.** Ball stops before the pre-League fill are worse (Indigo Great 20 +514 h, 30 +1740;
+Viridian Poke +277/+559; Sabrina Great +5/+10 +171/+331): the money matters more at the Indigo heal purchase than the
+fill's empty bag. Fill steps / swaps / drops / 26 added sites, Safari stop / steps / area order under the honest
+step counter, candy_early_n, Power Plant skip: all refuted or n.s. 1701-fillsteps14 is a -0.03 h artefact (pointer
+`CURRENT-OPB` only; do not adopt). Next: `--set earlymid --notkinds fights` (not started), the rest of the dexfill
+subset (hunt/ball/passoff/pewter), drop Diglett's Cave from the fill at R 6.4M (-43 [-105, +0.4]). Use
+`FRLG_MINGAIN=0.003` in descents to stop near-zero promotions.
+
 ## 2026-11-23 optimisation on the honest-3 model: CURRENT = 1504-reset1612 (journal `journal/2026-11-23-02-00-optimisation.md`)
 
 | plan | what | WR+2m | WR |
