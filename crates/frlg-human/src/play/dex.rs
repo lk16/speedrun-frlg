@@ -591,21 +591,32 @@ fn pace_pairs(s: &Session, map: &str, water: bool, from: (i16, i16)) -> Vec<[(i1
                 && y < m.h
                 && reach[(x as usize) + (y as usize) * (m.w as usize)]
     };
-    let mut v = vec![];
+    let mut all = vec![];
     for y in 0..m.h {
         for x in 0..m.w {
-            if !ok(x, y) || !reachable(x, y) {
+            if !ok(x, y) {
                 continue;
             }
             for (dx, dy) in [(1, 0), (0, 1)] {
-                if ok(x + dx, y + dy) && reachable(x + dx, y + dy) {
-                    v.push([(x, y), (x + dx, y + dy)]);
+                if ok(x + dx, y + dy) {
+                    all.push([(x, y), (x + dx, y + dy)]);
                 }
             }
         }
     }
-    v.sort_by_key(|p| (p[0].0 - from.0).abs() + (p[0].1 - from.1).abs());
-    v
+    all.sort_by_key(|p| (p[0].0 - from.0).abs() + (p[0].1 - from.1).abs());
+    let near: Vec<[(i16, i16); 2]> = all
+        .iter()
+        .filter(|p| reachable(p[0].0, p[0].1) && reachable(p[1].0, p[1].1))
+        .copied()
+        .collect();
+    // The flood is the layout's view only (ledges and elevation can connect what it splits):
+    // with no pair in the player's component, every pair stays a candidate, as before.
+    if near.is_empty() {
+        all
+    } else {
+        near
+    }
 }
 
 /// A fishing spot on `map`: a walkable tile next to water, and the direction facing it.
