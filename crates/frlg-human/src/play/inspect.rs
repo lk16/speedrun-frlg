@@ -48,6 +48,8 @@ pub fn print(rom: &Path, sym: &Path, state: &Path, _dex: &Dex) {
                 .collect::<Vec<_>>()
                 .join(" ")
         );
+        // atk, def, spe, spa, spd (`struct Pokemon` stats; engine harness comparisons, honesty 4).
+        println!("party {i} stats {:?}", m.stats);
     }
     println!("money {}", ram.money(emu));
     for p in 0..super::ram::POCKETS.len() {

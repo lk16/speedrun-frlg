@@ -839,6 +839,18 @@ fn main() {
                     arg(&args, "--nature", 0u8),
                     badges as u8,
                 );
+                // `--stats atk,def,spe,spa,spd` / `--max-hp n`: a played mon's RAM stats (`play-inspect`
+                // prints them; badge boosts stay the `--badges` multipliers), honesty 4.
+                let st: String = arg(&args, "--stats", String::new());
+                if !st.is_empty() {
+                    let v: Vec<i32> = st.split(',').map(|x| x.parse().unwrap()).collect();
+                    me.stat = [v[0], v[1], v[2], v[3], v[4]];
+                }
+                let mh: i32 = arg(&args, "--max-hp", 0i32);
+                if mh > 0 {
+                    me.max_hp = mh;
+                    me.hp = mh;
+                }
                 let boost: String = arg(&args, "--boost", String::new());
                 if let Some((t, p)) = boost.split_once(',') {
                     me.boost = Some((t.parse().unwrap(), p.parse().unwrap()));

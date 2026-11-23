@@ -595,6 +595,18 @@ fn koga(s: &mut Session) -> PResult<()> {
         json!({"segment": "koga-walk"}),
     );
     center_heal(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F")?;
+    // Honesty 4: the model teaches HM03 Surf right after the Safari (`sim.rs`, "safari-walk"), so
+    // its Koga is fought with Surf; v4 taught it after the badge (`teach-surf`) and fought Muk with
+    // Water Gun in the slot (engine at the v4 stats: 0.61 win with Water Gun, 0.89 with Surf).
+    // Teaching an HM needs no badge (`SafariZone_SecretHouse/scripts.inc` gives HM03).
+    let surf = super::names::id("MOVE_SURF");
+    if !super::ram::Ram::new(&s.obs)
+        .party(s.hf.rec.emu())
+        .iter()
+        .any(|m| m.knows(surf).is_some())
+    {
+        super::items::teach_tmhm(s, "ITEM_HM03", 0)?;
+    }
     // v3: the Safari's catches evolve here with the stones in the bag (Moon Stone: Nidorina /
     // Nidorino), at the PC of the center the human is standing in.
     super::dexfin::errands(s, "MAP_FUCHSIA_CITY_POKEMON_CENTER_1F", None, 0)?;
