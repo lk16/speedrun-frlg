@@ -5,6 +5,7 @@ usage: promote.py VARIANT.md NNN-name "what changed and why"
 Reads the last scores.jsonl line for the variant's plan name. stdlib only.
 """
 import json, os, sys
+import scores
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
 variant, name, why = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -12,7 +13,7 @@ params = json.loads(open(variant).read().split('```json')[1].split('```')[0])
 old = params['name']
 params['name'] = name
 rec = None
-for line in open(os.path.join(ROOT, 'human-run', 'scores.jsonl')):
+for line in scores.lines():
     r = json.loads(line)
     if r.get('plan') == old:
         rec = r

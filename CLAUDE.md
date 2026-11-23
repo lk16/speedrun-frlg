@@ -118,3 +118,7 @@ Rules the watchdog and the agents follow:
 - **Wrap-up.** When the human asks to wrap up: let in-flight confirmations finish, start no new
   candidates, stop descents by exact PID, merge and verify (build, fmt, tests), update `NEXT.md`, commit,
   then `CronDelete` the watchdog.
+- **Scores archive.** `human-run/scores.jsonl` must stay well under GitHub's 50 MB warning (100 MB is a
+  hard push refusal). Once it passes ~30 MB, run `human-run/tools/scores.py archive` at wrap-up, after every
+  agent branch is merged, and commit. A branch cut before an archive conflicts on `scores.jsonl`: keep only the
+  rows that branch added, not its copy of the archived rows. Readers use `scores.lines()`.

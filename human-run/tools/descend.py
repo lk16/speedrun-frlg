@@ -540,7 +540,8 @@ def gen(p):
         # Only candidates whose label has never been scored (any parent): the tail a stopped descent left, plus the
         # labels the promotions created.
         done = set()
-        for line in open(os.path.join(ROOT, 'human-run', 'scores.jsonl')):
+        import scores
+        for line in scores.lines():
             try:
                 idea = json.loads(line).get('idea', '')
             except ValueError:

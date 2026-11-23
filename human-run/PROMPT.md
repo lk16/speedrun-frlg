@@ -115,7 +115,7 @@ queue tier-2 requests for human-run plans.
 | `human-run/PROMPT.md` | this file |
 | `human-run/plans/NNN-short-name.md` | one file per **accepted** best plan: human-readable steps, branch rules, reset thresholds, the machine-readable parameters the simulator reads, and the score with R and CI |
 | `human-run/plans/CURRENT` | name of the current best plan |
-| `human-run/scores.jsonl` | one line per evaluation, accepted **or refuted**: plan, idea, diff from parent, rung, EHT, R, CI, commit |
+| `human-run/scores.jsonl` | one line per evaluation, accepted **or refuted**: plan, idea, diff from parent, rung, EHT, R, CI, commit. Older rows are in `scores-archive/*.jsonl.gz`; read the whole ledger with `tools/scores.py` |
 | `human-run/journal/YYYY-MM-DD-HH-MM-topic.md` | session notebook: what was slow or inconsistent, what was tried, what's next |
 | `crates/frlg-human/` | the simulator |
 
@@ -137,8 +137,8 @@ plan's markdown is fine. No plan DSL beyond what the current plans need.
 4. **Evaluate** paired against the current best, with the statistics above.
 5. **Record.** Every evaluation gets a line in `scores.jsonl`. If the change is significantly
    better, write the next `plans/NNN-…`, update `CURRENT`, and commit plan, code and score
-   together. If not, commit the refuted line. **Never re-test an idea that `scores.jsonl`
-   already refutes at adequate R.** Combinations and reorderings of refuted ideas are
+   together. If not, commit the refuted line. **Never re-test an idea that `scores.jsonl` (with its
+   archive, `scores-archive/`) already refutes at adequate R.** Combinations and reorderings of refuted ideas are
    new ideas, and are worth trying later.
 6. **Refine.** As plans stabilise, make the decisions more fine-grained: per-trainer move
    choices, per-encounter run/fight/catch rules, item use, split thresholds, mistakes,

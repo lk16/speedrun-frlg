@@ -460,6 +460,8 @@ CURRENT); every claim cites `decompiled/`; no network; Python stdlib only; no `r
   league_power 1.0/1.4, mewtwo_power 1.15/1.45, carry_power 1.7/2.0, door survival 0.10); screens at
   R 800k, most unconfirmed promotions turned out to be noise (+-1 h).
 - Agents share the scratchpad: use unique file prefixes; agent worktrees can be cut from an old base, so
-  always `git merge human-run` first; resolve `scores.jsonl` merge conflicts by keeping both sides.
+  always `git merge human-run` first; resolve `scores.jsonl` merge conflicts by keeping both sides
+  (but after an archive, keep only the branch's own new rows: see CLAUDE.md "Scores archive"). Rows up to
+  2026-11-23 18:15 are in `scores-archive/2026-11-23-1815.jsonl.gz` (38 371 rows, 53.6 MB -> 2.2 MB).
 - Descents are close to converged on knobs (the last confirmed steps are worth 1-3 h of ~100); the
   big wins this session came from model honesty and from audits (items, PP, fishing, Safari, evidence fits).

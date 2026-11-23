@@ -21,7 +21,8 @@ No plan reaches the WR rung (or WR+1m ... WR+20m). The no-reset finishing time o
 | `PROMPT.md` | the brief and the scoring rules |
 | `plans/NNN-*.md` | every accepted plan or model change with its parameter block; `CURRENT`, `CHAIN-*` name the best of each search chain |
 | `plans/CURRENT-SUMMARY.md` | the two best plans in words (`tools/summary.py`) |
-| `scores.jsonl` | one line per evaluation (accepted, refuted, model change, sensitivity), 2000+ lines |
+| `scores.jsonl` | one line per evaluation (accepted, refuted, model change, sensitivity): the live tail; writers append here |
+| `scores-archive/*.jsonl.gz` | older `scores.jsonl` rows, gzipped (GitHub warns above 50 MB and refuses files above 100 MB). Read the whole ledger, oldest first, with `tools/scores.py` `lines()` or `zcat scores-archive/*.jsonl.gz; cat scores.jsonl`. Archive with `tools/scores.py archive` once the live file passes ~30 MB, at wrap-up, with no agent branches still to merge |
 | `journal/` | session notebooks: what was found when (`...-starters-audit-safari.md`), conclusions and next ideas (`...-conclusions.md`) |
 | `forced-audit.md` | which trainers the route cannot walk around (sight-cone audit) |
 | `calibration.md` | tier-1 (libmgba) measurements of encounters and fights (`crates/frlg-calib`) |

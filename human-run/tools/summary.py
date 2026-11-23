@@ -6,6 +6,7 @@ Reads human-run/plans/NAME.md and human-run/scores.jsonl; every rule it states i
 parameter, not a claim about the game (see 001-crude.md for the citations).
 """
 import json, os, sys
+import scores
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..')
 PLANS = os.path.join(ROOT, 'human-run', 'plans')
@@ -54,7 +55,7 @@ if p.get('audited_forced', False):
     skips = [g for g in skips if g not in AUDITED]
 print('  unaudited, assumed walked around: ' + ', '.join(skips) + f"; audited_forced={p.get('audited_forced', False)}")
 last = None
-for line in open(os.path.join(ROOT, 'human-run', 'scores.jsonl')):
+for line in scores.lines():
     r = json.loads(line)
     if r.get('plan') == name:
         last = r
