@@ -266,6 +266,8 @@ impl Graph {
                 .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
                 .unwrap_or(0)
         };
+        let trainers_inc =
+            std::fs::read_to_string(root.join("data/scripts/trainers.inc")).unwrap_or_default();
         let mut maps = HashMap::new();
         for (mid, j) in raw {
             let Ok(md) = world.map(mid) else {
@@ -304,9 +306,13 @@ impl Graph {
                     ))
                 })
                 .collect();
+            // Most trainers' scripts live in `data/scripts/trainers.inc`, not the map's own
+            // `scripts.inc` (`Route3_EventScript_Ben`: `trainerbattle_single TRAINER_YOUNGSTER_BEN`):
+            // without it no trainer had a beaten flag and beaten trainers' lines stayed walls.
             let scripts =
                 std::fs::read_to_string(root.join(format!("data/maps/{name}/scripts.inc")))
-                    .unwrap_or_default();
+                    .unwrap_or_default()
+                    + &trainers_inc;
             let tflags = n.get("TRAINER_FLAGS_START").unwrap_or(0);
             let beaten_of = |script: &str| -> u16 {
                 let mut inside = false;
@@ -1736,7 +1742,9 @@ fn follow(s: &mut Session, plan: &Plan, held: u16, stats: &mut WalkStats) -> PRe
                 let mut total = 0;
                 loop {
                     let n = here(s);
-                    if n.is_some_and(|n| n.0 != from.0) || s.obs.in_battle(s.hf.rec.emu()) {
+                    // A warp to the same map (the Saffron gym's pads, `SaffronCity_Gym/map.json`
+                    // warps 3-32) only moves the player: wait for any change of node.
+                    if n.is_some_and(|n| n != from) || s.obs.in_battle(s.hf.rec.emu()) {
                         break;
                     }
                     // Only frames on which the player could move and did not count: once the

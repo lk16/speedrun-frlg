@@ -27,7 +27,7 @@ use crate::eval::Plan;
 pub struct Case {
     pub name: String,
     pub state: String,
-    /// Goal tiles in order: (map, x, y).
+    /// Goal tiles in order: (map, x, y); x < 0 means anywhere on the map.
     pub legs: Vec<(String, i16, i16)>,
     #[serde(default)]
     pub opts: Vec<String>,
@@ -108,7 +108,12 @@ pub fn run_case(
     let f0 = s.frame();
     let mut error = None;
     for (map, x, y) in &c.legs {
-        let r = walk::go(&mut s, leak(map), *x, *y, &opts);
+        // x < 0: anywhere on the map (a warp's arrival tile, which the game walks the player off).
+        let r = if *x < 0 {
+            walk::go_map(&mut s, leak(map), &opts)
+        } else {
+            walk::go(&mut s, leak(map), *x, *y, &opts)
+        };
         if let Err(e) = r {
             error = Some(match e {
                 PlayError::Death(m) | PlayError::Fatal(m) => m,

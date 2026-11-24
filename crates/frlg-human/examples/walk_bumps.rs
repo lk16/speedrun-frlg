@@ -61,7 +61,11 @@ fn main() {
     // Frames at which to look: (frame, bump index, what).
     let mut looks: Vec<(u64, usize, &str)> = vec![];
     for (i, (f, _)) in bumps.iter().enumerate() {
-        looks.push((f.saturating_sub(300), i, "state"));
+        // The latest frame between 1260 and 60 frames before the bump where the player stands
+        // free on the field (a state cut mid-battle or mid-warp cannot start a walk).
+        for k in (0..30).rev() {
+            looks.push((f.saturating_sub(60 + 40 * k), i, "state"));
+        }
         looks.push((f.saturating_sub(200), i, "before"));
         looks.push((f.saturating_sub(50), i, "scene"));
         looks.push((f + 400, i, "after"));
@@ -69,6 +73,7 @@ fn main() {
     looks.sort();
     let mut at = 0u64;
     let mut before = vec![String::new(); bumps.len()];
+    let mut state_at = vec![String::from("none"); bumps.len()];
     let mut scene = vec![String::new(); bumps.len()];
     let mut after = vec![String::new(); bumps.len()];
     for (f, i, what) in looks {
@@ -82,9 +87,14 @@ fn main() {
         let ram = Ram::new(&obs);
         match what {
             "state" => {
-                if let Some(o) = out {
-                    let p = o.join(format!("{f:07}-bump{i:02}.state"));
+                let free = !obs.in_battle(&mut emu)
+                    && obs.callback2_is(&mut emu, "CB2_Overworld")
+                    && !obs.field_controls_locked(&mut emu)
+                    && obs.player_can_step(&mut emu);
+                if let (Some(o), true) = (out, free) {
+                    let p = o.join(format!("bump{i:02}.state"));
                     emu.save_state_file(&p).expect("save");
+                    state_at[i] = format!("{f} {name} {pos:?}");
                 }
             }
             "before" => before[i] = format!("{name} {pos:?}"),
@@ -140,6 +150,7 @@ fn main() {
     for (i, (f, t)) in bumps.iter().enumerate() {
         println!("#{i:02} frame {f}: {t}");
         println!("  -200: {}   +400: {}", before[i], after[i]);
+        println!("  state: {}", state_at[i]);
         print!("{}", scene[i]);
     }
 }
