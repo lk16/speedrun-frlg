@@ -289,7 +289,7 @@ fn travel_to(
                 go_to(
                     s,
                     &format!("{cur_id} ({}, {}): where the Repel ends", wp.1, wp.2),
-                    &move |n: &Node| *n == wp || n.0 != wp.0,
+                    &move |n: &Node| *n == wp,
                     o,
                 )?;
                 continue;
