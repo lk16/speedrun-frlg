@@ -1174,7 +1174,7 @@ pub struct Params {
 /// HP <= max/3 (`decompiled/src/pokemon.c:2500`); Sammy's poison is kept as the resource that walks the HP
 /// down (1 HP per 5 steps, `decompiled/src/field_control_avatar.c:717-719`; it can faint the mon,
 /// `decompiled/src/field_poison.c:104-106`, so the band's floor matters).
-#[derive(Deserialize, Clone, Debug, Default)]
+#[derive(Deserialize, Clone, Debug)]
 #[serde(default)]
 pub struct EarlyTorrent {
     /// The fight entered in the window (`brock`); empty = off.
@@ -1192,6 +1192,27 @@ pub struct EarlyTorrent {
     /// The controller fights these trainers with Tackle only to keep the carry's HP falling (Liam);
     /// the simulator does not model the move restriction (documented, not simulated).
     pub tackle_only: Vec<String>,
+    /// A poisoned carry is cured once it is in the window, before the fight (in-battle poison takes 1/8 of
+    /// the max HP a turn, `decompiled/src/battle_util.c:805-806` `ENDTURN_POISON`, which kills a carry at 1/3 within
+    /// three turns). The Antidote is the Viridian Forest hidden one at (28,57)
+    /// (`decompiled/data/maps/ViridianForest/map.json:279-283`, review item 8: ~4 s detour) or a Pewter mart
+    /// buy (`PewterCity_Mart/scripts.inc`, 100). `cure_frames`: pickup 240 + bag use 400 (guesses).
+    pub cure: bool,
+    pub cure_frames: f64,
+}
+
+impl Default for EarlyTorrent {
+    fn default() -> Self {
+        EarlyTorrent {
+            fight: String::new(),
+            steer_poison: false,
+            no_stall: false,
+            withdraw_first: false,
+            tackle_only: vec![],
+            cure: false,
+            cure_frames: 640.0,
+        }
+    }
 }
 
 /// One step of `Params::potion_tiers`.

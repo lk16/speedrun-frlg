@@ -2198,6 +2198,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 // The lane is steered on its own in `risk_fight` (to the same target): no sync of this drop.
                 st.risk_real += st.hp_frac - before;
             }
+            if et.cure {
+                st.carry_status = Status1::None;
+                me.status = Status1::None;
+                clock_add(st, et.cure_frames * ctx.p.text_factor);
+            }
         }
         // Heal with items before the fight when low (each use is a bag trip).
         if (cfg.entry || in_torrent) && !mewtwo_now {
