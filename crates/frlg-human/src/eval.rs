@@ -196,6 +196,11 @@ impl Plan {
             },
             ball_shop_from: seg_index(&self.segs, &self.params.ball_shop_from),
             potion_bag_from: seg_index(&self.segs, &self.params.potion_bag_from),
+            early_bag_end: self
+                .params
+                .early_bag
+                .then(|| seg_index(&self.segs, "brock"))
+                .flatten(),
             stone_shop_from: self
                 .segs
                 .iter()
