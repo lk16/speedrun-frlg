@@ -24,9 +24,12 @@ use super::ram::Ram;
 use super::session::{PResult, PlayError, Session, Stage};
 use super::walk::{go, go_face, go_map, go_to, here, plan_nodes, MapId, Node, Opts};
 
+/// Cut usable; Saffron's gates are shut until the Tea (`Route5_SouthEntrance/scripts.inc:39`
+/// etc.: the guard takes `ITEM_TEA`), so the planner may not route through Saffron before it.
 fn cut_opts() -> Opts {
     Opts {
         cut: true,
+        avoid: vec!["MAP_SAFFRON_CITY"],
         ..Opts::default()
     }
 }
@@ -550,6 +553,55 @@ fn cut_learner(s: &mut Session) -> Option<usize> {
         })
 }
 
+/// The route needs a Cut user from Route 9 on (the tree at (50, 18) of `CeruleanCity/map.json`
+/// is the only way east: `bin/frlg-mapgraph` 60 tiles with Cut, 772 without), and the post-Giovanni
+/// stages cut too. The model has no Cut carrier (MODEL BUG): when nobody in the party can learn
+/// HM01, the human catches the first Bellsprout of Route 25's grass (LG land table,
+/// `decompiled/src/data/wild_encounters.json`; Bellsprout learns HM01, `tmhm_learnsets.h`), leaving
+/// every other species alone.
+fn cut_carrier_hunt(s: &mut Session) -> PResult<()> {
+    if cut_learner(s).is_some() {
+        return Ok(());
+    }
+    let skip: Vec<String> = [
+        "SPECIES_ABRA",
+        "SPECIES_CATERPIE",
+        "SPECIES_KAKUNA",
+        "SPECIES_METAPOD",
+        "SPECIES_PIDGEY",
+        "SPECIES_WEEDLE",
+    ]
+    .iter()
+    .map(|x| x.to_string())
+    .collect();
+    s.event(
+        "model-vs-actual",
+        "no party mon learns HM01 Cut (needed for Route 9 and later): hunting a Bellsprout on \
+         Route 25 (the model has no Cut carrier)",
+        json!({}),
+    );
+    let h = crate::params::Hunt {
+        after: "route25-trainers".into(),
+        site: "MAP_ROUTE25".into(),
+        area: "land".into(),
+        steps: 400,
+        skip,
+        on_route: true,
+        stop_after: 1,
+        ..Default::default()
+    };
+    let prev = std::mem::replace(&mut s.seg, "cut-carrier-hunt".into());
+    let rep = super::dex::hunt(s, &h)?;
+    s.seg = prev;
+    if cut_learner(s).is_none() {
+        return Err(PlayError::Death(format!(
+            "no Cut carrier after the Route 25 hunt ({} encounters)",
+            rep.encounters
+        )));
+    }
+    Ok(())
+}
+
 fn teach_cut(s: &mut Session) -> PResult<()> {
     if super::items::slot_with_move(s, "MOVE_CUT").is_some() {
         return Ok(());
@@ -878,6 +930,7 @@ fn bill(s: &mut Session) -> PResult<()> {
         .map(|t| (t, "route25-trainers".to_string()))
         .collect();
     travel(s, "MAP_ROUTE25", &Opts::default(), &bill_seg, &fights)?;
+    cut_carrier_hunt(s)?;
     travel(
         s,
         "MAP_ROUTE25_SEA_COTTAGE",
@@ -1028,7 +1081,8 @@ fn bike(s: &mut Session) -> PResult<()> {
     )?;
     s.seg = "bike-redeem".into();
     if have(s, "ITEM_BICYCLE") == 0 {
-        talk_to(s, "MAP_CERULEAN_CITY_BIKE_SHOP", 1)?;
+        // The clerk stands behind the counter (`CeruleanCity_BikeShop/map.json` (9, 3)).
+        super::shop::talk_at(s, "MAP_CERULEAN_CITY_BIKE_SHOP", 9, 3)?;
         settle(s)?;
     }
     if have(s, "ITEM_BICYCLE") == 0 {
@@ -1054,6 +1108,43 @@ fn rt_seg(map: &str) -> Option<&'static str> {
 fn rock_tunnel(s: &mut Session) -> PResult<()> {
     s.seg = "route9".into();
     teach_cut(s)?;
+    // Not in the model: ten trainers between Cerulean and Lavender with no Center, and the sim's
+    // potions are unlimited outside the League ("no heal item in the bag" deaths on every branch
+    // of the first try: Martha, Lenny, Jeremy, Allen). The human heals at the Cerulean Center next
+    // to the bike shop and stocks Super Potions at the mart (`CeruleanCity_Mart/scripts.inc:26`),
+    // keeping $1500 for the Celadon X items (the Nugget sale pays the rest).
+    let party = Ram::new(&s.obs).party(s.hf.rec.emu());
+    let lead = &party[0];
+    if lead.hp < lead.max_hp {
+        s.event(
+            "model-vs-actual",
+            format!(
+                "Center stop before Route 9 (lead {}/{}): the model has no heal between \
+                 cerulean-heal and lavender-heal",
+                lead.hp, lead.max_hp
+            ),
+            json!({"hp": lead.hp, "max": lead.max_hp}),
+        );
+        center_heal(s, "MAP_CERULEAN_CITY_POKEMON_CENTER_1F")?;
+    }
+    let money = Ram::new(&s.obs).money(s.hf.rec.emu());
+    let afford = (money.saturating_sub(1500) / 700) as u16;
+    let have_sp = have(s, "ITEM_SUPER_POTION");
+    let want = (have_sp + afford).min(8);
+    if want > have_sp {
+        s.event(
+            "model-vs-actual",
+            format!("Super Potions for Route 9 / Rock Tunnel: {have_sp} -> {want} (${money})"),
+            json!({"have": have_sp, "want": want, "money": money}),
+        );
+        super::shop::mart_topup(
+            s,
+            "MAP_CERULEAN_CITY_MART",
+            None,
+            &[("ITEM_SUPER_POTION", want)],
+            "Rock Tunnel heals",
+        )?;
+    }
     s.event(
         "model-vs-actual",
         "Rock Tunnel walked without Flash: the sim assumes HM05 in the bag (a guess, route_wr.rs); \
