@@ -59,6 +59,27 @@ fn arrow_dir(b: u16) -> Option<u16> {
         _ => None,
     }
 }
+/// One-sided walls `MB_IMPASSABLE_EAST/WEST/NORTH/SOUTH/NORTHEAST/NORTHWEST/SOUTHEAST/SOUTHWEST`
+/// 0x30-0x37 (`decompiled/include/constants/metatile_behaviors.h:39-46`): a step from `src` to `dst`
+/// by `(dx, dy)` is refused when the source is blocked on the side it leaves by or the
+/// destination on the side it enters by (`IsMetatileDirectionallyImpassable`,
+/// `decompiled/src/event_object_movement.c:889-901,4889-4897`; `MetatileBehavior_Is*Blocked`,
+/// `metatile_behavior.c:544-582`). Mt. Moon B2F row 14 is `MB_IMPASSABLE_NORTH`: not enterable
+/// from row 13.
+pub fn dir_blocked(src: u16, dst: u16, dx: i16, dy: i16) -> bool {
+    let north = |b: u16| matches!(b, 0x32 | 0x34 | 0x35);
+    let south = |b: u16| matches!(b, 0x33 | 0x36 | 0x37);
+    let east = |b: u16| matches!(b, 0x30 | 0x34 | 0x36);
+    let west = |b: u16| matches!(b, 0x31 | 0x35 | 0x37);
+    match (dx, dy) {
+        (0, 1) => south(src) || north(dst),
+        (0, -1) => north(src) || south(dst),
+        (-1, 0) => west(src) || east(dst),
+        (1, 0) => east(src) || west(dst),
+        _ => false,
+    }
+}
+
 /// Ledges (`MB_JUMP_EAST` .. `MB_JUMP_SOUTH`, 0x38-0x3B): hop direction.
 pub fn ledge(b: u16) -> Option<(i16, i16)> {
     match b {
@@ -196,6 +217,8 @@ impl Graph {
                 .unwrap_or(0)
         };
         let mut maps = HashMap::new();
+        let trainers_inc =
+            std::fs::read_to_string(root.join("data/scripts/trainers.inc")).unwrap_or_default();
         for (mid, j) in raw {
             let Ok(md) = world.map(mid) else {
                 continue;
@@ -233,13 +256,15 @@ impl Graph {
                     ))
                 })
                 .collect();
+            // Route trainers' scripts live in `data/scripts/trainers.inc`, not the map's own file
+            // (`Route9_EventScript_Alicia`, `decompiled/data/scripts/trainers.inc:529-530`).
             let scripts =
                 std::fs::read_to_string(root.join(format!("data/maps/{name}/scripts.inc")))
                     .unwrap_or_default();
             let tflags = n.get("TRAINER_FLAGS_START").unwrap_or(0);
             let beaten_of = |script: &str| -> u16 {
                 let mut inside = false;
-                for line in scripts.lines() {
+                for line in scripts.lines().chain(trainers_inc.lines()) {
                     let l = line.trim();
                     if let Some(lbl) = l.strip_suffix("::") {
                         inside = lbl == script;
@@ -416,23 +441,34 @@ impl Graph {
                 trees.insert((o.x, o.y));
                 continue;
             }
-            if mid == view.cur_map && live_ids.contains(&o.local_id) {
-                continue; // the live position below is the truth
-            }
-            if o.stationary() {
-                b.insert((o.x, o.y));
-            }
+            // An on-screen trainer's sight line is drawn from where it stands now (review item 17:
+            // on-screen trainers had no sight line at all; R1 adds the live facing).
+            let live_pos = if mid == view.cur_map {
+                view.live
+                    .iter()
+                    .find(|l| l.2 == o.local_id)
+                    .map(|l| (l.0, l.1))
+            } else {
+                None
+            };
             let beaten = o.beaten != 0 && view.flags.get(&o.beaten).copied().unwrap_or(false);
             if o.trainer && o.sight > 0 && !beaten {
+                let (ox, oy) = live_pos.unwrap_or((o.x, o.y));
                 let dirs: Vec<(i16, i16)> = match o.facing() {
                     Some(d) => vec![d],
                     None => vec![(0, -1), (0, 1), (-1, 0), (1, 0)],
                 };
                 for (dx, dy) in dirs {
                     for k in 1..=o.sight {
-                        sight.insert((o.x + dx * k, o.y + dy * k));
+                        sight.insert((ox + dx * k, oy + dy * k));
                     }
                 }
+            }
+            if mid == view.cur_map && live_ids.contains(&o.local_id) {
+                continue; // the live position below is the truth
+            }
+            if o.stationary() {
+                b.insert((o.x, o.y));
             }
         }
         if mid == view.cur_map {
@@ -671,6 +707,10 @@ impl Graph {
                     continue;
                 }
                 let Some(t) = m.tile(nx, ny) else { continue };
+                let src_b = m.tile(x, y).map_or(0, |t| t.behavior);
+                if dir_blocked(src_b, t.behavior, dx, dy) {
+                    continue;
+                }
                 // Spin tiles (`MB_SPIN_RIGHT/LEFT/UP/DOWN` 0x54-0x57, `MB_STOP_SPINNING` 0x58,
                 // `decompiled/include/constants/metatile_behaviors.h:66-70`): stepping on one
                 // slides the player its way, turning on every further spin tile, until a stop tile
@@ -1238,6 +1278,14 @@ fn follow(s: &mut Session, plan: &Plan) -> PResult<Follow> {
                         return Ok(Follow::Replan);
                     }
                     if fed > STEP_BUDGET {
+                        if std::env::var_os("FRLG_WALK_DEBUG").is_some() {
+                            eprintln!(
+                                "walk: bump {from:?} -> {to:?} dir {dir:#x} at {} ({}) plan {:?}",
+                                s.frame(),
+                                s.obs.snapshot(s.hf.rec.emu()),
+                                &plan.nodes[i.saturating_sub(2)..(i + 3).min(plan.nodes.len())]
+                            );
+                        }
                         return Ok(Follow::Bumped(to));
                     }
                     let b = run_bit(s);

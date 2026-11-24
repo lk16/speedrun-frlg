@@ -679,6 +679,20 @@ fn fly_lavender(s: &mut Session) -> PResult<()> {
 }
 
 pub fn stages() -> Vec<Stage> {
+    // Power-on to the Route 4 Center (`play/early.rs`, review step R2a; until it lands, the
+    // `mt-moon-pc` checkpoint of the 2026-11-21 prefix is the resume point), then the Center to
+    // Giovanni 1 (`play/early2.rs`).
+    let head = vec![Stage {
+        name: "mt-moon-pc",
+        run: noop,
+    }];
+    head.into_iter()
+        .chain(super::early2::stages())
+        .chain(rest())
+        .collect()
+}
+
+fn rest() -> Vec<Stage> {
     vec![
         Stage {
             name: "giovanni1",
