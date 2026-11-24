@@ -2786,6 +2786,19 @@ fn review_keys(ctx: &Ctx, st: &mut State, name: &str) {
             clock_add(st, f * p.text_factor);
         }
     }
+    if name == "deliver" && p.viridian_potions > 0 {
+        let n = if p.money_model {
+            p.viridian_potions.min(st.money / 300)
+        } else {
+            p.viridian_potions
+        };
+        if p.money_model {
+            st.money -= n * 300;
+        }
+        st.free_potions += n;
+        let f = if p.early_balls > 0 { 150.0 } else { 900.0 };
+        clock_add(st, f * p.text_factor);
+    }
     if name == "brock" && !st.abandoned {
         if p.tm39_sell {
             st.money += 1500;

@@ -1144,6 +1144,11 @@ pub struct Params {
     /// can spend only the picked-up `early_potions` (free), not purse-bought ones. Off = the old model
     /// (potions bought from the purse at the moment of use, from the first fight on).
     pub early_bag: bool,
+    /// PLAN (review item 9, with `early_bag`): Potions bought at the Viridian mart once the parcel is delivered
+    /// (`decompiled/data/maps/ViridianCity_Mart/scripts.inc:65-68` sells Poke Ball, Potion, Antidote; 300 each,
+    /// `items.json`), a mart visit of 900 frames (150 when `early_balls` already stops there; guesses).
+    /// They go into the same pre-Pewter bag as `early_potions`. 0 = none.
+    pub viridian_potions: u32,
     /// PLAN (review item 13): sell TM39 (Rock Tomb, Brock's prize; price 3000, sold at half,
     /// `decompiled/src/data/items.json` ITEM_TM39, `decompiled/src/item_menu.c:1933`) at the Pewter mart after
     /// Brock for 1500. `tm39_sell_frames`: the SELL menu inside a mart visit the route makes anyway for
@@ -1464,6 +1469,7 @@ impl Default for Params {
             .into_iter()
             .collect(),
             early_bag: false,
+            viridian_potions: 0,
             tm39_sell: false,
             tm39_sell_frames: 360.0,
             pewter_balls: 0,
