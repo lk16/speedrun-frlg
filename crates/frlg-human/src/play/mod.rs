@@ -33,6 +33,7 @@ pub mod ram;
 pub mod session;
 pub mod shop;
 pub mod walk;
+pub mod walk_check;
 
 /// GBA frames per second (`human-run/PROMPT.md`, *The target*).
 pub const FPS: f64 = 59.7275;

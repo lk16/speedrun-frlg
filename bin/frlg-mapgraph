@@ -17,7 +17,12 @@ Movement model (documented caveats -- keep in sync with docs/glitchless-run/rout
   * warps cost 1 step; map connections stitch neighbouring overworld maps
     (dest = src - offset on the shared axis)
   * static NPC/object bodies block; wandering NPCs are assumed manipulable and
-    are NOT modelled -- and script-driven setmetatile barriers (gym puzzles,
+    are NOT modelled. An object whose `flag` is set is not there at all (the game
+    skips its template, `TrySpawnObjectEvents` -> `FlagGet(template->flagId)`,
+    decompiled/src/event_object_movement.c). Which flags are set: by default the
+    ones a new game sets (`EventScript_ResetAllMapFlags`, decompiled/data/event_scripts.s,
+    run from decompiled/src/new_game.c), adjusted with --flags-set / --flags-clear
+    (comma-separated FLAG_* names) for a later point of the run -- and script-driven setmetatile barriers (gym puzzles,
     Silph doors) are NOT modelled either: distances through those maps are
     lower bounds
   * spin tiles / forced-movement tiles are treated as plain floor
@@ -27,6 +32,7 @@ Cost is TILES, not frames. Frames per tile (decompiled/src/event_object_movement
 
 Usage:
   frlg-mapgraph path MAP_A x,y MAP_B x,y [--surf] [--cut] [--ignore-objects]
+                [--flags-set FLAG_A,FLAG_B] [--flags-clear FLAG_C]
   frlg-mapgraph dump [outfile]     # standard route-leg distance table (JSON)
 """
 import json, os, re, struct, sys, functools
@@ -56,6 +62,29 @@ def tileset_attrs(tileset):
                 raw = open(f'{base}/{d}/metatile_attributes.bin', 'rb').read()
                 return struct.unpack(f'<{len(raw)//4}I', raw)
     raise FileNotFoundError(tileset)
+
+
+@functools.lru_cache(maxsize=None)
+def newgame_flags():
+    """Flags set by `EventScript_ResetAllMapFlags` (run at new game, decompiled/src/new_game.c)."""
+    out, inside = set(), False
+    for line in open(f'{DECOMP}/data/event_scripts.s'):
+        t = line.strip()
+        if t.endswith('::'):
+            inside = t == 'EventScript_ResetAllMapFlags::'
+            continue
+        if inside:
+            if t.startswith('setflag'):
+                out.add(t.split()[1])
+            elif t in ('end', 'return'):
+                break
+    return frozenset(out)
+
+
+def flags_set(opts):
+    """The FLAG_* names treated as set for this search."""
+    s = set(newgame_flags()) if opts.get('flags') is None else set(opts['flags'])
+    return (s | set(opts.get('flags_set', ()))) - set(opts.get('flags_clear', ()))
 
 
 @functools.lru_cache(maxsize=None)
@@ -100,8 +129,13 @@ class Map:
 
     def blocked_tiles(self, opts):
         tiles = set()
+        hidden = flags_set(opts)
         for o in self.objects:
             if opts.get('ignore_objects'):
+                continue
+            # A set flag hides the object (review item 5: Oak at Pallet (10,8) has
+            # FLAG_HIDE_OAK_IN_PALLET_TOWN, set at new game).
+            if str(o.get('flag', '0')) in hidden:
                 continue
             scr = str(o.get('script'))
             if opts.get('cut') and 'CutTree' in scr:
@@ -294,6 +328,11 @@ LEGS = [
 def cmd_path(argv):
     opts = {'surf': '--surf' in argv, 'cut': '--cut' in argv,
             'ignore_objects': '--ignore-objects' in argv}
+    for k in ('--flags-set', '--flags-clear'):
+        if k in argv:
+            i = argv.index(k)
+            opts[k[2:].replace('-', '_')] = tuple(argv[i + 1].split(','))
+            del argv[i:i + 2]
     argv = [a for a in argv if not a.startswith('--')]
     ma, xy_a, mb, xy_b = argv
     ax, ay = map(int, xy_a.split(','))

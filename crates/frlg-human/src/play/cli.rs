@@ -44,7 +44,9 @@ pub fn usage() -> &'static str {
      \x20                                      continue a played attempt from its last checkpoint\n\
      \x20 play-verify --plan <plan.md> <dir>    replay <dir>/run.ilog from boot, check checkpoint RAM hashes\n\
      \x20 play-battles --plan <plan.md> <dir>   replay <dir>/run.ilog, one line per battle (trainer, exp)\n\
-     \x20 play-inspect --plan <plan.md> <state> print map, position, party, bag of a savestate"
+     \x20 play-inspect --plan <plan.md> <state> print map, position, party, bag of a savestate\n\
+     \x20 play-walk --plan <plan.md> [cases.json] [--case name] [--seed S] [--seeds n]\n\
+     \x20                                      walker regression set (R1): bumps, waits, trainer fights"
 }
 
 pub fn main(cmd: &str, args: &[String], dex: &'static Dex) {
@@ -94,7 +96,22 @@ pub fn main(cmd: &str, args: &[String], dex: &'static Dex) {
             s.fallback = args.iter().any(|a| a == "--fallback-battle");
             let until = flag(args, "--until");
             let stages = super::legs::stages();
-            match s.play(&stages, until.as_deref()) {
+            let ev0 = s.log.events.len();
+            let res = s.play(&stages, until.as_deref());
+            // Review round 1 (R1): every bump is a controller bug; the summary reports them.
+            let (session_bumps, per) =
+                super::walk::bump_summary(&s.log.events[ev0.min(s.log.events.len())..]);
+            let (all_bumps, _) = super::walk::bump_summary(&s.log.events);
+            let per: Vec<String> = per.iter().map(|(st, n)| format!("{st} {n}")).collect();
+            eprintln!(
+                "bumps: {session_bumps} this session ({}); {all_bumps} in the whole log",
+                if per.is_empty() {
+                    "none".to_string()
+                } else {
+                    per.join(", ")
+                }
+            );
+            match res {
                 Ok(()) => eprintln!(
                     "done: last checkpoint {} at frame {}, {} rollbacks; outputs in {}",
                     s.last_checkpoint(),
@@ -139,6 +156,7 @@ pub fn main(cmd: &str, args: &[String], dex: &'static Dex) {
                 std::process::exit(1)
             }
         }
+        "play-walk" => super::walk_check::main(args, &plan, &rom, &sym),
         "play-inspect" => {
             let state = args
                 .iter()
