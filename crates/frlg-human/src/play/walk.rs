@@ -504,6 +504,21 @@ fn sight_line(m: &MapInfo, x: i16, y: i16, d: (i16, i16), r: i16, out: &mut Vec<
     }
 }
 
+impl Plan {
+    /// Length in tiles: a ledge hop or a spin slide covers several, a warp or a connection one.
+    pub fn tiles(&self) -> usize {
+        self.nodes.windows(2).map(|w| step_tiles(w[0], w[1])).sum()
+    }
+}
+
+fn step_tiles(a: Node, b: Node) -> usize {
+    if a.0 == b.0 {
+        ((a.1 - b.1).abs() + (a.2 - b.2).abs()) as usize
+    } else {
+        1
+    }
+}
+
 impl Graph {
     /// `m` is the map as the planner sees it (the live grid for the current map).
     fn blocked(&self, view: &View, mid: MapId, m: &MapInfo, opts: &Opts) -> Blk {
@@ -1122,7 +1137,7 @@ enum Follow {
 /// What one walk did, for the detour check.
 #[derive(Default)]
 struct WalkStats {
-    /// Moves made (a ledge hop or a warp counts as one).
+    /// Tiles moved (a ledge hop counts two, a warp or a connection one).
     moves: usize,
     /// Stops in front of an object that stood in (or stepped into) the next tile.
     blocked: usize,
@@ -1344,7 +1359,7 @@ pub fn go_to(
             s.event(
                 "warn",
                 format!(
-                    "detour: {what}: walked {} moves, shortest legal {short} when planned ({})",
+                    "detour: {what}: walked {} tiles, shortest legal {short} when planned ({})",
                     stats.moves,
                     r.join(", ")
                 ),
@@ -1379,10 +1394,10 @@ fn detour_check(
     };
     let g = s.graph();
     let Some(q) = g.plan(v, cur, goal, &legal) else {
-        return (p.moves.len(), p.moves.len(), String::new());
+        return (p.tiles(), p.tiles(), String::new());
     };
-    if p.moves.len() <= q.moves.len() {
-        return (q.moves.len(), p.moves.len(), String::new());
+    if p.tiles() <= q.tiles() {
+        return (q.tiles(), p.tiles(), String::new());
     }
     let grass = |pl: &Plan| {
         pl.nodes
@@ -1413,14 +1428,14 @@ fn detour_check(
     s.event(
         "warn",
         format!(
-            "detour: {what}: planned {} moves, shortest legal {} ({why})",
-            p.moves.len(),
-            q.moves.len()
+            "detour: {what}: planned {} tiles, shortest legal {} ({why})",
+            p.tiles(),
+            q.tiles()
         ),
-        json!({"detour": p.moves.len() - q.moves.len(), "planned": p.moves.len(),
-               "shortest": q.moves.len()}),
+        json!({"detour": p.tiles() - q.tiles(), "planned": p.tiles(),
+               "shortest": q.tiles()}),
     );
-    (q.moves.len(), p.moves.len(), why)
+    (q.tiles(), p.tiles(), why)
 }
 
 /// Bumps in an event log, in total and per stage (the stage a `bump` event names, or for older
@@ -1833,7 +1848,7 @@ fn follow(s: &mut Session, plan: &Plan, held: u16, stats: &mut WalkStats) -> PRe
                     s.hf.step(dir | b)?;
                     fed += 1;
                 }
-                stats.moves += 1;
+                stats.moves += step_tiles(from, to);
                 // The step into `to` has started. Someone came on screen or left: plan again
                 // from `to` while the step runs (no frame passes while planning).
                 if i + 1 < plan.moves.len() && live_set(s) != plan.live {
