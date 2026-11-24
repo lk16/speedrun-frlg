@@ -153,6 +153,61 @@ impl ObjInfo {
         v
     }
 
+    /// Every (tile, facing) this object can have, spawned at `(x0, y0)`. A `WALK_SEQUENCE_A_B_C_D`
+    /// object walks direction A until the next tile is outside its range, then B, C, D, and starts
+    /// over at its spawn (`MoveNextDirectionInSequence`, `decompiled/src/event_object_movement.c:3909-3935`),
+    /// so only the rim of its box with one facing per side; an obstacle stops it (it walks in
+    /// place). Everyone else: any offset of [`Self::offsets`] with any of [`Self::facings`].
+    pub fn poses(&self, m: &MapInfo, x0: i16, y0: i16) -> Vec<((i16, i16), (i16, i16))> {
+        if let Some(seq) = self.movement.strip_prefix("MOVEMENT_TYPE_WALK_SEQUENCE_") {
+            let dirs: Vec<(i16, i16)> = seq
+                .split('_')
+                .filter_map(|w| match w {
+                    "UP" => Some((0, -1)),
+                    "DOWN" => Some((0, 1)),
+                    "LEFT" => Some((-1, 0)),
+                    "RIGHT" => Some((1, 0)),
+                    _ => None,
+                })
+                .collect();
+            if dirs.len() == 4 {
+                let out_of_range = |x: i16, y: i16| {
+                    (self.range_x != 0 && (x - x0).abs() > self.range_x)
+                        || (self.range_y != 0 && (y - y0).abs() > self.range_y)
+                };
+                let (mut x, mut y, mut k) = (x0, y0, 0usize);
+                let mut v = vec![];
+                for _ in 0..256 {
+                    if k == 3 && (x, y) == (x0, y0) {
+                        break;
+                    }
+                    let mut d = dirs[k];
+                    if out_of_range(x + d.0, y + d.1) && k < 3 {
+                        k += 1;
+                        d = dirs[k];
+                    }
+                    v.push(((x, y), d));
+                    let free = m.tile(x + d.0, y + d.1).is_some_and(|t| t.collision == 0)
+                        && !out_of_range(x + d.0, y + d.1);
+                    if !free {
+                        break;
+                    }
+                    x += d.0;
+                    y += d.1;
+                    v.push(((x, y), d));
+                }
+                return v;
+            }
+        }
+        let mut v = vec![];
+        for (dx, dy) in self.offsets() {
+            for d in self.facings() {
+                v.push(((x0 + dx, y0 + dy), d));
+            }
+        }
+        v
+    }
+
     pub fn facings(&self) -> Vec<(i16, i16)> {
         if let Some(d) = self.facing() {
             return vec![d];
@@ -491,6 +546,8 @@ pub struct Plan {
     /// Per node: the local ids of the turning trainers on screen that could see it (wait for
     /// them to face away before stepping there).
     pub watch: Vec<Vec<u8>>,
+    /// Per node: inside a spinner's range box (enter it walking, B released).
+    pub norun: Vec<bool>,
     /// Per node: the local id of an unbeaten trainer whose line it is on (a fight the plan could
     /// not walk around), if any.
     pub seen: Vec<Option<u8>>,
@@ -512,6 +569,13 @@ struct Blk {
     /// can be: crossed only after waiting for it to face away (`follow`), so priced as a wait.
     /// Each tile maps to the local ids of the trainers that watch it.
     watch: HashMap<(i16, i16), Vec<u8>>,
+    /// Tiles inside a spinner's range box (`LOOK_AROUND`, `FACE_A_AND_B`, `ROTATE_*` trainers on
+    /// screen): a player who *runs* there makes it turn to face him at once
+    /// (`ObjectEventIsTrainerAndCloseToPlayer` needs `PLAYER_AVATAR_FLAG_DASH` and the player within
+    /// `trainerRange` on both axes, `decompiled/src/event_object_movement.c:2772-2798`; used by
+    /// `MovementType_LookAround_Step3/4`, `:3044-3066`, and every `FACE_*_AND_*` type), so these
+    /// tiles are entered walking. Wanderers do not react (`MovementType_WanderAround_Step3`, `:2721`).
+    norun: HashSet<(i16, i16)>,
 }
 
 /// The tiles a trainer at `(x, y)` sees in direction `d` with range `r`: up to `r` tiles, cut
@@ -591,10 +655,8 @@ impl Graph {
             if o.trainer && o.sight > 0 && !beaten(o) {
                 // Off screen: every tile it could see from anywhere in its range box.
                 let mut line = vec![];
-                for (dx, dy) in o.offsets() {
-                    for d in o.facings() {
-                        sight_line(m, ox + dx, oy + dy, d, o.sight, &mut line);
-                    }
+                for ((px, py), d) in o.poses(m, ox, oy) {
+                    sight_line(m, px, py, d, o.sight, &mut line);
                 }
                 out.sight.extend(line.into_iter().map(|t| (t, o.local_id)));
             }
@@ -651,13 +713,19 @@ impl Graph {
                     .find(|t| t.0 == o.local_id)
                     .map_or((o.x, o.y), |t| (t.1, t.2));
                 let mut line = vec![];
-                for (dx, dy) in o.offsets() {
-                    for &d in &facings {
-                        sight_line(m, ix + dx, iy + dy, d, r, &mut line);
-                    }
+                for ((px, py), d) in o.poses(m, ix, iy) {
+                    sight_line(m, px, py, d, r, &mut line);
                 }
                 for &d in &facings {
                     sight_line(m, l.x, l.y, d, r, &mut line);
+                }
+                let m_ = o.movement.as_str();
+                if !m_.contains("WANDER") && !m_.contains("WALK_") {
+                    for dx in -r..=r {
+                        for dy in -r..=r {
+                            out.norun.insert((l.x + dx, l.y + dy));
+                        }
+                    }
                 }
                 for t in line.into_iter().chain(now) {
                     let w = out.watch.entry(t).or_default();
@@ -1042,6 +1110,7 @@ impl Graph {
         moves.reverse();
         let mut watch = vec![];
         let mut seen = vec![];
+        let mut norun = vec![];
         for n in &nodes {
             let b = cache.get(&n.0);
             watch.push(
@@ -1049,6 +1118,7 @@ impl Graph {
                     .unwrap_or_default(),
             );
             seen.push(b.and_then(|b| b.sight.get(&(n.1, n.2)).copied()));
+            norun.push(b.is_some_and(|b| b.norun.contains(&(n.1, n.2))));
         }
         let mut live: Vec<(MapId, u8)> = view.live.iter().map(|l| (l.map, l.local_id)).collect();
         live.sort_unstable();
@@ -1057,6 +1127,7 @@ impl Graph {
             moves,
             watch,
             seen,
+            norun,
             live,
         })
     }
@@ -1967,7 +2038,8 @@ fn follow(
                             None => {}
                         }
                     }
-                    let b = run_bit(s);
+                    // Into a spinner's box: walk (see `Blk::norun`).
+                    let b = if plan.norun[i + 1] { 0 } else { run_bit(s) };
                     s.hf.step(dir | b)?;
                     fed += 1;
                 }
