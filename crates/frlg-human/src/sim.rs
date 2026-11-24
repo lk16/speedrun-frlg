@@ -2692,6 +2692,10 @@ fn risk_fight(
     let early = ctx.early_bag_end.is_some_and(|e| st.seg_i <= e) && !bag;
     let pay = (ctx.p.risk_pay && ctx.p.money_model && !bag) || early;
     if bag {
+        // MODEL CHANGE `mid_bag`: the early pickups still in the bag join the counted bag.
+        if ctx.p.mid_bag {
+            st.potions += std::mem::take(&mut st.free_potions);
+        }
         potions = potions.min(st.potions);
     }
     if early {
@@ -2835,6 +2839,57 @@ fn review_keys(ctx: &Ctx, st: &mut State, name: &str) {
             }
             st.balls[0] += n;
             clock_add(st, p.pewter_ball_frames * p.text_factor);
+        }
+    }
+}
+
+/// Does any caught species learn HM01 (`Params::cut_honest`)?
+fn has_cutter(ctx: &Ctx, st: &State) -> bool {
+    let cut = ctx.dex.move_id("MOVE_CUT");
+    (0..ctx.dex.species.len()).any(|i| {
+        let d = ctx.dex.species[i].dex;
+        d != 0 && st.caught.has(d) && can_learn(ctx, i, cut)
+    })
+}
+
+/// MODEL CHANGE `Params::cut_honest`: the HM01 carrier (a hunt for one, the teach, or the walk around the tree).
+fn cut_carrier(ctx: &Ctx, st: &mut State, rng: &mut Rng, name: &str) {
+    let p = ctx.p;
+    if name == p.cut_hunt_after && !has_cutter(ctx, st) {
+        let cut = ctx.dex.move_id("MOVE_CUT");
+        let lg = p.version == "LG";
+        let skip: Vec<String> = ctx
+            .dex
+            .area(&p.cut_hunt_site, Area::Land, lg, &p.rod)
+            .map(|(_, slots, _)| {
+                slots
+                    .iter()
+                    .filter(|s| !can_learn(ctx, s.species, cut))
+                    .map(|s| ctx.dex.species[s.species].name.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let h = Hunt {
+            after: name.to_string(),
+            site: p.cut_hunt_site.clone(),
+            area: "land".into(),
+            steps: p.cut_hunt_steps,
+            skip,
+            detour_tiles: 0,
+            on_route: true,
+            stop_after: 1,
+            repel_level: 0,
+        };
+        hunt(ctx, st, rng, &h, Era::Run);
+    }
+    if name == p.cut_teach_at {
+        if has_cutter(ctx, st) {
+            clock_add(st, p.cut_teach_frames * p.text_factor);
+        } else {
+            bump(
+                st,
+                p.cut_detour_tiles as f64 * Era::Run.frames_per_tile() * p.path_overhead,
+            );
         }
     }
 }
@@ -4546,6 +4601,9 @@ pub fn attempt(
                 bump(&mut st, ctx.p.full_heal_frames * ctx.p.text_factor);
             }
             review_keys(ctx, &mut st, &seg.name);
+            if ctx.p.cut_honest {
+                cut_carrier(ctx, &mut st, &mut rng, &seg.name);
+            }
             // Poison outside battle: 1 HP per 5 steps while walking or reading text.
             if ctx.p.poison_frames_per_hp > 0.0
                 && matches!(

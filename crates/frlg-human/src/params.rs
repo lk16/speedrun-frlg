@@ -1173,6 +1173,27 @@ pub struct Params {
     /// PLAN (review item 11): the early Torrent line at one fight (Main97's Brock, `STRATEGY.md` 359-370);
     /// see [`EarlyTorrent`]. Default off.
     pub early_torrent: EarlyTorrent,
+    // ---- Review round 1, R3 round 2 (journal 2026-11-24-22-00-r3b-model-bugs): model bugs the played early and mid
+    // stages exposed (R2a / R2b journals). Default off = the model before.
+    /// MODEL CHANGE (R2b bug 1): Cerulean's tree (50,18) is the only short way to Route 9 (`frlg-mapgraph` 60 tiles
+    /// with Cut, 772 without) and no mon of the carry line learns HM01 (`decompiled/src/data/pokemon/
+    /// tmhm_learnsets.h`). On: after `cut_hunt_after`, unless a caught species can learn HM01 (a passing Paras in
+    /// Mt. Moon, `wild_encounters.json` `sMtMoon1F_LeafGreen`), the human hunts one at `cut_hunt_site` (LG Route
+    /// 24/25 Bellsprout, FR Oddish) for at most `cut_hunt_steps` steps, fleeing every other species; HM01 is taught
+    /// at `cut_teach_at` (`cut_teach_frames`, guess); with no Cut mon by then the walk around costs
+    /// `cut_detour_tiles` run tiles (772 - 60).
+    pub cut_honest: bool,
+    pub cut_hunt_after: String,
+    pub cut_hunt_site: String,
+    pub cut_hunt_steps: u32,
+    pub cut_teach_at: String,
+    pub cut_teach_frames: f64,
+    pub cut_detour_tiles: u32,
+    /// MODEL CHANGE (R2b bug 2): the counted potion bag (`potion_bag_from`) starts after `brock` instead: the
+    /// Route 3 - Rock Tunnel fights (ten Rock Tunnel / Route 9 trainers without a Center) spend only Potions bought
+    /// at mart stops (`marts[].potions`: Pewter, Cerulean) or picked up (`early_potions` left over join the bag).
+    /// Off = the old purse-at-use potions until `potion_bag_from` (Koga).
+    pub mid_bag: bool,
 }
 
 /// The WR runner's early Torrent line at one fight (`Params::early_torrent`): Torrent is x1.5 Water power at
@@ -1478,6 +1499,14 @@ impl Default for Params {
             mt_moon_heal: false,
             mt_moon_heal_frames: 800,
             early_torrent: EarlyTorrent::default(),
+            cut_honest: false,
+            cut_hunt_after: "route25-trainers".into(),
+            cut_hunt_site: "MAP_ROUTE25".into(),
+            cut_hunt_steps: 300,
+            cut_teach_at: "bike-redeem".into(),
+            cut_teach_frames: 700.0,
+            cut_detour_tiles: 712,
+            mid_bag: false,
         }
     }
 }

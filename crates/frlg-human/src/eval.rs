@@ -195,7 +195,11 @@ impl Plan {
                 v
             },
             ball_shop_from: seg_index(&self.segs, &self.params.ball_shop_from),
-            potion_bag_from: seg_index(&self.segs, &self.params.potion_bag_from),
+            potion_bag_from: if self.params.mid_bag {
+                seg_index(&self.segs, "brock").map(|i| i + 1)
+            } else {
+                seg_index(&self.segs, &self.params.potion_bag_from)
+            },
             early_bag_end: self
                 .params
                 .early_bag
