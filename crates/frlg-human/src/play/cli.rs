@@ -35,7 +35,6 @@ pub fn rom_for(plan: &Plan) -> (PathBuf, PathBuf) {
 
 fn load_plan(dex: &'static Dex, path: &str) -> Plan {
     let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-    super::early::set_plan_text(&text);
     Plan::load(dex, &text).unwrap_or_else(|e| panic!("invalid plan {path}: {e}"))
 }
 

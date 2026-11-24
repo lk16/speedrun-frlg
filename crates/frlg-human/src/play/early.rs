@@ -17,14 +17,12 @@
 //!   before Brock (item 12), the Pewter mart per the plan (item 13), no Repel on Route 3/4 (item 14),
 //!   Route 4 per the plan (items 18, 19).
 //!
-//! Plan keys the R3 model adds (`rival_name_len`, `early_potions`, `tm39_sell`, `pewter_balls`,
-//! `route4_magikarp`, `mt_moon_heal`) are read from the plan's JSON block by name ([`knob`]), with the
-//! review verdicts as defaults until the plan carries them.
-use std::sync::OnceLock;
-
+//! The R3 model's plan keys (`rival_name_len`, `early_potions`, `tm39_sell`, `pewter_balls`,
+//! `route4_magikarp`, `mt_moon_heal`; `params.rs`) decide each of those choices, so the controller plays
+//! whatever CURRENT says.
 use frlg_emu::{keys, SaveState};
 use frlg_route::Feed;
-use serde_json::{json, Value};
+use serde_json::json;
 
 use super::names::{id, names};
 use super::prims::{settle, wait_until};
@@ -33,34 +31,6 @@ use super::walk::{go, go_face, go_map, go_to, here, Node, Opts};
 use super::FPS;
 
 // ------------------------------------------------------------------------------------------------
-// Plan knobs.
-
-static PLAN_JSON: OnceLock<Value> = OnceLock::new();
-
-/// Keep the plan's JSON block for [`knob`] (called once by the CLI with the plan text).
-pub fn set_plan_text(text: &str) {
-    let v = text
-        .find("```json")
-        .map(|s| &text[s + 7..])
-        .and_then(|r| r.find("```").map(|e| &r[..e]))
-        .and_then(|j| serde_json::from_str::<Value>(j).ok())
-        .unwrap_or(Value::Null);
-    let _ = PLAN_JSON.set(v);
-}
-
-/// A plan key by name (the R3 model's new keys), or `default` while the plan does not carry it.
-pub fn knob(name: &str) -> Option<&'static Value> {
-    PLAN_JSON.get().and_then(|v| v.get(name))
-}
-
-fn knob_u64(name: &str, default: u64) -> u64 {
-    knob(name).and_then(Value::as_u64).unwrap_or(default)
-}
-
-fn knob_bool(name: &str, default: bool) -> bool {
-    knob(name).and_then(Value::as_bool).unwrap_or(default)
-}
-
 // ------------------------------------------------------------------------------------------------
 // Small RAM helpers.
 
@@ -648,7 +618,7 @@ fn starter(s: &mut Session) -> PResult<()> {
     let mp = s.plan.params.manip.clone();
     let manip = s.plan.params.starter_model == "manip";
     let p_hit = mp.press_p();
-    let rival_len = knob_u64("rival_name_len", 1);
+    let rival_len = s.plan.params.rival_name_len as u64;
     let window = mp.quiet_window.min(60);
     let base_key = ((s.stage as u64) << 32) | 0x5000_0000;
     let start = snap(s)?;
@@ -783,20 +753,10 @@ fn have(s: &mut Session, item: &str) -> u16 {
     super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), id(item))
 }
 
-/// The early Potion pickups the plan takes (`early_potions`, R3 key): a list of names, or a count
-/// of the list `route1-clerk`, `forest-hidden`, `bedroom-pc` in that order. Default (review item 9,
-/// CONFIRMED): the Route 1 clerk's sample and the Forest's hidden Potion, not the bedroom PC.
-fn early_potion(name: &str) -> bool {
-    const ORDER: [&str; 3] = ["route1-clerk", "forest-hidden", "bedroom-pc"];
-    match knob("early_potions") {
-        Some(Value::Array(a)) => a.iter().any(|v| v.as_str() == Some(name)),
-        Some(v) if v.is_u64() => {
-            let n = v.as_u64().unwrap() as usize;
-            ORDER.iter().take(n).any(|&o| o == name)
-        }
-        Some(Value::Bool(b)) => *b && name != "bedroom-pc",
-        _ => name != "bedroom-pc",
-    }
+/// The early Potion pickups the plan takes (`early_potions`: `bedroom_pc`, `route1_clerk`,
+/// `forest_hidden`; review item 9).
+fn early_potion(s: &Session, name: &str) -> bool {
+    s.plan.params.early_potions.iter().any(|p| p == name)
 }
 
 /// A starter that faints is a dead branch (review item 10): it takes no exp and forces a Center.
@@ -903,7 +863,7 @@ fn rival_lab(s: &mut Session) -> PResult<()> {
 /// `FLAG_GOT_POTION_ON_ROUTE_1`; object 1 of `Route1/map.json`, wandering up/down at (6, 28)).
 fn to_viridian(s: &mut Session) -> PResult<()> {
     s.seg = "to-viridian".into();
-    if early_potion("route1-clerk") {
+    if early_potion(s, "route1_clerk") {
         super::legs::talk_to(s, ROUTE1, 1)?;
         settle(s)?;
         let got = flag(s, "FLAG_GOT_POTION_ON_ROUTE_1");
@@ -987,7 +947,7 @@ fn forest(s: &mut Session) -> PResult<()> {
     super::legs::talk_to(s, FOREST, 5)?;
     settle(s)?;
     starter_alive(s, "Sammy")?;
-    if early_potion("forest-hidden") && !flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_POTION") {
+    if early_potion(s, "forest_hidden") && !flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_POTION") {
         go_face(s, FOREST, 3, 22, &Opts::default())?;
         s.hf.press(keys::A)?;
         settle(s)?;
@@ -1085,7 +1045,7 @@ fn repels_wanted(s: &Session) -> u16 {
 fn pewter_mart(s: &mut Session) -> PResult<()> {
     s.seg = "route3".into();
     let mart = "MAP_PEWTER_CITY_MART";
-    let sell = knob_bool("tm39_sell", true);
+    let sell = s.plan.params.tm39_sell;
     if sell && have(s, "ITEM_TM39") > 0 {
         let got = super::shop::sell(s, mart, None, &["ITEM_TM39"])?;
         s.event(
@@ -1104,7 +1064,7 @@ fn pewter_mart(s: &mut Session) -> PResult<()> {
     .filter_map(|k| s.ctx.tactics.get(*k).map(|c| c.potions).filter(|&p| p >= 0))
     .max()
     .unwrap_or(3) as u16;
-    let balls = knob_u64("pewter_balls", s.plan.params.early_balls as u64) as u16;
+    let balls = s.plan.params.pewter_balls as u16;
     let mut want = vec![("ITEM_REPEL", repels_wanted(s)), ("ITEM_POTION", stock)];
     if balls > 0 {
         let have_balls = super::dex::ball_count(s);
@@ -1160,9 +1120,18 @@ fn route3(s: &mut Session) -> PResult<()> {
 /// no heal here, so default off), the Magikarp salesman per `route4_magikarp` (R3 key, item 19
 /// CONFIRMED: default on; 500, `Route4_PokemonCenter_1F/scripts.inc:1,23-53`, object 2; YES to
 /// buy, NO to the nickname).
+fn magikarp_planned(s: &Session) -> bool {
+    s.plan.params.route4_magikarp
+        || s.plan.params.specials.iter().any(|sp| {
+            sp.after == "route4"
+                && sp.kind == "buy"
+                && sp.species.iter().any(|x| x == "SPECIES_MAGIKARP")
+        })
+}
+
 fn route4_center(s: &mut Session) -> PResult<()> {
     let center = "MAP_ROUTE4_POKEMON_CENTER_1F";
-    if knob_bool("route4_magikarp", true) && !flag(s, "FLAG_BOUGHT_MAGIKARP") {
+    if magikarp_planned(s) && !flag(s, "FLAG_BOUGHT_MAGIKARP") {
         let money = super::ram::Ram::new(&s.obs).money(s.hf.rec.emu());
         if money >= 500 {
             super::legs::talk_to(s, center, 2)?;
@@ -1185,7 +1154,7 @@ fn route4_center(s: &mut Session) -> PResult<()> {
             );
         }
     }
-    if knob_bool("mt_moon_heal", false) {
+    if s.plan.params.mt_moon_heal {
         super::legs::center_heal(s, center)?;
     }
     Ok(())
