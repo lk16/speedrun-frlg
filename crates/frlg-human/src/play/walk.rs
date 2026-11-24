@@ -431,6 +431,8 @@ pub type Node = (MapId, i16, i16);
 struct View {
     cur_map: MapId,
     live: Vec<LiveObject>,
+    /// The current map's object templates in RAM: (local id, x, y).
+    templates: Vec<(u8, i16, i16)>,
     surfing: bool,
     flags: HashMap<u16, bool>,
     temp_block: HashSet<Node>,
@@ -552,19 +554,25 @@ impl Graph {
             if cur && live_ids.contains(&o.local_id) {
                 continue; // the live object below is the truth
             }
+            // On the current map the template in RAM says where the object (re)spawns.
+            let (ox, oy) = view
+                .templates
+                .iter()
+                .find(|t| cur && t.0 == o.local_id)
+                .map_or((o.x, o.y), |t| (t.1, t.2));
             if o.is_cut_tree() {
-                out.trees.insert((o.x, o.y));
+                out.trees.insert((ox, oy));
                 continue;
             }
             if o.stationary() {
-                out.b.insert((o.x, o.y));
+                out.b.insert((ox, oy));
             }
             if o.trainer && o.sight > 0 && !beaten(o) {
                 // Off screen: every tile it could see from anywhere in its range box.
                 let mut line = vec![];
                 for (dx, dy) in o.offsets() {
                     for d in o.facings() {
-                        sight_line(m, o.x + dx, o.y + dy, d, o.sight, &mut line);
+                        sight_line(m, ox + dx, oy + dy, d, o.sight, &mut line);
                     }
                 }
                 out.sight.extend(line.into_iter().map(|t| (t, o.local_id)));
@@ -616,7 +624,11 @@ impl Graph {
                     continue;
                 }
                 // A turning trainer: every line it can have from anywhere in its box.
-                let (ix, iy) = (o.x, o.y);
+                let (ix, iy) = view
+                    .templates
+                    .iter()
+                    .find(|t| t.0 == o.local_id)
+                    .map_or((o.x, o.y), |t| (t.1, t.2));
                 let mut line = vec![];
                 for (dx, dy) in o.offsets() {
                     for &d in &facings {
@@ -1047,6 +1059,7 @@ pub fn live_objects(s: &mut Session) -> Vec<LiveObject> {
 fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
     let cur_map = here(s).map(|n| n.0).unwrap_or((0, 0));
     let live = live_objects(s);
+    let templates = super::ram::Ram::new(&s.obs).templates(s.hf.rec.emu());
     let emu = s.hf.rec.emu();
     let surfing = s.obs.player_avatar_flags(emu) & AVATAR_SURFING != 0;
     let mut flags = HashMap::new();
@@ -1064,6 +1077,7 @@ fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
     View {
         cur_map,
         live,
+        templates,
         surfing,
         flags,
         temp_block: temp_block.clone(),
@@ -1129,7 +1143,7 @@ enum Follow {
     /// The set of live objects changed while a step was under way (someone came on screen or
     /// left): plan again from the tile being entered, without letting go of the d-pad (the key
     /// held so far).
-    Refresh(u16),
+    Refresh(u16, Node),
     /// Bumped into something unexpected at this node.
     Bumped(Node),
 }
@@ -1171,6 +1185,7 @@ pub fn go_to(
     let mut refreshes = 0;
     let mut bike_tried: Option<MapId> = None;
     let mut held = 0u16;
+    let mut came_from: Option<Node> = None;
     let mut stats = WalkStats::default();
     // (shortest legal moves, the first plan's moves, the first plan's reason) at planning time.
     let mut first: Option<(usize, usize, String)> = None;
@@ -1219,7 +1234,20 @@ pub fn go_to(
                 "soft-lock: {what}: {plans} re-plans without arriving"
             )));
         }
-        let v = view(s, &temp_block);
+        // A refresh never turns straight back to the tile just left unless nothing else goes
+        // (two views that differ by one object flickering on the screen edge made the plans
+        // alternate between two tiles: Viridian Gym, 2000 refreshes in place).
+        let mut v = view(s, &temp_block);
+        if let Some(b) = came_from.take() {
+            v.temp_block.insert(b);
+            let walls = Opts {
+                cone_walls: true,
+                ..opts.clone()
+            };
+            if s.graph().plan(&v, cur, goal, &walls).is_none() {
+                v.temp_block.remove(&b);
+            }
+        }
         // Around every unbeaten trainer's sight line if there is a way, else through (a forced
         // fight: `human-run/tools/forced.py` audits which ones the plan cannot avoid).
         let walls = Opts {
@@ -1294,12 +1322,23 @@ pub fn go_to(
                 json!({"sight": scr}),
             );
         }
-        let r = follow(s, &plan, held, &mut stats)?;
+        if std::env::var("FRLG_WALK_DEBUG").is_ok_and(|v| v == "2") {
+            let ns: Vec<String> = plan
+                .nodes
+                .iter()
+                .map(|n| format!("({},{})", n.1, n.2))
+                .collect();
+            eprintln!("walk: path {}", ns.join(" "));
+        }
+        let r = follow(s, &plan, held, &mut stats, opts)?;
         held = 0;
         match r {
             Follow::Arrived => {}
             Follow::Replan => stats.replans += 1,
-            Follow::Refresh(k) => held = k,
+            Follow::Refresh(k, back) => {
+                held = k;
+                came_from = Some(back);
+            }
             Follow::Bumped(n) => {
                 bumps += 1;
                 let mn = s
@@ -1667,8 +1706,53 @@ fn wait_away(s: &mut Session, map: MapId, id: u8, tiles: &[(i16, i16)]) -> PResu
     Ok(s.frame() - t0)
 }
 
-fn follow(s: &mut Session, plan: &Plan, held: u16, stats: &mut WalkStats) -> PResult<Follow> {
+/// Is the rest of `plan` (from node `k`) still good with the live objects as they are now: no
+/// node blocked by an object, inside a sight line or a turning trainer's watch it did not have
+/// when planned?
+fn still_good(s: &mut Session, plan: &Plan, k: usize, opts: &Opts) -> bool {
+    let v = view(s, &HashSet::new());
+    let g = s.graph();
+    let Some(m) = v
+        .cur_live
+        .clone()
+        .or_else(|| g.maps.get(&v.cur_map).cloned())
+    else {
+        return false;
+    };
+    let b = g.blocked(&v, v.cur_map, &m, opts);
+    for j in k..plan.nodes.len() {
+        let n = plan.nodes[j];
+        if n.0 != v.cur_map {
+            continue;
+        }
+        let t = (n.1, n.2);
+        if b.b.contains(&t)
+            || (b.sight.contains_key(&t) && plan.seen[j].is_none())
+            || (b.watch.contains_key(&t) && plan.watch[j].is_empty())
+        {
+            if std::env::var_os("FRLG_WALK_DEBUG").is_some() {
+                eprintln!(
+                    "walk: plan spoiled at {t:?}: object {} sight {:?} watch {:?}",
+                    b.b.contains(&t),
+                    b.sight.get(&t),
+                    b.watch.get(&t)
+                );
+            }
+            return false;
+        }
+    }
+    true
+}
+
+fn follow(
+    s: &mut Session,
+    plan: &Plan,
+    held: u16,
+    stats: &mut WalkStats,
+    opts: &Opts,
+) -> PResult<Follow> {
     let mut last_key = held;
+    let mut known = plan.live.clone();
     for (i, mv) in plan.moves.iter().enumerate() {
         let from = plan.nodes[i];
         let to = plan.nodes[i + 1];
@@ -1851,8 +1935,17 @@ fn follow(s: &mut Session, plan: &Plan, held: u16, stats: &mut WalkStats) -> PRe
                 stats.moves += step_tiles(from, to);
                 // The step into `to` has started. Someone came on screen or left: plan again
                 // from `to` while the step runs (no frame passes while planning).
-                if i + 1 < plan.moves.len() && live_set(s) != plan.live {
-                    return Ok(Follow::Refresh(dir));
+                // Only a change that spoils the rest of the plan re-plans: alternating between
+                // two near-equal paths on every flicker of the object set made the walker
+                // circle the Viridian Gym spinners.
+                if i + 1 < plan.moves.len() {
+                    let now = live_set(s);
+                    if now != known {
+                        known = now;
+                        if !still_good(s, plan, i + 2, opts) {
+                            return Ok(Follow::Refresh(dir, from));
+                        }
+                    }
                 }
             }
         }

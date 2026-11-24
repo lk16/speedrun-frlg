@@ -302,6 +302,31 @@ impl<'a> Ram<'a> {
             .collect()
     }
 
+    /// The current map's object templates as the game keeps them
+    /// (`gSaveBlock1Ptr->objectEventTemplates`, 64 x 0x18 bytes at 0x8E0 of SaveBlock1,
+    /// `decompiled/include/global.h:789`, `struct ObjectEventTemplate` in `global.fieldmap.h:110-134`):
+    /// (local id, x, y). Objects (re)spawn from these (`TrySpawnObjectEvents`,
+    /// `decompiled/src/event_object_movement.c:1808`), and scripts move them
+    /// (`SetObjEventTemplateCoords`, `decompiled/src/overworld.c:448`; `copyobjectxytoperm`,
+    /// `scrcmd.c:1094`): the v4 Viridian Gym's beaten Takashi stood at (10, 4), not his `map.json`
+    /// (10, 2), and the walker circled the spinners re-planning around the wrong tile.
+    pub fn templates(&self, emu: &mut Emu) -> Vec<(u8, i16, i16)> {
+        let Some(sb) = self.obs.save_block1(emu) else {
+            return vec![];
+        };
+        (0..64u32)
+            .map(|i| sb + 0x8E0 + i * 0x18)
+            .map(|a| {
+                (
+                    emu.read8(a),
+                    emu.read16(a + 4) as i16,
+                    emu.read16(a + 6) as i16,
+                )
+            })
+            .filter(|t| t.0 != 0)
+            .collect()
+    }
+
     /// The player's facing direction (`facingDirection`, low nibble of byte 0x18 of the player's
     /// object event; `DIR_SOUTH` 1, `DIR_NORTH` 2, `DIR_WEST` 3, `DIR_EAST` 4,
     /// `decompiled/include/constants/event_object_movement.h`).
