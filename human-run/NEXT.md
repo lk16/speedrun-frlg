@@ -1,5 +1,14 @@
 # Handoff for the next session
 
+## 2026-11-24 review round 1 (read this first)
+
+The human review of the v4 video (`video-analysis/1122-lgdescent-human-review.md`, read-only, items 1-20 up to
+Mt. Moon) is now the work queue: `PROMPT.md` *Review round 1* maps every item to a step (R1 walker, R2 early
+controller stages from power-on, R3 model/plan evaluations, R4 the v5 run and video) and adds standing rules:
+**zero bumps, no unexplained detours, skipped trainers never fought, the early game played by the current
+controller** (the lost Nov-21 prefix is retired). Items 8 (forest Antidote) and 20 (Persim) need no work; item 2
+(text speed) is a re-check only. The ranked optimiser queue below still holds after R3.
+
 ## 2026-11-23 09:30 session end (main session; read this first)
 
 Branch `human-run-play` (cut from `human-run` 2026-11-22). The session ran the PROMPT "Next phase" S0-S9 and

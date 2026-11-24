@@ -1,7 +1,8 @@
 # human-run: a human-executable Round 2 plan, optimised by simulation
 
 > **Open-ended run:** start the 10-minute watchdog cron from `CLAUDE.md` ("Open-ended tasks: the watchdog cron") in your first turn, use `bin/frlg-watchdog` for status, and read `human-run/NEXT.md` for the ranked search queue.
-> **Next phase:** a controller that plays the plan in libmgba and renders a review video. See
+> **Now:** the *Review round 1* section below (fixes from the human review of the v4 video), steps R0-R4.
+> **Previous phase:** a controller that plays the plan in libmgba and renders a review video. See
 > *Next phase: a playing controller and a review video* below, and work its step plan in order.
 
 You are on branch `human-run`. This target is different from everything else in the repo:
@@ -292,6 +293,72 @@ times go into `calibration.md` and, as a labelled MODEL CHANGE, into the model.
 Steps S6-S8 can be split across worktree agents per split range once S2-S4 exist. Each agent
 starts from the previous range's checkpoint savestate. Keep a running list of model bugs the
 controller exposes. They are the most valuable output after the video itself.
+
+## Review round 1: fixes from the human review of the v4 video
+
+A human watched `videos/1122-lgdescent-s11-v4-full.mp4` up to Mt. Moon and filed 20 items in
+`video-analysis/1122-lgdescent-human-review.md` (**read-only: never edit that file**; it carries the
+per-item Claude verdicts with decomp citations). The review continues later with item 21 onward;
+when it does, add the new items to the table below in the same way.
+
+**Standing rules the review adds** (they hold for every stage, not just the ones reviewed):
+
+- **No bump is acceptable.** Every attempted step either turns the player in place or moves them
+  to another tile. A "bumped ..." event is a controller bug (missing NPC/object in the collision
+  grid, a flag ignored, a stale position) and counts against the run like a failed check. The
+  played-run summary reports the bump count; the target is 0.
+- **No detours.** Each walked leg is compared with the shortest legal path at the moment it is
+  planned (ledges, live NPCs, trainer sight lines). Extra steps are logged as `warn` with the
+  reason; an unexplained detour is a bug.
+- **Trainers the plan skips are never fought by accident.** Sight lines are drawn from each
+  trainer's *current* RAM position and facing; a wanderer is passed by waiting for it to face away.
+- **The early game is played by the current controller.** The v4 prefix to Giovanni 1 came from
+  the lost 2026-11-21 controller and is retired: the next played run starts at power-on, through
+  new early stages in `play/` (`legs::stages()` gets a boot-to-Giovanni-1 head).
+
+| # | Item | Verdict | Work (owner step) |
+| --- | --- | --- | --- |
+| 1 | No encounter-seed manip at the title | CONFIRMED, ~60-90 s to Brock | R2: time the title A for a quiet wild seed (human jitter, reset when not quiet), then the starter naming frame |
+| 2 | Text speed Mid | REJECTED (Fast from the bedroom) | R2: re-check the 00:50 frame; set Fast at the first menu that allows it |
+| 3 | Rival name | CONFIRMED, small | R2: one-letter "New name" path; rebuild the starter naming table for the shifted frames. R3: price it in the model |
+| 4 | Wall/NPC bumps (85 in v4) | CONFIRMED | R1: walker collision grid from live objects, bump = bug, regression set from v4 bump sites |
+| 5 | Detours (Pallet) | CONFIRMED | R1: `frlg-mapgraph blocked_tiles` respects object flags; detour check per leg. R2: early stages |
+| 6 | Starter Sp. Atk IV 29 | UNSURE | R3: paired `min_spa` 30 vs 29 on CURRENT |
+| 7 | Wilds not weakened before balls | CONFIRMED (controller) | R2: weaken rule live from the first catch; R1/R2 test on a Route 1/2 catch |
+| 8 | Forest Antidote | REJECTED (-5 s) | none (Antidotes are bought at Lavender) |
+| 9 | Potions not picked up | CONFIRMED | R2: Route 1 clerk Potion, Forest hidden Potion (3,22); bedroom PC Potion only if R3 says so |
+| 10 | Starter fainted to Sammy | CONFIRMED | R2: heal from bag before/in Sammy; a starter faint is a dead branch |
+| 11 | No Brock Torrent line | CONFIRMED, size unmeasured | R3: early-only Torrent window in the model (Brock, Route 3); R2: steer HP (Sammy poison, 5/7/9 thresholds, Withdraw vs Onix, Liam with Tackle, no heal before the gym) |
+| 12 | Pewter Center visit | CONFIRMED (follows from 10) | R2: no Center before Brock |
+| 13 | Pewter Mart: no balls, TM39 not sold | UNSURE, leaning yes for TM39 | R3: model the TM39 sale (+1500) and a Pewter ball buy; R2: do what R3 accepts |
+| 14 | Repel on Route 3 (no grass on path) | CONFIRMED | R3: drop `route3` from `repel_on`; controller uses Repels only on paths that cross encounter tiles |
+| 15 | No Torrent on Route 3 | UNSURE | R3: `torrent_heal_below` 0 and per-fight thresholds, after 16/17 |
+| 16 | Youngster Ben fought | CONFIRMED (unintended) | R1: sight lines; walk around north |
+| 17 | Lass Robin fought | CONFIRMED (~38 s) | R1: wait at (39,9) until she faces away |
+| 18 | Mt. Moon Center heal | UNSURE | R3: model the heal as a knob after 11/14; R2 follows |
+| 19 | Magikarp not bought at Route 4 | CONFIRMED | R3: model the purchase (money, slot, dex-finish trip removed); R2: buy if accepted |
+| 20 | Persim Berry | UNSURE, break-even | none now; revisit with Misty's AI and our defences if Misty is slow |
+
+### Review step plan
+
+- [x] **R0. Plan.** This section, `NEXT.md`, the STRATEGY.md Water Gun correction (item 11).
+- [ ] **R1. Walker.** Live-object collision, flag-aware `blocked_tiles`, trainer sight lines from
+  current position and facing, wait-for-facing for wanderers, bump and detour accounting.
+  *Check:* replays of the v4 bump sites from their savestates walk through without a bump; Robin
+  and Ben are passed without a fight; the summary reports bumps = 0 on every stage replayed.
+- [ ] **R2. Early stages, boot to Giovanni 1,** in the current controller (`play/`), for the CURRENT
+  plan: title seed + starter manip with human timing, one-letter rival, Fast text, early Potions,
+  weaken-then-catch, Sammy/Brock Torrent line without a Center, Pewter mart per R3, Route 3 without a
+  Repel and without Ben/Robin, Route 4 per R3, Mt. Moon, then Misty, Bill, Bike, Rock Tunnel and the
+  hideout with the existing primitives. *Check:* `play` from power-on reaches `giovanni1`, verifies
+  from boot, and the splits are listed against the v4 prefix and the model p50.
+- [ ] **R3. Model and plan.** Early-only Torrent window, route 3 Repel, `min_spa` 30, TM39 sale and
+  Pewter balls, Magikarp at Route 4, Mt. Moon heal knob, rival-name frames, early Potion pickups,
+  `torrent_heal_below`. Each is a paired evaluation with a `scores.jsonl` row; accepted ones become a
+  new plan and CURRENT.
+- [ ] **R4. v5 run and video.** A full played run of CURRENT from power-on with R1-R3 in, verified from
+  boot, rendered (`VIDEO.md`), journal with splits vs v4 and the model, bump count, and the review
+  items each one closes.
 
 ## Rules that still apply
 

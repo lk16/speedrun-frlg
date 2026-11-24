@@ -256,7 +256,9 @@ questline [WR]. In the LG route the E4 segments themselves are near-identical to
 
 1. Lab (rival 1) -> Route 1 -> Viridian -> Route 2 -> Viridian Forest -> Pewter; **Weedle caught
    with a plain Poke Ball** ~0:09 (chat: weaken first, "usually 78%") ; Pewter mart (Parlyz Heal;
-   money 4508) ~0:15; Water Gun learned Lv13 pre-Brock; **Brock 14:40** (3 caught).
+   money 4508) ~0:15; **Brock 14:40** (3 caught). (Corrected 2026-11-24 from the human review of
+   the v4 video, item 11: Main97 usually reaches L13 and learns Water Gun at the *end* of the Brock
+   fight, not before it; the earlier "Water Gun learned Lv13 pre-Brock" here was wrong.)
 2. Route 3 Bug Catchers -> **Wartortle ~0:21** -> PC box deposit ~0:22 -> Mt. Moon (Rocket,
    fossils) -> Cerulean: **Misty 28:01** (Staryu Lv18; Squirtle moveset Tackle/Water Gun/Bite/
    Mega Kick/Water Pulse) (8 caught).
