@@ -679,88 +679,96 @@ fn fly_lavender(s: &mut Session) -> PResult<()> {
 }
 
 pub fn stages() -> Vec<Stage> {
-    // Power-on to `mt-moon-pc` (`early.rs`), then from Giovanni 1 on.
+    // Power-on to the Route 4 Center (`play/early.rs`, ends in `mt-moon-pc`), then the Center to
+    // Giovanni 1 (`play/early2.rs`), then the rest.
     super::early::stages()
         .into_iter()
-        .chain(vec![
-            Stage {
-                name: "giovanni1",
-                run: noop,
-            },
-            Stage {
-                name: "hideout-out",
-                run: hideout_out,
-            },
-            Stage {
-                name: "hm02-trip",
-                run: hm02_walk,
-            },
-            Stage {
-                name: "hm02",
-                run: hm02,
-            },
-            Stage {
-                name: "to-vermilion",
-                run: to_vermilion,
-            },
-            Stage {
-                name: "surge-cans",
-                run: surge_cans,
-            },
-            Stage {
-                name: "surge",
-                run: surge,
-            },
-            Stage {
-                name: "fly-lavender",
-                run: fly_lavender,
-            },
-            Stage {
-                name: "lavender-heal",
-                run: lavender_heal,
-            },
-            Stage {
-                name: "tower-rival",
-                run: tower_rival,
-            },
-            Stage {
-                name: "tower-marowak",
-                run: tower_marowak,
-            },
-            Stage {
-                name: "fuji-flute",
-                run: tower_fuji,
-            },
-            Stage {
-                name: "fly-celadon",
-                run: fly_celadon,
-            },
-            Stage {
-                name: "snorlax",
-                run: snorlax,
-            },
-            Stage {
-                name: "cycling-road",
-                run: cycling,
-            },
-            Stage {
-                name: "safari-trip",
-                run: safari_trip,
-            },
-            Stage {
-                name: "safari-walk",
-                run: safari_walk,
-            },
-            Stage {
-                name: "warden",
-                run: warden,
-            },
-            Stage {
-                name: "koga",
-                run: koga,
-            },
-        ])
-        .chain(super::legs2::stages())
-        .chain(super::legs3::stages())
+        .chain(super::early2::stages())
+        .chain(rest())
         .collect()
+}
+
+fn rest() -> Vec<Stage> {
+    vec![
+        Stage {
+            name: "giovanni1",
+            run: noop,
+        },
+        Stage {
+            name: "hideout-out",
+            run: hideout_out,
+        },
+        Stage {
+            name: "hm02-trip",
+            run: hm02_walk,
+        },
+        Stage {
+            name: "hm02",
+            run: hm02,
+        },
+        Stage {
+            name: "to-vermilion",
+            run: to_vermilion,
+        },
+        Stage {
+            name: "surge-cans",
+            run: surge_cans,
+        },
+        Stage {
+            name: "surge",
+            run: surge,
+        },
+        Stage {
+            name: "fly-lavender",
+            run: fly_lavender,
+        },
+        Stage {
+            name: "lavender-heal",
+            run: lavender_heal,
+        },
+        Stage {
+            name: "tower-rival",
+            run: tower_rival,
+        },
+        Stage {
+            name: "tower-marowak",
+            run: tower_marowak,
+        },
+        Stage {
+            name: "fuji-flute",
+            run: tower_fuji,
+        },
+        Stage {
+            name: "fly-celadon",
+            run: fly_celadon,
+        },
+        Stage {
+            name: "snorlax",
+            run: snorlax,
+        },
+        Stage {
+            name: "cycling-road",
+            run: cycling,
+        },
+        Stage {
+            name: "safari-trip",
+            run: safari_trip,
+        },
+        Stage {
+            name: "safari-walk",
+            run: safari_walk,
+        },
+        Stage {
+            name: "warden",
+            run: warden,
+        },
+        Stage {
+            name: "koga",
+            run: koga,
+        },
+    ]
+    .into_iter()
+    .chain(super::legs2::stages())
+    .chain(super::legs3::stages())
+    .collect()
 }

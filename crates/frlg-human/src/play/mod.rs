@@ -17,6 +17,7 @@ pub mod dex;
 pub mod dex_test;
 pub mod dexfin;
 pub mod early;
+pub mod early2;
 pub mod events;
 pub mod fallback_battle;
 pub mod human;
@@ -34,6 +35,9 @@ pub mod ram;
 pub mod session;
 pub mod shop;
 pub mod walk;
+pub mod walk_check;
+#[cfg(test)]
+mod walk_test;
 
 /// GBA frames per second (`human-run/PROMPT.md`, *The target*).
 pub const FPS: f64 = 59.7275;

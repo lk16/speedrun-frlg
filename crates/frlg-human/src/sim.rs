@@ -1829,7 +1829,7 @@ fn battle(
 
 /// A TM/HM or tutor move the species can be taught (`tmhm_learnsets.h`,
 /// `tutor_learnsets.h`).
-fn can_learn(ctx: &Ctx, species: usize, mv: usize) -> bool {
+pub(crate) fn can_learn(ctx: &Ctx, species: usize, mv: usize) -> bool {
     let sp = &ctx.dex.species[species];
     sp.tmhm.contains(&mv) || sp.tutor.contains(&mv)
 }
