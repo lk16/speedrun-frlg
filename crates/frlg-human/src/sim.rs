@@ -1449,7 +1449,7 @@ fn encounter(
         if ok {
             got(st, sp.dex, level);
         }
-    } else if fights_wild(ctx, st.carry) && ctx.p.battle_sim {
+    } else if fights_wild(ctx, st.carry, st.hp_frac) && ctx.p.battle_sim {
         let foe = wild_mon(ctx, st, slot.species, level);
         // A lost wild fight is a whiteout like any other; the human does not give up the run over it.
         sim_battle(
@@ -1468,7 +1468,7 @@ fn encounter(
                 wild: true,
             },
         );
-    } else if fights_wild(ctx, st.carry) {
+    } else if fights_wild(ctx, st.carry, st.hp_frac) {
         let e = exp_gain(sp.exp_yield as u8, level as u8, false);
         let t = turns_per_mon(level as f64, effective_level(st, ctx.p), st.strength, 1.0);
         bump(st, t * ctx.turn() + ctx.mon_overhead());
@@ -1857,10 +1857,11 @@ pub fn entry_heal_floor(
 }
 
 /// A wild encounter the human does not catch is fought for exp (not fled) while the carry is below
-/// `fight_until_level`, or always with `fight_wild` (the rule of `run_encounters`; the playing
-/// controller asks the same function, `play/dex.rs`).
-pub fn fights_wild(ctx: &Ctx, carry: u32) -> bool {
-    ctx.p.fight_wild || carry < ctx.p.fight_until_level
+/// `fight_until_level`, or always with `fight_wild`, and only while the carry's HP fraction `hp` is at
+/// least `wild_fight_floor` (the rule of `run_encounters`; the playing controller asks the same
+/// function, `play/dex.rs`).
+pub fn fights_wild(ctx: &Ctx, carry: u32, hp: f64) -> bool {
+    (ctx.p.fight_wild || carry < ctx.p.fight_until_level) && hp >= ctx.p.wild_fight_floor
 }
 
 /// One `battle_sim` fight, described.

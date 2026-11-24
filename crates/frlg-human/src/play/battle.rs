@@ -1293,9 +1293,15 @@ fn use_move(f: &mut HumanFeed, c: &Ctl, sc: &Scene, mv: usize) -> Result<(), Rou
     let obs = c.obs;
     let slot = sc.me.moves.iter().position(|&m| m == mv).unwrap_or(0) as u8;
     nav_2x2(f, "action cursor on FIGHT", 0, |e| obs.action_cursor(e, 0))?;
+    // With no usable move FIGHT goes straight to Struggle (`AreAllMovesUnusable`,
+    // `decompiled/src/battle_main.c:3146-3147`), so there is no move menu: the action menu just closes (the r2a forest soft-lock: a Metapod whose Harden ran out).
     press_until(f, "the move menu", keys::A, 4, 30, |e| {
         obs.battle_controller_is(e, 0, "HandleInputChooseMove")
+            || !obs.battle_controller_is(e, 0, "HandleInputChooseAction")
     })?;
+    if !obs.battle_controller_is(f.emu(), 0, "HandleInputChooseMove") {
+        return Ok(());
+    }
     nav_2x2(f, "move cursor", slot, |e| obs.move_cursor(e, 0))?;
     press_until(f, "the move chosen", keys::A, 4, 30, |e| {
         !obs.battle_controller_is(e, 0, "HandleInputChooseMove")

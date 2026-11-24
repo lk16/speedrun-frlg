@@ -417,8 +417,69 @@ const BALL_JMAX: usize = 15_000;
 /// Bedroom -> Pallet -> Oak's trigger at the north exit ((12, 1), `PalletTown/map.json`
 /// coord_events, `PalletTown_EventScript_OakTriggerLeft`) -> his scene into the lab -> the
 /// starter offer (lab scene var 2, `ChooseStarterScene`) -> stand below the Squirtle ball facing it.
+/// The bedroom PC's new-game Potion (`gNewGamePCItems`, `decompiled/src/player_pc.c:99-102`): the PC
+/// is the bg event at (1, 1) of `PalletTown_PlayersHouse_2F/map.json`; ITEM STORAGE, WITHDRAW ITEM
+/// (`sMenuActions_TopMenu`, `sMenuActions_ItemPc`, `player_pc.c:85-97`), the Potion row and its
+/// WITHDRAW (`item_pc.c` `Task_ItemPcMain` -> `Task_ItemPcSubmenuRun` -> `Task_ItemPcWithdraw`; one
+/// Potion, no quantity box), then B back out. Every menu's cursor starts on its first row.
+fn bedroom_pc_potion(s: &mut Session) -> PResult<()> {
+    let room = "MAP_PALLET_TOWN_PLAYERS_HOUSE_2F";
+    go_face(s, room, 1, 1, &Opts::default())?;
+    s.hf.press(keys::A)?;
+    let potion = id("ITEM_POTION");
+    let start = s.hf.fed();
+    let mut free_run = 0;
+    loop {
+        let got = super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), potion) > 0;
+        let menu = [
+            "Task_TopMenuHandleInput",
+            "Task_TopMenu_ItemStorageSubmenu_HandleInput",
+            "Task_ItemPcMain",
+            "Task_ItemPcSubmenuRun",
+            "Task_ItemPcHandleWithdrawMultiple",
+            "Task_ItemPcWaitButtonAndFinishWithdrawMultiple",
+        ]
+        .iter()
+        .any(|t| task(s, t));
+        // Free for a while with no PC menu up: the PC's field menus leave the player looking free
+        // (no script lock while they run), and a later `settle` A there would reopen the empty PC.
+        if got && !menu && super::prims::is_free(s) {
+            free_run += 1;
+            if free_run >= 20 {
+                break;
+            }
+            s.hf.step(0)?;
+            continue;
+        }
+        free_run = 0;
+        if s.hf.fed() - start > 4000 {
+            return Err(PlayError::Death("soft-lock: bedroom PC".into()));
+        }
+        if !menu && !s.obs.field_controls_locked(s.hf.rec.emu()) && !got {
+            // Between screens (fades): wait.
+            s.hf.step(0)?;
+            continue;
+        }
+        if super::prims::fade_active(s) {
+            s.hf.step(0)?;
+            continue;
+        }
+        s.hf.press(if got { keys::B } else { keys::A })?;
+        s.hf.idle(6)?;
+    }
+    s.event(
+        "decision",
+        "bedroom PC: withdrew the Potion (plan early_potions bedroom_pc)",
+        json!({"potions": 1}),
+    );
+    Ok(())
+}
+
 fn bedroom_to_ball(s: &mut Session) -> PResult<()> {
     options(s)?;
+    if early_potion(s, "bedroom_pc") {
+        bedroom_pc_potion(s)?;
+    }
     go_map(s, PALLET, &Opts::default())?;
     let g = s.graph();
     let (pallet, lab) = (g.id(PALLET), g.id(LAB));
@@ -896,6 +957,7 @@ fn rival_lab_trainer(s: &Session) -> &'static str {
 /// `rival-lab`: walk out; the rival's trigger row (y 8, `PalletTown_ProfessorOaksLab/map.json`
 /// coord_events, scene var 3) starts the fight; his exit scene; out the door (`exit-lab`).
 fn rival_lab(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     let tr = rival_lab_trainer(s);
     preheal(s, "rival-lab", tr)?;
     s.seg = "rival-lab".into();
@@ -913,6 +975,7 @@ fn rival_lab(s: &mut Session) -> PResult<()> {
 /// `to-viridian` with the Route 1 clerk's free Potion (`Route1/scripts.inc:4-22`,
 /// `FLAG_GOT_POTION_ON_ROUTE_1`; object 1 of `Route1/map.json`, wandering up/down at (6, 28)).
 fn to_viridian(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "to-viridian".into();
     if early_potion(s, "route1_clerk") {
         super::legs::talk_to(s, ROUTE1, 1)?;
@@ -938,6 +1001,7 @@ fn to_viridian(s: &mut Session) -> PResult<()> {
 /// `parcel`: entering the Viridian mart plays the parcel scene (`ViridianCity_Mart/scripts.inc`,
 /// `VAR_MAP_SCENE_VIRIDIAN_CITY_MART` 1, `ITEM_OAKS_PARCEL`); then back out.
 fn parcel(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "parcel".into();
     go_map(s, "MAP_VIRIDIAN_CITY_MART", &Opts::default())?;
     settle(s)?;
@@ -952,6 +1016,7 @@ fn parcel(s: &mut Session) -> PResult<()> {
 /// (`PalletTown_ProfessorOaksLab/scripts.inc` delivery scene, sets
 /// `VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN` 1).
 fn deliver(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "deliver".into();
     super::legs::talk_to(s, LAB, 4)?;
     settle(s)?;
@@ -967,6 +1032,7 @@ fn deliver(s: &mut Session) -> PResult<()> {
 /// ((20, 8) / (22, 8), `ViridianCity/map.json` coord_events, var 1) and ends with his var at 2
 /// (`ViridianCity/scripts.inc:234`), which opens the road to Route 2.
 fn tutorial(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "tutorial".into();
     go_map(s, "MAP_ROUTE2", &Opts::default())?;
     if var(s, "VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN") < 2 {
@@ -982,6 +1048,7 @@ fn tutorial(s: &mut Session) -> PResult<()> {
 /// (`ViridianForest/map.json` bg_events, `FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_POTION`), and out of the
 /// north exit.
 fn forest(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "route2-encounters".into();
     go_map(s, FOREST, &Opts::default())?;
     s.seg = "forest-encounters".into();
@@ -1026,6 +1093,7 @@ fn forest(s: &mut Session) -> PResult<()> {
 /// `to-pewter`: Route 2's north half into Pewter and to the gym door (`PewterCity/map.json` warp
 /// (15, 16)); no Center on the way (review item 12).
 fn to_pewter(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "to-pewter".into();
     go_map(s, GYM, &Opts::default())?;
     Ok(())
@@ -1036,6 +1104,7 @@ fn to_pewter(s: &mut Session) -> PResult<()> {
 /// own pre-fight rule (review items 11, 12). The badge and TM39 are Brock's
 /// (`PewterCity_Gym/scripts.inc`).
 fn brock(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     if s.plan.params.route_style == "wr" {
         preheal(s, "pewter-gym-trainer", "TRAINER_CAMPER_LIAM")?;
         s.seg = "pewter-gym-trainer".into();
@@ -1094,6 +1163,7 @@ fn repels_wanted(s: &Session) -> u16 {
 /// 14), Potions to the plan's stock for the fights before Cerulean (`fight_tactics` `potions`), and
 /// Poké Balls per `pewter_balls` (R3 key, default `early_balls`).
 fn pewter_mart(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "route3".into();
     let mart = "MAP_PEWTER_CITY_MART";
     let sell = s.plan.params.tm39_sell;
@@ -1137,6 +1207,7 @@ fn pewter_mart(s: &mut Session) -> PResult<()> {
 /// order, the others passed (Ben, Robin, ...: review items 16, 17, sight lines are the walker's),
 /// then Route 4 into its Pokémon Center, where the run checkpoints as `mt-moon-pc`.
 fn route3(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     let list: Vec<String> = s
         .plan
         .params

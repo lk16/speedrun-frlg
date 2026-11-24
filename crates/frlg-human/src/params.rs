@@ -604,6 +604,11 @@ pub struct Params {
     pub fight_wild: bool,
     /// Fight non-target wild encounters while the carry is below this level (else flee).
     pub fight_until_level: u32,
+    /// PLAN (r2a controller run, journal 2026-11-24-18-00-r2a): a wild encounter is fought for exp
+    /// (`fight_wild` / `fight_until_level`) only while the carry has at least this fraction of its max HP;
+    /// below it the human runs. 0 = no floor (the old rule). Shared by the simulator and the controller
+    /// (`sim::fights_wild`).
+    pub wild_fight_floor: f64,
     /// Effective-level multiplier of a full team over the lone carry (guess).
     pub team_bonus: f64,
     pub hunts: Vec<Hunt>,
@@ -1308,6 +1313,7 @@ impl Default for Params {
             safari_bait_from: 0,
             fight_wild: false,
             fight_until_level: 30,
+            wild_fight_floor: 0.0,
             team_bonus: 1.08,
             hunts: vec![],
             specials: vec![],

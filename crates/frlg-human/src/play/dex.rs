@@ -369,7 +369,8 @@ pub fn wild_battle(s: &mut Session) -> Option<PResult<()>> {
     // the simulator's own rule for encounters on the way).
     if plan == WildPlan::Flee && s.dex.hunt.is_none() {
         let carry = carry_level(s);
-        if sim::fights_wild(&s.ctx, carry) {
+        let hp = carry_hp_frac(s);
+        if sim::fights_wild(&s.ctx, carry, hp) {
             let (sp, lv) = wild_mon(s);
             s.event(
                 "decision",
@@ -434,6 +435,22 @@ pub fn carry_level(s: &mut Session) -> u32 {
         .map(|m| m.level as u32)
         .max()
         .unwrap_or(0)
+}
+
+/// The carry's HP fraction (the party's highest member of the starter line), 0 when fainted.
+pub fn carry_hp_frac(s: &mut Session) -> f64 {
+    let line: Vec<u16> = s
+        .ctx
+        .starter_line
+        .iter()
+        .map(|&i| id(&s.plan.dex.species[i].name))
+        .collect();
+    Ram::new(&s.obs)
+        .party(s.hf.rec.emu())
+        .iter()
+        .filter(|m| line.contains(&m.species))
+        .max_by_key(|m| m.level)
+        .map_or(0.0, |m| m.hp as f64 / m.max_hp.max(1) as f64)
 }
 
 /// The Safari action menu takes input: `gBattlerControllerFuncs[0]` is the Safari controller's
