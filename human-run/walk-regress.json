@@ -1,20 +1,20 @@
 [
  {
   "name": "v4-bump00",
-  "state": "states/human-play/r1-bump-sites/0004044-bump00.state",
+  "state": "states/human-play/r1-bump-sites-free/bump00.state",
   "legs": [
    [
     "MAP_PALLET_TOWN",
-    6,
-    8
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 0), (6, 7)); re-planning [walk past the bump site; player PalletTown_PlayersHouse_1F (5, 8)]"
+  "note": "frame 4344: bumped something at ((3, 0), (6, 7)); re-planning Cause: old controller: held toward a plain tile of a three-wide exit mat (only the arrow tile warps). Player at PalletTown_PlayersHouse_1F (5, 8)."
  },
  {
   "name": "v4-bump01",
-  "state": "states/human-play/r1-bump-sites/0007632-bump01.state",
+  "state": "states/human-play/r1-bump-sites-free/bump01.state",
   "legs": [
    [
     "MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB",
@@ -23,11 +23,11 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((4, 3), (8, 5)); re-planning [walk past the bump site; player PalletTown_ProfessorOaksLab (9, 5)]"
+  "note": "frame 7932: bumped something at ((4, 3), (8, 5)); re-planning Cause: old controller: standing object missing from the collision grid. Player at PalletTown_ProfessorOaksLab (9, 5)."
  },
  {
   "name": "v4-bump02",
-  "state": "states/human-play/r1-bump-sites/0007919-bump02.state",
+  "state": "states/human-play/r1-bump-sites-free/bump02.state",
   "legs": [
    [
     "MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB",
@@ -36,24 +36,24 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((4, 3), (8, 5)); re-planning [walk past the bump site; player PalletTown_ProfessorOaksLab (9, 5)]"
+  "note": "frame 8219: bumped something at ((4, 3), (8, 5)); re-planning Cause: old controller: standing object missing from the collision grid. Player at PalletTown_ProfessorOaksLab (9, 5)."
  },
  {
   "name": "v4-bump03",
-  "state": "states/human-play/r1-bump-sites/0012116-bump03.state",
+  "state": "states/human-play/r1-bump-sites-free/bump03.state",
   "legs": [
    [
     "MAP_PALLET_TOWN",
-    16,
-    13
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 0), (16, 13)); re-planning [walk past the bump site; player PalletTown_ProfessorOaksLab (7, 12)]"
+  "note": "frame 12416: bumped something at ((3, 0), (16, 13)); re-planning Cause: old controller: held toward a plain tile of a three-wide exit mat (only the arrow tile warps). Player at PalletTown_ProfessorOaksLab (7, 12)."
  },
  {
   "name": "v4-bump04",
-  "state": "states/human-play/r1-bump-sites/0033464-bump04.state",
+  "state": "states/human-play/r1-bump-sites-free/bump04.state",
   "legs": [
    [
     "MAP_VIRIDIAN_CITY",
@@ -62,24 +62,24 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 1), (21, 8)); re-planning [walk past the bump site; player ViridianCity (20, 8)]"
+  "note": "frame 33764: bumped something at ((3, 1), (21, 8)); re-planning Cause: old controller: standing object missing from the collision grid. Player at ViridianCity (20, 8)."
  },
  {
   "name": "v4-bump05",
-  "state": "states/human-play/r1-bump-sites/0033740-bump05.state",
+  "state": "states/human-play/r1-bump-sites-free/bump05.state",
   "legs": [
    [
     "MAP_ROUTE2",
-    7,
-    69
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 1), (21, 8)); re-planning [walk past the bump site; player ViridianCity (20, 8)]"
+  "note": "frame 34040: bumped something at ((3, 1), (21, 8)); re-planning Cause: old controller: standing object missing from the collision grid. Player at ViridianCity (20, 8)."
  },
  {
   "name": "v4-bump06",
-  "state": "states/human-play/r1-bump-sites/0034987-bump06.state",
+  "state": "states/human-play/r1-bump-sites-free/bump06.state",
   "legs": [
    [
     "MAP_VIRIDIAN_FOREST",
@@ -88,11 +88,11 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((1, 0), (29, 61)); re-planning [walk past the bump site; player ViridianForest (29, 62)]"
+  "note": "frame 35287: bumped something at ((1, 0), (29, 61)); re-planning Cause: old controller: warp still loading (time-out counted as a bump). Player at ViridianForest (29, 62)."
  },
  {
   "name": "v4-bump07",
-  "state": "states/human-play/r1-bump-sites/0050869-bump07.state",
+  "state": "states/human-play/r1-bump-sites-free/bump07.state",
   "legs": [
    [
     "MAP_ROUTE2_VIRIDIAN_FOREST_NORTH_ENTRANCE",
@@ -101,24 +101,24 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((15, 3), (4, 7)); re-planning [walk past the bump site; player Route2_ViridianForest_NorthEntrance (4, 8)]"
+  "note": "frame 51169: bumped something at ((15, 3), (4, 7)); re-planning Cause: old controller: standing object missing from the collision grid. Player at Route2_ViridianForest_NorthEntrance (4, 8)."
  },
  {
   "name": "v4-bump08",
-  "state": "states/human-play/r1-bump-sites/0051138-bump08.state",
+  "state": "states/human-play/r1-bump-sites-free/bump08.state",
   "legs": [
    [
     "MAP_ROUTE2",
-    5,
-    13
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((15, 3), (4, 7)); re-planning [walk past the bump site; player Route2_ViridianForest_NorthEntrance (4, 8)]"
+  "note": "frame 51438: bumped something at ((15, 3), (4, 7)); re-planning Cause: old controller: standing object missing from the collision grid. Player at Route2_ViridianForest_NorthEntrance (4, 8)."
  },
  {
   "name": "v4-bump09",
-  "state": "states/human-play/r1-bump-sites/0101861-bump09.state",
+  "state": "states/human-play/r1-bump-sites-free/bump09.state",
   "legs": [
    [
     "MAP_MT_MOON_1F",
@@ -127,37 +127,37 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((1, 1), (15, 17)); re-planning [walk past the bump site; player MtMoon_1F (16, 17)]"
+  "note": "frame 102161: bumped something at ((1, 1), (15, 17)); re-planning Cause: old controller: standing object missing from the collision grid. Player at MtMoon_1F (16, 17)."
  },
  {
   "name": "v4-bump10",
-  "state": "states/human-play/r1-bump-sites/0102150-bump10.state",
+  "state": "states/human-play/r1-bump-sites-free/bump10.state",
   "legs": [
    [
     "MAP_MT_MOON_B1F",
-    4,
-    9
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((1, 1), (15, 17)); re-planning [walk past the bump site; player MtMoon_1F (16, 17)]"
+  "note": "frame 102450: bumped something at ((1, 1), (15, 17)); re-planning Cause: old controller: standing object missing from the collision grid. Player at MtMoon_1F (16, 17)."
  },
  {
   "name": "v4-bump11",
-  "state": "states/human-play/r1-bump-sites/0138257-bump11.state",
+  "state": "states/human-play/r1-bump-sites-free/bump11.state",
   "legs": [
    [
     "MAP_CERULEAN_CITY",
-    31,
-    21
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 3), (31, 21)); re-planning [walk past the bump site; player CeruleanCity_Gym (9, 18)]"
+  "note": "frame 138557: bumped something at ((3, 3), (31, 21)); re-planning Cause: old controller: held toward a plain tile of a three-wide exit mat (only the arrow tile warps). Player at CeruleanCity_Gym (9, 18)."
  },
  {
   "name": "v4-bump12",
-  "state": "states/human-play/r1-bump-sites/0171540-bump12.state",
+  "state": "states/human-play/r1-bump-sites-free/bump12.state",
   "legs": [
    [
     "MAP_ROUTE25",
@@ -166,11 +166,11 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 44), (21, 4)); re-planning [walk past the bump site; player Route25 (20, 4)]"
+  "note": "frame 171840: bumped something at ((3, 44), (21, 4)); re-planning Cause: old controller: standing object missing from the collision grid. Player at Route25 (20, 4)."
  },
  {
   "name": "v4-bump13",
-  "state": "states/human-play/r1-bump-sites/0171838-bump13.state",
+  "state": "states/human-play/r1-bump-sites-free/bump13.state",
   "legs": [
    [
     "MAP_ROUTE25",
@@ -179,11 +179,11 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 44), (21, 4)); re-planning [walk past the bump site; player Route25 (20, 4)]"
+  "note": "frame 172138: bumped something at ((3, 44), (21, 4)); re-planning Cause: old controller: standing object missing from the collision grid. Player at Route25 (20, 4)."
  },
  {
   "name": "v4-bump14",
-  "state": "states/human-play/r1-bump-sites/0186808-bump14.state",
+  "state": "states/human-play/r1-bump-sites-free/bump14.state",
   "legs": [
    [
     "MAP_ROUTE25_SEA_COTTAGE",
@@ -192,37 +192,37 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 44), (51, 4)); re-planning [walk past the bump site; player Route25_SeaCottage (6, 9)]"
+  "note": "frame 187108: bumped something at ((3, 44), (51, 4)); re-planning Cause: old controller: held toward a plain tile of a three-wide exit mat (only the arrow tile warps). Player at Route25_SeaCottage (6, 9)."
  },
  {
   "name": "v4-bump15",
-  "state": "states/human-play/r1-bump-sites/0194815-bump15.state",
+  "state": "states/human-play/r1-bump-sites-free/bump15.state",
   "legs": [
    [
     "MAP_ROUTE6",
-    19,
-    13
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 24), (19, 13)); re-planning [walk past the bump site; player UndergroundPath_SouthEntrance (7, 8)]"
+  "note": "frame 195115: bumped something at ((3, 24), (19, 13)); re-planning Cause: old controller: held toward a plain tile of a three-wide exit mat (only the arrow tile warps). Player at UndergroundPath_SouthEntrance (7, 8)."
  },
  {
   "name": "v4-bump16",
-  "state": "states/human-play/r1-bump-sites/0204285-bump16.state",
+  "state": "states/human-play/r1-bump-sites-free/bump16.state",
   "legs": [
    [
     "MAP_VERMILION_CITY",
-    12,
-    17
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 5), (12, 17)); re-planning [walk past the bump site; player VermilionCity_PokemonFanClub (4, 10)]"
+  "note": "frame 204585: bumped something at ((3, 5), (12, 17)); re-planning Cause: old controller: held toward a plain tile of a three-wide exit mat (only the arrow tile warps). Player at VermilionCity_PokemonFanClub (4, 10)."
  },
  {
   "name": "v4-bump17",
-  "state": "states/human-play/r1-bump-sites/0213446-bump17.state",
+  "state": "states/human-play/r1-bump-sites-free/bump17.state",
   "legs": [
    [
     "MAP_SSANNE_2F_CORRIDOR",
@@ -231,37 +231,37 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((1, 6), (2, 8)); re-planning [walk past the bump site; player SSAnne_2F_Corridor (2, 9)]"
+  "note": "frame 213746: bumped something at ((1, 6), (2, 8)); re-planning Cause: old controller: moving NPC in the next tile. Player at SSAnne_2F_Corridor (2, 9)."
  },
  {
   "name": "v4-bump18",
-  "state": "states/human-play/r1-bump-sites/0213982-bump18.state",
+  "state": "states/human-play/r1-bump-sites-free/bump18.state",
   "legs": [
    [
     "MAP_SSANNE_1F_CORRIDOR",
-    3,
-    8
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((1, 6), (2, 5)); re-planning [walk past the bump site; player SSAnne_2F_Corridor (2, 6)]"
+  "note": "frame 214282: bumped something at ((1, 6), (2, 5)); re-planning Cause: old controller: moving NPC in the next tile. Player at SSAnne_2F_Corridor (2, 6)."
  },
  {
   "name": "v4-bump19",
-  "state": "states/human-play/r1-bump-sites/0214246-bump19.state",
+  "state": "states/human-play/r1-bump-sites-free/bump19.state",
   "legs": [
    [
     "MAP_SSANNE_1F_CORRIDOR",
-    19,
-    1
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((1, 6), (2, 5)); re-planning [walk past the bump site; player SSAnne_2F_Corridor (2, 6)]"
+  "note": "frame 214546: bumped something at ((1, 6), (2, 5)); re-planning Cause: old controller: moving NPC in the next tile. Player at SSAnne_2F_Corridor (2, 6)."
  },
  {
   "name": "v4-bump20",
-  "state": "states/human-play/r1-bump-sites/0216609-bump20.state",
+  "state": "states/human-play/r1-bump-sites-free/bump20.state",
   "legs": [
    [
     "MAP_VERMILION_CITY",
@@ -270,11 +270,11 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 5), (31, 30)); re-planning [walk past the bump site; player VermilionCity (30, 30)]"
+  "note": "frame 216909: bumped something at ((3, 5), (31, 30)); re-planning Cause: old controller: moving NPC in the next tile. Player at VermilionCity (30, 30)."
  },
  {
   "name": "v4-bump21",
-  "state": "states/human-play/r1-bump-sites/0217477-bump21.state",
+  "state": "states/human-play/r1-bump-sites-free/bump21.state",
   "legs": [
    [
     "MAP_VERMILION_CITY",
@@ -283,37 +283,37 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 5), (35, 30)); re-planning [walk past the bump site; player VermilionCity (34, 30)]"
+  "note": "frame 217777: bumped something at ((3, 5), (35, 30)); re-planning Cause: old controller: moving NPC in the next tile. Player at VermilionCity (34, 30)."
  },
  {
   "name": "v4-bump22",
-  "state": "states/human-play/r1-bump-sites/0217737-bump22.state",
+  "state": "states/human-play/r1-bump-sites-free/bump22.state",
   "legs": [
    [
     "MAP_ROUTE6",
-    12,
-    38
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 5), (35, 30)); re-planning [walk past the bump site; player VermilionCity (34, 30)]"
+  "note": "frame 218037: bumped something at ((3, 5), (35, 30)); re-planning Cause: old controller: moving NPC in the next tile. Player at VermilionCity (34, 30)."
  },
  {
   "name": "v4-bump23",
-  "state": "states/human-play/r1-bump-sites/0221783-bump23.state",
+  "state": "states/human-play/r1-bump-sites-free/bump23.state",
   "legs": [
    [
     "MAP_ROUTE5",
-    31,
-    31
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((3, 23), (31, 31)); re-planning [walk past the bump site; player UndergroundPath_NorthEntrance (7, 8)]"
+  "note": "frame 222083: bumped something at ((3, 23), (31, 31)); re-planning Cause: old controller: held toward a plain tile of a three-wide exit mat (only the arrow tile warps). Player at UndergroundPath_NorthEntrance (7, 8)."
  },
  {
   "name": "v4-bump24",
-  "state": "states/human-play/r1-bump-sites/0223882-bump24.state",
+  "state": "states/human-play/r1-bump-sites-free/bump24.state",
   "legs": [
    [
     "MAP_CERULEAN_CITY_BIKE_SHOP",
@@ -322,24 +322,24 @@
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((7, 6), (5, 5)); re-planning [walk past the bump site; player CeruleanCity_BikeShop (5, 4)]"
+  "note": "frame 224182: bumped something at ((7, 6), (5, 5)); re-planning Cause: old controller: standing object missing from the collision grid. Player at CeruleanCity_BikeShop (5, 4)."
  },
  {
   "name": "v4-bump25",
-  "state": "states/human-play/r1-bump-sites/0224148-bump25.state",
+  "state": "states/human-play/r1-bump-sites-free/bump25.state",
   "legs": [
    [
     "MAP_CERULEAN_CITY",
-    13,
-    29
+    -1,
+    -1
    ]
   ],
   "opts": [],
-  "note": "bumped something at ((7, 6), (5, 5)); re-planning [walk past the bump site; player CeruleanCity_BikeShop (5, 4)]"
+  "note": "frame 224448: bumped something at ((7, 6), (5, 5)); re-planning Cause: old controller: standing object missing from the collision grid. Player at CeruleanCity_BikeShop (5, 4)."
  },
  {
   "name": "v4-bump26",
-  "state": "states/human-play/r1-bump-sites/0268088-bump26.state",
+  "state": "states/human-play/r1-bump-sites-free/bump26.state",
   "legs": [
    [
     "MAP_ROCK_TUNNEL_B1F",
@@ -350,11 +350,11 @@
   "opts": [
    "cut"
   ],
-  "note": "bumped something at ((1, 82), (2, 7)); re-planning [walk past the bump site; player RockTunnel_B1F (2, 8)]"
+  "note": "frame 268388: bumped something at ((1, 82), (2, 7)); re-planning Cause: old controller: standing object missing from the collision grid. Player at RockTunnel_B1F (2, 8)."
  },
  {
   "name": "v4-bump27",
-  "state": "states/human-play/r1-bump-sites/0268377-bump27.state",
+  "state": "states/human-play/r1-bump-sites-free/bump27.state",
   "legs": [
    [
     "MAP_ROCK_TUNNEL_B1F",
@@ -365,26 +365,26 @@
   "opts": [
    "cut"
   ],
-  "note": "bumped something at ((1, 82), (2, 7)); re-planning [walk past the bump site; player RockTunnel_B1F (2, 8)]"
+  "note": "frame 268677: bumped something at ((1, 82), (2, 7)); re-planning Cause: old controller: standing object missing from the collision grid. Player at RockTunnel_B1F (2, 8)."
  },
  {
   "name": "v4-bump28",
-  "state": "states/human-play/r1-bump-sites/0292194-bump28.state",
+  "state": "states/human-play/r1-bump-sites-free/bump28.state",
   "legs": [
    [
     "MAP_ROUTE7",
-    7,
-    14
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut"
   ],
-  "note": "bumped something at ((3, 25), (7, 14)); re-planning [walk past the bump site; player UndergroundPath_WestEntrance (7, 8)]"
+  "note": "frame 292494: bumped something at ((3, 25), (7, 14)); re-planning Cause: old controller: held toward a plain tile of a three-wide exit mat (only the arrow tile warps). Player at UndergroundPath_WestEntrance (7, 8)."
  },
  {
   "name": "v4-bump29",
-  "state": "states/human-play/r1-bump-sites/0293478-bump29.state",
+  "state": "states/human-play/r1-bump-sites-free/bump29.state",
   "legs": [
    [
     "MAP_CELADON_CITY",
@@ -395,56 +395,56 @@
   "opts": [
    "cut"
   ],
-  "note": "bumped something at ((3, 6), (44, 15)); re-planning [walk past the bump site; player CeladonCity (45, 15)]"
+  "note": "frame 293778: bumped something at ((3, 6), (44, 15)); re-planning Cause: old controller: moving NPC in the next tile. Player at CeladonCity (45, 15)."
  },
  {
   "name": "v4-bump30",
-  "state": "states/human-play/r1-bump-sites/0293748-bump30.state",
+  "state": "states/human-play/r1-bump-sites-free/bump30.state",
   "legs": [
    [
     "MAP_CELADON_CITY_CONDOMINIUMS_1F",
-    8,
-    14
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut"
   ],
-  "note": "bumped something at ((3, 6), (44, 15)); re-planning [walk past the bump site; player CeladonCity (45, 15)]"
+  "note": "frame 294048: bumped something at ((3, 6), (44, 15)); re-planning Cause: old controller: moving NPC in the next tile. Player at CeladonCity (45, 15)."
  },
  {
   "name": "v4-bump31",
-  "state": "states/human-play/r1-bump-sites/0299967-bump31.state",
+  "state": "states/human-play/r1-bump-sites-free/bump31.state",
   "legs": [
    [
     "MAP_CELADON_CITY_DEPARTMENT_STORE_4F",
-    6,
-    2
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut"
   ],
-  "note": "bumped something at ((10, 4), (5, 7)); re-planning [walk past the bump site; player CeladonCity_DepartmentStore_5F (4, 7)]"
+  "note": "frame 300267: bumped something at ((10, 4), (5, 7)); re-planning Cause: old controller: moving NPC in the next tile. Player at CeladonCity_DepartmentStore_5F (4, 7)."
  },
  {
   "name": "v4-bump32",
-  "state": "states/human-play/r1-bump-sites/0305143-bump32.state",
+  "state": "states/human-play/r1-bump-sites-free/bump32.state",
   "legs": [
    [
     "MAP_ROCKET_HIDEOUT_B2F",
-    22,
-    6
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut"
   ],
-  "note": "bumped something at ((1, 42), (13, 2)); re-planning [walk past the bump site; player RocketHideout_B1F (12, 2)]"
+  "note": "frame 305443: bumped something at ((1, 42), (13, 2)); re-planning Cause: old controller: warp still loading (time-out counted as a bump). Player at RocketHideout_B1F (12, 2)."
  },
  {
   "name": "v4-bump33",
-  "state": "states/human-play/r1-bump-sites/0310317-bump33.state",
+  "state": "states/human-play/r1-bump-sites-free/bump33.state",
   "legs": [
    [
     "MAP_ROCKET_HIDEOUT_B2F",
@@ -455,26 +455,26 @@
   "opts": [
    "cut"
   ],
-  "note": "bumped something at ((1, 43), (21, 6)); re-planning [walk past the bump site; player RocketHideout_B2F (22, 6)]"
+  "note": "frame 310617: bumped something at ((1, 43), (21, 6)); re-planning Cause: old controller: standing object missing from the collision grid. Player at RocketHideout_B2F (22, 6)."
  },
  {
   "name": "v4-bump34",
-  "state": "states/human-play/r1-bump-sites/0310609-bump34.state",
+  "state": "states/human-play/r1-bump-sites-free/bump34.state",
   "legs": [
    [
     "MAP_ROCKET_HIDEOUT_B3F",
-    10,
-    13
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut"
   ],
-  "note": "bumped something at ((1, 43), (21, 6)); re-planning [walk past the bump site; player RocketHideout_B2F (22, 6)]"
+  "note": "frame 310909: bumped something at ((1, 43), (21, 6)); re-planning Cause: old controller: standing object missing from the collision grid. Player at RocketHideout_B2F (22, 6)."
  },
  {
   "name": "v4-bump35",
-  "state": "states/human-play/r1-bump-sites/0341062-bump35.state",
+  "state": "states/human-play/r1-bump-sites-free/bump35.state",
   "legs": [
    [
     "MAP_CELADON_CITY",
@@ -485,152 +485,152 @@
   "opts": [
    "cut"
   ],
-  "note": "bumped into something at CeladonCity (18, 22); re-planning [walk past the bump site; player CeladonCity (16, 22)]"
+  "note": "frame 341362: bumped into something at CeladonCity (18, 22); re-planning Cause: moving NPC stepped into the next tile. Player at CeladonCity (16, 22)."
  },
  {
   "name": "v4-bump36",
-  "state": "states/human-play/r1-bump-sites/0352754-bump36.state",
+  "state": "states/human-play/r1-bump-sites-free/bump36.state",
   "legs": [
    [
     "MAP_VERMILION_CITY",
-    14,
-    25
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut"
   ],
-  "note": "bumped into something at VermilionCity (14, 25); re-planning [warp still loading; player VermilionCity_Gym (5, 19)]"
+  "note": "frame 353054: bumped into something at VermilionCity (14, 25); re-planning Cause: warp still loading at the 90-frame time-out. Player at VermilionCity_Gym (5, 19)."
  },
  {
   "name": "v4-bump37",
-  "state": "states/human-play/r1-bump-sites/0372778-bump37.state",
+  "state": "states/human-play/r1-bump-sites-free/bump37.state",
   "legs": [
    [
     "MAP_POKEMON_TOWER_6F",
-    18,
-    10
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut"
   ],
-  "note": "bumped into something at PokemonTower_6F (18, 10); re-planning [warp still loading; player PokemonTower_5F (18, 10)]"
+  "note": "frame 373078: bumped into something at PokemonTower_6F (18, 10); re-planning Cause: warp still loading at the 90-frame time-out. Player at PokemonTower_5F (18, 10)."
  },
  {
   "name": "v4-bump38",
-  "state": "states/human-play/r1-bump-sites/0463012-bump38.state",
+  "state": "states/human-play/r1-bump-sites-free/bump38.state",
   "legs": [
    [
     "MAP_FUCHSIA_CITY",
-    9,
-    32
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut"
   ],
-  "note": "bumped into something at FuchsiaCity (9, 32); re-planning [warp still loading; player FuchsiaCity_Gym (7, 21)]"
+  "note": "frame 463312: bumped into something at FuchsiaCity (9, 32); re-planning Cause: warp still loading at the 90-frame time-out. Player at FuchsiaCity_Gym (7, 21)."
  },
  {
   "name": "v4-bump39",
-  "state": "states/human-play/r1-bump-sites/0512519-bump39.state",
+  "state": "states/human-play/r1-bump-sites-free/bump39.state",
   "legs": [
    [
     "MAP_POKEMON_MANSION_1F",
-    19,
-    22
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at PokemonMansion_1F (19, 22); re-planning [warp still loading; player PokemonMansion_3F (18, 18)]"
+  "note": "frame 512819: bumped into something at PokemonMansion_1F (19, 22); re-planning Cause: warp still loading at the 90-frame time-out. Player at PokemonMansion_3F (18, 18)."
  },
  {
   "name": "v4-bump40",
-  "state": "states/human-play/r1-bump-sites/0515632-bump40.state",
+  "state": "states/human-play/r1-bump-sites-free/bump40.state",
   "legs": [
    [
     "MAP_POKEMON_MANSION_B1F",
-    34,
-    29
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at PokemonMansion_B1F (34, 29); re-planning [warp still loading; player PokemonMansion_1F (25, 27)]"
+  "note": "frame 515932: bumped into something at PokemonMansion_B1F (34, 29); re-planning Cause: warp still loading at the 90-frame time-out. Player at PokemonMansion_1F (25, 27)."
  },
  {
   "name": "v4-bump41",
-  "state": "states/human-play/r1-bump-sites/0566210-bump41.state",
+  "state": "states/human-play/r1-bump-sites-free/bump41.state",
   "legs": [
    [
     "MAP_CINNABAR_ISLAND",
-    20,
-    4
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CinnabarIsland (20, 4); re-planning [warp still loading; player CinnabarIsland_Gym (25, 23)]"
+  "note": "frame 566510: bumped into something at CinnabarIsland (20, 4); re-planning Cause: warp still loading at the 90-frame time-out. Player at CinnabarIsland_Gym (25, 23)."
  },
  {
   "name": "v4-bump42",
-  "state": "states/human-play/r1-bump-sites/0573280-bump42.state",
+  "state": "states/human-play/r1-bump-sites-free/bump42.state",
   "legs": [
    [
     "MAP_TWO_ISLAND",
-    39,
-    9
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at TwoIsland (39, 9); re-planning [warp still loading; player TwoIsland_JoyfulGameCorner (5, 8)]"
+  "note": "frame 573580: bumped into something at TwoIsland (39, 9); re-planning Cause: warp still loading at the 90-frame time-out. Player at TwoIsland_JoyfulGameCorner (5, 8)."
  },
  {
   "name": "v4-bump43",
-  "state": "states/human-play/r1-bump-sites/0617782-bump43.state",
+  "state": "states/human-play/r1-bump-sites-free/bump43.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_MART",
-    2,
-    5
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity (48, 24); re-planning [walk past the bump site; player SaffronCity (48, 26)]"
+  "note": "frame 618082: bumped into something at SaffronCity (48, 24); re-planning Cause: moving NPC stepped into the next tile. Player at SaffronCity (48, 26)."
  },
  {
   "name": "v4-bump44",
-  "state": "states/human-play/r1-bump-sites/0619130-bump44.state",
+  "state": "states/human-play/r1-bump-sites-free/bump44.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_POKEMON_CENTER_1F",
-    7,
-    8
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity (29, 39); re-planning [walk past the bump site; player SaffronCity (31, 39)]"
+  "note": "frame 619430: bumped into something at SaffronCity (29, 39); re-planning Cause: moving NPC stepped into the next tile. Player at SaffronCity (31, 39)."
  },
  {
   "name": "v4-bump45",
-  "state": "states/human-play/r1-bump-sites/0644282-bump45.state",
+  "state": "states/human-play/r1-bump-sites-free/bump45.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -642,11 +642,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (28, 23); re-planning [warp still loading; player SaffronCity_Gym (18, 20)]"
+  "note": "frame 644582: bumped into something at SaffronCity_Gym (28, 23); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (18, 20)."
  },
  {
   "name": "v4-bump46",
-  "state": "states/human-play/r1-bump-sites/0644463-bump46.state",
+  "state": "states/human-play/r1-bump-sites-free/bump46.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -658,11 +658,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (28, 12); re-planning [warp still loading; player SaffronCity_Gym (28, 20)]"
+  "note": "frame 644763: bumped into something at SaffronCity_Gym (28, 12); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (28, 20)."
  },
  {
   "name": "v4-bump47",
-  "state": "states/human-play/r1-bump-sites/0647307-bump47.state",
+  "state": "states/human-play/r1-bump-sites-free/bump47.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -674,11 +674,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (20, 4); re-planning [warp still loading; player SaffronCity_Gym (20, 12)]"
+  "note": "frame 647607: bumped into something at SaffronCity_Gym (20, 4); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (20, 12)."
  },
  {
   "name": "v4-bump48",
-  "state": "states/human-play/r1-bump-sites/0647499-bump48.state",
+  "state": "states/human-play/r1-bump-sites-free/bump48.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -690,11 +690,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (0, 4); re-planning [warp still loading; player SaffronCity_Gym (20, 7)]"
+  "note": "frame 647799: bumped into something at SaffronCity_Gym (0, 4); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (20, 7)."
  },
  {
   "name": "v4-bump49",
-  "state": "states/human-play/r1-bump-sites/0647682-bump49.state",
+  "state": "states/human-play/r1-bump-sites-free/bump49.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -706,11 +706,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (18, 15); re-planning [warp still loading; player SaffronCity_Gym (0, 7)]"
+  "note": "frame 647982: bumped into something at SaffronCity_Gym (18, 15); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (0, 7)."
  },
  {
   "name": "v4-bump50",
-  "state": "states/human-play/r1-bump-sites/0656776-bump50.state",
+  "state": "states/human-play/r1-bump-sites-free/bump50.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -722,11 +722,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (0, 7); re-planning [warp still loading; player SaffronCity_Gym (18, 15)]"
+  "note": "frame 657076: bumped into something at SaffronCity_Gym (0, 7); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (18, 15)."
  },
  {
   "name": "v4-bump51",
-  "state": "states/human-play/r1-bump-sites/0657048-bump51.state",
+  "state": "states/human-play/r1-bump-sites-free/bump51.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -738,11 +738,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (0, 15); re-planning [warp still loading; player SaffronCity_Gym (8, 7)]"
+  "note": "frame 657348: bumped into something at SaffronCity_Gym (0, 15); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (8, 7)."
  },
  {
   "name": "v4-bump52",
-  "state": "states/human-play/r1-bump-sites/0657238-bump52.state",
+  "state": "states/human-play/r1-bump-sites-free/bump52.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -754,11 +754,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (28, 15); re-planning [warp still loading; player SaffronCity_Gym (0, 12)]"
+  "note": "frame 657538: bumped into something at SaffronCity_Gym (28, 15); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (0, 12)."
  },
  {
   "name": "v4-bump53",
-  "state": "states/human-play/r1-bump-sites/0657422-bump53.state",
+  "state": "states/human-play/r1-bump-sites-free/bump53.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -770,11 +770,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (28, 20); re-planning [warp still loading; player SaffronCity_Gym (28, 12)]"
+  "note": "frame 657722: bumped into something at SaffronCity_Gym (28, 20); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (28, 12)."
  },
  {
   "name": "v4-bump54",
-  "state": "states/human-play/r1-bump-sites/0657618-bump54.state",
+  "state": "states/human-play/r1-bump-sites-free/bump54.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_GYM",
@@ -786,43 +786,43 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity_Gym (18, 20); re-planning [warp still loading; player SaffronCity_Gym (28, 23)]"
+  "note": "frame 657918: bumped into something at SaffronCity_Gym (18, 20); re-planning Cause: same-map warp pad (Saffron Gym) never detected: 90-frame time-out. Player at SaffronCity_Gym (28, 23)."
  },
  {
   "name": "v4-bump55",
-  "state": "states/human-play/r1-bump-sites/0657864-bump55.state",
+  "state": "states/human-play/r1-bump-sites-free/bump55.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY",
-    46,
-    12
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity (46, 12); re-planning [warp still loading; player SaffronCity_Gym (14, 23)]"
+  "note": "frame 658164: bumped into something at SaffronCity (46, 12); re-planning Cause: warp still loading at the 90-frame time-out. Player at SaffronCity_Gym (14, 23)."
  },
  {
   "name": "v4-bump56",
-  "state": "states/human-play/r1-bump-sites/0658296-bump56.state",
+  "state": "states/human-play/r1-bump-sites-free/bump56.state",
   "legs": [
    [
     "MAP_SAFFRON_CITY_POKEMON_CENTER_1F",
-    7,
-    4
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SaffronCity (33, 39); re-planning [walk past the bump site; player SaffronCity (35, 39)]"
+  "note": "frame 658596: bumped into something at SaffronCity (33, 39); re-planning Cause: moving NPC stepped into the next tile. Player at SaffronCity (35, 39)."
  },
  {
   "name": "v4-bump57",
-  "state": "states/human-play/r1-bump-sites/0713339-bump57.state",
+  "state": "states/human-play/r1-bump-sites-free/bump57.state",
   "legs": [
    [
     "MAP_VIRIDIAN_CITY_GYM",
@@ -834,155 +834,155 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at ViridianCity_Gym (10, 4); re-planning [walk past the bump site; player ViridianCity_Gym (10, 6)]"
+  "note": "frame 713639: bumped into something at ViridianCity_Gym (10, 4); re-planning Cause: beaten trainer moved from his map.json tile (RAM template). Player at ViridianCity_Gym (10, 6)."
  },
  {
   "name": "v4-bump58",
-  "state": "states/human-play/r1-bump-sites/0721774-bump58.state",
+  "state": "states/human-play/r1-bump-sites-free/bump58.state",
   "legs": [
    [
     "MAP_VIRIDIAN_CITY",
-    36,
-    10
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at ViridianCity (36, 10); re-planning [warp still loading; player ViridianCity_Gym (17, 22)]"
+  "note": "frame 722074: bumped into something at ViridianCity (36, 10); re-planning Cause: warp still loading at the 90-frame time-out. Player at ViridianCity_Gym (17, 22)."
  },
  {
   "name": "v4-bump59",
-  "state": "states/human-play/r1-bump-sites/0780438-bump59.state",
+  "state": "states/human-play/r1-bump-sites-free/bump59.state",
   "legs": [
    [
     "MAP_VICTORY_ROAD_2F",
-    34,
-    19
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at VictoryRoad_2F (34, 19); re-planning [warp still loading; player VictoryRoad_3F (34, 18)]"
+  "note": "frame 780738: bumped into something at VictoryRoad_2F (34, 19); re-planning Cause: warp still loading at the 90-frame time-out. Player at VictoryRoad_3F (34, 18)."
  },
  {
   "name": "v4-bump60",
-  "state": "states/human-play/r1-bump-sites/0939147-bump60.state",
+  "state": "states/human-play/r1-bump-sites-free/bump60.state",
   "legs": [
    [
     "MAP_POKEMON_TOWER_4F",
-    4,
-    10
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at PokemonTower_4F (4, 10); re-planning [warp still loading; player PokemonTower_5F (4, 10)]"
+  "note": "frame 939447: bumped into something at PokemonTower_4F (4, 10); re-planning Cause: warp still loading at the 90-frame time-out. Player at PokemonTower_5F (4, 10)."
  },
  {
   "name": "v4-bump61",
-  "state": "states/human-play/r1-bump-sites/1082077-bump61.state",
+  "state": "states/human-play/r1-bump-sites-free/bump61.state",
   "legs": [
    [
     "MAP_SIX_ISLAND_DOTTED_HOLE_B1F",
-    6,
-    7
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SixIsland_DottedHole_B1F (6, 7); re-planning [warp still loading; player SixIsland_DottedHole_1F (6, 5)]"
+  "note": "frame 1082377: bumped into something at SixIsland_DottedHole_B1F (6, 7); re-planning Cause: warp still loading at the 90-frame time-out. Player at SixIsland_DottedHole_1F (6, 5)."
  },
  {
   "name": "v4-bump62",
-  "state": "states/human-play/r1-bump-sites/1082322-bump62.state",
+  "state": "states/human-play/r1-bump-sites-free/bump62.state",
   "legs": [
    [
     "MAP_SIX_ISLAND_DOTTED_HOLE_B2F",
-    6,
-    7
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SixIsland_DottedHole_B2F (6, 7); re-planning [warp still loading; player SixIsland_DottedHole_B1F (6, 1)]"
+  "note": "frame 1082622: bumped into something at SixIsland_DottedHole_B2F (6, 7); re-planning Cause: warp still loading at the 90-frame time-out. Player at SixIsland_DottedHole_B1F (6, 1)."
  },
  {
   "name": "v4-bump63",
-  "state": "states/human-play/r1-bump-sites/1082599-bump63.state",
+  "state": "states/human-play/r1-bump-sites-free/bump63.state",
   "legs": [
    [
     "MAP_SIX_ISLAND_DOTTED_HOLE_B3F",
-    6,
-    7
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SixIsland_DottedHole_B3F (6, 7); re-planning [warp still loading; player SixIsland_DottedHole_B2F (1, 5)]"
+  "note": "frame 1082899: bumped into something at SixIsland_DottedHole_B3F (6, 7); re-planning Cause: warp still loading at the 90-frame time-out. Player at SixIsland_DottedHole_B2F (1, 5)."
  },
  {
   "name": "v4-bump64",
-  "state": "states/human-play/r1-bump-sites/1082874-bump64.state",
+  "state": "states/human-play/r1-bump-sites-free/bump64.state",
   "legs": [
    [
     "MAP_SIX_ISLAND_DOTTED_HOLE_B4F",
-    6,
-    7
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SixIsland_DottedHole_B4F (6, 7); re-planning [warp still loading; player SixIsland_DottedHole_B3F (11, 5)]"
+  "note": "frame 1083174: bumped into something at SixIsland_DottedHole_B4F (6, 7); re-planning Cause: warp still loading at the 90-frame time-out. Player at SixIsland_DottedHole_B3F (11, 5)."
  },
  {
   "name": "v4-bump65",
-  "state": "states/human-play/r1-bump-sites/1083108-bump65.state",
+  "state": "states/human-play/r1-bump-sites-free/bump65.state",
   "legs": [
    [
     "MAP_SIX_ISLAND_DOTTED_HOLE_SAPPHIRE_ROOM",
-    5,
-    9
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at SixIsland_DottedHole_SapphireRoom (5, 9); re-planning [warp still loading; player SixIsland_DottedHole_B4F (6, 9)]"
+  "note": "frame 1083408: bumped into something at SixIsland_DottedHole_SapphireRoom (5, 9); re-planning Cause: warp still loading at the 90-frame time-out. Player at SixIsland_DottedHole_B4F (6, 9)."
  },
  {
   "name": "v4-bump66",
-  "state": "states/human-play/r1-bump-sites/1127659-bump66.state",
+  "state": "states/human-play/r1-bump-sites-free/bump66.state",
   "legs": [
    [
     "MAP_FIVE_ISLAND_MEADOW",
-    12,
-    21
+    -1,
+    -1
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "bumped into something at FiveIsland_Meadow (12, 21); re-planning [warp still loading; player FiveIsland_RocketWarehouse (24, 25)]"
+  "note": "frame 1127959: bumped into something at FiveIsland_Meadow (12, 21); re-planning Cause: warp still loading at the 90-frame time-out. Player at FiveIsland_RocketWarehouse (24, 25)."
  },
  {
   "name": "v4-bump67",
-  "state": "states/human-play/r1-bump-sites/1136904-bump67.state",
+  "state": "states/human-play/r1-bump-sites-free/bump67.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -994,11 +994,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (29, 8); re-planning [walk past the bump site; player CeruleanCave_1F (29, 7)]"
+  "note": "frame 1137204: bumped into something at CeruleanCave_1F (29, 8); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (29, 7)."
  },
  {
   "name": "v4-bump68",
-  "state": "states/human-play/r1-bump-sites/1137039-bump68.state",
+  "state": "states/human-play/r1-bump-sites-free/bump68.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1010,11 +1010,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (25, 4); re-planning [walk past the bump site; player CeruleanCave_1F (26, 3)]"
+  "note": "frame 1137339: bumped into something at CeruleanCave_1F (25, 4); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (26, 3)."
  },
  {
   "name": "v4-bump69",
-  "state": "states/human-play/r1-bump-sites/1137131-bump69.state",
+  "state": "states/human-play/r1-bump-sites-free/bump69.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1026,11 +1026,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (26, 4); re-planning [walk past the bump site; player CeruleanCave_1F (26, 3)]"
+  "note": "frame 1137431: bumped into something at CeruleanCave_1F (26, 4); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (26, 3)."
  },
  {
   "name": "v4-bump70",
-  "state": "states/human-play/r1-bump-sites/1137875-bump70.state",
+  "state": "states/human-play/r1-bump-sites-free/bump70.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1042,11 +1042,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (27, 4); re-planning [walk past the bump site; player CeruleanCave_1F (27, 3)]"
+  "note": "frame 1138175: bumped into something at CeruleanCave_1F (27, 4); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (27, 3)."
  },
  {
   "name": "v4-bump71",
-  "state": "states/human-play/r1-bump-sites/1138003-bump71.state",
+  "state": "states/human-play/r1-bump-sites-free/bump71.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1058,11 +1058,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (23, 6); re-planning [walk past the bump site; player CeruleanCave_1F (23, 4)]"
+  "note": "frame 1138303: bumped into something at CeruleanCave_1F (23, 6); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (23, 4)."
  },
  {
   "name": "v4-bump72",
-  "state": "states/human-play/r1-bump-sites/1138093-bump72.state",
+  "state": "states/human-play/r1-bump-sites-free/bump72.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1074,11 +1074,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (22, 6); re-planning [walk past the bump site; player CeruleanCave_1F (22, 5)]"
+  "note": "frame 1138393: bumped into something at CeruleanCave_1F (22, 6); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (22, 5)."
  },
  {
   "name": "v4-bump73",
-  "state": "states/human-play/r1-bump-sites/1138175-bump73.state",
+  "state": "states/human-play/r1-bump-sites-free/bump73.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1090,11 +1090,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (21, 6); re-planning [walk past the bump site; player CeruleanCave_1F (21, 5)]"
+  "note": "frame 1138475: bumped into something at CeruleanCave_1F (21, 6); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (21, 5)."
  },
  {
   "name": "v4-bump74",
-  "state": "states/human-play/r1-bump-sites/1138261-bump74.state",
+  "state": "states/human-play/r1-bump-sites-free/bump74.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1106,11 +1106,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (20, 6); re-planning [walk past the bump site; player CeruleanCave_1F (21, 5)]"
+  "note": "frame 1138561: bumped into something at CeruleanCave_1F (20, 6); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (21, 5)."
  },
  {
   "name": "v4-bump75",
-  "state": "states/human-play/r1-bump-sites/1138348-bump75.state",
+  "state": "states/human-play/r1-bump-sites-free/bump75.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1122,11 +1122,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (19, 6); re-planning [walk past the bump site; player CeruleanCave_1F (20, 5)]"
+  "note": "frame 1138648: bumped into something at CeruleanCave_1F (19, 6); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (20, 5)."
  },
  {
   "name": "v4-bump76",
-  "state": "states/human-play/r1-bump-sites/1138435-bump76.state",
+  "state": "states/human-play/r1-bump-sites-free/bump76.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1138,11 +1138,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (18, 6); re-planning [walk past the bump site; player CeruleanCave_1F (19, 5)]"
+  "note": "frame 1138735: bumped into something at CeruleanCave_1F (18, 6); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (19, 5)."
  },
  {
   "name": "v4-bump77",
-  "state": "states/human-play/r1-bump-sites/1139327-bump77.state",
+  "state": "states/human-play/r1-bump-sites-free/bump77.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1154,11 +1154,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (31, 8); re-planning [walk past the bump site; player CeruleanCave_1F (30, 7)]"
+  "note": "frame 1139627: bumped into something at CeruleanCave_1F (31, 8); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (30, 7)."
  },
  {
   "name": "v4-bump78",
-  "state": "states/human-play/r1-bump-sites/1139413-bump78.state",
+  "state": "states/human-play/r1-bump-sites-free/bump78.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1170,11 +1170,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (32, 8); re-planning [walk past the bump site; player CeruleanCave_1F (32, 7)]"
+  "note": "frame 1139713: bumped into something at CeruleanCave_1F (32, 8); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (32, 7)."
  },
  {
   "name": "v4-bump79",
-  "state": "states/human-play/r1-bump-sites/1139501-bump79.state",
+  "state": "states/human-play/r1-bump-sites-free/bump79.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1186,11 +1186,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (33, 8); re-planning [walk past the bump site; player CeruleanCave_1F (33, 7)]"
+  "note": "frame 1139801: bumped into something at CeruleanCave_1F (33, 8); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (33, 7)."
  },
  {
   "name": "v4-bump80",
-  "state": "states/human-play/r1-bump-sites/1139581-bump80.state",
+  "state": "states/human-play/r1-bump-sites-free/bump80.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1202,11 +1202,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (34, 8); re-planning [walk past the bump site; player CeruleanCave_1F (33, 7)]"
+  "note": "frame 1139881: bumped into something at CeruleanCave_1F (34, 8); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (33, 7)."
  },
  {
   "name": "v4-bump81",
-  "state": "states/human-play/r1-bump-sites/1140574-bump81.state",
+  "state": "states/human-play/r1-bump-sites-free/bump81.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1218,11 +1218,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (16, 15); re-planning [walk past the bump site; player CeruleanCave_1F (16, 13)]"
+  "note": "frame 1140874: bumped into something at CeruleanCave_1F (16, 15); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (16, 13)."
  },
  {
   "name": "v4-bump82",
-  "state": "states/human-play/r1-bump-sites/1141323-bump82.state",
+  "state": "states/human-play/r1-bump-sites-free/bump82.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1234,11 +1234,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (15, 15); re-planning [walk past the bump site; player CeruleanCave_1F (15, 14)]"
+  "note": "frame 1141623: bumped into something at CeruleanCave_1F (15, 15); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (15, 14)."
  },
  {
   "name": "v4-bump83",
-  "state": "states/human-play/r1-bump-sites/1141407-bump83.state",
+  "state": "states/human-play/r1-bump-sites-free/bump83.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1250,11 +1250,11 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (14, 15); re-planning [walk past the bump site; player CeruleanCave_1F (15, 14)]"
+  "note": "frame 1141707: bumped into something at CeruleanCave_1F (14, 15); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (15, 14)."
  },
  {
   "name": "v4-bump84",
-  "state": "states/human-play/r1-bump-sites/1141496-bump84.state",
+  "state": "states/human-play/r1-bump-sites-free/bump84.state",
   "legs": [
    [
     "MAP_CERULEAN_CAVE_1F",
@@ -1266,6 +1266,41 @@
    "cut",
    "surf"
   ],
-  "note": "bumped into something at CeruleanCave_1F (13, 15); re-planning [walk past the bump site; player CeruleanCave_1F (13, 14)]"
+  "note": "frame 1141796: bumped into something at CeruleanCave_1F (13, 15); re-planning Cause: surf dismount onto elevation-4 land (CanStopSurfing needs elevation 3). Player at CeruleanCave_1F (13, 14)."
+ },
+ {
+  "name": "route3-ben-robin",
+  "state": "states/human-play/1122-lgdescent-s11/0073608-brock-done.state",
+  "legs": [
+   [
+    "MAP_MT_MOON_1F",
+    -1,
+    -1
+   ]
+  ],
+  "opts": [],
+  "no_fight": [
+   "YOUNGSTER_BEN",
+   "LASS_ROBIN",
+   "LASS_JANICE",
+   "BUG_CATCHER_CALVIN"
+  ],
+  "note": "review items 16/17: Ben walked around (his line is a wall), Robin passed after waiting at (39, 9) for her to face away; Colton, Greg and James are the plan's forced trainers"
+ },
+ {
+  "name": "viridian-gym-spinners",
+  "state": "states/human-play/r1-bump-sites-free/viridian-gym-spinners.state",
+  "legs": [
+   [
+    "MAP_VIRIDIAN_CITY_GYM",
+    2,
+    3
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "R1 regression: refreshes alternated between two spinner paths around Takashi, who stands at his RAM template (10, 4), not map.json (10, 2)"
  }
 ]

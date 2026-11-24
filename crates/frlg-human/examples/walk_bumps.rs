@@ -54,15 +54,34 @@ fn main() {
             bumps.push((v["frame"].as_u64().unwrap(), t.to_string()));
         }
     }
+    // `R1_MIN_BUMP=n`: only bumps n and later. The replay jumps between the run's checkpoint
+    // savestates (`checkpoints.jsonl`, all verified from boot) instead of replaying every frame.
+    let min_bump: usize = std::env::var("R1_MIN_BUMP")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let ckpts: Vec<(u64, String)> = std::fs::read_to_string(dir.join("checkpoints.jsonl"))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+        .map(|v| {
+            (
+                v["frame"].as_u64().unwrap_or(0),
+                v["state_file"].as_str().unwrap_or("").to_string(),
+            )
+        })
+        .filter(|c| Path::new(&c.1).exists())
+        .collect();
     let mut world = World::load().expect("world");
     let mut emu = Emu::new(Path::new(&a[0])).expect("rom");
     frlg_emu::boot_with_default_bios(&mut emu).expect("bios");
     emu.reset();
     // Frames at which to look: (frame, bump index, what).
     let mut looks: Vec<(u64, usize, &str)> = vec![];
-    for (i, (f, _)) in bumps.iter().enumerate() {
-        // The latest frame between 1260 and 60 frames before the bump where the player stands
-        // free on the field (a state cut mid-battle or mid-warp cannot start a walk).
+    for (i, (f, _)) in bumps.iter().enumerate().filter(|(i, _)| *i >= min_bump) {
+        // The latest frame between 1260 and 60 frames before the bump where the player is on
+        // the field with control (a state cut mid-battle or mid-warp cannot start a walk; one
+        // mid-step can: the walker settles first).
         for k in (0..30).rev() {
             looks.push((f.saturating_sub(60 + 40 * k), i, "state"));
         }
@@ -77,6 +96,11 @@ fn main() {
     let mut scene = vec![String::new(); bumps.len()];
     let mut after = vec![String::new(); bumps.len()];
     for (f, i, what) in looks {
+        if let Some(c) = ckpts.iter().rev().find(|c| c.0 > at && c.0 <= f) {
+            emu.load_state_file(Path::new(&c.1))
+                .expect("checkpoint state");
+            at = c.0;
+        }
         while at < f && (at as usize) < log.frames.len() {
             emu.step(log.frames[at as usize]);
             at += 1;
@@ -90,7 +114,7 @@ fn main() {
                 let free = !obs.in_battle(&mut emu)
                     && obs.callback2_is(&mut emu, "CB2_Overworld")
                     && !obs.field_controls_locked(&mut emu)
-                    && obs.player_can_step(&mut emu);
+                    && !obs.prevent_step(&mut emu);
                 if let (Some(o), true) = (out, free) {
                     let p = o.join(format!("bump{i:02}.state"));
                     emu.save_state_file(&p).expect("save");
@@ -147,7 +171,7 @@ fn main() {
             }
         }
     }
-    for (i, (f, t)) in bumps.iter().enumerate() {
+    for (i, (f, t)) in bumps.iter().enumerate().filter(|(i, _)| *i >= min_bump) {
         println!("#{i:02} frame {f}: {t}");
         println!("  -200: {}   +400: {}", before[i], after[i]);
         println!("  state: {}", state_at[i]);
