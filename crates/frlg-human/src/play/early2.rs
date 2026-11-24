@@ -974,7 +974,12 @@ fn dig_grunt(s: &mut Session) -> PResult<()> {
     go_map(s, "MAP_CERULEAN_CITY", &Opts::default())?;
     // The plan's `center-heal@nugget-bridge-trainers` (`extra_heals`): the only Center is in
     // Cerulean, so the human heals on the way back from Bill instead of walking back mid-route.
-    if s.plan.params.extra_heals.iter().any(|h| h == "nugget-bridge-trainers") {
+    if s.plan
+        .params
+        .extra_heals
+        .iter()
+        .any(|h| h == "nugget-bridge-trainers")
+    {
         s.seg = "center-heal@nugget-bridge-trainers".into();
         s.event(
             "model-vs-actual",
