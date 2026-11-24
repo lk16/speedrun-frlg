@@ -160,15 +160,57 @@ fn resume_checkpoints(
     events: &EventLog,
     ilog_len: u64,
     state_dir: &Path,
+    from: Option<&str>,
 ) -> Result<Vec<CheckpointRec>, String> {
     let cp = dir.join("checkpoints.jsonl");
     if cp.exists() {
         let text = std::fs::read_to_string(&cp).map_err(|e| e.to_string())?;
-        return text
+        let recs: Vec<CheckpointRec> = text
             .lines()
             .filter(|l| !l.trim().is_empty())
             .map(|l| serde_json::from_str(l).map_err(|e| format!("{}: {e}", cp.display())))
-            .collect();
+            .collect::<Result<_, _>>()?;
+        match from {
+            Some(f) if !recs.iter().any(|r| r.name == f) => {}
+            _ => return Ok(recs),
+        }
+    }
+    // `--from` a checkpoint older than `checkpoints.jsonl` (the 2026-11-21 prefix only lists the
+    // ones from Giovanni 1 on): its last `checkpoint <name> saved at frame <f>` event, the state
+    // file next to the log, under `state_dir`, or under `states/human-play/<run dir name>/`.
+    if let Some(name) = from {
+        let ev = events
+            .events
+            .iter()
+            .rev()
+            .find(|e| {
+                e.frame <= ilog_len
+                    && e.nums.get("checkpoint").and_then(Value::as_str) == Some(name)
+            })
+            .ok_or_else(|| format!("no checkpoint event {name} in {}", dir.display()))?;
+        let f = ev.frame;
+        let mut candidates = vec![
+            dir.join(format!("{name}-{f}.state")),
+            state_dir.join(format!("{f:07}-{name}.state")),
+        ];
+        if let (Some(art), Some(dn)) = (std::env::var_os("FRLG_ARTIFACTS"), dir.file_name()) {
+            candidates.push(
+                Path::new(&art)
+                    .join("states/human-play")
+                    .join(dn)
+                    .join(format!("{f:07}-{name}.state")),
+            );
+        }
+        let file = candidates
+            .iter()
+            .find(|p| p.exists())
+            .ok_or_else(|| format!("no state file for checkpoint {name} at {f}"))?;
+        return Ok(vec![CheckpointRec {
+            name: name.to_string(),
+            frame: f,
+            ram_hash: String::new(),
+            state_file: file.display().to_string(),
+        }]);
     }
     let ev = events
         .events
@@ -203,7 +245,13 @@ impl<'p> Session<'p> {
         let obs = Observer::new(syms)?;
         let ilog = read_ilog(&resume.join("run.ilog"))?;
         let mut log = EventLog::load(&resume.join("events.jsonl")).map_err(|e| e.to_string())?;
-        let mut recs = resume_checkpoints(resume, &log, ilog.len() as u64, &cfg.state_dir)?;
+        let mut recs = resume_checkpoints(
+            resume,
+            &log,
+            ilog.len() as u64,
+            &cfg.state_dir,
+            cfg.from.as_deref(),
+        )?;
         if let Some(from) = &cfg.from {
             let k = recs
                 .iter()
@@ -306,6 +354,45 @@ impl<'p> Session<'p> {
             deep_until: 0,
             deep: 0,
         })
+    }
+
+    /// A fresh attempt at power-on: no resumed prefix, the core straight out of reset, and a
+    /// checkpoint `power-on` at frame 0 (the first stage of `legs::stages()`, `early.rs`), so
+    /// rollback, `checkpoints.jsonl` and `play-verify` work from boot like any other checkpoint.
+    pub fn power_on(plan: &'p Plan, cfg: PlayCfg, model: Model) -> PResult<Self> {
+        let dir = cfg.out_dir.clone();
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let mut rec = Recorder::from_reset(&cfg.rom)?;
+        std::fs::create_dir_all(&cfg.state_dir).map_err(|e| e.to_string())?;
+        let file = cfg.state_dir.join(format!("{:07}-power-on.state", 0));
+        rec.save_state_file(&file)?;
+        let hash = rec.emu().ram_hash().map_err(|e| e.to_string())?;
+        let mut log = EventLog::default();
+        log.push(
+            0,
+            "decision",
+            format!("plan {}: power-on", plan.params.name),
+            json!({"checkpoint": "power-on", "ram_hash": hash}),
+        );
+        std::fs::write(
+            dir.join("run.ilog"),
+            InputLog::new(rec.rom_sha1(), vec![]).encode(),
+        )
+        .map_err(|e| e.to_string())?;
+        log.save(&dir.join("events.jsonl"))
+            .map_err(|e| e.to_string())?;
+        let rec_line = CheckpointRec {
+            name: "power-on".into(),
+            frame: 0,
+            ram_hash: hash,
+            state_file: file.display().to_string(),
+        };
+        std::fs::write(
+            dir.join("checkpoints.jsonl"),
+            format!("{}\n", serde_json::to_string(&rec_line).unwrap()),
+        )
+        .map_err(|e| e.to_string())?;
+        Self::resume(plan, cfg, &dir, model)
     }
 
     /// Absolute frame since power-on.

@@ -1590,6 +1590,27 @@ pub fn build(dex: &Dex, p: &Params) -> Result<Vec<Seg>, String> {
             },
         );
     }
+    // PLAN `mt_moon_heal` (review item 18): the Route 4 Pokémon Center at Mt. Moon's entrance. Not a
+    // `center-heal@` anchor, so the Torrent phase does not walk past it.
+    if p.mt_moon_heal {
+        let at = b
+            .find("route3-trainers")
+            .ok_or("mt_moon_heal: no route3-trainers segment")?;
+        b.segs.insert(
+            at + 1,
+            Seg {
+                name: "mtmoon-heal@route3-trainers".into(),
+                src: Src::Guess,
+                inputs: 8,
+                split: false,
+                off_timer: false,
+                starter_check: false,
+                kind: Kind::Text {
+                    frames: p.mt_moon_heal_frames,
+                },
+            },
+        );
+    }
     for h in p.extra_heals.iter().rev() {
         let at = b
             .find(h)

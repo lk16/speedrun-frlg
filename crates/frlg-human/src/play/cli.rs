@@ -39,7 +39,7 @@ fn load_plan(dex: &'static Dex, path: &str) -> Plan {
 }
 
 pub fn usage() -> &'static str {
-    "  play --plan <plan.md> --seed S --resume <dir> [--until <stage>] [--out <dir>]\n\
+    "  play --plan <plan.md> --seed S (--power-on | --resume <dir>) [--until <stage>] [--out <dir>]\n\
      \x20      [--force-rollback <stage>[,<stage>]] [--retries n] [--model-R n]\n\
      \x20                                      continue a played attempt from its last checkpoint\n\
      \x20 play-verify --plan <plan.md> <dir>    replay <dir>/run.ilog from boot, check checkpoint RAM hashes\n\
@@ -89,7 +89,14 @@ pub fn main(cmd: &str, args: &[String], dex: &'static Dex) {
                 from: flag(args, "--from"),
                 max_retries: flag(args, "--retries").map_or(12, |s| s.parse().unwrap()),
             };
-            let mut s = Session::resume(&plan, cfg, &resume, model).unwrap_or_else(|e| {
+            // `--power-on`: a fresh attempt from boot, no resumed prefix (`Session::power_on`).
+            let fresh = args.iter().any(|a| a == "--power-on");
+            let started = if fresh {
+                Session::power_on(&plan, cfg, model)
+            } else {
+                Session::resume(&plan, cfg, &resume, model)
+            };
+            let mut s = started.unwrap_or_else(|e| {
                 eprintln!("{e}");
                 std::process::exit(1)
             });

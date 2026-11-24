@@ -679,6 +679,16 @@ fn fly_lavender(s: &mut Session) -> PResult<()> {
 }
 
 pub fn stages() -> Vec<Stage> {
+    // Power-on to the Route 4 Center (`play/early.rs`, ends in `mt-moon-pc`), then the Center to
+    // Giovanni 1 (`play/early2.rs`), then the rest.
+    super::early::stages()
+        .into_iter()
+        .chain(super::early2::stages())
+        .chain(rest())
+        .collect()
+}
+
+fn rest() -> Vec<Stage> {
     vec![
         Stage {
             name: "giovanni1",

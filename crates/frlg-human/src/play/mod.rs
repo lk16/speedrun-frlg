@@ -16,6 +16,8 @@ pub mod cli;
 pub mod dex;
 pub mod dex_test;
 pub mod dexfin;
+pub mod early;
+pub mod early2;
 pub mod events;
 pub mod fallback_battle;
 pub mod human;

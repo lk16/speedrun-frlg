@@ -60,6 +60,27 @@ fn arrow_dir(b: u16) -> Option<u16> {
         _ => None,
     }
 }
+/// One-sided walls `MB_IMPASSABLE_EAST/WEST/NORTH/SOUTH/NORTHEAST/NORTHWEST/SOUTHEAST/SOUTHWEST`
+/// 0x30-0x37 (`decompiled/include/constants/metatile_behaviors.h:39-46`): a step from `src` to `dst`
+/// by `(dx, dy)` is refused when the source is blocked on the side it leaves by or the
+/// destination on the side it enters by (`IsMetatileDirectionallyImpassable`,
+/// `decompiled/src/event_object_movement.c:889-901,4889-4897`; `MetatileBehavior_Is*Blocked`,
+/// `metatile_behavior.c:544-582`). Mt. Moon B2F row 14 is `MB_IMPASSABLE_NORTH`: not enterable
+/// from row 13 (13 bumps per pass before this).
+pub fn dir_blocked(src: u16, dst: u16, dx: i16, dy: i16) -> bool {
+    let north = |b: u16| matches!(b, 0x32 | 0x34 | 0x35);
+    let south = |b: u16| matches!(b, 0x33 | 0x36 | 0x37);
+    let east = |b: u16| matches!(b, 0x30 | 0x34 | 0x36);
+    let west = |b: u16| matches!(b, 0x31 | 0x35 | 0x37);
+    match (dx, dy) {
+        (0, 1) => south(src) || north(dst),
+        (0, -1) => north(src) || south(dst),
+        (-1, 0) => west(src) || east(dst),
+        (1, 0) => east(src) || west(dst),
+        _ => false,
+    }
+}
+
 /// Ledges (`MB_JUMP_EAST` .. `MB_JUMP_SOUTH`, 0x38-0x3B): hop direction.
 pub fn ledge(b: u16) -> Option<(i16, i16)> {
     match b {
@@ -859,6 +880,10 @@ impl Graph {
                     continue;
                 }
                 let Some(t) = m.tile(nx, ny) else { continue };
+                let src_b = m.tile(x, y).map_or(0, |t| t.behavior);
+                if dir_blocked(src_b, t.behavior, dx, dy) {
+                    continue;
+                }
                 // Spin tiles (`MB_SPIN_RIGHT/LEFT/UP/DOWN` 0x54-0x57, `MB_STOP_SPINNING` 0x58,
                 // `decompiled/include/constants/metatile_behaviors.h:66-70`): stepping on one
                 // slides the player its way, turning on every further spin tile, until a stop tile

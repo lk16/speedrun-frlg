@@ -129,6 +129,9 @@ pub struct Ctx<'a> {
     pub potion_bag_from: Option<usize>,
     /// MODEL CHANGE `Params::stone_shops`: first segment in the Celadon Department Store.
     pub stone_shop_from: Option<usize>,
+    /// MODEL CHANGE `Params::early_bag`: last segment (`brock`) whose risk-lane fights spend only the
+    /// picked-up early Potions.
+    pub early_bag_end: Option<usize>,
 }
 
 /// HP one potion use restores at segment `seg_i`: the level tier (`battle::heal_amount`: the human buys the tier the
@@ -387,6 +390,14 @@ struct State {
     safari_done: bool,
     /// MODEL CHANGE `Params::potion_bag_from`: potions in the bag.
     potions: u32,
+    /// PLAN `Params::early_potions`: free Potions picked up and not yet drunk (the risk lane spends them
+    /// before buying one).
+    free_potions: u32,
+    /// PLAN `Params::early_torrent`: the HP fraction the human walks a poisoned carry down to before the
+    /// steered fight (set in `sim_battle`, applied to the risk lane in `risk_fight`), and the HP the timing
+    /// lane lost doing it (the walk is charged once, for the larger drop).
+    steer_to: Option<f64>,
+    steer_hp: i32,
     /// The segment of the last PC visit paid (`pc_visit`) and `catch_n` then (`strength_carrier`).
     pc_seg: Option<usize>,
     pc_catch_n: u16,
@@ -1438,7 +1449,7 @@ fn encounter(
         if ok {
             got(st, sp.dex, level);
         }
-    } else if (ctx.p.fight_wild || st.carry < ctx.p.fight_until_level) && ctx.p.battle_sim {
+    } else if fights_wild(ctx, st.carry) && ctx.p.battle_sim {
         let foe = wild_mon(ctx, st, slot.species, level);
         // A lost wild fight is a whiteout like any other; the human does not give up the run over it.
         sim_battle(
@@ -1457,7 +1468,7 @@ fn encounter(
                 wild: true,
             },
         );
-    } else if ctx.p.fight_wild || st.carry < ctx.p.fight_until_level {
+    } else if fights_wild(ctx, st.carry) {
         let e = exp_gain(sp.exp_yield as u8, level as u8, false);
         let t = turns_per_mon(level as f64, effective_level(st, ctx.p), st.strength, 1.0);
         bump(st, t * ctx.turn() + ctx.mon_overhead());
@@ -1818,7 +1829,7 @@ fn battle(
 
 /// A TM/HM or tutor move the species can be taught (`tmhm_learnsets.h`,
 /// `tutor_learnsets.h`).
-fn can_learn(ctx: &Ctx, species: usize, mv: usize) -> bool {
+pub(crate) fn can_learn(ctx: &Ctx, species: usize, mv: usize) -> bool {
     let sp = &ctx.dex.species[species];
     sp.tmhm.contains(&mv) || sp.tutor.contains(&mv)
 }
@@ -1827,6 +1838,29 @@ fn can_learn(ctx: &Ctx, species: usize, mv: usize) -> bool {
 fn carry_species(ctx: &Ctx, level: u32) -> usize {
     let stage = (level >= ctx.evo_at[0]) as usize + (level >= ctx.evo_at[1]) as usize;
     ctx.starter_line[stage]
+}
+
+/// The pre-fight heal rule of the Torrent phase and of `entry` fights (`sim_battle`): the carry starts
+/// the fight with at least the foes' best hit (after one Withdraw, `battle::entry_floor`) times
+/// `torrent_hits` (1 for `entry` fights) plus one HP; below that the human drinks potions, above it
+/// nothing is done (the Torrent window, at most 1/3 of the max, is kept). The playing controller
+/// asks the same function before a fight (`play/early.rs`).
+pub fn entry_heal_floor(
+    ctx: &Ctx,
+    entry: bool,
+    dex: &crate::data::Dex,
+    me: &crate::battle::Mon,
+    foes: &[crate::battle::Mon],
+) -> i32 {
+    let hits = if entry { 1.0 } else { ctx.p.torrent_hits };
+    (crate::battle::entry_floor(dex, me, foes) as f64 * hits).ceil() as i32 + 1
+}
+
+/// A wild encounter the human does not catch is fought for exp (not fled) while the carry is below
+/// `fight_until_level`, or always with `fight_wild` (the rule of `run_encounters`; the playing
+/// controller asks the same function, `play/dex.rs`).
+pub fn fights_wild(ctx: &Ctx, carry: u32) -> bool {
+    ctx.p.fight_wild || carry < ctx.p.fight_until_level
 }
 
 /// One `battle_sim` fight, described.
@@ -1904,8 +1938,12 @@ pub fn fight_tactics(ctx: &Ctx, name: &str, league: bool, t: &TacIn) -> crate::b
         sac_free: !(ctx.p.sac_honest && (!league || ctx.p.sac_honest_league)),
         helper_hp: ctx.p.helper_hp,
         torrent: (torrent || (league && ctx.p.league_torrent)) && !t.mewtwo_now,
-        torrent_stall: ctx.p.torrent_stall,
-        torrent_early: ctx.p.torrent_early,
+        // PLAN `early_torrent`: the steered fight is fought from inside the window (no stall turns) and
+        // with Withdraw first against a faster foe.
+        torrent_stall: ctx.p.torrent_stall
+            && !(ctx.p.early_torrent.no_stall && ctx.p.early_torrent.fight == name),
+        torrent_early: ctx.p.torrent_early
+            || (ctx.p.early_torrent.withdraw_first && ctx.p.early_torrent.fight == name),
         others_alive: t.fodder,
         heal_stock: if league { t.heal_items } else { u32::MAX },
         rollouts: if league { ctx.p.league_rollouts } else { 0 },
@@ -2158,12 +2196,40 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             }
             m
         };
+        // PLAN `early_torrent` (review item 11): a poisoned carry is walked down into the Torrent window
+        // before the steered fight (Main97's Brock line, `STRATEGY.md` 359-370).
+        st.steer_to = None;
+        let et = &ctx.p.early_torrent;
+        if tries == 0
+            && !mewtwo_now
+            && in_torrent
+            && et.steer_poison
+            && a.name == et.fight
+            && matches!(st.carry_status, Status1::Poison | Status1::Toxic(_))
+        {
+            let lo = crate::battle::entry_floor(dex, &me, a.foes) + 1;
+            let target = (me.max_hp / 3).max(lo);
+            let tf = target as f64 / me.max_hp as f64;
+            st.steer_to = Some(tf);
+            let cur = (me.max_hp as f64 * st.hp_frac).round() as i32;
+            st.steer_hp = 0;
+            if cur > target {
+                st.steer_hp = cur - target;
+                clock_add(st, (cur - target) as f64 * ctx.p.poison_frames_per_hp);
+                let before = st.hp_frac;
+                st.hp_frac = tf;
+                // The lane is steered on its own in `risk_fight` (to the same target): no sync of this drop.
+                st.risk_real += st.hp_frac - before;
+            }
+            if et.cure {
+                st.carry_status = Status1::None;
+                me.status = Status1::None;
+                clock_add(st, et.cure_frames * ctx.p.text_factor);
+            }
+        }
         // Heal with items before the fight when low (each use is a bag trip).
         if (cfg.entry || in_torrent) && !mewtwo_now {
-            // The Torrent window: at least the foes' best hit (after one Withdraw) plus one HP, at
-            // most 1/3 of the max. Below the window a potion heal; above it nothing can be done.
-            let hits = if cfg.entry { 1.0 } else { ctx.p.torrent_hits };
-            let lo = (crate::battle::entry_floor(dex, &me, a.foes) as f64 * hits).ceil() as i32 + 1;
+            let lo = entry_heal_floor(ctx, cfg.entry, dex, &me, a.foes);
             let cur = (me.max_hp as f64 * st.hp_frac).round() as i32;
             if cur < lo {
                 let per = potion_hp(ctx, st.seg_i, me.level, st.league_items);
@@ -2600,6 +2666,17 @@ fn risk_fight(
     } else {
         (st.risk_hp + st.hp_frac - st.risk_real).clamp(0.0, 1.0)
     };
+    // PLAN `early_torrent`: the human walks the real (lane) HP into the window too; the walk is charged once,
+    // for the larger of the two lanes' drops.
+    if let Some(tf) = st.steer_to.take() {
+        let lane_cur = (me.max_hp as f64 * st.risk_hp).round() as i32;
+        let target = (me.max_hp as f64 * tf).round() as i32;
+        if lane_cur > target {
+            let extra = (lane_cur - target - st.steer_hp).max(0);
+            clock_add(st, extra as f64 * ctx.p.poison_frames_per_hp);
+            st.risk_hp = tf;
+        }
+    }
     let mut potions = if cfg.potions >= 0 {
         cfg.potions as u32
     } else {
@@ -2611,12 +2688,16 @@ fn risk_fight(
     let price = potion_price(per);
     // MODEL CHANGE `potion_bag_from`: from there on the potions come out of the bag (paid at the stop).
     let bag = ctx.potion_bag_from.is_some_and(|f| st.seg_i >= f);
-    let pay = ctx.p.risk_pay && ctx.p.money_model && !bag;
+    // MODEL CHANGE `early_bag`: before the Pewter mart only the picked-up Potions exist.
+    let early = ctx.early_bag_end.is_some_and(|e| st.seg_i <= e) && !bag;
+    let pay = (ctx.p.risk_pay && ctx.p.money_model && !bag) || early;
     if bag {
         potions = potions.min(st.potions);
     }
-    if pay {
-        potions = potions.min(st.money / price);
+    if early {
+        potions = potions.min(st.free_potions);
+    } else if pay {
+        potions = potions.min(st.free_potions + st.money / price);
     }
     let mut healed = false;
     // The entry heal of the Torrent phase, as in the timing lane but paid from the potion budget.
@@ -2634,9 +2715,9 @@ fn risk_fight(
                 bump(st, uses as f64 * ctx.turn());
             }
             if pay {
-                st.money -= uses * price;
+                spend_potions(st, uses, price);
                 bump(st, uses as f64 * ctx.turn());
-                potions = potions.min(st.money / price);
+                potions = potions.min(st.free_potions + if early { 0 } else { st.money / price });
             }
             st.risk_hp = ((cur + uses as i32 * per) as f64 / me.max_hp as f64).min(1.0);
         }
@@ -2659,7 +2740,7 @@ fn risk_fight(
     }
     if pay {
         let n = out.heals_used.min(potions);
-        st.money -= n * price;
+        spend_potions(st, n, price);
         // `tcost_whole`: the clock's actions (the `turn_power` copy, heal turns included) already pay the
         // in-battle heals; the lane's potions cost money only.
         if !whole_price(ctx, a) {
@@ -2690,6 +2771,80 @@ fn risk_fight(
         }
     }
     (lost, healed)
+}
+
+/// Clock-only cost (no VBlank advance of the game's stream): the small review-round plan costs below keep
+/// the pair's game draws common, so a 5-second plan change is not drowned in reshuffled fights.
+fn clock_add(st: &mut State, f: f64) {
+    if f >= 0.0 {
+        st.clock += f.round() as u64;
+    } else {
+        st.clock = st.clock.saturating_sub((-f).round() as u64);
+    }
+}
+
+/// The review-round-1 plan keys (R3) that act at one segment: rival name, early Potions, the Pewter mart
+/// after Brock (TM39 sale, Poké Balls).
+fn review_keys(ctx: &Ctx, st: &mut State, name: &str) {
+    let p = ctx.p;
+    if p.rival_name_len == 1 {
+        if name == "names" {
+            clock_add(st, p.rival_name_frames * p.text_factor);
+        } else if name.starts_with("rival-") || name == "champion" || name == "champion-2" {
+            // 6 rival fights + the two Champion fights carry the ~85 prints.
+            clock_add(st, -p.rival_print_saving / 8.0);
+        }
+    }
+    for (pick, anchor) in [
+        ("bedroom_pc", "house"),
+        ("route1_clerk", "to-viridian"),
+        ("forest_hidden", "forest-trainers"),
+    ] {
+        if name == anchor && p.early_potions.iter().any(|e| e == pick) {
+            st.free_potions += 1;
+            let f = p.early_potion_frames.get(pick).copied().unwrap_or(0.0);
+            clock_add(st, f * p.text_factor);
+        }
+    }
+    if name == "deliver" && p.viridian_potions > 0 {
+        let n = if p.money_model {
+            p.viridian_potions.min(st.money / 300)
+        } else {
+            p.viridian_potions
+        };
+        if p.money_model {
+            st.money -= n * 300;
+        }
+        st.free_potions += n;
+        let f = if p.early_balls > 0 { 150.0 } else { 900.0 };
+        clock_add(st, f * p.text_factor);
+    }
+    if name == "brock" && !st.abandoned {
+        if p.tm39_sell {
+            st.money += 1500;
+            clock_add(st, p.tm39_sell_frames * p.text_factor);
+        }
+        if p.pewter_balls > 0 {
+            let n = if p.money_model {
+                p.pewter_balls.min(st.money / 200)
+            } else {
+                p.pewter_balls
+            };
+            if p.money_model {
+                st.money -= n * 200;
+            }
+            st.balls[0] += n;
+            clock_add(st, p.pewter_ball_frames * p.text_factor);
+        }
+    }
+}
+
+/// Spend `n` risk-lane potions: the free early pickups first (`Params::early_potions`), the rest bought at
+/// `price` from the purse.
+fn spend_potions(st: &mut State, n: u32, price: u32) {
+    let f = n.min(st.free_potions);
+    st.free_potions -= f;
+    st.money = st.money.saturating_sub((n - f) * price);
 }
 
 /// Mart price of the potion that heals `per` HP (`items.json`: Potion 300, Super Potion 700, Hyper
@@ -3403,6 +3558,9 @@ pub fn attempt(
         revives: 0,
         candies: 0,
         potions: 0,
+        free_potions: 0,
+        steer_to: None,
+        steer_hp: 0,
         pc_seg: None,
         pc_catch_n: 0,
         slot_bonus: vec![],
@@ -4387,6 +4545,7 @@ pub fn attempt(
                 st.cures += n;
                 bump(&mut st, ctx.p.full_heal_frames * ctx.p.text_factor);
             }
+            review_keys(ctx, &mut st, &seg.name);
             // Poison outside battle: 1 HP per 5 steps while walking or reading text.
             if ctx.p.poison_frames_per_hp > 0.0
                 && matches!(
