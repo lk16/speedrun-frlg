@@ -1085,7 +1085,10 @@ fn repels_wanted(s: &Session) -> u16 {
             _ => 0,
         })
         .sum();
-    tiles.div_ceil(100) as u16
+    // +1: the played Mt. Moon walk (Robby, the Rare Candy ball, Miguel's trigger, the 1F/B1F/B2F
+    // ladders) is longer than the model's tiles; r2b-full2 ran out of Repels before B2F's 103
+    // encounter tiles with 3 (journal 2026-11-24-20-00-r2b-mid-stages).
+    tiles.div_ceil(100) as u16 + 1
 }
 
 /// Pewter mart (review item 13): sell TM39 when the plan does (`tm39_sell`, R3 key; the TM is
