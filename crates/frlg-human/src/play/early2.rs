@@ -418,6 +418,127 @@ fn use_pickups(s: &mut Session, anchor: &str) -> PResult<()> {
     Ok(())
 }
 
+/// Top up the bag at the mart on `map`: Repels to `repels`, then Super Potions to `supers`, as far
+/// as the money goes above `reserve` (Repel 350, Super Potion 700, `decompiled/src/data/items.json`).
+/// The sim's potions are unlimited outside the League and it carries no Repel count: every stock
+/// is a controller choice, logged as such.
+fn stock_up(
+    s: &mut Session,
+    map: &str,
+    repels: u16,
+    supers: u16,
+    reserve: u32,
+    why: &str,
+) -> PResult<()> {
+    let mut money = Ram::new(&s.obs)
+        .money(s.hf.rec.emu())
+        .saturating_sub(reserve);
+    let mut want: Vec<(&str, u16)> = vec![];
+    for (it, target, price) in [
+        ("ITEM_REPEL", repels, 350u32),
+        ("ITEM_SUPER_POTION", supers, 700u32),
+    ] {
+        let h = have(s, it);
+        let n = (target.saturating_sub(h) as u32).min(money / price) as u16;
+        if n > 0 {
+            money -= n as u32 * price;
+            want.push((it, h + n));
+        }
+    }
+    if want.is_empty() {
+        return Ok(());
+    }
+    s.event(
+        "model-vs-actual",
+        format!(
+            "{why}: {} (the sim's heals are unrationed and it counts no Repels)",
+            want.iter()
+                .map(|(i, n)| format!("{} to {n}", short(i)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        json!({"map": map}),
+    );
+    super::shop::mart_topup(s, map, None, &want, why)
+}
+
+/// A Center heal when the carry is under the plan's `heal_below` (the sim's between-fight heal
+/// threshold, `Params::heal_below`): the bag-heal the sim prices as free (`sim.rs` pre-fight
+/// heals) costs real potions here; a Center on the way costs none.
+fn center_if_low(s: &mut Session, center: &str, why: &str) -> PResult<()> {
+    let lead = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
+    let frac = lead.hp as f64 / lead.max_hp.max(1) as f64;
+    if frac >= s.plan.params.heal_below {
+        return Ok(());
+    }
+    s.event(
+        "model-vs-actual",
+        format!(
+            "Center stop ({why}): carry {}/{} under heal_below {}; the model heals from an unrationed bag",
+            lead.hp, lead.max_hp, s.plan.params.heal_below
+        ),
+        json!({"hp": lead.hp, "max": lead.max_hp}),
+    );
+    center_heal(s, center)
+}
+
+/// A hidden Rare Candy the plan counts (`elixirs` candy), picked up when the detour from here to
+/// `next_map` is at most `max_extra` tiles (`plan_len`: here -> facing the tile -> `next_map`,
+/// minus here -> `next_map`); otherwise left, and logged as a model bug (the model counts it).
+fn candy_on_way(
+    s: &mut Session,
+    map: &str,
+    x: i16,
+    y: i16,
+    gone: &str,
+    next_map: &str,
+    max_extra: usize,
+) -> PResult<()> {
+    if flag(s, gone) {
+        return Ok(());
+    }
+    let o = cut_opts();
+    let mid = s.graph().id(map);
+    let nmid = s.graph().id(next_map);
+    let adj = move |n: &Node| n.0 == mid && (n.1 - x).abs() + (n.2 - y).abs() == 1;
+    let to_next = move |n: &Node| n.0 == nmid;
+    let direct = super::walk::plan_len(s, None, &to_next, &o);
+    let there = here(s).and_then(|h| {
+        plan_nodes(s, h, &adj, &o).map(|n| (n.len().saturating_sub(1), *n.last().unwrap()))
+    });
+    let extra = match (direct, there) {
+        (Some(d), Some((a, end))) => {
+            super::walk::plan_len(s, Some(end), &to_next, &o).map(|b| (a + b).saturating_sub(d))
+        }
+        _ => None,
+    };
+    match extra {
+        Some(e) if e <= max_extra => {
+            s.event(
+                "decision",
+                format!(
+                    "hidden Rare Candy at {} ({x}, {y}): {e} extra tiles, picked up (plan elixirs candy)",
+                    short(map)
+                ),
+                json!({"map": map, "x": x, "y": y, "extra": e}),
+            );
+            pick(s, map, x, y, gone, "ITEM_RARE_CANDY")
+        }
+        _ => {
+            s.event(
+                "model-vs-actual",
+                format!(
+                    "hidden Rare Candy at {} ({x}, {y}) left: {extra:?} extra tiles (> {max_extra}); \
+                     the model counts it at no walking cost",
+                    short(map)
+                ),
+                json!({"map": map, "x": x, "y": y, "extra": extra}),
+            );
+            Ok(())
+        }
+    }
+}
+
 /// A hidden item or item ball (`legs3::pickup`), logged against the plan's anchor.
 fn pick(s: &mut Session, map: &str, x: i16, y: i16, gone: &str, item: &str) -> PResult<()> {
     super::legs3::pickup(s, map, x, y, gone, item)
@@ -793,6 +914,17 @@ fn mega_kick(s: &mut Session) -> PResult<()> {
 fn cerulean(s: &mut Session) -> PResult<()> {
     s.seg = "cerulean-heal".into();
     center_heal(s, "MAP_CERULEAN_CITY_POKEMON_CENTER_1F")?;
+    // The second `elixir-candy@cerulean-heal`: the hidden candy (18, 7) of `CeruleanCity/map.json`
+    // (`FLAG_HIDDEN_ITEM_CERULEAN_CITY_RARE_CANDY`), measured against the walk to the gym.
+    candy_on_way(
+        s,
+        "MAP_CERULEAN_CITY",
+        18,
+        7,
+        "FLAG_HIDDEN_ITEM_CERULEAN_CITY_RARE_CANDY",
+        "MAP_CERULEAN_CITY_GYM",
+        30,
+    )?;
     eat_candies(s, "cerulean-heal")?;
     s.seg = "persim-and-potions".into();
     let p = &s.plan.params;
@@ -819,8 +951,8 @@ fn cerulean(s: &mut Session) -> PResult<()> {
     if awak > 0 {
         want.push(("ITEM_AWAKENING", awak));
     }
-    // Repels: Route 9 and Rock Tunnel (repel_on), about one per 100 steps: 3.
-    want.push(("ITEM_REPEL", 3));
+    // Repels for Route 9 / Rock Tunnel are bought at the stop before Route 9 (`rock_tunnel`), with
+    // the bridge and Route 25 money; Nugget Bridge's path has no grass.
     // Heals: Super Potions up to 4, while the money lasts (the sim's heals are unrationed).
     want.push(("ITEM_SUPER_POTION", 4));
     s.event(
@@ -1039,6 +1171,17 @@ fn bike_voucher(s: &mut Session) -> PResult<()> {
         .map(|t| (t, "route6-trainers".to_string()))
         .collect();
     travel(s, "MAP_ROUTE6", &Opts::default(), &r56_seg, &[])?;
+    // One of the three `elixir-candy@hideout-grunts`: Route 6's hidden candy (19, 5)
+    // (`Route6/map.json`, `FLAG_HIDDEN_ITEM_ROUTE6_RARE_CANDY`).
+    candy_on_way(
+        s,
+        "MAP_ROUTE6",
+        19,
+        5,
+        "FLAG_HIDDEN_ITEM_ROUTE6_RARE_CANDY",
+        "MAP_VERMILION_CITY",
+        30,
+    )?;
     travel(s, "MAP_VERMILION_CITY", &Opts::default(), &r56_seg, &fights)?;
     s.seg = "bike-voucher".into();
     if have(s, "ITEM_BIKE_VOUCHER") == 0 {
@@ -1062,6 +1205,21 @@ fn bike_voucher(s: &mut Session) -> PResult<()> {
 fn ss_anne(s: &mut Session) -> PResult<()> {
     s.seg = "ss-anne".into();
     special_at(s, "ss-anne", "trade")?;
+    // The rival's Kadabra / Ivysaur killed two of three branches with an empty bag (r2b-dev8/9).
+    // Vermilion's Center and mart are on the way to the dock.
+    center_if_low(
+        s,
+        "MAP_VERMILION_CITY_POKEMON_CENTER_1F",
+        "before the S.S. Anne rival",
+    )?;
+    stock_up(
+        s,
+        "MAP_VERMILION_CITY_MART",
+        0,
+        5,
+        500,
+        "Super Potions for the S.S. Anne rival",
+    )?;
     s.seg = "rival-ss-anne".into();
     go_map(s, "MAP_SSANNE_2F_CORRIDOR", &Opts::default())?;
     if var(s, "VAR_MAP_SCENE_S_S_ANNE_2F_CORRIDOR") == 0 {
@@ -1145,24 +1303,16 @@ fn rock_tunnel(s: &mut Session) -> PResult<()> {
         );
         center_heal(s, "MAP_CERULEAN_CITY_POKEMON_CENTER_1F")?;
     }
-    let money = Ram::new(&s.obs).money(s.hf.rec.emu());
-    let afford = (money.saturating_sub(1500) / 700) as u16;
-    let have_sp = have(s, "ITEM_SUPER_POTION");
-    let want = (have_sp + afford).min(8);
-    if want > have_sp {
-        s.event(
-            "model-vs-actual",
-            format!("Super Potions for Route 9 / Rock Tunnel: {have_sp} -> {want} (${money})"),
-            json!({"have": have_sp, "want": want, "money": money}),
-        );
-        super::shop::mart_topup(
-            s,
-            "MAP_CERULEAN_CITY_MART",
-            None,
-            &[("ITEM_SUPER_POTION", want)],
-            "Rock Tunnel heals",
-        )?;
-    }
+    // Repels for `repel_on` route9 / rock-tunnel (the tunnel's two floors are ~140 steps, the
+    // Route 9 / 10 grass ~80), then Super Potions; $500 kept (the Nugget pays for the X items).
+    stock_up(
+        s,
+        "MAP_CERULEAN_CITY_MART",
+        3,
+        10,
+        500,
+        "Repels and Super Potions for Route 9 / Rock Tunnel",
+    )?;
     s.event(
         "model-vs-actual",
         "Rock Tunnel walked without Flash: the sim assumes HM05 in the bag (a guess, route_wr.rs); \
@@ -1173,6 +1323,18 @@ fn rock_tunnel(s: &mut Session) -> PResult<()> {
         .into_iter()
         .map(|t| (t, "rock-tunnel-trainers".to_string()))
         .collect();
+    travel(s, "MAP_ROUTE9", &cut_opts(), &rt_seg, &fights)?;
+    // One of the three `elixir-candy@hideout-grunts`: Route 9's hidden candy (63, 2)
+    // (`Route9/map.json`, `FLAG_HIDDEN_ITEM_ROUTE9_RARE_CANDY`), near the Route 10 end.
+    candy_on_way(
+        s,
+        "MAP_ROUTE9",
+        63,
+        2,
+        "FLAG_HIDDEN_ITEM_ROUTE9_RARE_CANDY",
+        "MAP_ROUTE10",
+        30,
+    )?;
     travel(s, "MAP_LAVENDER_TOWN", &cut_opts(), &rt_seg, &fights)?;
     split(s, "Rock Tunnel", "rock-tunnel-trainers")
 }
