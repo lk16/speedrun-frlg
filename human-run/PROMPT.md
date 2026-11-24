@@ -342,10 +342,13 @@ when it does, add the new items to the table below in the same way.
 ### Review step plan
 
 - [x] **R0. Plan.** This section, `NEXT.md`, the STRATEGY.md Water Gun correction (item 11).
-- [ ] **R1. Walker.** Live-object collision, flag-aware `blocked_tiles`, trainer sight lines from
+- [x] **R1. Walker.** Live-object collision, flag-aware `blocked_tiles`, trainer sight lines from
   current position and facing, wait-for-facing for wanderers, bump and detour accounting.
   *Check:* replays of the v4 bump sites from their savestates walk through without a bump; Robin
   and Ben are passed without a fight; the summary reports bumps = 0 on every stage replayed.
+  *Done* (`journal/2026-11-24-19-05-r1-walker.md`): `frlg-human play-walk` over `walk-regress.json`, 87/87 cases,
+  0 bumps (v4: 85); Route 3 15 seeds, Ben/Robin never fought; replayed stages 0 bumps. Open: re-check Dan / Hideout
+  B1F on R2b's stages with the spinner fix.
 - [ ] **R2. Early stages, boot to Giovanni 1,** in the current controller (`play/`), for the CURRENT
   plan: title seed + starter manip with human timing, one-letter rival, Fast text, early Potions,
   weaken-then-catch, Sammy/Brock Torrent line without a Center, Pewter mart per R3, Route 3 without a

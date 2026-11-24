@@ -153,6 +153,61 @@ impl ObjInfo {
         v
     }
 
+    /// Every (tile, facing) this object can have, spawned at `(x0, y0)`. A `WALK_SEQUENCE_A_B_C_D`
+    /// object walks direction A until the next tile is outside its range, then B, C, D, and starts
+    /// over at its spawn (`MoveNextDirectionInSequence`, `decompiled/src/event_object_movement.c:3909-3935`),
+    /// so only the rim of its box with one facing per side; an obstacle stops it (it walks in
+    /// place). Everyone else: any offset of [`Self::offsets`] with any of [`Self::facings`].
+    pub fn poses(&self, m: &MapInfo, x0: i16, y0: i16) -> Vec<((i16, i16), (i16, i16))> {
+        if let Some(seq) = self.movement.strip_prefix("MOVEMENT_TYPE_WALK_SEQUENCE_") {
+            let dirs: Vec<(i16, i16)> = seq
+                .split('_')
+                .filter_map(|w| match w {
+                    "UP" => Some((0, -1)),
+                    "DOWN" => Some((0, 1)),
+                    "LEFT" => Some((-1, 0)),
+                    "RIGHT" => Some((1, 0)),
+                    _ => None,
+                })
+                .collect();
+            if dirs.len() == 4 {
+                let out_of_range = |x: i16, y: i16| {
+                    (self.range_x != 0 && (x - x0).abs() > self.range_x)
+                        || (self.range_y != 0 && (y - y0).abs() > self.range_y)
+                };
+                let (mut x, mut y, mut k) = (x0, y0, 0usize);
+                let mut v = vec![];
+                for _ in 0..256 {
+                    if k == 3 && (x, y) == (x0, y0) {
+                        break;
+                    }
+                    let mut d = dirs[k];
+                    if out_of_range(x + d.0, y + d.1) && k < 3 {
+                        k += 1;
+                        d = dirs[k];
+                    }
+                    v.push(((x, y), d));
+                    let free = m.tile(x + d.0, y + d.1).is_some_and(|t| t.collision == 0)
+                        && !out_of_range(x + d.0, y + d.1);
+                    if !free {
+                        break;
+                    }
+                    x += d.0;
+                    y += d.1;
+                    v.push(((x, y), d));
+                }
+                return v;
+            }
+        }
+        let mut v = vec![];
+        for (dx, dy) in self.offsets() {
+            for d in self.facings() {
+                v.push(((x0 + dx, y0 + dy), d));
+            }
+        }
+        v
+    }
+
     pub fn facings(&self) -> Vec<(i16, i16)> {
         if let Some(d) = self.facing() {
             return vec![d];
@@ -452,6 +507,8 @@ pub type Node = (MapId, i16, i16);
 struct View {
     cur_map: MapId,
     live: Vec<LiveObject>,
+    /// The current map's object templates in RAM: (local id, x, y).
+    templates: Vec<(u8, i16, i16)>,
     surfing: bool,
     flags: HashMap<u16, bool>,
     temp_block: HashSet<Node>,
@@ -489,6 +546,8 @@ pub struct Plan {
     /// Per node: the local ids of the turning trainers on screen that could see it (wait for
     /// them to face away before stepping there).
     pub watch: Vec<Vec<u8>>,
+    /// Per node: inside a spinner's range box (enter it walking, B released).
+    pub norun: Vec<bool>,
     /// Per node: the local id of an unbeaten trainer whose line it is on (a fight the plan could
     /// not walk around), if any.
     pub seen: Vec<Option<u8>>,
@@ -510,6 +569,13 @@ struct Blk {
     /// can be: crossed only after waiting for it to face away (`follow`), so priced as a wait.
     /// Each tile maps to the local ids of the trainers that watch it.
     watch: HashMap<(i16, i16), Vec<u8>>,
+    /// Tiles inside a spinner's range box (`LOOK_AROUND`, `FACE_A_AND_B`, `ROTATE_*` trainers on
+    /// screen): a player who *runs* there makes it turn to face him at once
+    /// (`ObjectEventIsTrainerAndCloseToPlayer` needs `PLAYER_AVATAR_FLAG_DASH` and the player within
+    /// `trainerRange` on both axes, `decompiled/src/event_object_movement.c:2772-2798`; used by
+    /// `MovementType_LookAround_Step3/4`, `:3044-3066`, and every `FACE_*_AND_*` type), so these
+    /// tiles are entered walking. Wanderers do not react (`MovementType_WanderAround_Step3`, `:2721`).
+    norun: HashSet<(i16, i16)>,
 }
 
 /// The tiles a trainer at `(x, y)` sees in direction `d` with range `r`: up to `r` tiles, cut
@@ -573,20 +639,24 @@ impl Graph {
             if cur && live_ids.contains(&o.local_id) {
                 continue; // the live object below is the truth
             }
+            // On the current map the template in RAM says where the object (re)spawns.
+            let (ox, oy) = view
+                .templates
+                .iter()
+                .find(|t| cur && t.0 == o.local_id)
+                .map_or((o.x, o.y), |t| (t.1, t.2));
             if o.is_cut_tree() {
-                out.trees.insert((o.x, o.y));
+                out.trees.insert((ox, oy));
                 continue;
             }
             if o.stationary() {
-                out.b.insert((o.x, o.y));
+                out.b.insert((ox, oy));
             }
             if o.trainer && o.sight > 0 && !beaten(o) {
                 // Off screen: every tile it could see from anywhere in its range box.
                 let mut line = vec![];
-                for (dx, dy) in o.offsets() {
-                    for d in o.facings() {
-                        sight_line(m, o.x + dx, o.y + dy, d, o.sight, &mut line);
-                    }
+                for ((px, py), d) in o.poses(m, ox, oy) {
+                    sight_line(m, px, py, d, o.sight, &mut line);
                 }
                 out.sight.extend(line.into_iter().map(|t| (t, o.local_id)));
             }
@@ -637,15 +707,25 @@ impl Graph {
                     continue;
                 }
                 // A turning trainer: every line it can have from anywhere in its box.
-                let (ix, iy) = (o.x, o.y);
+                let (ix, iy) = view
+                    .templates
+                    .iter()
+                    .find(|t| t.0 == o.local_id)
+                    .map_or((o.x, o.y), |t| (t.1, t.2));
                 let mut line = vec![];
-                for (dx, dy) in o.offsets() {
-                    for &d in &facings {
-                        sight_line(m, ix + dx, iy + dy, d, r, &mut line);
-                    }
+                for ((px, py), d) in o.poses(m, ix, iy) {
+                    sight_line(m, px, py, d, r, &mut line);
                 }
                 for &d in &facings {
                     sight_line(m, l.x, l.y, d, r, &mut line);
+                }
+                let m_ = o.movement.as_str();
+                if !m_.contains("WANDER") && !m_.contains("WALK_") {
+                    for dx in -r..=r {
+                        for dy in -r..=r {
+                            out.norun.insert((l.x + dx, l.y + dy));
+                        }
+                    }
                 }
                 for t in line.into_iter().chain(now) {
                     let w = out.watch.entry(t).or_default();
@@ -1030,6 +1110,7 @@ impl Graph {
         moves.reverse();
         let mut watch = vec![];
         let mut seen = vec![];
+        let mut norun = vec![];
         for n in &nodes {
             let b = cache.get(&n.0);
             watch.push(
@@ -1037,6 +1118,7 @@ impl Graph {
                     .unwrap_or_default(),
             );
             seen.push(b.and_then(|b| b.sight.get(&(n.1, n.2)).copied()));
+            norun.push(b.is_some_and(|b| b.norun.contains(&(n.1, n.2))));
         }
         let mut live: Vec<(MapId, u8)> = view.live.iter().map(|l| (l.map, l.local_id)).collect();
         live.sort_unstable();
@@ -1045,6 +1127,7 @@ impl Graph {
             moves,
             watch,
             seen,
+            norun,
             live,
         })
     }
@@ -1072,6 +1155,7 @@ pub fn live_objects(s: &mut Session) -> Vec<LiveObject> {
 fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
     let cur_map = here(s).map(|n| n.0).unwrap_or((0, 0));
     let live = live_objects(s);
+    let templates = super::ram::Ram::new(&s.obs).templates(s.hf.rec.emu());
     let emu = s.hf.rec.emu();
     let surfing = s.obs.player_avatar_flags(emu) & AVATAR_SURFING != 0;
     let mut flags = HashMap::new();
@@ -1089,6 +1173,7 @@ fn view(s: &mut Session, temp_block: &HashSet<Node>) -> View {
     View {
         cur_map,
         live,
+        templates,
         surfing,
         flags,
         temp_block: temp_block.clone(),
@@ -1154,7 +1239,7 @@ enum Follow {
     /// The set of live objects changed while a step was under way (someone came on screen or
     /// left): plan again from the tile being entered, without letting go of the d-pad (the key
     /// held so far).
-    Refresh(u16),
+    Refresh(u16, Node),
     /// Bumped into something unexpected at this node.
     Bumped(Node),
 }
@@ -1196,6 +1281,7 @@ pub fn go_to(
     let mut refreshes = 0;
     let mut bike_tried: Option<MapId> = None;
     let mut held = 0u16;
+    let mut came_from: Option<Node> = None;
     let mut stats = WalkStats::default();
     // (shortest legal moves, the first plan's moves, the first plan's reason) at planning time.
     let mut first: Option<(usize, usize, String)> = None;
@@ -1244,7 +1330,20 @@ pub fn go_to(
                 "soft-lock: {what}: {plans} re-plans without arriving"
             )));
         }
-        let v = view(s, &temp_block);
+        // A refresh never turns straight back to the tile just left unless nothing else goes
+        // (two views that differ by one object flickering on the screen edge made the plans
+        // alternate between two tiles: Viridian Gym, 2000 refreshes in place).
+        let mut v = view(s, &temp_block);
+        if let Some(b) = came_from.take() {
+            v.temp_block.insert(b);
+            let walls = Opts {
+                cone_walls: true,
+                ..opts.clone()
+            };
+            if s.graph().plan(&v, cur, goal, &walls).is_none() {
+                v.temp_block.remove(&b);
+            }
+        }
         // Around every unbeaten trainer's sight line if there is a way, else through (a forced
         // fight: `human-run/tools/forced.py` audits which ones the plan cannot avoid).
         let walls = Opts {
@@ -1319,12 +1418,23 @@ pub fn go_to(
                 json!({"sight": scr}),
             );
         }
-        let r = follow(s, &plan, held, &mut stats)?;
+        if std::env::var("FRLG_WALK_DEBUG").is_ok_and(|v| v == "2") {
+            let ns: Vec<String> = plan
+                .nodes
+                .iter()
+                .map(|n| format!("({},{})", n.1, n.2))
+                .collect();
+            eprintln!("walk: path {}", ns.join(" "));
+        }
+        let r = follow(s, &plan, held, &mut stats, opts)?;
         held = 0;
         match r {
             Follow::Arrived => {}
             Follow::Replan => stats.replans += 1,
-            Follow::Refresh(k) => held = k,
+            Follow::Refresh(k, back) => {
+                held = k;
+                came_from = Some(back);
+            }
             Follow::Bumped(n) => {
                 bumps += 1;
                 let mn = s
@@ -1692,8 +1802,53 @@ fn wait_away(s: &mut Session, map: MapId, id: u8, tiles: &[(i16, i16)]) -> PResu
     Ok(s.frame() - t0)
 }
 
-fn follow(s: &mut Session, plan: &Plan, held: u16, stats: &mut WalkStats) -> PResult<Follow> {
+/// Is the rest of `plan` (from node `k`) still good with the live objects as they are now: no
+/// node blocked by an object, inside a sight line or a turning trainer's watch it did not have
+/// when planned?
+fn still_good(s: &mut Session, plan: &Plan, k: usize, opts: &Opts) -> bool {
+    let v = view(s, &HashSet::new());
+    let g = s.graph();
+    let Some(m) = v
+        .cur_live
+        .clone()
+        .or_else(|| g.maps.get(&v.cur_map).cloned())
+    else {
+        return false;
+    };
+    let b = g.blocked(&v, v.cur_map, &m, opts);
+    for j in k..plan.nodes.len() {
+        let n = plan.nodes[j];
+        if n.0 != v.cur_map {
+            continue;
+        }
+        let t = (n.1, n.2);
+        if b.b.contains(&t)
+            || (b.sight.contains_key(&t) && plan.seen[j].is_none())
+            || (b.watch.contains_key(&t) && plan.watch[j].is_empty())
+        {
+            if std::env::var_os("FRLG_WALK_DEBUG").is_some() {
+                eprintln!(
+                    "walk: plan spoiled at {t:?}: object {} sight {:?} watch {:?}",
+                    b.b.contains(&t),
+                    b.sight.get(&t),
+                    b.watch.get(&t)
+                );
+            }
+            return false;
+        }
+    }
+    true
+}
+
+fn follow(
+    s: &mut Session,
+    plan: &Plan,
+    held: u16,
+    stats: &mut WalkStats,
+    opts: &Opts,
+) -> PResult<Follow> {
     let mut last_key = held;
+    let mut known = plan.live.clone();
     for (i, mv) in plan.moves.iter().enumerate() {
         let from = plan.nodes[i];
         let to = plan.nodes[i + 1];
@@ -1835,6 +1990,20 @@ fn follow(s: &mut Session, plan: &Plan, held: u16, stats: &mut WalkStats) -> PRe
                         if n == Some(to) {
                             break;
                         }
+                        // A spin-tile slide (`to` several tiles away) passes through the tiles
+                        // between: let it run out, then see whether it ended where planned.
+                        if step_tiles(from, to) > 1 && n.is_some_and(|n| n.0 == from.0) {
+                            let mut k = 0;
+                            while !is_free(s) && k < 1200 && !s.obs.in_battle(s.hf.rec.emu()) {
+                                s.hf.step(0)?;
+                                k += 1;
+                            }
+                            if here(s) == Some(to) {
+                                // The slide stopped the player: the next press is a new one.
+                                last_key = 0;
+                                break;
+                            }
+                        }
                         // A map change through a connection or warp, or a forced move.
                         if std::env::var_os("FRLG_WALK_DEBUG").is_some() {
                             eprintln!("walk: at {n:?}, expected {from:?} -> {to:?}");
@@ -1869,15 +2038,25 @@ fn follow(s: &mut Session, plan: &Plan, held: u16, stats: &mut WalkStats) -> PRe
                             None => {}
                         }
                     }
-                    let b = run_bit(s);
+                    // Into a spinner's box: walk (see `Blk::norun`).
+                    let b = if plan.norun[i + 1] { 0 } else { run_bit(s) };
                     s.hf.step(dir | b)?;
                     fed += 1;
                 }
                 stats.moves += step_tiles(from, to);
                 // The step into `to` has started. Someone came on screen or left: plan again
                 // from `to` while the step runs (no frame passes while planning).
-                if i + 1 < plan.moves.len() && live_set(s) != plan.live {
-                    return Ok(Follow::Refresh(dir));
+                // Only a change that spoils the rest of the plan re-plans: alternating between
+                // two near-equal paths on every flicker of the object set made the walker
+                // circle the Viridian Gym spinners.
+                if i + 1 < plan.moves.len() {
+                    let now = live_set(s);
+                    if now != known {
+                        known = now;
+                        if !still_good(s, plan, i + 2, opts) {
+                            return Ok(Follow::Refresh(dir, from));
+                        }
+                    }
                 }
             }
         }
