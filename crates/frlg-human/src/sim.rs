@@ -1575,6 +1575,9 @@ fn use_repels(ctx: &Ctx, st: &mut State, seg: &Seg, tiles: u32) -> u32 {
             }
             bump(st, REPEL_USE * ctx.p.text_factor);
             st.repel_left = dur;
+            if std::env::var_os("FRLG_REPEL_TRACE").is_some() {
+                eprintln!("repel-use {}", seg.name);
+            }
         }
         let take = left.min(st.repel_left);
         st.repel_left -= take;
