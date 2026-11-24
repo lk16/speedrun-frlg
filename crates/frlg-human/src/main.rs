@@ -61,7 +61,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let seed: u64 = arg(&args, "--seed", 1);
     match args.first().map(String::as_str) {
-        Some(c @ ("play" | "play-verify" | "play-inspect" | "play-battles")) => {
+        Some(c @ ("play" | "play-verify" | "play-inspect" | "play-battles" | "play-walk")) => {
             frlg_human::play::cli::main(c, &args, dex());
         }
         Some("ladder") => {
