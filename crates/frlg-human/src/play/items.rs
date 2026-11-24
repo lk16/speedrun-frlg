@@ -450,10 +450,22 @@ const TM_MOVES: [&str; 50] = [
 /// picks the move, the cursor (`sMoveSelectionCursorPos`, 0-3 known moves, 4 the new one) goes
 /// there, A.
 fn forget_for_teach(s: &mut Session, item: u16, slot: usize) -> PResult<()> {
+    let what = names().item(item).trim_start_matches("ITEM_").to_string();
+    forget_for_move(s, tm_move(item), &what, slot)
+}
+
+/// The forget list while party slot `slot` learns the move `new_move` (game id) from a TM, HM or
+/// tutor (`what` names the source in the log): the sim's `replace_slot` (forced) picks the slot.
+pub fn forget_for_move(
+    s: &mut Session,
+    new_move: Option<u16>,
+    what: &str,
+    slot: usize,
+) -> PResult<()> {
     use super::battle::{move_index, moves_of, species_index};
     let mon = Ram::new(&s.obs).party(s.hf.rec.emu())[slot].clone();
     let dex = s.ctx.dex;
-    let mv = tm_move(item).and_then(|m| move_index(dex, m));
+    let mv = new_move.and_then(|m| move_index(dex, m));
     let sp = species_index(dex, mon.species);
     let pick = match (mv, sp, moves_of(dex, &mon.moves, &mon.pp)) {
         (Some(mv), Some(sp), Some((slots, _))) => {
@@ -471,7 +483,7 @@ fn forget_for_teach(s: &mut Session, item: u16, slot: usize) -> PResult<()> {
                 .mv(mon.moves[i])
                 .trim_start_matches("MOVE_")
                 .to_string()),
-            names().item(item).trim_start_matches("ITEM_")
+            what
         ),
         json!({"slot": pick, "moves": mon.moves.iter().map(|m| names().mv(*m)).collect::<Vec<_>>()}),
     );

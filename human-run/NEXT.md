@@ -1,5 +1,35 @@
 # Handoff for the next session
 
+## 2026-11-24 R3 (review round 1, model and plan; journal `journal/2026-11-24-18-00-r3-review-model.md`)
+
+**CURRENT = 1841-r3-repel** (WR+2m 3258 h vs 1507's 2671, +587 [231, 958]; WR 9120 vs 7608, seed 8106 R 3.2M). The rise
+is a MODEL change: `early_bag` (no mart on the walked route before Pewter, so the fights up to Brock have only
+picked-up Potions; the old model bought them from the purse, +79 382 h without pickups), answered by picking up all
+three early Potions (+975 h net) and the Brock Torrent line (**-413 h [-582, -258]**, forest-brock 0.397 in the
+runner's CI). Refuted / n.s.: `min_spa` 30 (+404), 5 Pewter balls (+453), TM39 sale (n.s.), one-letter rival (n.s.,
+~1.3 s), Mt. Moon heal (n.s., leaning worse), `torrent_heal_below` 0 and Route 3 per-fight thresholds (n.s.). The
+Route 4 Magikarp is already in the model (dropping it +1415 h).
+
+**Plan keys the controller (R2) follows, from 1841** (doc: `plans/1800-r3-keys.md`, `params.rs`):
+
+| key | value | meaning |
+| --- | --- | --- |
+| `rival_name_len` | 0 | preset name (one letter n.s.; if used, rebuild the starter-naming table) |
+| `early_potions` | `bedroom_pc`, `route1_clerk`, `forest_hidden` | pick up all three (forest one after Sammy) |
+| `early_bag` | true | MODEL: no Potions before Pewter except those |
+| `viridian_potions` | 0 | no Viridian mart stop |
+| `tm39_sell` | false | keep TM39 (sale n.s.) |
+| `pewter_balls` | 0 | no balls at Pewter |
+| `route4_magikarp` | true | buy Magikarp at the Route 4 Center on the first pass |
+| `mt_moon_heal` | false | no Center heal before Mt. Moon |
+| `early_torrent` | `{fight: brock, steer_poison, no_stall, cure: true, withdraw_first: false, tackle_only: [pewter-gym-trainer]}` | no heal before/in the gym; a poisoned carry walked down to floor(max/3) (not below Onix's max roll after Withdraw + 1), cured with the forest Antidote (28,57); Brock without stall turns; Liam with Tackle |
+| `repel_on` | without `route3` | Repels only where the path crosses encounter tiles |
+| `manip.min_spa` | 29 | unchanged |
+| `torrent_heal_below` | 0.5 | unchanged |
+
+Next: tier-1 timings of the pickups and the poison walk (guesses), a SENS on `early_potion_frames`, compare the
+lane's Brock pass (0.73) with played Brock attempts once R2 exists.
+
 ## 2026-11-24 review round 1 (read this first)
 
 The human review of the v4 video (`video-analysis/1122-lgdescent-human-review.md`, read-only, items 1-20 up to

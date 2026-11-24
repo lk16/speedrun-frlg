@@ -146,6 +146,24 @@ pub struct LiveObject {
     pub x: i16,
     pub y: i16,
     pub graphics: u8,
+    /// `previousCoords`: the tile a walking object is leaving. Collision checks both it and
+    /// `currentCoords` (`DoesObjectCollideWithObjectAt`, `decompiled/src/event_object_movement.c:4899-4915`),
+    /// and `currentCoords` is already the destination while a step is under way.
+    pub px: i16,
+    pub py: i16,
+    /// `facingDirection` (`DIR_SOUTH` 1, `DIR_NORTH` 2, `DIR_WEST` 3, `DIR_EAST` 4).
+    pub facing: u8,
+    /// `movementType` (`MOVEMENT_TYPE_*`, `decompiled/include/constants/event_object_movement.h`).
+    pub movement: u8,
+    /// `trainerType` and `trainerRange_berryTreeId` (the sight range of a trainer).
+    pub trainer_type: u8,
+    pub range: u8,
+    /// `mapNum` / `mapGroup` the object belongs to (an object of the previous map can stay
+    /// loaded for a while after a connection is crossed).
+    pub map: (u8, u8),
+    pub elevation: u8,
+    /// `invisible` (bit 13): hidden objects still collide, but nobody sees them.
+    pub invisible: bool,
 }
 
 impl<'a> Ram<'a> {
@@ -270,6 +288,15 @@ impl<'a> Ram<'a> {
                     graphics: emu.read8(b + 0x05),
                     x: emu.read16(b + 0x10) as i16 - MAP_OFFSET,
                     y: emu.read16(b + 0x12) as i16 - MAP_OFFSET,
+                    px: emu.read16(b + 0x14) as i16 - MAP_OFFSET,
+                    py: emu.read16(b + 0x16) as i16 - MAP_OFFSET,
+                    facing: emu.read8(b + 0x18) & 0x0F,
+                    movement: emu.read8(b + 0x06),
+                    trainer_type: emu.read8(b + 0x07),
+                    range: emu.read8(b + 0x1D),
+                    map: (emu.read8(b + 0x0A), emu.read8(b + 0x09)),
+                    elevation: emu.read8(b + 0x0B) & 0x0F,
+                    invisible: flags & (1 << 13) != 0,
                 })
             })
             .collect()

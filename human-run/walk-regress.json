@@ -1,0 +1,1271 @@
+[
+ {
+  "name": "v4-bump00",
+  "state": "states/human-play/r1-bump-sites/0004044-bump00.state",
+  "legs": [
+   [
+    "MAP_PALLET_TOWN",
+    6,
+    8
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 0), (6, 7)); re-planning [walk past the bump site; player PalletTown_PlayersHouse_1F (5, 8)]"
+ },
+ {
+  "name": "v4-bump01",
+  "state": "states/human-play/r1-bump-sites/0007632-bump01.state",
+  "legs": [
+   [
+    "MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB",
+    7,
+    7
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((4, 3), (8, 5)); re-planning [walk past the bump site; player PalletTown_ProfessorOaksLab (9, 5)]"
+ },
+ {
+  "name": "v4-bump02",
+  "state": "states/human-play/r1-bump-sites/0007919-bump02.state",
+  "legs": [
+   [
+    "MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB",
+    7,
+    8
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((4, 3), (8, 5)); re-planning [walk past the bump site; player PalletTown_ProfessorOaksLab (9, 5)]"
+ },
+ {
+  "name": "v4-bump03",
+  "state": "states/human-play/r1-bump-sites/0012116-bump03.state",
+  "legs": [
+   [
+    "MAP_PALLET_TOWN",
+    16,
+    13
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 0), (16, 13)); re-planning [walk past the bump site; player PalletTown_ProfessorOaksLab (7, 12)]"
+ },
+ {
+  "name": "v4-bump04",
+  "state": "states/human-play/r1-bump-sites/0033464-bump04.state",
+  "legs": [
+   [
+    "MAP_VIRIDIAN_CITY",
+    21,
+    4
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 1), (21, 8)); re-planning [walk past the bump site; player ViridianCity (20, 8)]"
+ },
+ {
+  "name": "v4-bump05",
+  "state": "states/human-play/r1-bump-sites/0033740-bump05.state",
+  "legs": [
+   [
+    "MAP_ROUTE2",
+    7,
+    69
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 1), (21, 8)); re-planning [walk past the bump site; player ViridianCity (20, 8)]"
+ },
+ {
+  "name": "v4-bump06",
+  "state": "states/human-play/r1-bump-sites/0034987-bump06.state",
+  "legs": [
+   [
+    "MAP_VIRIDIAN_FOREST",
+    39,
+    55
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((1, 0), (29, 61)); re-planning [walk past the bump site; player ViridianForest (29, 62)]"
+ },
+ {
+  "name": "v4-bump07",
+  "state": "states/human-play/r1-bump-sites/0050869-bump07.state",
+  "legs": [
+   [
+    "MAP_ROUTE2_VIRIDIAN_FOREST_NORTH_ENTRANCE",
+    4,
+    5
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((15, 3), (4, 7)); re-planning [walk past the bump site; player Route2_ViridianForest_NorthEntrance (4, 8)]"
+ },
+ {
+  "name": "v4-bump08",
+  "state": "states/human-play/r1-bump-sites/0051138-bump08.state",
+  "legs": [
+   [
+    "MAP_ROUTE2",
+    5,
+    13
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((15, 3), (4, 7)); re-planning [walk past the bump site; player Route2_ViridianForest_NorthEntrance (4, 8)]"
+ },
+ {
+  "name": "v4-bump09",
+  "state": "states/human-play/r1-bump-sites/0101861-bump09.state",
+  "legs": [
+   [
+    "MAP_MT_MOON_1F",
+    9,
+    18
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((1, 1), (15, 17)); re-planning [walk past the bump site; player MtMoon_1F (16, 17)]"
+ },
+ {
+  "name": "v4-bump10",
+  "state": "states/human-play/r1-bump-sites/0102150-bump10.state",
+  "legs": [
+   [
+    "MAP_MT_MOON_B1F",
+    4,
+    9
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((1, 1), (15, 17)); re-planning [walk past the bump site; player MtMoon_1F (16, 17)]"
+ },
+ {
+  "name": "v4-bump11",
+  "state": "states/human-play/r1-bump-sites/0138257-bump11.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CITY",
+    31,
+    21
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 3), (31, 21)); re-planning [walk past the bump site; player CeruleanCity_Gym (9, 18)]"
+ },
+ {
+  "name": "v4-bump12",
+  "state": "states/human-play/r1-bump-sites/0171540-bump12.state",
+  "legs": [
+   [
+    "MAP_ROUTE25",
+    24,
+    6
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 44), (21, 4)); re-planning [walk past the bump site; player Route25 (20, 4)]"
+ },
+ {
+  "name": "v4-bump13",
+  "state": "states/human-play/r1-bump-sites/0171838-bump13.state",
+  "legs": [
+   [
+    "MAP_ROUTE25",
+    24,
+    8
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 44), (21, 4)); re-planning [walk past the bump site; player Route25 (20, 4)]"
+ },
+ {
+  "name": "v4-bump14",
+  "state": "states/human-play/r1-bump-sites/0186808-bump14.state",
+  "legs": [
+   [
+    "MAP_ROUTE25_SEA_COTTAGE",
+    7,
+    9
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 44), (51, 4)); re-planning [walk past the bump site; player Route25_SeaCottage (6, 9)]"
+ },
+ {
+  "name": "v4-bump15",
+  "state": "states/human-play/r1-bump-sites/0194815-bump15.state",
+  "legs": [
+   [
+    "MAP_ROUTE6",
+    19,
+    13
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 24), (19, 13)); re-planning [walk past the bump site; player UndergroundPath_SouthEntrance (7, 8)]"
+ },
+ {
+  "name": "v4-bump16",
+  "state": "states/human-play/r1-bump-sites/0204285-bump16.state",
+  "legs": [
+   [
+    "MAP_VERMILION_CITY",
+    12,
+    17
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 5), (12, 17)); re-planning [walk past the bump site; player VermilionCity_PokemonFanClub (4, 10)]"
+ },
+ {
+  "name": "v4-bump17",
+  "state": "states/human-play/r1-bump-sites/0213446-bump17.state",
+  "legs": [
+   [
+    "MAP_SSANNE_2F_CORRIDOR",
+    2,
+    6
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((1, 6), (2, 8)); re-planning [walk past the bump site; player SSAnne_2F_Corridor (2, 9)]"
+ },
+ {
+  "name": "v4-bump18",
+  "state": "states/human-play/r1-bump-sites/0213982-bump18.state",
+  "legs": [
+   [
+    "MAP_SSANNE_1F_CORRIDOR",
+    3,
+    8
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((1, 6), (2, 5)); re-planning [walk past the bump site; player SSAnne_2F_Corridor (2, 6)]"
+ },
+ {
+  "name": "v4-bump19",
+  "state": "states/human-play/r1-bump-sites/0214246-bump19.state",
+  "legs": [
+   [
+    "MAP_SSANNE_1F_CORRIDOR",
+    19,
+    1
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((1, 6), (2, 5)); re-planning [walk past the bump site; player SSAnne_2F_Corridor (2, 6)]"
+ },
+ {
+  "name": "v4-bump20",
+  "state": "states/human-play/r1-bump-sites/0216609-bump20.state",
+  "legs": [
+   [
+    "MAP_VERMILION_CITY",
+    32,
+    30
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 5), (31, 30)); re-planning [walk past the bump site; player VermilionCity (30, 30)]"
+ },
+ {
+  "name": "v4-bump21",
+  "state": "states/human-play/r1-bump-sites/0217477-bump21.state",
+  "legs": [
+   [
+    "MAP_VERMILION_CITY",
+    34,
+    20
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 5), (35, 30)); re-planning [walk past the bump site; player VermilionCity (34, 30)]"
+ },
+ {
+  "name": "v4-bump22",
+  "state": "states/human-play/r1-bump-sites/0217737-bump22.state",
+  "legs": [
+   [
+    "MAP_ROUTE6",
+    12,
+    38
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 5), (35, 30)); re-planning [walk past the bump site; player VermilionCity (34, 30)]"
+ },
+ {
+  "name": "v4-bump23",
+  "state": "states/human-play/r1-bump-sites/0221783-bump23.state",
+  "legs": [
+   [
+    "MAP_ROUTE5",
+    31,
+    31
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((3, 23), (31, 31)); re-planning [walk past the bump site; player UndergroundPath_NorthEntrance (7, 8)]"
+ },
+ {
+  "name": "v4-bump24",
+  "state": "states/human-play/r1-bump-sites/0223882-bump24.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CITY_BIKE_SHOP",
+    5,
+    7
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((7, 6), (5, 5)); re-planning [walk past the bump site; player CeruleanCity_BikeShop (5, 4)]"
+ },
+ {
+  "name": "v4-bump25",
+  "state": "states/human-play/r1-bump-sites/0224148-bump25.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CITY",
+    13,
+    29
+   ]
+  ],
+  "opts": [],
+  "note": "bumped something at ((7, 6), (5, 5)); re-planning [walk past the bump site; player CeruleanCity_BikeShop (5, 4)]"
+ },
+ {
+  "name": "v4-bump26",
+  "state": "states/human-play/r1-bump-sites/0268088-bump26.state",
+  "legs": [
+   [
+    "MAP_ROCK_TUNNEL_B1F",
+    2,
+    5
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped something at ((1, 82), (2, 7)); re-planning [walk past the bump site; player RockTunnel_B1F (2, 8)]"
+ },
+ {
+  "name": "v4-bump27",
+  "state": "states/human-play/r1-bump-sites/0268377-bump27.state",
+  "legs": [
+   [
+    "MAP_ROCK_TUNNEL_B1F",
+    2,
+    5
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped something at ((1, 82), (2, 7)); re-planning [walk past the bump site; player RockTunnel_B1F (2, 8)]"
+ },
+ {
+  "name": "v4-bump28",
+  "state": "states/human-play/r1-bump-sites/0292194-bump28.state",
+  "legs": [
+   [
+    "MAP_ROUTE7",
+    7,
+    14
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped something at ((3, 25), (7, 14)); re-planning [walk past the bump site; player UndergroundPath_WestEntrance (7, 8)]"
+ },
+ {
+  "name": "v4-bump29",
+  "state": "states/human-play/r1-bump-sites/0293478-bump29.state",
+  "legs": [
+   [
+    "MAP_CELADON_CITY",
+    33,
+    13
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped something at ((3, 6), (44, 15)); re-planning [walk past the bump site; player CeladonCity (45, 15)]"
+ },
+ {
+  "name": "v4-bump30",
+  "state": "states/human-play/r1-bump-sites/0293748-bump30.state",
+  "legs": [
+   [
+    "MAP_CELADON_CITY_CONDOMINIUMS_1F",
+    8,
+    14
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped something at ((3, 6), (44, 15)); re-planning [walk past the bump site; player CeladonCity (45, 15)]"
+ },
+ {
+  "name": "v4-bump31",
+  "state": "states/human-play/r1-bump-sites/0299967-bump31.state",
+  "legs": [
+   [
+    "MAP_CELADON_CITY_DEPARTMENT_STORE_4F",
+    6,
+    2
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped something at ((10, 4), (5, 7)); re-planning [walk past the bump site; player CeladonCity_DepartmentStore_5F (4, 7)]"
+ },
+ {
+  "name": "v4-bump32",
+  "state": "states/human-play/r1-bump-sites/0305143-bump32.state",
+  "legs": [
+   [
+    "MAP_ROCKET_HIDEOUT_B2F",
+    22,
+    6
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped something at ((1, 42), (13, 2)); re-planning [walk past the bump site; player RocketHideout_B1F (12, 2)]"
+ },
+ {
+  "name": "v4-bump33",
+  "state": "states/human-play/r1-bump-sites/0310317-bump33.state",
+  "legs": [
+   [
+    "MAP_ROCKET_HIDEOUT_B2F",
+    21,
+    2
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped something at ((1, 43), (21, 6)); re-planning [walk past the bump site; player RocketHideout_B2F (22, 6)]"
+ },
+ {
+  "name": "v4-bump34",
+  "state": "states/human-play/r1-bump-sites/0310609-bump34.state",
+  "legs": [
+   [
+    "MAP_ROCKET_HIDEOUT_B3F",
+    10,
+    13
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped something at ((1, 43), (21, 6)); re-planning [walk past the bump site; player RocketHideout_B2F (22, 6)]"
+ },
+ {
+  "name": "v4-bump35",
+  "state": "states/human-play/r1-bump-sites/0341062-bump35.state",
+  "legs": [
+   [
+    "MAP_CELADON_CITY",
+    31,
+    15
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped into something at CeladonCity (18, 22); re-planning [walk past the bump site; player CeladonCity (16, 22)]"
+ },
+ {
+  "name": "v4-bump36",
+  "state": "states/human-play/r1-bump-sites/0352754-bump36.state",
+  "legs": [
+   [
+    "MAP_VERMILION_CITY",
+    14,
+    25
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped into something at VermilionCity (14, 25); re-planning [warp still loading; player VermilionCity_Gym (5, 19)]"
+ },
+ {
+  "name": "v4-bump37",
+  "state": "states/human-play/r1-bump-sites/0372778-bump37.state",
+  "legs": [
+   [
+    "MAP_POKEMON_TOWER_6F",
+    18,
+    10
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped into something at PokemonTower_6F (18, 10); re-planning [warp still loading; player PokemonTower_5F (18, 10)]"
+ },
+ {
+  "name": "v4-bump38",
+  "state": "states/human-play/r1-bump-sites/0463012-bump38.state",
+  "legs": [
+   [
+    "MAP_FUCHSIA_CITY",
+    9,
+    32
+   ]
+  ],
+  "opts": [
+   "cut"
+  ],
+  "note": "bumped into something at FuchsiaCity (9, 32); re-planning [warp still loading; player FuchsiaCity_Gym (7, 21)]"
+ },
+ {
+  "name": "v4-bump39",
+  "state": "states/human-play/r1-bump-sites/0512519-bump39.state",
+  "legs": [
+   [
+    "MAP_POKEMON_MANSION_1F",
+    19,
+    22
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at PokemonMansion_1F (19, 22); re-planning [warp still loading; player PokemonMansion_3F (18, 18)]"
+ },
+ {
+  "name": "v4-bump40",
+  "state": "states/human-play/r1-bump-sites/0515632-bump40.state",
+  "legs": [
+   [
+    "MAP_POKEMON_MANSION_B1F",
+    34,
+    29
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at PokemonMansion_B1F (34, 29); re-planning [warp still loading; player PokemonMansion_1F (25, 27)]"
+ },
+ {
+  "name": "v4-bump41",
+  "state": "states/human-play/r1-bump-sites/0566210-bump41.state",
+  "legs": [
+   [
+    "MAP_CINNABAR_ISLAND",
+    20,
+    4
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CinnabarIsland (20, 4); re-planning [warp still loading; player CinnabarIsland_Gym (25, 23)]"
+ },
+ {
+  "name": "v4-bump42",
+  "state": "states/human-play/r1-bump-sites/0573280-bump42.state",
+  "legs": [
+   [
+    "MAP_TWO_ISLAND",
+    39,
+    9
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at TwoIsland (39, 9); re-planning [warp still loading; player TwoIsland_JoyfulGameCorner (5, 8)]"
+ },
+ {
+  "name": "v4-bump43",
+  "state": "states/human-play/r1-bump-sites/0617782-bump43.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_MART",
+    2,
+    5
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity (48, 24); re-planning [walk past the bump site; player SaffronCity (48, 26)]"
+ },
+ {
+  "name": "v4-bump44",
+  "state": "states/human-play/r1-bump-sites/0619130-bump44.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_POKEMON_CENTER_1F",
+    7,
+    8
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity (29, 39); re-planning [walk past the bump site; player SaffronCity (31, 39)]"
+ },
+ {
+  "name": "v4-bump45",
+  "state": "states/human-play/r1-bump-sites/0644282-bump45.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    28,
+    23
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (28, 23); re-planning [warp still loading; player SaffronCity_Gym (18, 20)]"
+ },
+ {
+  "name": "v4-bump46",
+  "state": "states/human-play/r1-bump-sites/0644463-bump46.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    28,
+    12
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (28, 12); re-planning [warp still loading; player SaffronCity_Gym (28, 20)]"
+ },
+ {
+  "name": "v4-bump47",
+  "state": "states/human-play/r1-bump-sites/0647307-bump47.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    20,
+    4
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (20, 4); re-planning [warp still loading; player SaffronCity_Gym (20, 12)]"
+ },
+ {
+  "name": "v4-bump48",
+  "state": "states/human-play/r1-bump-sites/0647499-bump48.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    0,
+    4
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (0, 4); re-planning [warp still loading; player SaffronCity_Gym (20, 7)]"
+ },
+ {
+  "name": "v4-bump49",
+  "state": "states/human-play/r1-bump-sites/0647682-bump49.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    18,
+    15
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (18, 15); re-planning [warp still loading; player SaffronCity_Gym (0, 7)]"
+ },
+ {
+  "name": "v4-bump50",
+  "state": "states/human-play/r1-bump-sites/0656776-bump50.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    0,
+    7
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (0, 7); re-planning [warp still loading; player SaffronCity_Gym (18, 15)]"
+ },
+ {
+  "name": "v4-bump51",
+  "state": "states/human-play/r1-bump-sites/0657048-bump51.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    0,
+    15
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (0, 15); re-planning [warp still loading; player SaffronCity_Gym (8, 7)]"
+ },
+ {
+  "name": "v4-bump52",
+  "state": "states/human-play/r1-bump-sites/0657238-bump52.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    28,
+    15
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (28, 15); re-planning [warp still loading; player SaffronCity_Gym (0, 12)]"
+ },
+ {
+  "name": "v4-bump53",
+  "state": "states/human-play/r1-bump-sites/0657422-bump53.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    28,
+    20
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (28, 20); re-planning [warp still loading; player SaffronCity_Gym (28, 12)]"
+ },
+ {
+  "name": "v4-bump54",
+  "state": "states/human-play/r1-bump-sites/0657618-bump54.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_GYM",
+    18,
+    20
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity_Gym (18, 20); re-planning [warp still loading; player SaffronCity_Gym (28, 23)]"
+ },
+ {
+  "name": "v4-bump55",
+  "state": "states/human-play/r1-bump-sites/0657864-bump55.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY",
+    46,
+    12
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity (46, 12); re-planning [warp still loading; player SaffronCity_Gym (14, 23)]"
+ },
+ {
+  "name": "v4-bump56",
+  "state": "states/human-play/r1-bump-sites/0658296-bump56.state",
+  "legs": [
+   [
+    "MAP_SAFFRON_CITY_POKEMON_CENTER_1F",
+    7,
+    4
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SaffronCity (33, 39); re-planning [walk past the bump site; player SaffronCity (35, 39)]"
+ },
+ {
+  "name": "v4-bump57",
+  "state": "states/human-play/r1-bump-sites/0713339-bump57.state",
+  "legs": [
+   [
+    "MAP_VIRIDIAN_CITY_GYM",
+    17,
+    17
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at ViridianCity_Gym (10, 4); re-planning [walk past the bump site; player ViridianCity_Gym (10, 6)]"
+ },
+ {
+  "name": "v4-bump58",
+  "state": "states/human-play/r1-bump-sites/0721774-bump58.state",
+  "legs": [
+   [
+    "MAP_VIRIDIAN_CITY",
+    36,
+    10
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at ViridianCity (36, 10); re-planning [warp still loading; player ViridianCity_Gym (17, 22)]"
+ },
+ {
+  "name": "v4-bump59",
+  "state": "states/human-play/r1-bump-sites/0780438-bump59.state",
+  "legs": [
+   [
+    "MAP_VICTORY_ROAD_2F",
+    34,
+    19
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at VictoryRoad_2F (34, 19); re-planning [warp still loading; player VictoryRoad_3F (34, 18)]"
+ },
+ {
+  "name": "v4-bump60",
+  "state": "states/human-play/r1-bump-sites/0939147-bump60.state",
+  "legs": [
+   [
+    "MAP_POKEMON_TOWER_4F",
+    4,
+    10
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at PokemonTower_4F (4, 10); re-planning [warp still loading; player PokemonTower_5F (4, 10)]"
+ },
+ {
+  "name": "v4-bump61",
+  "state": "states/human-play/r1-bump-sites/1082077-bump61.state",
+  "legs": [
+   [
+    "MAP_SIX_ISLAND_DOTTED_HOLE_B1F",
+    6,
+    7
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SixIsland_DottedHole_B1F (6, 7); re-planning [warp still loading; player SixIsland_DottedHole_1F (6, 5)]"
+ },
+ {
+  "name": "v4-bump62",
+  "state": "states/human-play/r1-bump-sites/1082322-bump62.state",
+  "legs": [
+   [
+    "MAP_SIX_ISLAND_DOTTED_HOLE_B2F",
+    6,
+    7
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SixIsland_DottedHole_B2F (6, 7); re-planning [warp still loading; player SixIsland_DottedHole_B1F (6, 1)]"
+ },
+ {
+  "name": "v4-bump63",
+  "state": "states/human-play/r1-bump-sites/1082599-bump63.state",
+  "legs": [
+   [
+    "MAP_SIX_ISLAND_DOTTED_HOLE_B3F",
+    6,
+    7
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SixIsland_DottedHole_B3F (6, 7); re-planning [warp still loading; player SixIsland_DottedHole_B2F (1, 5)]"
+ },
+ {
+  "name": "v4-bump64",
+  "state": "states/human-play/r1-bump-sites/1082874-bump64.state",
+  "legs": [
+   [
+    "MAP_SIX_ISLAND_DOTTED_HOLE_B4F",
+    6,
+    7
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SixIsland_DottedHole_B4F (6, 7); re-planning [warp still loading; player SixIsland_DottedHole_B3F (11, 5)]"
+ },
+ {
+  "name": "v4-bump65",
+  "state": "states/human-play/r1-bump-sites/1083108-bump65.state",
+  "legs": [
+   [
+    "MAP_SIX_ISLAND_DOTTED_HOLE_SAPPHIRE_ROOM",
+    5,
+    9
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at SixIsland_DottedHole_SapphireRoom (5, 9); re-planning [warp still loading; player SixIsland_DottedHole_B4F (6, 9)]"
+ },
+ {
+  "name": "v4-bump66",
+  "state": "states/human-play/r1-bump-sites/1127659-bump66.state",
+  "legs": [
+   [
+    "MAP_FIVE_ISLAND_MEADOW",
+    12,
+    21
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at FiveIsland_Meadow (12, 21); re-planning [warp still loading; player FiveIsland_RocketWarehouse (24, 25)]"
+ },
+ {
+  "name": "v4-bump67",
+  "state": "states/human-play/r1-bump-sites/1136904-bump67.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    27,
+    3
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (29, 8); re-planning [walk past the bump site; player CeruleanCave_1F (29, 7)]"
+ },
+ {
+  "name": "v4-bump68",
+  "state": "states/human-play/r1-bump-sites/1137039-bump68.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    27,
+    3
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (25, 4); re-planning [walk past the bump site; player CeruleanCave_1F (26, 3)]"
+ },
+ {
+  "name": "v4-bump69",
+  "state": "states/human-play/r1-bump-sites/1137131-bump69.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    27,
+    3
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (26, 4); re-planning [walk past the bump site; player CeruleanCave_1F (26, 3)]"
+ },
+ {
+  "name": "v4-bump70",
+  "state": "states/human-play/r1-bump-sites/1137875-bump70.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    20,
+    5
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (27, 4); re-planning [walk past the bump site; player CeruleanCave_1F (27, 3)]"
+ },
+ {
+  "name": "v4-bump71",
+  "state": "states/human-play/r1-bump-sites/1138003-bump71.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    18,
+    5
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (23, 6); re-planning [walk past the bump site; player CeruleanCave_1F (23, 4)]"
+ },
+ {
+  "name": "v4-bump72",
+  "state": "states/human-play/r1-bump-sites/1138093-bump72.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    19,
+    3
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (22, 6); re-planning [walk past the bump site; player CeruleanCave_1F (22, 5)]"
+ },
+ {
+  "name": "v4-bump73",
+  "state": "states/human-play/r1-bump-sites/1138175-bump73.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    29,
+    3
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (21, 6); re-planning [walk past the bump site; player CeruleanCave_1F (21, 5)]"
+ },
+ {
+  "name": "v4-bump74",
+  "state": "states/human-play/r1-bump-sites/1138261-bump74.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    30,
+    4
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (20, 6); re-planning [walk past the bump site; player CeruleanCave_1F (21, 5)]"
+ },
+ {
+  "name": "v4-bump75",
+  "state": "states/human-play/r1-bump-sites/1138348-bump75.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    30,
+    4
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (19, 6); re-planning [walk past the bump site; player CeruleanCave_1F (20, 5)]"
+ },
+ {
+  "name": "v4-bump76",
+  "state": "states/human-play/r1-bump-sites/1138435-bump76.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    30,
+    4
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (18, 6); re-planning [walk past the bump site; player CeruleanCave_1F (19, 5)]"
+ },
+ {
+  "name": "v4-bump77",
+  "state": "states/human-play/r1-bump-sites/1139327-bump77.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    24,
+    3
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (31, 8); re-planning [walk past the bump site; player CeruleanCave_1F (30, 7)]"
+ },
+ {
+  "name": "v4-bump78",
+  "state": "states/human-play/r1-bump-sites/1139413-bump78.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    16,
+    6
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (32, 8); re-planning [walk past the bump site; player CeruleanCave_1F (32, 7)]"
+ },
+ {
+  "name": "v4-bump79",
+  "state": "states/human-play/r1-bump-sites/1139501-bump79.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    16,
+    6
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (33, 8); re-planning [walk past the bump site; player CeruleanCave_1F (33, 7)]"
+ },
+ {
+  "name": "v4-bump80",
+  "state": "states/human-play/r1-bump-sites/1139581-bump80.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    16,
+    6
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (34, 8); re-planning [walk past the bump site; player CeruleanCave_1F (33, 7)]"
+ },
+ {
+  "name": "v4-bump81",
+  "state": "states/human-play/r1-bump-sites/1140574-bump81.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    15,
+    14
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (16, 15); re-planning [walk past the bump site; player CeruleanCave_1F (16, 13)]"
+ },
+ {
+  "name": "v4-bump82",
+  "state": "states/human-play/r1-bump-sites/1141323-bump82.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    20,
+    17
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (15, 15); re-planning [walk past the bump site; player CeruleanCave_1F (15, 14)]"
+ },
+ {
+  "name": "v4-bump83",
+  "state": "states/human-play/r1-bump-sites/1141407-bump83.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    20,
+    17
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (14, 15); re-planning [walk past the bump site; player CeruleanCave_1F (15, 14)]"
+ },
+ {
+  "name": "v4-bump84",
+  "state": "states/human-play/r1-bump-sites/1141496-bump84.state",
+  "legs": [
+   [
+    "MAP_CERULEAN_CAVE_1F",
+    20,
+    17
+   ]
+  ],
+  "opts": [
+   "cut",
+   "surf"
+  ],
+  "note": "bumped into something at CeruleanCave_1F (13, 15); re-planning [walk past the bump site; player CeruleanCave_1F (13, 14)]"
+ }
+]
