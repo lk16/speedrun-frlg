@@ -1438,7 +1438,7 @@ fn encounter(
         if ok {
             got(st, sp.dex, level);
         }
-    } else if (ctx.p.fight_wild || st.carry < ctx.p.fight_until_level) && ctx.p.battle_sim {
+    } else if fights_wild(ctx, st.carry) && ctx.p.battle_sim {
         let foe = wild_mon(ctx, st, slot.species, level);
         // A lost wild fight is a whiteout like any other; the human does not give up the run over it.
         sim_battle(
@@ -1457,7 +1457,7 @@ fn encounter(
                 wild: true,
             },
         );
-    } else if ctx.p.fight_wild || st.carry < ctx.p.fight_until_level {
+    } else if fights_wild(ctx, st.carry) {
         let e = exp_gain(sp.exp_yield as u8, level as u8, false);
         let t = turns_per_mon(level as f64, effective_level(st, ctx.p), st.strength, 1.0);
         bump(st, t * ctx.turn() + ctx.mon_overhead());
@@ -1829,6 +1829,29 @@ fn carry_species(ctx: &Ctx, level: u32) -> usize {
     ctx.starter_line[stage]
 }
 
+/// The pre-fight heal rule of the Torrent phase and of `entry` fights (`sim_battle`): the carry starts
+/// the fight with at least the foes' best hit (after one Withdraw, `battle::entry_floor`) times
+/// `torrent_hits` (1 for `entry` fights) plus one HP; below that the human drinks potions, above it
+/// nothing is done (the Torrent window, at most 1/3 of the max, is kept). The playing controller
+/// asks the same function before a fight (`play/early.rs`).
+pub fn entry_heal_floor(
+    ctx: &Ctx,
+    entry: bool,
+    dex: &crate::data::Dex,
+    me: &crate::battle::Mon,
+    foes: &[crate::battle::Mon],
+) -> i32 {
+    let hits = if entry { 1.0 } else { ctx.p.torrent_hits };
+    (crate::battle::entry_floor(dex, me, foes) as f64 * hits).ceil() as i32 + 1
+}
+
+/// A wild encounter the human does not catch is fought for exp (not fled) while the carry is below
+/// `fight_until_level`, or always with `fight_wild` (the rule of `run_encounters`; the playing
+/// controller asks the same function, `play/dex.rs`).
+pub fn fights_wild(ctx: &Ctx, carry: u32) -> bool {
+    ctx.p.fight_wild || carry < ctx.p.fight_until_level
+}
+
 /// One `battle_sim` fight, described.
 /// The Torrent phase of the plan (`Params::torrent_until`) is on at segment `seg_i`, unless a heal took
 /// the carry out of the window (`State::torrent_lost`).
@@ -2160,10 +2183,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
         };
         // Heal with items before the fight when low (each use is a bag trip).
         if (cfg.entry || in_torrent) && !mewtwo_now {
-            // The Torrent window: at least the foes' best hit (after one Withdraw) plus one HP, at
-            // most 1/3 of the max. Below the window a potion heal; above it nothing can be done.
-            let hits = if cfg.entry { 1.0 } else { ctx.p.torrent_hits };
-            let lo = (crate::battle::entry_floor(dex, &me, a.foes) as f64 * hits).ceil() as i32 + 1;
+            let lo = entry_heal_floor(ctx, cfg.entry, dex, &me, a.foes);
             let cur = (me.max_hp as f64 * st.hp_frac).round() as i32;
             if cur < lo {
                 let per = potion_hp(ctx, st.seg_i, me.level, st.league_items);

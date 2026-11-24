@@ -365,6 +365,24 @@ pub fn wild_battle(s: &mut Session) -> Option<PResult<()>> {
     }
     let (species, _) = wild_mon(s);
     let mut plan = wild_plan(s, s.wild_plan);
+    // Not caught: fought for exp while the carry is under `fight_until_level` (`sim::fights_wild`,
+    // the simulator's own rule for encounters on the way).
+    if plan == WildPlan::Flee && s.dex.hunt.is_none() {
+        let carry = carry_level(s);
+        if sim::fights_wild(&s.ctx, carry) {
+            let (sp, lv) = wild_mon(s);
+            s.event(
+                "decision",
+                format!(
+                    "wild {} Lv{lv}: fight for exp (carry Lv{carry} < fight_until_level {})",
+                    short(names().species(sp)),
+                    s.plan.params.fight_until_level
+                ),
+                json!({"species": names().species(sp), "level": lv, "carry": carry, "rule": "fight_until_level"}),
+            );
+            plan = WildPlan::Fight;
+        }
+    }
     // Arena Trap (Diglett, Dugtrio in Kanto) blocks RUN for a grounded player mon
     // (`decompiled/src/battle_main.c:3031,3203`): "Can't escape!" every turn, and the flee loop
     // spun forever in the v3 fill (Diglett's Cave B1F). The human knocks it out instead.
@@ -399,6 +417,23 @@ pub fn wild_battle(s: &mut Session) -> Option<PResult<()>> {
     }
     after_wild(s, rep.end, species);
     Some(Ok(()))
+}
+
+/// The carry's level: the highest party member of the plan's starter line (`Ctx::starter_line`).
+pub fn carry_level(s: &mut Session) -> u32 {
+    let line: Vec<u16> = s
+        .ctx
+        .starter_line
+        .iter()
+        .map(|&i| id(&s.plan.dex.species[i].name))
+        .collect();
+    Ram::new(&s.obs)
+        .party(s.hf.rec.emu())
+        .iter()
+        .filter(|m| line.contains(&m.species))
+        .map(|m| m.level as u32)
+        .max()
+        .unwrap_or(0)
 }
 
 /// The Safari action menu takes input: `gBattlerControllerFuncs[0]` is the Safari controller's

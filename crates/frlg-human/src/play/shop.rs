@@ -386,6 +386,14 @@ pub fn sell(s: &mut Session, map: &str, clerk: Option<(i16, i16)>, items: &[&str
     wait_until(s, "the sell bag", 600, super::items::bag_input)?;
     for it in todo {
         let item = id(it);
+        let tm = Ram::new(&s.obs)
+            .pocket(s.hf.rec.emu(), 3)
+            .iter()
+            .any(|&(i, _)| i == item);
+        if tm {
+            sell_from_tm_case(s, it)?;
+            continue;
+        }
         let Some((pocket, idx)) = super::items::pocket_of(s, item) else {
             continue;
         };
@@ -462,6 +470,84 @@ pub fn sell(s: &mut Session, map: &str, clerk: Option<(i16, i16)>, items: &[&str
     Ok(Ram::new(&s.obs)
         .money(s.hf.rec.emu())
         .saturating_sub(money0))
+}
+
+/// In the sell bag: a TM sits in the TM Case (Key Items pocket), whose sell action opens the case
+/// in sell mode (`Task_ItemContext_Sell` -> `GoToTMCase_Sell`, `decompiled/src/item_menu.c:1787-1793`);
+/// A on the TM (`Task_HandleListInput`, `tm_case.c:891-935`), the price question and its YES
+/// (`Task_SelectedTMHM_Sell` -> `Task_AskConfirmSaleWithAmount` -> `Task_CallYesOrNoCallback`,
+/// `tm_case.c:1157-1199`, `menu_helpers.c:63-68`), the "turned over" text, then B out of the case
+/// back to the bag.
+fn sell_from_tm_case(s: &mut Session, it: &str) -> PResult<()> {
+    let item = id(it);
+    let case = id("ITEM_TM_CASE");
+    let Some((pocket, idx)) = super::items::pocket_of(s, case) else {
+        return Err(PlayError::Fatal(format!("{it} to sell but no TM Case")));
+    };
+    for tries in 0.. {
+        wait_until(s, "the bag", 200, super::items::bag_input)?;
+        let cur = super::items::bag_pocket(s) as usize;
+        if cur == pocket {
+            break;
+        }
+        if tries > 8 {
+            return Err(PlayError::Death("soft-lock: sell bag pocket".into()));
+        }
+        s.hf.press(if pocket > cur {
+            keys::RIGHT
+        } else {
+            keys::LEFT
+        })?;
+        s.hf.idle(2)?;
+    }
+    list_goto(s, idx as u16)?;
+    let owned = |s: &mut Session| Ram::new(&s.obs).count(s.hf.rec.emu(), item) > 0;
+    let case_input =
+        |s: &mut Session| menu::task(s, "Task_HandleListInput") && !super::prims::fade_active(s);
+    press_until(s, "the TM Case", keys::A, 600, |s| case_input(s))?;
+    // TM rows in the case are the TM pocket in order (`BagGetItemIdByPocketPosition`).
+    let row = Ram::new(&s.obs)
+        .pocket(s.hf.rec.emu(), 3)
+        .iter()
+        .position(|&(i, _)| i == item)
+        .unwrap_or(0) as u16;
+    list_goto(s, row)?;
+    let start = s.hf.fed();
+    loop {
+        if s.hf.fed() - start > 2000 {
+            return Err(PlayError::Death(format!(
+                "soft-lock: selling {it} (TM Case)"
+            )));
+        }
+        if !owned(s) && case_input(s) {
+            break;
+        }
+        if menu::task(s, "Task_CallYesOrNoCallback") {
+            menu::answer(s, true)?;
+            continue;
+        }
+        s.hf.late()?;
+        s.hf.step(keys::A)?;
+        s.hf.step(0)?;
+        s.hf.idle(2)?;
+    }
+    press_until(
+        s,
+        "back in the sell bag",
+        keys::B,
+        600,
+        super::items::bag_input,
+    )?;
+    let money = Ram::new(&s.obs).money(s.hf.rec.emu());
+    s.event(
+        "decision",
+        format!(
+            "sold {} from the TM Case (¥{money} now)",
+            it.trim_start_matches("ITEM_")
+        ),
+        json!({"item": it, "money": money}),
+    );
+    Ok(())
 }
 
 /// One PC operation.

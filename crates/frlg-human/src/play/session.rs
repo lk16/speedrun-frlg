@@ -308,6 +308,45 @@ impl<'p> Session<'p> {
         })
     }
 
+    /// A fresh attempt at power-on: no resumed prefix, the core straight out of reset, and a
+    /// checkpoint `power-on` at frame 0 (the first stage of `legs::stages()`, `early.rs`), so
+    /// rollback, `checkpoints.jsonl` and `play-verify` work from boot like any other checkpoint.
+    pub fn power_on(plan: &'p Plan, cfg: PlayCfg, model: Model) -> PResult<Self> {
+        let dir = cfg.out_dir.clone();
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let mut rec = Recorder::from_reset(&cfg.rom)?;
+        std::fs::create_dir_all(&cfg.state_dir).map_err(|e| e.to_string())?;
+        let file = cfg.state_dir.join(format!("{:07}-power-on.state", 0));
+        rec.save_state_file(&file)?;
+        let hash = rec.emu().ram_hash().map_err(|e| e.to_string())?;
+        let mut log = EventLog::default();
+        log.push(
+            0,
+            "decision",
+            format!("plan {}: power-on", plan.params.name),
+            json!({"checkpoint": "power-on", "ram_hash": hash}),
+        );
+        std::fs::write(
+            dir.join("run.ilog"),
+            InputLog::new(rec.rom_sha1(), vec![]).encode(),
+        )
+        .map_err(|e| e.to_string())?;
+        log.save(&dir.join("events.jsonl"))
+            .map_err(|e| e.to_string())?;
+        let rec_line = CheckpointRec {
+            name: "power-on".into(),
+            frame: 0,
+            ram_hash: hash,
+            state_file: file.display().to_string(),
+        };
+        std::fs::write(
+            dir.join("checkpoints.jsonl"),
+            format!("{}\n", serde_json::to_string(&rec_line).unwrap()),
+        )
+        .map_err(|e| e.to_string())?;
+        Self::resume(plan, cfg, &dir, model)
+    }
+
     /// Absolute frame since power-on.
     pub fn frame(&self) -> u64 {
         self.prefix.len() as u64 + self.hf.rec.frames() as u64
