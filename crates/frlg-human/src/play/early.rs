@@ -445,8 +445,31 @@ fn bedroom_to_ball(s: &mut Session) -> PResult<()> {
             "lab scene var is not 2 after Oak's scene".into(),
         ));
     }
-    go(s, LAB, BALL.0, BALL.1 + 1, &Opts::default())?;
-    super::walk::face(s, keys::UP)?;
+    // Two tiles below the ball, then one step up by hand: the walker's `settle` mashes A whenever
+    // the player is not free, and an A facing the ball runs its script at an untimed frame.
+    go(s, LAB, BALL.0, BALL.1 + 2, &Opts::default())?;
+    let lab_id = s.graph().id(LAB);
+    for _ in 0..4 {
+        if here(s) == Some((lab_id, BALL.0, BALL.1 + 1)) {
+            break;
+        }
+        wait_until(s, "free below the ball", 120, super::prims::is_free)?;
+        s.hf.late()?;
+        for _ in 0..24 {
+            if here(s) == Some((lab_id, BALL.0, BALL.1 + 1)) {
+                break;
+            }
+            s.hf.step(keys::UP)?;
+        }
+    }
+    wait_until(s, "free facing the ball", 120, super::prims::is_free)?;
+    let facing = super::ram::Ram::new(&s.obs).player_facing(s.hf.rec.emu());
+    if here(s) != Some((lab_id, BALL.0, BALL.1 + 1)) || facing != 2 {
+        return Err(PlayError::Death(format!(
+            "soft-lock: not facing the ball ({:?}, facing {facing})",
+            here(s)
+        )));
+    }
     Ok(())
 }
 
@@ -455,12 +478,38 @@ fn bedroom_to_ball(s: &mut Session) -> PResult<()> {
 /// POKéMON is really energetic!" exactly `d` frames after the ball press; `givemon` follows it
 /// (`PalletTown_ProfessorOaksLab/scripts.inc` `ChoseStarter`). Then B through the nickname prompt
 /// (NO) and the rival's pick, to lab scene var 3. Returns the dismiss frame.
-fn ball_sequence(s: &mut Session, d: u64) -> PResult<u64> {
+/// The ball press (at the current frame) through the YES; returns the ball press frame.
+fn ball_to_yes(s: &mut Session) -> PResult<u64> {
+    wait_until(s, "free facing the ball", 120, super::prims::is_free)?;
     let f0 = s.frame();
     s.hf.tap(keys::A)?;
-    super::prims::press_until(s, "the starter yes/no", keys::A, 600, super::menu::yesno_up)?;
+    // Oak's "Hm! SQUIRTLE is your choice..." page needs an A; the question then prints and opens
+    // the yes/no by itself (MSGBOX_YESNO). One press per page and a pause after it: a mashed A on
+    // the frame the box opens answers it and runs on into the next text.
+    let mut ok = false;
+    for _ in 0..12 {
+        for _ in 0..50 {
+            if super::menu::yesno_up(s) {
+                ok = true;
+                break;
+            }
+            s.hf.step(0)?;
+        }
+        if ok {
+            break;
+        }
+        s.hf.press(keys::A)?;
+    }
+    if !ok {
+        return Err(PlayError::Death("soft-lock: no starter yes/no".into()));
+    }
     s.hf.idle(4)?;
     s.hf.press(keys::A)?;
+    Ok(f0)
+}
+
+fn ball_sequence(s: &mut Session, d: u64) -> PResult<u64> {
+    let f0 = ball_to_yes(s)?;
     let target = f0 + d;
     if s.frame() >= target {
         return Err(PlayError::Fatal(format!(
@@ -483,23 +532,11 @@ fn ball_sequence(s: &mut Session, d: u64) -> PResult<u64> {
     Ok(target)
 }
 
-/// The fastest dismiss delay on this branch (TAS mash from the ball press to `givemon`), measured
-/// once per table; the human's target leaves a margin over it for his own late presses.
-fn min_dismiss(s: &mut Session) -> PResult<u64> {
-    let f0 = s.frame();
-    let obs = s.obs.clone();
-    let mut last = f0;
-    for _ in 0..800 {
-        if obs.party_count(s.hf.rec.emu()) == 1 {
-            return Ok(last - f0);
-        }
-        last = s.frame();
-        if super::menu::yesno_up(s) || obs.party_count(s.hf.rec.emu()) == 0 {
-            s.hf.step(keys::A)?;
-        }
-        s.hf.step(0)?;
-    }
-    Err(PlayError::Fatal("no starter after 1600 frames of A".into()))
+/// Frames from the ball press to the YES on this branch (the human's own procedure); the dismiss
+/// target leaves 90 frames over it for his late presses and the "really energetic" text to print.
+fn yes_elapsed(s: &mut Session) -> PResult<u64> {
+    let f0 = ball_to_yes(s)?;
+    Ok(s.frame() - f0)
 }
 
 /// The human's ball table on one branch (facing the ball at `at`): `gRngValue` before each frame
@@ -514,8 +551,7 @@ struct BallTable {
 
 fn ball_table(s: &mut Session, at: &Snap) -> PResult<BallTable> {
     restore(s, at)?;
-    let dmin = min_dismiss(s)?;
-    let d = dmin + 30;
+    let d = yes_elapsed(s)? + 90;
     restore(s, at)?;
     let mut rng = Vec::with_capacity(BALL_JMAX + 1);
     rng.push(rng_value(s));
@@ -625,6 +661,7 @@ fn starter(s: &mut Session) -> PResult<()> {
     let mut resets = 0u32;
     let mut off_frames = 0u64;
     let mut quiet_resets = 0u32;
+    let mut why: Vec<String> = vec![];
     for attempt in 0..400u64 {
         restore(s, &start)?;
         s.hf.rekey(base_key + attempt);
@@ -647,6 +684,8 @@ fn starter(s: &mut Session) -> PResult<()> {
             // No quiet frame before the attract screen: a full reboot, off the timer.
             off_frames += (s.frame() + mp.quiet_wait_cap as u64) + (mp.s_reset * FPS) as u64;
             resets += 1;
+            why.push("no quiet title frame".into());
+            eprintln!("starter attempt {attempt}: reset, {}", why.last().unwrap());
             continue;
         };
         let key = base_key + 0x100_0000 + attempt;
@@ -680,6 +719,8 @@ fn starter(s: &mut Session) -> PResult<()> {
         let Some((dn_star, j_star, dismiss)) = best else {
             off_frames += s.frame() + (mp.s_reset * FPS) as u64;
             resets += 1;
+            why.push("no table wait".into());
+            eprintln!("starter attempt {attempt}: reset, {}", why.last().unwrap());
             continue;
         };
         // The attempt as played: the presses land where they land.
@@ -695,6 +736,11 @@ fn starter(s: &mut Session) -> PResult<()> {
             off_frames += ng + (mp.s_reset * FPS) as u64;
             resets += 1;
             quiet_resets += 1;
+            why.push(format!(
+                "title press {:+}: seed not quiet ({h_real} hits)",
+                errs[0]
+            ));
+            eprintln!("starter attempt {attempt}: reset, {}", why.last().unwrap());
             continue;
         }
         s.hf.idle(j)?;
@@ -704,6 +750,11 @@ fn starter(s: &mut Session) -> PResult<()> {
         if !ok {
             off_frames += s.frame() + (mp.s_reset * FPS) as u64;
             resets += 1;
+            why.push(format!(
+                "presses {errs:?}: {} IVs {ivs:?} not in the tier",
+                frlg_mon::stats::NATURE_NAMES[nat as usize]
+            ));
+            eprintln!("starter attempt {attempt}: reset, {}", why.last().unwrap());
             continue;
         }
         let nature = frlg_mon::stats::NATURE_NAMES[nat as usize];
@@ -721,7 +772,7 @@ fn starter(s: &mut Session) -> PResult<()> {
                    "press_errors": errs, "p_hit": p_hit, "title_d": title_d, "title_target": d_star,
                    "table_hits": hits, "wild_hits": h_real, "naming_n": naming_n, "naming_target": NAMING_N0 + dn_star, "dials": mp.dials, "ball_wait": j,
                    "ball_target": j_star, "pid": pid, "nature": nature, "ivs": ivs,
-                   "ball_wait_s": j as f64 / FPS, "rival_name_len": rival_len}),
+                   "ball_wait_s": j as f64 / FPS, "resets_why": why, "rival_name_len": rival_len}),
         );
         return Ok(());
     }
