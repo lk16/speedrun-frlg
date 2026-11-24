@@ -1117,6 +1117,102 @@ pub struct Params {
     /// `LavenderTown_Mart/scripts.inc:32`: one more buy row, ~150 frames, guess).
     pub full_heal_price: u32,
     pub full_heal_frames: f64,
+    // ---- Review round 1 (R3, journal 2026-11-24 r3-review-model): plan keys the playing controller follows.
+    // Every default is the behaviour before R3 (the model's and, where the model was silent, the controller's).
+    /// PLAN (review item 3): the rival's name. 0 = the preset name (DOWN, A on the list,
+    /// `decompiled/src/oak_speech.c:1413-1440,2142`); 1 = "New name" and a one-letter name (A, START, A on an
+    /// empty naming screen, `decompiled/src/naming_screen.c:494,1485,2114`). The naming screen costs
+    /// `rival_name_frames` more (fades, ~85-100 frames measured by the review), and each of the rival-name
+    /// prints is 2 characters shorter (the preset names are 3 letters long; `{RIVAL}` lines plus the battle
+    /// strings, ~85 prints in a run, `decompiled/src/battle_message.c:2078-2081`); `rival_print_saving` is the
+    /// total, spread over the `rival-*` fights (1 frame per character at Fast text,
+    /// `decompiled/src/new_menu_helpers.c:27-31`; guess for the battle strings). Note the starter-manip naming
+    /// table shifts with the extra frames (controller, R2).
+    pub rival_name_len: u32,
+    pub rival_name_frames: f64,
+    pub rival_print_saving: f64,
+    /// PLAN (review item 9): the free early Potions picked up, any of `bedroom_pc` (the PC's starting item,
+    /// `decompiled/src/player_pc.c:101`), `route1_clerk` (the mart clerk's sample,
+    /// `decompiled/data/maps/Route1/scripts.inc:4-22`), `forest_hidden` (hidden Potion at (3,22),
+    /// `decompiled/data/maps/ViridianForest/map.json:272`, 4 tiles from Sammy). Frames per pickup:
+    /// `early_potion_frames` (guesses: PC withdraw 420, clerk talk 300, hidden item + 8 steps 240). Each is a
+    /// Potion the risk lane spends before paying for one. Empty = none (the old model and v4).
+    pub early_potions: Vec<String>,
+    pub early_potion_frames: std::collections::HashMap<String, f64>,
+    /// MODEL CHANGE (review item 9/10): no mart sells Potions on the walked route before the Pewter mart
+    /// visit after Brock (Viridian's is never entered), so the risk lane's fights up to and including `brock`
+    /// can spend only the picked-up `early_potions` (free), not purse-bought ones. Off = the old model
+    /// (potions bought from the purse at the moment of use, from the first fight on).
+    pub early_bag: bool,
+    /// PLAN (review item 13): sell TM39 (Rock Tomb, Brock's prize; price 3000, sold at half,
+    /// `decompiled/src/data/items.json` ITEM_TM39, `decompiled/src/item_menu.c:1933`) at the Pewter mart after
+    /// Brock for 1500. `tm39_sell_frames`: the SELL menu inside a mart visit the route makes anyway for
+    /// Repels and Potions (guess 360).
+    pub tm39_sell: bool,
+    pub tm39_sell_frames: f64,
+    /// PLAN (review item 13): Poké Balls bought at the Pewter mart after Brock (it sells them,
+    /// `decompiled/data/maps/PewterCity_Mart/scripts.inc` `PewterCity_Mart_Items`; 200 each, `items.json`).
+    /// `pewter_ball_frames`: one buy row inside that visit (guess 150). 0 = none.
+    pub pewter_balls: u32,
+    pub pewter_ball_frames: f64,
+    /// PLAN (review item 19): buy the Magikarp at the Route 4 Pokémon Center on the first pass (500,
+    /// `decompiled/data/maps/Route4_PokemonCenter_1F/scripts.inc:1,26-101`). The simulator reads the purchase
+    /// from `specials` (kind `buy`, after `route4`): true adds that entry when the plan lacks it (900 frames);
+    /// false leaves `specials` alone. Default false (the v4 controller bought it late, `play/dexfin.rs:335-339`).
+    pub route4_magikarp: bool,
+    /// PLAN (review item 18): a Pokémon Center heal at the Route 4 Center before Mt. Moon (after
+    /// `route3-trainers`), visited even in the Torrent phase; `mt_moon_heal_frames` (689 measured in v4 at the
+    /// nurse, plus ~110 walk-in, guess). Default false (the model's Torrent phase walks past it).
+    pub mt_moon_heal: bool,
+    pub mt_moon_heal_frames: u32,
+    /// PLAN (review item 11): the early Torrent line at one fight (Main97's Brock, `STRATEGY.md` 359-370);
+    /// see [`EarlyTorrent`]. Default off.
+    pub early_torrent: EarlyTorrent,
+}
+
+/// The WR runner's early Torrent line at one fight (`Params::early_torrent`): Torrent is x1.5 Water power at
+/// HP <= max/3 (`decompiled/src/pokemon.c:2500`); Sammy's poison is kept as the resource that walks the HP
+/// down (1 HP per 5 steps, `decompiled/src/field_control_avatar.c:717-719`; it can faint the mon,
+/// `decompiled/src/field_poison.c:104-106`, so the band's floor matters).
+#[derive(Deserialize, Clone, Debug)]
+#[serde(default)]
+pub struct EarlyTorrent {
+    /// The fight entered in the window (`brock`); empty = off.
+    pub fight: String,
+    /// Before that fight a poisoned carry above the window walks (in place) until its HP is at the window's
+    /// top, `floor(max/3)`, but never below `entry_floor + 1` (the foes' best max roll after one Withdraw:
+    /// Onix's Rock Tomb 5-7, the runner's 5/7/9 thresholds). Costs `poison_frames_per_hp` frames per HP
+    /// beyond what the route's own walk already drained. A carry that is not poisoned enters as it is.
+    pub steer_poison: bool,
+    /// The fight is fought without stall turns (the carry is already in the window; the runner stalls only
+    /// to keep Torrent when Bind misses). Off = the global `torrent_stall`.
+    pub no_stall: bool,
+    /// Withdraw on turn 1 against a faster foe whose max roll would KO (Onix; `Tactics::torrent_early`).
+    pub withdraw_first: bool,
+    /// The controller fights these trainers with Tackle only to keep the carry's HP falling (Liam);
+    /// the simulator does not model the move restriction (documented, not simulated).
+    pub tackle_only: Vec<String>,
+    /// A poisoned carry is cured once it is in the window, before the fight (in-battle poison takes 1/8 of
+    /// the max HP a turn, `decompiled/src/battle_util.c:805-806` `ENDTURN_POISON`, which kills a carry at 1/3 within
+    /// three turns). The Antidote is the Viridian Forest hidden one at (28,57)
+    /// (`decompiled/data/maps/ViridianForest/map.json:279-283`, review item 8: ~4 s detour) or a Pewter mart
+    /// buy (`PewterCity_Mart/scripts.inc`, 100). `cure_frames`: pickup 240 + bag use 400 (guesses).
+    pub cure: bool,
+    pub cure_frames: f64,
+}
+
+impl Default for EarlyTorrent {
+    fn default() -> Self {
+        EarlyTorrent {
+            fight: String::new(),
+            steer_poison: false,
+            no_stall: false,
+            withdraw_first: false,
+            tackle_only: vec![],
+            cure: false,
+            cure_frames: 640.0,
+        }
+    }
 }
 
 /// One step of `Params::potion_tiers`.
@@ -1356,6 +1452,26 @@ impl Default for Params {
             full_heal_at: String::new(),
             full_heal_price: 600,
             full_heal_frames: 900.0,
+            rival_name_len: 0,
+            rival_name_frames: 92.0,
+            rival_print_saving: 170.0,
+            early_potions: vec![],
+            early_potion_frames: [
+                ("bedroom_pc".to_string(), 420.0),
+                ("route1_clerk".to_string(), 300.0),
+                ("forest_hidden".to_string(), 240.0),
+            ]
+            .into_iter()
+            .collect(),
+            early_bag: false,
+            tm39_sell: false,
+            tm39_sell_frames: 360.0,
+            pewter_balls: 0,
+            pewter_ball_frames: 150.0,
+            route4_magikarp: false,
+            mt_moon_heal: false,
+            mt_moon_heal_frames: 800,
+            early_torrent: EarlyTorrent::default(),
         }
     }
 }
@@ -1371,8 +1487,36 @@ impl Params {
         let start = text.find("```json").ok_or("plan has no ```json block")? + "```json".len();
         let rest = &text[start..];
         let end = rest.find("```").ok_or("unterminated ```json block")?;
-        let p: Params =
+        let mut p: Params =
             serde_json::from_str(&rest[..end]).map_err(|e| format!("plan-params: {e}"))?;
+        for e in &p.early_potions {
+            if !p.early_potion_frames.contains_key(e) {
+                return Err(format!(
+                    "unknown early_potions entry {e} (bedroom_pc, route1_clerk, forest_hidden)"
+                ));
+            }
+        }
+        if p.rival_name_len > 1 {
+            return Err("rival_name_len is 0 (preset) or 1 (one letter)".into());
+        }
+        // `route4_magikarp`: the purchase is a `specials` buy (the simulator's one mechanism for it).
+        if p.route4_magikarp
+            && !p.specials.iter().any(|s| {
+                s.kind == "buy"
+                    && s.after == "route4"
+                    && s.species.iter().any(|x| x == "SPECIES_MAGIKARP")
+            })
+        {
+            p.specials.push(Special {
+                after: "route4".into(),
+                kind: "buy".into(),
+                species: vec!["SPECIES_MAGIKARP".into()],
+                level: 5,
+                frames: 900,
+                cost: 500,
+                ..Default::default()
+            });
+        }
         if !matches!(p.starter_model.as_str(), "random" | "manip") {
             return Err(format!("unknown starter_model {}", p.starter_model));
         }
