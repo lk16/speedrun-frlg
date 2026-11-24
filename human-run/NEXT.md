@@ -1,5 +1,26 @@
 # Handoff for the next session
 
+## 2026-11-24 R3 round 2: model bugs from R2a / R2b (journal `journal/2026-11-24-22-00-r3b-model-bugs.md`)
+
+**CURRENT stays 1841-r3-repel** (session ended on the usage limit; nothing adopted). New default-off keys: `cut_honest`
+(+ hunt / teach / detour knobs) and `mid_bag` (counted potion bag from Pewter). Findings, ranked for the next session:
+1. **`manip.dials` 2 (naming-screen dial): -812 h [-1194, -555]; with tier spe 28 / hp 16 / spd 20 -971 h** (one seed,
+   8201). Confirm on a second seed and adopt; the controller's two-dial path (R2a) must be played.
+2. **`mid_bag` + Potion top-ups 10 / 10 / 10 (Pewter, Cerulean `persim-and-potions`, `bike-redeem`) + Cerulean heal
+   before Route 9 (`extra_heals` / `torrent_heals` `bike-redeem`): -180 h n.s. vs 1841** = the honest Rock Tunnel bag
+   costs nothing with that response. Adopt as the model of record.
+3. **Cut (`cut_honest`) +2812 h**, no plan response found (Route 25 hunt 150-600 steps, a Mt. Moon Paras hunt: worse).
+   Try balls before the hunt and a priced walk-around.
+4. Tier-1 frames (R2a runs): TM39 sale ~470 f, a buy row ~210 f, Route 1 clerk ~400-560 f, forest Potion <= 628 f.
+Not model bugs: the bridge heal (skipped in the Torrent phase), the Teleports (walked), the trades (never happen),
+the Persim fetch (in `persim-and-potions`).
+
+**Controller (R2) keys, unchanged from 1841** (table in the R3 section below), plus these controller obligations:
+pick up the three hidden Rare Candies (Cerulean (18,7), Route 6 (19,5), Route 9 (63,2): skipping them is +157 548 h);
+buy 3 Repels at Pewter (one per Mt. Moon floor) and 1-2 at Cerulean (Rock Tunnel); the Route 4 Magikarp; the
+Persim pickup and give; until `mid_bag` is adopted, keep healing at Cerulean before Route 9 and topping up Potions
+(the honest plan above is what the model will price).
+
 ## 2026-11-24 R3 (review round 1, model and plan; journal `journal/2026-11-24-18-00-r3-review-model.md`)
 
 **CURRENT = 1841-r3-repel** (WR+2m 3258 h vs 1507's 2671, +587 [231, 958]; WR 9120 vs 7608, seed 8106 R 3.2M). The rise
