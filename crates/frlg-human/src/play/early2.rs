@@ -972,6 +972,19 @@ fn dig_grunt(s: &mut Session) -> PResult<()> {
         );
     }
     go_map(s, "MAP_CERULEAN_CITY", &Opts::default())?;
+    // The plan's `center-heal@nugget-bridge-trainers` (`extra_heals`): the only Center is in
+    // Cerulean, so the human heals on the way back from Bill instead of walking back mid-route.
+    if s.plan.params.extra_heals.iter().any(|h| h == "nugget-bridge-trainers") {
+        s.seg = "center-heal@nugget-bridge-trainers".into();
+        s.event(
+            "model-vs-actual",
+            "center-heal@nugget-bridge-trainers taken at Cerulean after Bill (the Center is behind \
+             the bridge; the model heals right after the bridge trainers)",
+            json!({}),
+        );
+        center_heal(s, "MAP_CERULEAN_CITY_POKEMON_CENTER_1F")?;
+        s.seg = "teleport-cerulean".into();
+    }
     if s.plan.params.variant("dig_after_bill") {
         s.seg = "dig-grunt".into();
         if var(s, "VAR_MAP_SCENE_CERULEAN_CITY_ROCKET") == 0 {
