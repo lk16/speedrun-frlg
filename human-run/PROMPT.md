@@ -349,7 +349,7 @@ when it does, add the new items to the table below in the same way.
   *Done* (`journal/2026-11-24-19-05-r1-walker.md`): `frlg-human play-walk` over `walk-regress.json`, 87/87 cases,
   0 bumps (v4: 85); Route 3 15 seeds, Ben/Robin never fought; replayed stages 0 bumps. Open: re-check Dan / Hideout
   B1F on R2b's stages with the spinner fix.
-- [ ] **R2. Early stages, boot to Giovanni 1,** in the current controller (`play/`), for the CURRENT
+- [ ] **R2. Early stages, boot to Giovanni 1,** (in progress 2026-11-24: `play/early.rs` + `play/early2.rs` merged; verified pieces `r2a-s11` (1507) and `r2b-full3b`; 1841 from power-on blocked at Liam by a no-PP move pick; see `NEXT.md`) in the current controller (`play/`), for the CURRENT
   plan: title seed + starter manip with human timing, one-letter rival, Fast text, early Potions,
   weaken-then-catch, Sammy/Brock Torrent line without a Center, Pewter mart per R3, Route 3 without a
   Repel and without Ben/Robin, Route 4 per R3, Mt. Moon, then Misty, Bill, Bike, Rock Tunnel and the

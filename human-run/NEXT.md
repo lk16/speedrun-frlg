@@ -1,5 +1,39 @@
 # Handoff for the next session
 
+## 2026-11-24 20:15 session end, review round 1 (read this first)
+
+All four branches are merged into `human-run`: R1 walker, R2a `play/early.rs` (power-on to `mt-moon-pc`), R2b
+`play/early2.rs` (`mt-moon-pc` to Giovanni 1), R3 model. **CURRENT 1841-r3-repel.** The stage list is now
+`early + early2 + rest`, so `frlg-human play --power-on` covers the whole run. The session ended on the weekly usage
+limit; **R2 and R4 are not done.**
+
+- **R1 done** (journal `2026-11-24-19-05-r1-walker.md`): 87/87 bump sites from v4 walk with 0 bumps; Route 3 on 15
+  seeds without Ben or Robin; trainer sight lines from RAM, plus spinners and loop walkers. Not yet re-checked with this
+  walker: Youngster Dan and Chad (Route 25), Mt. Moon Grunt 4, the hideout B1F grunts (R2b's runs used the old walker).
+- **R2 state.** Verified runs: `runs/human-play/r2a-s11` (plan 1507, power-on to `mt-moon-pc`, Brock 978 s, mt-moon-pc
+  1366 s) and `r2b-full3b` (from r2a's `brock` checkpoint to `hideout-out`, 0 bumps; Misty 1964, Bill 2791, Bike 3319,
+  Rock Tunnel 4080, Giovanni 1 4809 s vs the old prefix's 5532). **No run of 1841 past `pewter-gym` yet.** Seed 21
+  soft-locked in Liam: the Tackle-only rule fell back to Bubble with 0 PP left. Fix first: the move pick must re-read
+  PP from RAM.
+- **Next, in order:**
+  1. The PP fix.
+  2. Play 1841 from power-on to `giovanni1` with the merged walker. This is the first play of the
+     `early_torrent` poison walk and cure. Check: 0 bumps, Dan/Chad/Grunt 4/B1F grunts not fought, verify from boot.
+  3. Continue into the existing stages, then the full v5 run and video (R4).
+- **Model next** (R3 round 2 section below): confirm `manip.dials` 2 on a second seed (-812 h, one seed) and play the
+  two-dial starter path in the controller; adopt `mid_bag` + top-ups; a plan response to `cut_honest` (+2812 h);
+  price `wild_fight_floor` (new key, default 0) and the Tackle-only Liam rule. Write the measured frame costs into the
+  plan: bedroom PC Potion 466-474, Route 1 clerk 946 (from the lab door), forest Antidote 239-246, forest Potion 238-239,
+  TM39 sale ~470, a buy row ~210.
+- **Battle-driver bug:** a flee from a Shadow Tag Wobbuffet (Six Island) hangs.
+- **Review items now closed in code:** 1, 2 (re-checked: Fast is set at the first chance, in the bedroom), 4, 5, 7, 9,
+  10, 12, 14, 16, 17, 19. Implemented: 11, waiting for a played check.
+  - Item 8 is reversed: the forest Antidote is now picked up, because item 11's cure needs it.
+  - 3, 13 and 18 were tested and not adopted, so the plan keys keep them off.
+  - 6 is refuted.
+  - 15 is not significant.
+  - 20 needs no work.
+
 ## 2026-11-24 R3 round 2: model bugs from R2a / R2b (journal `journal/2026-11-24-22-00-r3b-model-bugs.md`)
 
 **CURRENT stays 1841-r3-repel** (session ended on the usage limit; nothing adopted). New default-off keys: `cut_honest`
