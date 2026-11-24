@@ -569,16 +569,16 @@
   "state": "states/human-play/r1-bump-sites-free/bump41.state",
   "legs": [
    [
-    "MAP_CINNABAR_ISLAND",
-    -1,
-    -1
+    "MAP_CINNABAR_ISLAND_GYM",
+    24,
+    21
    ]
   ],
   "opts": [
    "cut",
    "surf"
   ],
-  "note": "frame 566510: bumped into something at CinnabarIsland (20, 4); re-planning Cause: warp still loading at the 90-frame time-out. Player at CinnabarIsland_Gym (25, 23)."
+  "note": "frame 566510: bumped into something at CinnabarIsland (20, 4); re-planning Cause: warp still loading at the 90-frame time-out. Player at CinnabarIsland_Gym (25, 23). Goal kept inside the gym: leaving it after Blaine starts Bill's scene, which the harness mashes through to the One Island boat (the sevii-boat stage), so the original exit warp is covered by the other door cases."
  },
  {
   "name": "v4-bump42",
