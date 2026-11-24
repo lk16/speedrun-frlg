@@ -1180,7 +1180,8 @@ fn bike_voucher(s: &mut Session) -> PResult<()> {
         5,
         "FLAG_HIDDEN_ITEM_ROUTE6_RARE_CANDY",
         "MAP_VERMILION_CITY",
-        30,
+        // 34 extra tiles in r2b-full2 (~5 s running plus the found-item text) for a level.
+        40,
     )?;
     travel(s, "MAP_VERMILION_CITY", &Opts::default(), &r56_seg, &fights)?;
     s.seg = "bike-voucher".into();
