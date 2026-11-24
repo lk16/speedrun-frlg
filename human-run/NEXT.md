@@ -7,7 +7,7 @@
 1. **`manip.dials` 2 (naming-screen dial): -812 h [-1194, -555]; with tier spe 28 / hp 16 / spd 20 -971 h** (one seed,
    8201). Confirm on a second seed and adopt; the controller's two-dial path (R2a) must be played.
 2. **`mid_bag` + Potion top-ups 10 / 10 / 10 (Pewter, Cerulean `persim-and-potions`, `bike-redeem`) + Cerulean heal
-   before Route 9 (`extra_heals` / `torrent_heals` `bike-redeem`): -180 h n.s. vs 1841** = the honest Rock Tunnel bag
+   before Route 9 (`extra_heals` / `torrent_heals` `bike-redeem`): -180 h n.s. vs 1841; 10 / 6 / 6 + heal -335 [-708, +15] n.s.** = the honest Rock Tunnel bag
    costs nothing with that response. Adopt as the model of record.
 3. **Cut (`cut_honest`) +2812 h**, no plan response found (Route 25 hunt 150-600 steps, a Mt. Moon Paras hunt: worse).
    Try balls before the hunt and a priced walk-around.
