@@ -127,6 +127,10 @@ pub struct Session<'p> {
     /// is treated as blocked for the rest of the stage (cleared at every stage start, so a run
     /// resumed at a checkpoint plans exactly as the uninterrupted one).
     pub bumped: std::collections::HashMap<super::walk::Node, u32>,
+    /// The carry fainting in any battle kills the branch (review item 10, set by the early stages:
+    /// before the first Center a fainted starter takes no exp and forces a heal). Cleared at every
+    /// stage start.
+    pub carry_faint_dead: bool,
     pub model: Model,
     pub cfg: PlayCfg,
     prefix: Vec<u16>,
@@ -341,6 +345,7 @@ impl<'p> Session<'p> {
             wild_plan: super::battle::WildPlan::Flee,
             dex: Default::default(),
             bumped: Default::default(),
+            carry_faint_dead: false,
             model,
             cfg,
             prefix,
@@ -469,6 +474,7 @@ impl<'p> Session<'p> {
             self.seg = st.name.to_string();
             self.wild_plan = super::battle::WildPlan::Flee;
             self.bumped.clear();
+            self.carry_faint_dead = false;
             let mut res = (st.run)(self);
             if res.is_ok()
                 && self.cfg.force_rollback.iter().any(|n| n == st.name)

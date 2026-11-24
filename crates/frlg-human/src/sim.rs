@@ -1449,7 +1449,7 @@ fn encounter(
         if ok {
             got(st, sp.dex, level);
         }
-    } else if fights_wild(ctx, st.carry) && ctx.p.battle_sim {
+    } else if fights_wild(ctx, st.carry, st.hp_frac) && ctx.p.battle_sim {
         let foe = wild_mon(ctx, st, slot.species, level);
         // A lost wild fight is a whiteout like any other; the human does not give up the run over it.
         sim_battle(
@@ -1468,7 +1468,7 @@ fn encounter(
                 wild: true,
             },
         );
-    } else if fights_wild(ctx, st.carry) {
+    } else if fights_wild(ctx, st.carry, st.hp_frac) {
         let e = exp_gain(sp.exp_yield as u8, level as u8, false);
         let t = turns_per_mon(level as f64, effective_level(st, ctx.p), st.strength, 1.0);
         bump(st, t * ctx.turn() + ctx.mon_overhead());
@@ -1859,11 +1859,25 @@ pub fn entry_heal_floor(
     (crate::battle::entry_floor(dex, me, foes) as f64 * hits).ceil() as i32 + 1
 }
 
+/// PLAN `early_torrent.steer_poison`: the HP a poisoned carry is walked down to before the steered
+/// fight: the top of the Torrent window, `max / 3` (`decompiled/src/pokemon.c:2500`), but never below
+/// the foes' best max roll after one Withdraw plus one (`battle::entry_floor`). The playing controller
+/// walks to the same number (`play/early.rs`).
+pub fn early_torrent_target(
+    dex: &crate::data::Dex,
+    me: &crate::battle::Mon,
+    foes: &[crate::battle::Mon],
+) -> i32 {
+    let lo = crate::battle::entry_floor(dex, me, foes) + 1;
+    (me.max_hp / 3).max(lo)
+}
+
 /// A wild encounter the human does not catch is fought for exp (not fled) while the carry is below
-/// `fight_until_level`, or always with `fight_wild` (the rule of `run_encounters`; the playing
-/// controller asks the same function, `play/dex.rs`).
-pub fn fights_wild(ctx: &Ctx, carry: u32) -> bool {
-    ctx.p.fight_wild || carry < ctx.p.fight_until_level
+/// `fight_until_level`, or always with `fight_wild`, and only while the carry's HP fraction `hp` is at
+/// least `wild_fight_floor` (the rule of `run_encounters`; the playing controller asks the same
+/// function, `play/dex.rs`).
+pub fn fights_wild(ctx: &Ctx, carry: u32, hp: f64) -> bool {
+    (ctx.p.fight_wild || carry < ctx.p.fight_until_level) && hp >= ctx.p.wild_fight_floor
 }
 
 /// One `battle_sim` fight, described.
@@ -2210,8 +2224,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             && a.name == et.fight
             && matches!(st.carry_status, Status1::Poison | Status1::Toxic(_))
         {
-            let lo = crate::battle::entry_floor(dex, &me, a.foes) + 1;
-            let target = (me.max_hp / 3).max(lo);
+            let target = early_torrent_target(dex, &me, a.foes);
             let tf = target as f64 / me.max_hp as f64;
             st.steer_to = Some(tf);
             let cur = (me.max_hp as f64 * st.hp_frac).round() as i32;

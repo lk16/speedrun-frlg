@@ -1041,7 +1041,21 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
         OUTLOOK_N,
         c.turns.wrapping_mul(0x2545_F491),
     );
-    let taken = execute(f, c, log, &sc, d.action)?;
+    // PLAN `early_torrent.tackle_only` (review item 11, Main97's Liam): the attacks of this fight are
+    // Tackle, so the carry's HP keeps falling towards the Torrent window; the sim does not model the
+    // restriction (`params.rs` `EarlyTorrent`). Heals and other actions stay the policy's.
+    let mut action = d.action;
+    if c.cfg.ctx.p.early_torrent.tackle_only.contains(&c.cfg.seg) {
+        if let Action::Move(mv) = action {
+            let tackle = dex.move_id("MOVE_TACKLE");
+            if let Some(i) = sc.me.moves.iter().position(|&m| m == tackle) {
+                if mv != tackle && sc.me.pp.get(i).is_none_or(|&p| p > 0) {
+                    action = Action::Move(tackle);
+                }
+            }
+        }
+    }
+    let taken = execute(f, c, log, &sc, action)?;
     let what = describe(dex, &sc, taken);
     let mv_pp = match taken {
         Action::Move(mv) => sc
@@ -1293,9 +1307,15 @@ fn use_move(f: &mut HumanFeed, c: &Ctl, sc: &Scene, mv: usize) -> Result<(), Rou
     let obs = c.obs;
     let slot = sc.me.moves.iter().position(|&m| m == mv).unwrap_or(0) as u8;
     nav_2x2(f, "action cursor on FIGHT", 0, |e| obs.action_cursor(e, 0))?;
+    // With no usable move FIGHT goes straight to Struggle (`AreAllMovesUnusable`,
+    // `decompiled/src/battle_main.c:3146-3147`), so there is no move menu: the action menu just closes (the r2a forest soft-lock: a Metapod whose Harden ran out).
     press_until(f, "the move menu", keys::A, 4, 30, |e| {
         obs.battle_controller_is(e, 0, "HandleInputChooseMove")
+            || !obs.battle_controller_is(e, 0, "HandleInputChooseAction")
     })?;
+    if !obs.battle_controller_is(f.emu(), 0, "HandleInputChooseMove") {
+        return Ok(());
+    }
     nav_2x2(f, "move cursor", slot, |e| obs.move_cursor(e, 0))?;
     press_until(f, "the move chosen", keys::A, 4, 30, |e| {
         !obs.battle_controller_is(e, 0, "HandleInputChooseMove")

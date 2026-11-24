@@ -89,6 +89,17 @@ fn cursor_2x2(s: &mut Session, cur: u8, want: u8) -> PResult<()> {
 /// (`play/battle.rs`, `fight`) with the session's current plan segment, or the stand-in below with
 /// `--fallback-battle`. A loss is a dead branch.
 pub fn battle(s: &mut Session) -> PResult<()> {
+    battle_inner(s)?;
+    if s.carry_faint_dead && super::dex::carry_hp_frac(s) == 0.0 {
+        return Err(PlayError::Death(format!(
+            "the starter fainted in a battle ({}): a dead branch before the first Center",
+            s.seg
+        )));
+    }
+    Ok(())
+}
+
+fn battle_inner(s: &mut Session) -> PResult<()> {
     if s.fallback {
         return stand_in(s);
     }

@@ -417,8 +417,93 @@ const BALL_JMAX: usize = 15_000;
 /// Bedroom -> Pallet -> Oak's trigger at the north exit ((12, 1), `PalletTown/map.json`
 /// coord_events, `PalletTown_EventScript_OakTriggerLeft`) -> his scene into the lab -> the
 /// starter offer (lab scene var 2, `ChooseStarterScene`) -> stand below the Squirtle ball facing it.
+/// The bedroom PC's new-game Potion (`gNewGamePCItems`, `decompiled/src/player_pc.c:99-102`): the PC
+/// is the bg event at (1, 1) of `PalletTown_PlayersHouse_2F/map.json`; ITEM STORAGE, WITHDRAW ITEM
+/// (`sMenuActions_TopMenu`, `sMenuActions_ItemPc`, `player_pc.c:85-97`), the Potion row and its
+/// WITHDRAW (`item_pc.c` `Task_ItemPcMain` -> `Task_ItemPcSubmenuRun` -> `Task_ItemPcWithdraw`; one
+/// Potion, no quantity box), then B back out. Every menu's cursor starts on its first row.
+fn bedroom_pc_potion(s: &mut Session) -> PResult<()> {
+    let room = "MAP_PALLET_TOWN_PLAYERS_HOUSE_2F";
+    let f0 = s.frame();
+    // Below the PC, then a hand turn up: `walk::face` settles, and a settle A facing the PC opens it
+    // and runs its menus by mashing (it emptied the PC and then looped on "There are no items").
+    go(s, room, 1, 2, &Opts::default())?;
+    for _ in 0..6 {
+        if super::ram::Ram::new(&s.obs).player_facing(s.hf.rec.emu()) == 2 {
+            break;
+        }
+        wait_until(s, "free below the PC", 120, super::prims::is_free)?;
+        s.hf.late()?;
+        s.hf.step(keys::UP)?;
+        s.hf.idle(8)?;
+    }
+    wait_until(s, "free facing the PC", 120, super::prims::is_free)?;
+    s.hf.press(keys::A)?;
+    let potion = id("ITEM_POTION");
+    let start = s.hf.fed();
+    let mut free_run = 0;
+    // Set once B has left the top menu after the withdraw (`Task_PlayerPcTurnOff` runs the shut-down
+    // script, `player_pc.c:257-264`); only then is a free-looking player really out of the PC.
+    let mut closed = false;
+    loop {
+        let got = super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), potion) > 0;
+        let menu = [
+            "Task_TopMenuHandleInput",
+            "Task_TopMenu_ItemStorageSubmenu_HandleInput",
+            "Task_ItemPcMain",
+            "Task_ItemPcSubmenuRun",
+            "Task_ItemPcHandleWithdrawMultiple",
+            "Task_ItemPcWaitButtonAndFinishWithdrawMultiple",
+        ]
+        .iter()
+        .any(|t| task(s, t));
+        // Free for a while with no PC menu up: the PC's field menus leave the player looking free
+        // (no script lock while they run), and a later `settle` A there would reopen the empty PC.
+        if got && closed && !menu && super::prims::is_free(s) {
+            free_run += 1;
+            if free_run >= 20 {
+                break;
+            }
+            s.hf.step(0)?;
+            continue;
+        }
+        free_run = 0;
+        if s.hf.fed() - start > 4000 {
+            return Err(PlayError::Death("soft-lock: bedroom PC".into()));
+        }
+        if !menu && !s.obs.field_controls_locked(s.hf.rec.emu()) && !got {
+            // Between screens (fades): wait.
+            s.hf.step(0)?;
+            continue;
+        }
+        if super::prims::fade_active(s) {
+            s.hf.step(0)?;
+            continue;
+        }
+        if got && task(s, "Task_TopMenuHandleInput") {
+            closed = true;
+        }
+        if got && closed && !menu && !s.obs.field_controls_locked(s.hf.rec.emu()) {
+            s.hf.step(0)?;
+            continue;
+        }
+        s.hf.press(if got { keys::B } else { keys::A })?;
+        s.hf.idle(6)?;
+    }
+    let frames = s.frame() - f0;
+    s.event(
+        "decision",
+        format!("bedroom PC: withdrew the Potion ({frames} frames; plan early_potions bedroom_pc)"),
+        json!({"potions": 1, "frames": frames, "pickup": "bedroom_pc"}),
+    );
+    Ok(())
+}
+
 fn bedroom_to_ball(s: &mut Session) -> PResult<()> {
     options(s)?;
+    if early_potion(s, "bedroom_pc") {
+        bedroom_pc_potion(s)?;
+    }
     go_map(s, PALLET, &Opts::default())?;
     let g = s.graph();
     let (pallet, lab) = (g.id(PALLET), g.id(LAB));
@@ -692,6 +777,10 @@ fn starter(s: &mut Session) -> PResult<()> {
         let key2 = base_key + 0x200_0000 + attempt;
         // The intended branch: every press on its frame. The naming frame is a dial with
         // `manip.dials` 2 (the cheapest naming idle + ball wait, doc 4.2), fixed with 1.
+        eprintln!(
+            "starter attempt {attempt}: intended: title_to_naming at frame {}",
+            s.frame()
+        );
         title_to_naming(s, &title, d_star, key)?;
         let at_naming = snap(s)?;
         let n_max = if mp.dials >= 2 { 240 } else { 0 };
@@ -701,6 +790,10 @@ fn starter(s: &mut Session) -> PResult<()> {
                 break;
             }
             restore(s, &at_naming)?;
+            eprintln!(
+                "starter attempt {attempt}: intended: naming_to_ball at frame {}",
+                s.frame()
+            );
             naming_to_ball(s, NAMING_N0 + dn, key2, rival_len)?;
             if !manip {
                 // No manip: the dismiss is just a human press (150 frames covers the text).
@@ -708,8 +801,16 @@ fn starter(s: &mut Session) -> PResult<()> {
                 break;
             }
             let at_ball = snap(s)?;
+            eprintln!(
+                "starter attempt {attempt}: ball_table at frame {}",
+                s.frame()
+            );
             let table = ball_table(s, &at_ball)?;
             let limit = best.map_or(BALL_JMAX, |b| b.0 + b.1 - dn);
+            eprintln!(
+                "starter attempt {attempt}: first_good_wait at frame {}",
+                s.frame()
+            );
             if let Some(j) = first_good_wait(s, &at_ball, &table, &mp, limit)? {
                 if best.is_none_or(|b| dn + j < b.0 + b.1) {
                     best = Some((dn, j, table.d));
@@ -728,6 +829,10 @@ fn starter(s: &mut Session) -> PResult<()> {
         let naming_n = ((NAMING_N0 + dn_star) as i64 + errs[1]).max(0) as usize;
         let j = (j_star as i64 + errs[2]).max(0) as usize;
         let (wild, ng) = title_to_naming(s, &title, title_d, key)?;
+        eprintln!(
+            "starter attempt {attempt}: actual: naming_to_ball at frame {}",
+            s.frame()
+        );
         naming_to_ball(s, naming_n, key2, rival_len)?;
         let h_real = wild_hits(wild, window, 14);
         let quiet = !manip || mp.quiet_max_hits == 0 || h_real <= mp.quiet_max_hits;
@@ -743,6 +848,10 @@ fn starter(s: &mut Session) -> PResult<()> {
             eprintln!("starter attempt {attempt}: reset, {}", why.last().unwrap());
             continue;
         }
+        eprintln!(
+            "starter attempt {attempt}: actual: ball wait at frame {}",
+            s.frame()
+        );
         s.hf.idle(j)?;
         ball_sequence(s, dismiss)?;
         let (pid, ivs, nat) = starter_genome(s);
@@ -896,6 +1005,7 @@ fn rival_lab_trainer(s: &Session) -> &'static str {
 /// `rival-lab`: walk out; the rival's trigger row (y 8, `PalletTown_ProfessorOaksLab/map.json`
 /// coord_events, scene var 3) starts the fight; his exit scene; out the door (`exit-lab`).
 fn rival_lab(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     let tr = rival_lab_trainer(s);
     preheal(s, "rival-lab", tr)?;
     s.seg = "rival-lab".into();
@@ -913,19 +1023,22 @@ fn rival_lab(s: &mut Session) -> PResult<()> {
 /// `to-viridian` with the Route 1 clerk's free Potion (`Route1/scripts.inc:4-22`,
 /// `FLAG_GOT_POTION_ON_ROUTE_1`; object 1 of `Route1/map.json`, wandering up/down at (6, 28)).
 fn to_viridian(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "to-viridian".into();
     if early_potion(s, "route1_clerk") {
+        let f0 = s.frame();
         super::legs::talk_to(s, ROUTE1, 1)?;
         settle(s)?;
         let got = flag(s, "FLAG_GOT_POTION_ON_ROUTE_1");
         let n = have(s, "ITEM_POTION");
+        let frames = s.frame() - f0;
         s.event(
             "decision",
             format!(
-                "Route 1 clerk: sample Potion {}",
+                "Route 1 clerk: sample Potion {} ({frames} frames from the lab door, walk included)",
                 if got { "taken" } else { "NOT taken" }
             ),
-            json!({"potions": n, "got": got}),
+            json!({"potions": n, "got": got, "frames": frames, "pickup": "route1_clerk"}),
         );
     }
     s.seg = "route1-encounters".into();
@@ -938,6 +1051,7 @@ fn to_viridian(s: &mut Session) -> PResult<()> {
 /// `parcel`: entering the Viridian mart plays the parcel scene (`ViridianCity_Mart/scripts.inc`,
 /// `VAR_MAP_SCENE_VIRIDIAN_CITY_MART` 1, `ITEM_OAKS_PARCEL`); then back out.
 fn parcel(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "parcel".into();
     go_map(s, "MAP_VIRIDIAN_CITY_MART", &Opts::default())?;
     settle(s)?;
@@ -952,6 +1066,7 @@ fn parcel(s: &mut Session) -> PResult<()> {
 /// (`PalletTown_ProfessorOaksLab/scripts.inc` delivery scene, sets
 /// `VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN` 1).
 fn deliver(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "deliver".into();
     super::legs::talk_to(s, LAB, 4)?;
     settle(s)?;
@@ -967,6 +1082,7 @@ fn deliver(s: &mut Session) -> PResult<()> {
 /// ((20, 8) / (22, 8), `ViridianCity/map.json` coord_events, var 1) and ends with his var at 2
 /// (`ViridianCity/scripts.inc:234`), which opens the road to Route 2.
 fn tutorial(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "tutorial".into();
     go_map(s, "MAP_ROUTE2", &Opts::default())?;
     if var(s, "VAR_MAP_SCENE_VIRIDIAN_CITY_OLD_MAN") < 2 {
@@ -982,9 +1098,30 @@ fn tutorial(s: &mut Session) -> PResult<()> {
 /// (`ViridianForest/map.json` bg_events, `FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_POTION`), and out of the
 /// north exit.
 fn forest(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "route2-encounters".into();
     go_map(s, FOREST, &Opts::default())?;
     s.seg = "forest-encounters".into();
+    // PLAN `early_torrent.cure`: the Antidote for the steered carry is the forest's hidden one at
+    // (28, 57) (`ViridianForest/map.json` bg_events, `FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_ANTIDOTE`), a
+    // few tiles from the south entrance; picked up on the way in (poison is not known yet).
+    let et = s.plan.params.early_torrent.clone();
+    if et.cure && !et.fight.is_empty() && !flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_ANTIDOTE") {
+        let f0 = s.frame();
+        go_face(s, FOREST, 28, 57, &Opts::default())?;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        let got = flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_ANTIDOTE");
+        let frames = s.frame() - f0;
+        s.event(
+            "decision",
+            format!(
+                "Forest hidden Antidote at (28, 57): {} ({frames} frames from the entrance; plan early_torrent.cure)",
+                if got { "found" } else { "NOT found" }
+            ),
+            json!({"got": got, "frames": frames, "pickup": "forest_antidote"}),
+        );
+    }
     let fid = s.graph().id(FOREST);
     // Up to the west column below Sammy's line; heal by the plan's rule; then talk to him.
     go_to(
@@ -999,18 +1136,20 @@ fn forest(s: &mut Session) -> PResult<()> {
     settle(s)?;
     starter_alive(s, "Sammy")?;
     if early_potion(s, "forest_hidden") && !flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_POTION") {
+        let f0 = s.frame();
         go_face(s, FOREST, 3, 22, &Opts::default())?;
         s.hf.press(keys::A)?;
         settle(s)?;
         let got = flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_POTION");
         let n = have(s, "ITEM_POTION");
+        let frames = s.frame() - f0;
         s.event(
             "decision",
             format!(
-                "Forest hidden Potion at (3, 22): {}",
+                "Forest hidden Potion at (3, 22): {} ({frames} frames after Sammy)",
                 if got { "found" } else { "NOT found" }
             ),
-            json!({"potions": n, "got": got}),
+            json!({"potions": n, "got": got, "frames": frames, "pickup": "forest_hidden"}),
         );
     }
     s.seg = "forest-encounters".into();
@@ -1026,8 +1165,115 @@ fn forest(s: &mut Session) -> PResult<()> {
 /// `to-pewter`: Route 2's north half into Pewter and to the gym door (`PewterCity/map.json` warp
 /// (15, 16)); no Center on the way (review item 12).
 fn to_pewter(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "to-pewter".into();
     go_map(s, GYM, &Opts::default())?;
+    Ok(())
+}
+
+/// `STATUS1_POISON` / `STATUS1_TOXIC_POISON` (`decompiled/include/constants/battle.h`).
+const STATUS_POISON: u32 = (1 << 3) | (1 << 7);
+
+/// PLAN `early_torrent` (review item 11, Main97's Brock line, `STRATEGY.md` 359-370) before `fight`:
+/// a poisoned carry walks (back and forth on the spot, field poison 1 HP per 5 steps:
+/// `field_control_avatar.c:716-719`, `decompiled/src/field_poison.c`) down to
+/// `sim::early_torrent_target` (the top of the Torrent window, never below the foes' best hit after
+/// one Withdraw + 1), then drinks the Antidote (`cure`). A carry that is not poisoned enters as it is.
+/// Logs the frames of the walk and of the cure for the model's `poison_frames_per_hp` / `cure_frames`.
+fn steer_into_window(s: &mut Session, fight: &str, trainer: &str) -> PResult<()> {
+    let et = s.plan.params.early_torrent.clone();
+    let poisoned = |s: &mut Session| {
+        super::ram::Ram::new(&s.obs)
+            .party(s.hf.rec.emu())
+            .first()
+            .is_some_and(|m| m.status & STATUS_POISON != 0)
+    };
+    if !poisoned(s) {
+        s.event(
+            "decision",
+            format!("{fight}: carry not poisoned, enters as it is (early_torrent)"),
+            json!({"fight": fight, "poisoned": false}),
+        );
+        return Ok(());
+    }
+    let dex = s.plan.dex;
+    let foes: Vec<crate::battle::Mon> = dex
+        .fight(trainer)
+        .full
+        .iter()
+        .map(|m| crate::battle::enemy_mon(dex, m))
+        .collect();
+    let ram = super::battle_ram::BattleRam::new(s.obs.symbols())?;
+    let raw = ram.player_party(s.hf.rec.emu())[0].clone();
+    let badges = super::battle_ram::badges(&s.obs, s.hf.rec.emu());
+    let me = super::battle::sim_party_mon(dex, &raw, badges, true, 0)
+        .ok_or("early_torrent: carry not in the dex")?;
+    let target = crate::sim::early_torrent_target(dex, &me, &foes);
+    let hp0 = raw.hp as i32;
+    let f0 = s.frame();
+    if et.steer_poison && hp0 > target {
+        let start = here(s).ok_or("no position")?;
+        let map = s
+            .graph()
+            .maps
+            .get(&start.0)
+            .map(|m| m.name.clone())
+            .unwrap_or_default();
+        let g = s.graph();
+        let m = &g.maps[&start.0];
+        let nb = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+            .iter()
+            .map(|&(dx, dy)| (start.1 + dx, start.2 + dy))
+            .find(|&(x, y)| {
+                m.tile(x, y)
+                    .is_some_and(|t| t.collision == 0 && !super::walk::is_warp_tile(t.behavior))
+            })
+            .ok_or("early_torrent: no free tile to pace on")?;
+        let mut steps = 0;
+        loop {
+            let hp = super::ram::Ram::new(&s.obs).party(s.hf.rec.emu())[0].hp as i32;
+            if hp <= target || !poisoned(s) || steps > 400 {
+                break;
+            }
+            let (x, y) = if steps % 2 == 0 {
+                nb
+            } else {
+                (start.1, start.2)
+            };
+            go(s, &map, x, y, &Opts::default())?;
+            steps += 1;
+        }
+        let hp1 = super::ram::Ram::new(&s.obs).party(s.hf.rec.emu())[0].hp as i32;
+        let frames = s.frame() - f0;
+        s.event(
+            "decision",
+            format!(
+                "{fight}: poisoned carry walked {hp0} -> {hp1} HP (target {target}, window top {}) in {steps} steps, {frames} frames",
+                me.max_hp / 3
+            ),
+            json!({"fight": fight, "hp_from": hp0, "hp_to": hp1, "target": target, "steps": steps,
+                   "frames": frames, "frames_per_hp": frames as f64 / (hp0 - hp1).max(1) as f64,
+                   "plan_key": "early_torrent.steer_poison"}),
+        );
+    }
+    if et.cure && poisoned(s) {
+        let f1 = s.frame();
+        if have(s, "ITEM_ANTIDOTE") > 0 {
+            super::shop::use_item_on(s, "ITEM_ANTIDOTE", 0)?;
+            let frames = s.frame() - f1;
+            s.event(
+                "decision",
+                format!("{fight}: Antidote on the carry ({frames} frames)"),
+                json!({"fight": fight, "frames": frames, "plan_key": "early_torrent.cure"}),
+            );
+        } else {
+            s.event(
+                "model-vs-actual",
+                format!("{fight}: carry poisoned in the window but no Antidote in the bag"),
+                json!({"fight": fight}),
+            );
+        }
+    }
     Ok(())
 }
 
@@ -1036,12 +1282,17 @@ fn to_pewter(s: &mut Session) -> PResult<()> {
 /// own pre-fight rule (review items 11, 12). The badge and TM39 are Brock's
 /// (`PewterCity_Gym/scripts.inc`).
 fn brock(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     if s.plan.params.route_style == "wr" {
         preheal(s, "pewter-gym-trainer", "TRAINER_CAMPER_LIAM")?;
         s.seg = "pewter-gym-trainer".into();
         super::legs::talk_to(s, GYM, 2)?;
         settle(s)?;
         starter_alive(s, "Liam")?;
+    }
+    let et = s.plan.params.early_torrent.clone();
+    if et.fight == "brock" {
+        steer_into_window(s, "brock", "TRAINER_LEADER_BROCK")?;
     }
     preheal(s, "brock", "TRAINER_LEADER_BROCK")?;
     s.seg = "brock".into();
@@ -1097,6 +1348,7 @@ fn repels_wanted(s: &Session) -> u16 {
 /// 14), Potions to the plan's stock for the fights before Cerulean (`fight_tactics` `potions`), and
 /// Poké Balls per `pewter_balls` (R3 key, default `early_balls`).
 fn pewter_mart(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     s.seg = "route3".into();
     let mart = "MAP_PEWTER_CITY_MART";
     let sell = s.plan.params.tm39_sell;
@@ -1140,6 +1392,7 @@ fn pewter_mart(s: &mut Session) -> PResult<()> {
 /// order, the others passed (Ben, Robin, ...: review items 16, 17, sight lines are the walker's),
 /// then Route 4 into its Pokémon Center, where the run checkpoints as `mt-moon-pc`.
 fn route3(s: &mut Session) -> PResult<()> {
+    s.carry_faint_dead = true;
     let list: Vec<String> = s
         .plan
         .params
