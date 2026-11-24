@@ -352,7 +352,7 @@ when it does, add the new items to the table below in the same way.
   Repel and without Ben/Robin, Route 4 per R3, Mt. Moon, then Misty, Bill, Bike, Rock Tunnel and the
   hideout with the existing primitives. *Check:* `play` from power-on reaches `giovanni1`, verifies
   from boot, and the splits are listed against the v4 prefix and the model p50.
-- [ ] **R3. Model and plan.** Early-only Torrent window, route 3 Repel, `min_spa` 30, TM39 sale and
+- [x] **R3. Model and plan.** (branch `human-run-r3-model`, journal `journal/2026-11-24-18-00-r3-review-model.md`; CURRENT `1841-r3-repel`: `early_bag` MODEL + all three early Potions, the Brock Torrent line, no Route 3 Repel; the plan keys the controller follows are in `NEXT.md`) Early-only Torrent window, route 3 Repel, `min_spa` 30, TM39 sale and
   Pewter balls, Magikarp at Route 4, Mt. Moon heal knob, rival-name frames, early Potion pickups,
   `torrent_heal_below`. Each is a paired evaluation with a `scores.jsonl` row; accepted ones become a
   new plan and CURRENT.
