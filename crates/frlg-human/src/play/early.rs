@@ -424,11 +424,27 @@ const BALL_JMAX: usize = 15_000;
 /// Potion, no quantity box), then B back out. Every menu's cursor starts on its first row.
 fn bedroom_pc_potion(s: &mut Session) -> PResult<()> {
     let room = "MAP_PALLET_TOWN_PLAYERS_HOUSE_2F";
-    go_face(s, room, 1, 1, &Opts::default())?;
+    let f0 = s.frame();
+    // Below the PC, then a hand turn up: `walk::face` settles, and a settle A facing the PC opens it
+    // and runs its menus by mashing (it emptied the PC and then looped on "There are no items").
+    go(s, room, 1, 2, &Opts::default())?;
+    for _ in 0..6 {
+        if super::ram::Ram::new(&s.obs).player_facing(s.hf.rec.emu()) == 2 {
+            break;
+        }
+        wait_until(s, "free below the PC", 120, super::prims::is_free)?;
+        s.hf.late()?;
+        s.hf.step(keys::UP)?;
+        s.hf.idle(8)?;
+    }
+    wait_until(s, "free facing the PC", 120, super::prims::is_free)?;
     s.hf.press(keys::A)?;
     let potion = id("ITEM_POTION");
     let start = s.hf.fed();
     let mut free_run = 0;
+    // Set once B has left the top menu after the withdraw (`Task_PlayerPcTurnOff` runs the shut-down
+    // script, `player_pc.c:257-264`); only then is a free-looking player really out of the PC.
+    let mut closed = false;
     loop {
         let got = super::ram::Ram::new(&s.obs).count(s.hf.rec.emu(), potion) > 0;
         let menu = [
@@ -443,7 +459,7 @@ fn bedroom_pc_potion(s: &mut Session) -> PResult<()> {
         .any(|t| task(s, t));
         // Free for a while with no PC menu up: the PC's field menus leave the player looking free
         // (no script lock while they run), and a later `settle` A there would reopen the empty PC.
-        if got && !menu && super::prims::is_free(s) {
+        if got && closed && !menu && super::prims::is_free(s) {
             free_run += 1;
             if free_run >= 20 {
                 break;
@@ -464,13 +480,21 @@ fn bedroom_pc_potion(s: &mut Session) -> PResult<()> {
             s.hf.step(0)?;
             continue;
         }
+        if got && task(s, "Task_TopMenuHandleInput") {
+            closed = true;
+        }
+        if got && closed && !menu && !s.obs.field_controls_locked(s.hf.rec.emu()) {
+            s.hf.step(0)?;
+            continue;
+        }
         s.hf.press(if got { keys::B } else { keys::A })?;
         s.hf.idle(6)?;
     }
+    let frames = s.frame() - f0;
     s.event(
         "decision",
-        "bedroom PC: withdrew the Potion (plan early_potions bedroom_pc)",
-        json!({"potions": 1}),
+        format!("bedroom PC: withdrew the Potion ({frames} frames; plan early_potions bedroom_pc)"),
+        json!({"potions": 1, "frames": frames, "pickup": "bedroom_pc"}),
     );
     Ok(())
 }
@@ -753,6 +777,10 @@ fn starter(s: &mut Session) -> PResult<()> {
         let key2 = base_key + 0x200_0000 + attempt;
         // The intended branch: every press on its frame. The naming frame is a dial with
         // `manip.dials` 2 (the cheapest naming idle + ball wait, doc 4.2), fixed with 1.
+        eprintln!(
+            "starter attempt {attempt}: intended: title_to_naming at frame {}",
+            s.frame()
+        );
         title_to_naming(s, &title, d_star, key)?;
         let at_naming = snap(s)?;
         let n_max = if mp.dials >= 2 { 240 } else { 0 };
@@ -762,6 +790,10 @@ fn starter(s: &mut Session) -> PResult<()> {
                 break;
             }
             restore(s, &at_naming)?;
+            eprintln!(
+                "starter attempt {attempt}: intended: naming_to_ball at frame {}",
+                s.frame()
+            );
             naming_to_ball(s, NAMING_N0 + dn, key2, rival_len)?;
             if !manip {
                 // No manip: the dismiss is just a human press (150 frames covers the text).
@@ -769,8 +801,16 @@ fn starter(s: &mut Session) -> PResult<()> {
                 break;
             }
             let at_ball = snap(s)?;
+            eprintln!(
+                "starter attempt {attempt}: ball_table at frame {}",
+                s.frame()
+            );
             let table = ball_table(s, &at_ball)?;
             let limit = best.map_or(BALL_JMAX, |b| b.0 + b.1 - dn);
+            eprintln!(
+                "starter attempt {attempt}: first_good_wait at frame {}",
+                s.frame()
+            );
             if let Some(j) = first_good_wait(s, &at_ball, &table, &mp, limit)? {
                 if best.is_none_or(|b| dn + j < b.0 + b.1) {
                     best = Some((dn, j, table.d));
@@ -789,6 +829,10 @@ fn starter(s: &mut Session) -> PResult<()> {
         let naming_n = ((NAMING_N0 + dn_star) as i64 + errs[1]).max(0) as usize;
         let j = (j_star as i64 + errs[2]).max(0) as usize;
         let (wild, ng) = title_to_naming(s, &title, title_d, key)?;
+        eprintln!(
+            "starter attempt {attempt}: actual: naming_to_ball at frame {}",
+            s.frame()
+        );
         naming_to_ball(s, naming_n, key2, rival_len)?;
         let h_real = wild_hits(wild, window, 14);
         let quiet = !manip || mp.quiet_max_hits == 0 || h_real <= mp.quiet_max_hits;
@@ -804,6 +848,10 @@ fn starter(s: &mut Session) -> PResult<()> {
             eprintln!("starter attempt {attempt}: reset, {}", why.last().unwrap());
             continue;
         }
+        eprintln!(
+            "starter attempt {attempt}: actual: ball wait at frame {}",
+            s.frame()
+        );
         s.hf.idle(j)?;
         ball_sequence(s, dismiss)?;
         let (pid, ivs, nat) = starter_genome(s);
@@ -978,17 +1026,19 @@ fn to_viridian(s: &mut Session) -> PResult<()> {
     s.carry_faint_dead = true;
     s.seg = "to-viridian".into();
     if early_potion(s, "route1_clerk") {
+        let f0 = s.frame();
         super::legs::talk_to(s, ROUTE1, 1)?;
         settle(s)?;
         let got = flag(s, "FLAG_GOT_POTION_ON_ROUTE_1");
         let n = have(s, "ITEM_POTION");
+        let frames = s.frame() - f0;
         s.event(
             "decision",
             format!(
-                "Route 1 clerk: sample Potion {}",
+                "Route 1 clerk: sample Potion {} ({frames} frames from the lab door, walk included)",
                 if got { "taken" } else { "NOT taken" }
             ),
-            json!({"potions": n, "got": got}),
+            json!({"potions": n, "got": got, "frames": frames, "pickup": "route1_clerk"}),
         );
     }
     s.seg = "route1-encounters".into();
@@ -1052,6 +1102,26 @@ fn forest(s: &mut Session) -> PResult<()> {
     s.seg = "route2-encounters".into();
     go_map(s, FOREST, &Opts::default())?;
     s.seg = "forest-encounters".into();
+    // PLAN `early_torrent.cure`: the Antidote for the steered carry is the forest's hidden one at
+    // (28, 57) (`ViridianForest/map.json` bg_events, `FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_ANTIDOTE`), a
+    // few tiles from the south entrance; picked up on the way in (poison is not known yet).
+    let et = s.plan.params.early_torrent.clone();
+    if et.cure && !et.fight.is_empty() && !flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_ANTIDOTE") {
+        let f0 = s.frame();
+        go_face(s, FOREST, 28, 57, &Opts::default())?;
+        s.hf.press(keys::A)?;
+        settle(s)?;
+        let got = flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_ANTIDOTE");
+        let frames = s.frame() - f0;
+        s.event(
+            "decision",
+            format!(
+                "Forest hidden Antidote at (28, 57): {} ({frames} frames from the entrance; plan early_torrent.cure)",
+                if got { "found" } else { "NOT found" }
+            ),
+            json!({"got": got, "frames": frames, "pickup": "forest_antidote"}),
+        );
+    }
     let fid = s.graph().id(FOREST);
     // Up to the west column below Sammy's line; heal by the plan's rule; then talk to him.
     go_to(
@@ -1066,18 +1136,20 @@ fn forest(s: &mut Session) -> PResult<()> {
     settle(s)?;
     starter_alive(s, "Sammy")?;
     if early_potion(s, "forest_hidden") && !flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_POTION") {
+        let f0 = s.frame();
         go_face(s, FOREST, 3, 22, &Opts::default())?;
         s.hf.press(keys::A)?;
         settle(s)?;
         let got = flag(s, "FLAG_HIDDEN_ITEM_VIRIDIAN_FOREST_POTION");
         let n = have(s, "ITEM_POTION");
+        let frames = s.frame() - f0;
         s.event(
             "decision",
             format!(
-                "Forest hidden Potion at (3, 22): {}",
+                "Forest hidden Potion at (3, 22): {} ({frames} frames after Sammy)",
                 if got { "found" } else { "NOT found" }
             ),
-            json!({"potions": n, "got": got}),
+            json!({"potions": n, "got": got, "frames": frames, "pickup": "forest_hidden"}),
         );
     }
     s.seg = "forest-encounters".into();
@@ -1099,6 +1171,112 @@ fn to_pewter(s: &mut Session) -> PResult<()> {
     Ok(())
 }
 
+/// `STATUS1_POISON` / `STATUS1_TOXIC_POISON` (`decompiled/include/constants/battle.h`).
+const STATUS_POISON: u32 = (1 << 3) | (1 << 7);
+
+/// PLAN `early_torrent` (review item 11, Main97's Brock line, `STRATEGY.md` 359-370) before `fight`:
+/// a poisoned carry walks (back and forth on the spot, field poison 1 HP per 5 steps:
+/// `field_control_avatar.c:716-719`, `decompiled/src/field_poison.c`) down to
+/// `sim::early_torrent_target` (the top of the Torrent window, never below the foes' best hit after
+/// one Withdraw + 1), then drinks the Antidote (`cure`). A carry that is not poisoned enters as it is.
+/// Logs the frames of the walk and of the cure for the model's `poison_frames_per_hp` / `cure_frames`.
+fn steer_into_window(s: &mut Session, fight: &str, trainer: &str) -> PResult<()> {
+    let et = s.plan.params.early_torrent.clone();
+    let poisoned = |s: &mut Session| {
+        super::ram::Ram::new(&s.obs)
+            .party(s.hf.rec.emu())
+            .first()
+            .is_some_and(|m| m.status & STATUS_POISON != 0)
+    };
+    if !poisoned(s) {
+        s.event(
+            "decision",
+            format!("{fight}: carry not poisoned, enters as it is (early_torrent)"),
+            json!({"fight": fight, "poisoned": false}),
+        );
+        return Ok(());
+    }
+    let dex = s.plan.dex;
+    let foes: Vec<crate::battle::Mon> = dex
+        .fight(trainer)
+        .full
+        .iter()
+        .map(|m| crate::battle::enemy_mon(dex, m))
+        .collect();
+    let ram = super::battle_ram::BattleRam::new(s.obs.symbols())?;
+    let raw = ram.player_party(s.hf.rec.emu())[0].clone();
+    let badges = super::battle_ram::badges(&s.obs, s.hf.rec.emu());
+    let me = super::battle::sim_party_mon(dex, &raw, badges, true, 0)
+        .ok_or("early_torrent: carry not in the dex")?;
+    let target = crate::sim::early_torrent_target(dex, &me, &foes);
+    let hp0 = raw.hp as i32;
+    let f0 = s.frame();
+    if et.steer_poison && hp0 > target {
+        let start = here(s).ok_or("no position")?;
+        let map = s
+            .graph()
+            .maps
+            .get(&start.0)
+            .map(|m| m.name.clone())
+            .unwrap_or_default();
+        let g = s.graph();
+        let m = &g.maps[&start.0];
+        let nb = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+            .iter()
+            .map(|&(dx, dy)| (start.1 + dx, start.2 + dy))
+            .find(|&(x, y)| {
+                m.tile(x, y)
+                    .is_some_and(|t| t.collision == 0 && !super::walk::is_warp_tile(t.behavior))
+            })
+            .ok_or("early_torrent: no free tile to pace on")?;
+        let mut steps = 0;
+        loop {
+            let hp = super::ram::Ram::new(&s.obs).party(s.hf.rec.emu())[0].hp as i32;
+            if hp <= target || !poisoned(s) || steps > 400 {
+                break;
+            }
+            let (x, y) = if steps % 2 == 0 {
+                nb
+            } else {
+                (start.1, start.2)
+            };
+            go(s, &map, x, y, &Opts::default())?;
+            steps += 1;
+        }
+        let hp1 = super::ram::Ram::new(&s.obs).party(s.hf.rec.emu())[0].hp as i32;
+        let frames = s.frame() - f0;
+        s.event(
+            "decision",
+            format!(
+                "{fight}: poisoned carry walked {hp0} -> {hp1} HP (target {target}, window top {}) in {steps} steps, {frames} frames",
+                me.max_hp / 3
+            ),
+            json!({"fight": fight, "hp_from": hp0, "hp_to": hp1, "target": target, "steps": steps,
+                   "frames": frames, "frames_per_hp": frames as f64 / (hp0 - hp1).max(1) as f64,
+                   "plan_key": "early_torrent.steer_poison"}),
+        );
+    }
+    if et.cure && poisoned(s) {
+        let f1 = s.frame();
+        if have(s, "ITEM_ANTIDOTE") > 0 {
+            super::shop::use_item_on(s, "ITEM_ANTIDOTE", 0)?;
+            let frames = s.frame() - f1;
+            s.event(
+                "decision",
+                format!("{fight}: Antidote on the carry ({frames} frames)"),
+                json!({"fight": fight, "frames": frames, "plan_key": "early_torrent.cure"}),
+            );
+        } else {
+            s.event(
+                "model-vs-actual",
+                format!("{fight}: carry poisoned in the window but no Antidote in the bag"),
+                json!({"fight": fight}),
+            );
+        }
+    }
+    Ok(())
+}
+
 /// `pewter-gym-trainer` (Camper Liam, object 2 of `PewterCity_Gym/map.json`, forced in the WR
 /// order, `route.rs`) and `brock` (object 1); no heal before or in the gym other than the plan's
 /// own pre-fight rule (review items 11, 12). The badge and TM39 are Brock's
@@ -1111,6 +1289,10 @@ fn brock(s: &mut Session) -> PResult<()> {
         super::legs::talk_to(s, GYM, 2)?;
         settle(s)?;
         starter_alive(s, "Liam")?;
+    }
+    let et = s.plan.params.early_torrent.clone();
+    if et.fight == "brock" {
+        steer_into_window(s, "brock", "TRAINER_LEADER_BROCK")?;
     }
     preheal(s, "brock", "TRAINER_LEADER_BROCK")?;
     s.seg = "brock".into();

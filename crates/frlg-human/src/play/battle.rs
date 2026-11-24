@@ -1041,7 +1041,21 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
         OUTLOOK_N,
         c.turns.wrapping_mul(0x2545_F491),
     );
-    let taken = execute(f, c, log, &sc, d.action)?;
+    // PLAN `early_torrent.tackle_only` (review item 11, Main97's Liam): the attacks of this fight are
+    // Tackle, so the carry's HP keeps falling towards the Torrent window; the sim does not model the
+    // restriction (`params.rs` `EarlyTorrent`). Heals and other actions stay the policy's.
+    let mut action = d.action;
+    if c.cfg.ctx.p.early_torrent.tackle_only.contains(&c.cfg.seg) {
+        if let Action::Move(mv) = action {
+            let tackle = dex.move_id("MOVE_TACKLE");
+            if let Some(i) = sc.me.moves.iter().position(|&m| m == tackle) {
+                if mv != tackle && sc.me.pp.get(i).is_none_or(|&p| p > 0) {
+                    action = Action::Move(tackle);
+                }
+            }
+        }
+    }
+    let taken = execute(f, c, log, &sc, action)?;
     let what = describe(dex, &sc, taken);
     let mv_pp = match taken {
         Action::Move(mv) => sc
