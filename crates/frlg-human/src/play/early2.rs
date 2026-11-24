@@ -1357,9 +1357,44 @@ fn hideout_key(s: &mut Session) -> PResult<()> {
 /// when both are beaten), `hideout-giovanni` (19, 4), the Silph Scope (20, 5), the Calcium ball
 /// (6, 23) (`elixirs` calcium after hideout-giovanni).
 fn giovanni(s: &mut Session) -> PResult<()> {
-    let o = Opts::default();
+    // B1F's barrier (20..21, 19..20) stands until GRUNT_12 is beaten
+    // (`RocketHideout_B1F/scripts.inc` `OnLoad` -> `SetBarrier`): planned as walls from the other
+    // floors, so the way to the elevator is B2F's door (28, 16), not B1F's layout corridor.
+    let barrier = !beaten(s, "TRAINER_TEAM_ROCKET_GRUNT_12");
+    let o = Opts {
+        patch: if barrier {
+            vec![
+                ("MAP_ROCKET_HIDEOUT_B1F", 20, 19, true),
+                ("MAP_ROCKET_HIDEOUT_B1F", 21, 19, true),
+                ("MAP_ROCKET_HIDEOUT_B1F", 20, 20, true),
+                ("MAP_ROCKET_HIDEOUT_B1F", 21, 20, true),
+            ]
+        } else {
+            vec![]
+        },
+        ..Opts::default()
+    };
     s.seg = "hideout-grunts".into();
     if !(beaten(s, "TRAINER_TEAM_ROCKET_GRUNT_16") && beaten(s, "TRAINER_TEAM_ROCKET_GRUNT_17")) {
+        // The B2F spinner maze from the stairs to the elevator door (28, 16) runs through the
+        // Moon Stone ball at (2, 5) (`RocketHideout_B2F/map.json`; a BFS over the layout with the
+        // spin tiles finds no way around it): the human picks it up on the way.
+        if barrier && !flag(s, "FLAG_HIDE_ROCKET_HIDEOUT_B2F_MOON_STONE") {
+            s.event(
+                "model-vs-actual",
+                "Rocket Hideout B2F: the Moon Stone ball (2, 5) blocks the spinner maze to the \
+                 elevator; picked up (not a plan pickup)",
+                json!({}),
+            );
+            pick(
+                s,
+                "MAP_ROCKET_HIDEOUT_B2F",
+                2,
+                5,
+                "FLAG_HIDE_ROCKET_HIDEOUT_B2F_MOON_STONE",
+                "ITEM_MOON_STONE",
+            )?;
+        }
         go_map(s, "MAP_ROCKET_HIDEOUT_ELEVATOR", &o)?;
         go_face(s, "MAP_ROCKET_HIDEOUT_ELEVATOR", 0, 2, &o)?;
         s.hf.press(keys::A)?;
