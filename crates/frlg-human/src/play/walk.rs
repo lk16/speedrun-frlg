@@ -1894,6 +1894,20 @@ fn follow(
                         if n == Some(to) {
                             break;
                         }
+                        // A spin-tile slide (`to` several tiles away) passes through the tiles
+                        // between: let it run out, then see whether it ended where planned.
+                        if step_tiles(from, to) > 1 && n.is_some_and(|n| n.0 == from.0) {
+                            let mut k = 0;
+                            while !is_free(s) && k < 1200 && !s.obs.in_battle(s.hf.rec.emu()) {
+                                s.hf.step(0)?;
+                                k += 1;
+                            }
+                            if here(s) == Some(to) {
+                                // The slide stopped the player: the next press is a new one.
+                                last_key = 0;
+                                break;
+                            }
+                        }
                         // A map change through a connection or warp, or a forced move.
                         if std::env::var_os("FRLG_WALK_DEBUG").is_some() {
                             eprintln!("walk: at {n:?}, expected {from:?} -> {to:?}");
