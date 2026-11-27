@@ -954,13 +954,21 @@ fn preheal(s: &mut Session, seg: &str, trainer: &str) -> PResult<()> {
     let seg_i = s.plan.segs.iter().position(|g| g.name == seg).unwrap_or(0);
     let in_torrent = crate::sim::in_torrent_phase(&s.ctx, seg_i, false);
     let (hp, max) = (raw.hp as i32, raw.max_hp as i32);
-    let target = if cfg.entry || in_torrent {
-        crate::sim::entry_heal_floor(&s.ctx, cfg.entry, dex, &me, &foes)
-    } else if (hp as f64) < s.plan.params.preheal_below * max as f64 && !cfg.torrent {
-        (0.85 * max as f64).ceil() as i32
+    // A poisoned carry loses max/8 a turn in battle (`ENDTURN_POISON`, `battle_util.c:805-806`): two
+    // turns of it on top of the floor (r2k-s41 met Greg poisoned at 3/39 with "floor 7, no heal").
+    let poison_turns = if raw.status & STATUS_POISON != 0 {
+        2 * (max / 8).max(1)
     } else {
         0
     };
+    let target = poison_turns
+        + if cfg.entry || in_torrent {
+            crate::sim::entry_heal_floor(&s.ctx, cfg.entry, dex, &me, &foes)
+        } else if (hp as f64) < s.plan.params.preheal_below * max as f64 && !cfg.torrent {
+            (0.85 * max as f64).ceil() as i32
+        } else {
+            0
+        };
     let potions = have(s, "ITEM_POTION");
     let need = if hp < target {
         (target - hp + 19) / 20
@@ -1228,7 +1236,9 @@ pub fn field_guard_due(s: &mut Session) -> PResult<Option<(&'static str, u16, i3
     // Outside the early stages: in-battle poison takes 1/8 of the max HP a turn (`ENDTURN_POISON`,
     // `decompiled/src/battle_util.c:805-806`), so a carry under a quarter cannot sit through two turns
     // (2026-11-27 r2e-s31: Route 25 entered at 6/65 HP poisoned with no cure, 34 dead branches).
-    let mut floor = if s.carry_faint_dead {
+    // The 3-HP floor is the `early_torrent` resource rule, before that fight only; after it (Route 3 on)
+    // the usual quarter (r2k-s41: poisoned at 5/37 after Colton, 3/39 into Greg, dead in battle).
+    let mut floor = if s.carry_faint_dead && before_fight {
         3
     } else {
         (lead.max_hp as i32 / 4).max(3)
