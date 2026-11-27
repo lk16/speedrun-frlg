@@ -1293,6 +1293,30 @@ fn dig_grunt(s: &mut Session) -> PResult<()> {
     // PLAN 1952: the plan's anchors after `tm28-dig`, the Route 5 Cut-carrier hunt among them (the grass
     // the path to the Underground Path crosses), unless a Cut learner is already in the party.
     if cut_route5(s) {
+        // No HM02 learner yet: the Pidgey hunt after the Cut hunt needs its own balls, bought here in
+        // Cerulean before Route 5 (the way back from Route 5 passes a Cut tree nobody can cut yet).
+        if hm_learner(s, "MOVE_FLY").is_none() {
+            // Balls for it: the carry is too strong to weaken a Lv13 Pidgey (thrown at full HP, 34 % a
+            // ball: v5f-s41 missed both of its last two). The Nugget the plan sells at Celadon (half of
+            // 10000, `decompiled/src/data/items.json`) is sold here instead, a few tiles from the Rocket,
+            // and pays for 5 more balls (Poke Ball 200, `CeruleanCity_Mart/scripts.inc:25`).
+            if have(s, "ITEM_NUGGET") > 0 {
+                let got = super::shop::sell(s, "MAP_CERULEAN_CITY_MART", None, &["ITEM_NUGGET"])?;
+                s.event(
+                "model-vs-actual",
+                format!("sold the Nugget at Cerulean for ${got} (plan: at Celadon) for the Pidgey's balls"),
+                json!({"money": got}),
+            );
+            }
+            let target = super::dex::ball_count(s) + 5;
+            super::shop::mart_topup(
+                s,
+                "MAP_CERULEAN_CITY_MART",
+                None,
+                &[("ITEM_POKE_BALL", target)],
+                "fly-carrier balls",
+            )?;
+        }
         if cut_learner(s).is_some() {
             s.event(
                 "decision",

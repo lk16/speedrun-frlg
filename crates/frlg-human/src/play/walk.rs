@@ -1274,6 +1274,25 @@ pub fn go_to(
     goal: &dyn Fn(&Node) -> bool,
     opts: &Opts,
 ) -> PResult<()> {
+    // Cut trees are walkable only with a party mon that knows Cut (the field move menu lists it only
+    // then, `decompiled/src/party_menu.c` `SetPartyMonFieldSelectionActions`): a carrier that can only
+    // *learn* it (the Route 5 Meowth before `bike-redeem`) made the walker plan through Cerulean's
+    // (26, 32) tree and press A at it forever (2026-11-27 fly1 replay).
+    let no_cut;
+    let opts = if opts.cut
+        && !super::ram::Ram::new(&s.obs)
+            .party(s.hf.rec.emu())
+            .iter()
+            .any(|m| m.knows(super::names::id("MOVE_CUT")).is_some())
+    {
+        no_cut = Opts {
+            cut: false,
+            ..opts.clone()
+        };
+        &no_cut
+    } else {
+        opts
+    };
     // Tiles bumped on two earlier walks of this stage stay blocked (Victory Road 2F (33, 17) was
     // bumped 57 times by one hunt's pacing in the 11-22 canonical run, ~50 frames each).
     let mut temp_block: HashSet<Node> = s
