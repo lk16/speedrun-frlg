@@ -692,10 +692,16 @@ fn tutor(s: &mut Session, map: &str, script: &str, mv: &str) -> PResult<()> {
 /// The party slot (not the carry) that learns HM01 Cut, by the TM/HM learnsets
 /// (`decompiled/src/data/pokemon/tmhm_learnsets.h`, `sim::can_learn`): first such slot.
 fn cut_learner(s: &mut Session) -> Option<usize> {
+    hm_learner(s, "MOVE_CUT")
+}
+
+/// The party slot (not the carry) that knows `mv` or can learn it into a free move slot, by the TM/HM
+/// learnsets (`decompiled/src/data/pokemon/tmhm_learnsets.h`, `sim::can_learn`).
+pub(crate) fn hm_learner(s: &mut Session, mv: &str) -> Option<usize> {
     let dex = s.ctx.dex;
-    let cut = super::battle::move_index(dex, id("MOVE_CUT"))?;
+    let m_id = super::battle::move_index(dex, id(mv))?;
     let party = Ram::new(&s.obs).party(s.hf.rec.emu());
-    if let Some(i) = party.iter().position(|m| m.knows(id("MOVE_CUT")).is_some()) {
+    if let Some(i) = party.iter().position(|m| m.knows(id(mv)).is_some()) {
         return Some(i);
     }
     party
@@ -704,12 +710,12 @@ fn cut_learner(s: &mut Session) -> Option<usize> {
         .skip(1)
         .find_map(|(i, m)| {
             let sp = super::battle::species_index(dex, m.species)?;
-            (crate::sim::can_learn(&s.ctx, sp, cut) && m.moves.contains(&0)).then_some(i)
+            (crate::sim::can_learn(&s.ctx, sp, m_id) && m.moves.contains(&0)).then_some(i)
         })
         .or_else(|| {
             party.iter().enumerate().skip(1).find_map(|(i, m)| {
                 let sp = super::battle::species_index(dex, m.species)?;
-                crate::sim::can_learn(&s.ctx, sp, cut).then_some(i)
+                crate::sim::can_learn(&s.ctx, sp, m_id).then_some(i)
             })
         })
 }
@@ -1296,6 +1302,41 @@ fn dig_grunt(s: &mut Session) -> PResult<()> {
         } else {
             s.seg = "tm28-dig".into();
             super::dex::dex_hook(s, "tm28-dig")?;
+        }
+        // HM02 (Route 16 house, `leg_hm02`) needs a Fly learner; the model has none (MODEL BUG, like Cut
+        // before R3d). Earlier runs had a Route 1 Pidgey caught against `pass_off`; with that fixed
+        // (v5c-s41: fatal "no Pidgey to teach Fly"), the human takes the first Pidgey of the same Route 5
+        // grass, 40 % of `sRoute5_LeafGreen` (`decompiled/src/data/wild_encounters.json`; Pidgey learns
+        // HM02, `tmhm_learnsets.h`).
+        if hm_learner(s, "MOVE_FLY").is_none() {
+            s.event(
+                "model-vs-actual",
+                "no party mon learns HM02 Fly: a Route 5 Pidgey (the model has no Fly carrier)",
+                json!({}),
+            );
+            let h = crate::params::Hunt {
+                after: "tm28-dig".into(),
+                site: "MAP_ROUTE5".into(),
+                area: "land".into(),
+                steps: 150,
+                skip: vec!["SPECIES_MEOWTH".into(), "SPECIES_BELLSPROUT".into()],
+                on_route: true,
+                stop_after: 1,
+                ..Default::default()
+            };
+            let prev = std::mem::replace(&mut s.seg, "fly-carrier-hunt".into());
+            let rep = super::dex::hunt(s, &h)?;
+            s.seg = prev;
+            if hm_learner(s, "MOVE_FLY").is_none() {
+                s.event(
+                    "warn",
+                    format!(
+                        "no Fly learner after the Route 5 hunt ({} encounters, {})",
+                        rep.encounters, rep.why
+                    ),
+                    json!({"encounters": rep.encounters}),
+                );
+            }
         }
     }
     Ok(())
