@@ -799,6 +799,11 @@ pub struct Params {
     /// again (`league_redo` times the League clock spent so far, plus the whiteout cost) instead of
     /// resetting. 0 = reset (the old model).
     pub league_redo: f64,
+    /// MODEL CHANGE (human input 2026-11-27, category practice): any whiteout ends the attempt: League
+    /// (redoing from Lorelei loses so much time that continuing is almost never worth it), mid-game
+    /// trainer and wild losses, and hazard deaths. Overrides `league_redo`, `salvage_at` /
+    /// `salvage_default` and the retry-from-the-Center loop. Off = the old salvage rules.
+    pub death_resets: bool,
     /// Save-and-reload discipline (what-if; the category rules say only that the timer starts at New Game, so a
     /// reload from an in-game save keeps the timer running): the human saves at the start of each listed
     /// segment (`reload_save_frames`: Start menu, overwrite prompt, "Saving..."), and when an attempt would die
@@ -1483,6 +1488,7 @@ impl Default for Params {
             salvage_at: Default::default(),
             salvage_default: -1.0,
             league_redo: 0.0,
+            death_resets: false,
             reload_save_at: vec![],
             reload_save_frames: 800,
             reload_frames: 1500,

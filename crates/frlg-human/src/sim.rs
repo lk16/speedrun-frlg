@@ -1855,6 +1855,10 @@ fn battle(
         if rng.chance(danger) {
             let spent = st.clock - start;
             st.whiteouts += 1;
+            if ctx.p.death_resets {
+                st.abandoned = true;
+                return false;
+            }
             bump(st, ctx.k("whiteout", WHITEOUT as f64) + spent as f64 * 0.0);
             tries += 1;
             if tries >= 3 {
@@ -2668,6 +2672,11 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             return true;
         }
         st.whiteouts += 1;
+        // MODEL CHANGE `death_resets`: the human resets on any whiteout (wild losses included).
+        if ctx.p.death_resets {
+            st.abandoned = true;
+            return false;
+        }
         if risk_lost && ctx.p.risk_abandon && !a.league {
             st.abandoned = true;
             return false;
@@ -3270,7 +3279,7 @@ fn hazard_death(ctx: &Ctx, st: &mut State, rng: &mut Rng, name: &str) -> bool {
         return false;
     }
     st.whiteouts += 1;
-    if ctx.no_salvage_end.is_some_and(|e| st.seg_i <= e) {
+    if ctx.p.death_resets || ctx.no_salvage_end.is_some_and(|e| st.seg_i <= e) {
         st.abandoned = true;
         return true;
     }
