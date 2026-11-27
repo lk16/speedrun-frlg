@@ -991,6 +991,22 @@ fn preheal(s: &mut Session, seg: &str, trainer: &str) -> PResult<()> {
     for _ in 0..need.min(potions as i32) {
         super::shop::use_item_on(s, "ITEM_POTION", 0)?;
     }
+    // Short of Potions in Pewter (the first poison spent the Antidote, a second one walked the carry down:
+    // 2026-11-27 r2d-s31 met Liam at 4/28 HP poisoned, ~25 dead branches): the human heals at the Pewter
+    // Center (`PewterCity_PokemonCenter_1F`) rather than lose the run. Off the plan (no Center before
+    // Brock, review item 12), so logged as model-vs-actual.
+    if need > potions as i32 && matches!(seg, "pewter-gym-trainer" | "brock") {
+        let hp1 = ram.player_party(s.hf.rec.emu())[0].hp;
+        s.event(
+            "model-vs-actual",
+            format!(
+                "before {seg}: starter {hp1}/{max} HP below the floor {target} with no Potion left: \
+                 Pewter Center heal (not in the plan)"
+            ),
+            json!({"seg": seg, "hp": hp1, "floor": target}),
+        );
+        super::legs::center_heal(s, "MAP_PEWTER_CITY_POKEMON_CENTER_1F")?;
+    }
     Ok(())
 }
 
