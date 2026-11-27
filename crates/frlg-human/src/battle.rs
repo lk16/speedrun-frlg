@@ -2897,6 +2897,11 @@ fn ai_wants_item(total: u32, left: u32, valid: u32, e: &Mon) -> bool {
     used == 0 || valid <= total - used + 1
 }
 
+/// `Tactics::bag_honest`: a status alone is cured with a Full Heal only above this HP fraction; lower, the
+/// Full Restore's free refill is worth its price (R3f: a Full Heal on a half-HP fighter costs a second item
+/// turn later; 0.75 is a guess).
+const FULL_HEAL_ABOVE: f64 = 0.75;
+
 /// Mutable state of one fight that a rollout must be able to copy. Public so the playing
 /// controller can carry it across the turns of a real fight ([`Fs::new`], [`decide`], [`note`]).
 #[derive(Clone)]
@@ -3161,7 +3166,7 @@ fn greedy_action(
         && !safe_kill;
     let fr_ok = !honest
         || (fs.frs_left > 0
-            && ((status_bad && (fs.fh_left == 0 || hp_need))
+            && ((status_bad && (fs.fh_left == 0 || hp_need || my_frac < FULL_HEAL_ABOVE))
                 || (hp_need && pots == 0)
                 || (prep_heal && heal_ok && pots == 0)));
     let action = if fs.must_switch {
@@ -3186,7 +3191,7 @@ fn greedy_action(
             || (prep_heal && heal_ok))
     {
         Action::FullRestore
-    } else if honest && fs.fh_left > 0 && status_bad {
+    } else if honest && fs.fh_left > 0 && status_bad && my_frac >= FULL_HEAL_ABOVE {
         // `bag_honest`: a Full Heal cures every status, confusion included (`item_effects.h:47-49`).
         Action::Cure
     } else if fs.awakenings_left > 0 && matches!(me.status, Status1::Sleep(_)) && danger > 0 {
