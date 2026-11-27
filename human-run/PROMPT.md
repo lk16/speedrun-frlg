@@ -50,6 +50,12 @@ clock**. It counts toward the score below, not toward the run time.
    *active* target (see *Score*), not always the WR. On top of that floor, each split has an
    optional, more aggressive threshold that the optimiser tunes, because resetting a run that
    is merely unlikely to finish usually lowers the score.
+   **A death resets** (human input, 2026-11-27): any whiteout ends the attempt. A League whiteout
+   is not redone from Lorelei (that loses so much time that continuing is almost never worth it),
+   and mid-game or wild losses are not salvaged either; no save-and-reload. Model key
+   `death_resets`. In played runs (`frlg-human play`) a rollback after a death is a *debug branch*
+   for coverage, not a strategy: the played run of record is one surviving branch, so its splits are
+   luckier than a real attempt, and the score always comes from the model.
 5. **RNG.** v1 uses a fully random seed per attempt, so the human only reacts and resets.
    Human-feasible manipulation (timer-based, with modelled ±frame accuracy) is a later plan
    variant, scored like any other idea.
