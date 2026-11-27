@@ -230,8 +230,20 @@ fn surge_cans(s: &mut Session) -> PResult<()> {
             }
             None => (1..=15).filter(|c| !tried.contains(c)).collect(),
         };
+        // Every can marked tried without the first switch (an A press that did not reach a can, e.g.
+        // r2g-s31-full after Dwayne's fight): check them again, as a human would; `checked` bounds it.
+        if cand.is_empty() {
+            s.event(
+                "warn",
+                "trash cans: all 15 tried without the first switch: checking again",
+                json!({"checked": checked}),
+            );
+            tried.clear();
+            checked += 1;
+            continue;
+        }
         // Nearest can first.
-        let me = here(s).unwrap();
+        let me = here(s).ok_or("no position in the gym")?;
         let next = *cand
             .iter()
             .min_by_key(|&&c| {
@@ -241,9 +253,41 @@ fn surge_cans(s: &mut Session) -> PResult<()> {
             .unwrap();
         let (x, y) = can_xy(next);
         go_face(s, map, x, y, &Opts::default())?;
+        let at = here(s);
+        let facing = super::ram::Ram::new(&s.obs).player_facing(s.hf.rec.emu());
+        // The walk's own `settle` mashes A, and arriving face to face with the can checks it: the
+        // first switch can already be open here. Pressing again would be the "second" switch on the
+        // same can, wrong, and reset both locks (`TrySwitchTwo`, `VermilionCity_Gym/scripts.inc:166-175`;
+        // r2g-s31-full: switches 15/10, can 15 found by the walk, then reset, 31 cans).
+        if found_first.is_none() && s.obs.flag(s.hf.rec.emu(), first).unwrap_or(false) {
+            found_first = Some(next);
+            tried.push(next);
+            checked += 1;
+            s.event(
+                "decision",
+                format!("first switch in can {next} (opened by the walk's A on arrival)"),
+                json!({"can": next, "checked": checked}),
+            );
+            continue;
+        }
+        let f0 = s.frame();
+        let pre = (
+            // `VAR_TEMP_0` / `VAR_TEMP_1` = 0x4000 / 0x4001 (`include/constants/vars.h:7-9`).
+            s.obs.var(s.hf.rec.emu(), 0x4000).unwrap_or(0),
+            s.obs.var(s.hf.rec.emu(), 0x4001).unwrap_or(0),
+            s.obs.flag(s.hf.rec.emu(), first).unwrap_or(false),
+        );
         s.hf.press(keys::A)?;
         settle(s)?;
         checked += 1;
+        s.event(
+            "decision",
+            format!(
+                "trash can {next} at ({x}, {y}) checked from {at:?} facing {facing} ({} frames; switches {}/{} first {} before)",
+                s.frame() - f0, pre.0, pre.1, pre.2
+            ),
+            json!({"can": next, "frames": s.frame() - f0, "switch1": pre.0, "switch2": pre.1, "first_before": pre.2}),
+        );
         let f1 = s.obs.flag(s.hf.rec.emu(), first).unwrap_or(false);
         if found_first.is_none() {
             tried.push(next);
