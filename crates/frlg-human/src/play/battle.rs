@@ -403,6 +403,12 @@ fn heal_count(items: &[(u16, u16)]) -> u32 {
     .sum()
 }
 
+/// `include/constants/abilities.h`, `include/constants/pokemon.h`.
+const ABILITY_SHADOW_TAG: u8 = 23;
+const ABILITY_LEVITATE: u8 = 26;
+const ABILITY_ARENA_TRAP: u8 = 71;
+const TYPE_FLYING: u8 = 2;
+
 /// Full Restores the round-2 Elite Four rooms leave in the bag for the Champion (a played rule).
 pub const CHAMPION2_RESERVE: u32 = 4;
 
@@ -1585,6 +1591,29 @@ fn wild_turn(
                 json!({"throws": c.throws}),
             );
         }
+    }
+    // Shadow Tag, or Arena Trap on a grounded mon, makes RUN fail at selection and the action menu comes
+    // back without a turn passing (`IsRunningFromBattleImpossible`, `decompiled/src/battle_main.c:3017-3037`;
+    // abilities `include/constants/abilities.h`): fleeing would loop (the Six Island Wobbuffet hang of
+    // 2026-11-24). Attack instead.
+    let me_raw = c.ram.battle_mon(f.emu(), 0);
+    let foe_ability = c.ram.battle_mon(f.emu(), 1).ability;
+    let grounded = me_raw.types.0 != TYPE_FLYING
+        && me_raw.types.1 != TYPE_FLYING
+        && me_raw.ability != ABILITY_LEVITATE;
+    if foe_ability == ABILITY_SHADOW_TAG || (foe_ability == ABILITY_ARENA_TRAP && grounded) {
+        let mv = best_move(dex, sc);
+        log.push(
+            f.frame(),
+            "model-vs-actual",
+            format!(
+                "{} cannot be fled (ability {foe_ability}): attacking with {}",
+                species_name(dex, sc.foe.species),
+                move_name(dex, mv)
+            ),
+            json!({"ability": foe_ability}),
+        );
+        return use_move(f, c, sc, mv);
     }
     // Run (`TryRunFromBattle`, `decompiled/src/battle_main.c`); a failed escape gives a new menu.
     nav_2x2(f, "action cursor on RUN", 3, |e| obs.action_cursor(e, 0))?;

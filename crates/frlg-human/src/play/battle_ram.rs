@@ -14,6 +14,7 @@ mod bmon {
     pub const MOVES: u32 = 0x0C;
     /// `s8 statStages[NUM_BATTLE_STATS]`: HP, Atk, Def, Spe, SpA, SpD, Acc, Eva; 6 = neutral.
     pub const STAGES: u32 = 0x18;
+    pub const ABILITY: u32 = 0x20;
     pub const TYPE1: u32 = 0x21;
     pub const TYPE2: u32 = 0x22;
     pub const PP: u32 = 0x24;
@@ -135,6 +136,7 @@ pub struct RawBattleMon {
     pub moves: [u16; 4],
     pub stages: [i8; 8],
     pub types: (u8, u8),
+    pub ability: u8,
     pub pp: [u8; 4],
     pub hp: u16,
     pub level: u8,
@@ -221,6 +223,7 @@ impl BattleRam {
             moves: std::array::from_fn(|i| emu.read16(b + bmon::MOVES + 2 * i as u32)),
             stages: std::array::from_fn(|i| emu.read8(b + bmon::STAGES + i as u32) as i8),
             types: (emu.read8(b + bmon::TYPE1), emu.read8(b + bmon::TYPE2)),
+            ability: emu.read8(b + bmon::ABILITY),
             pp: std::array::from_fn(|i| emu.read8(b + bmon::PP + i as u32)),
             hp: emu.read16(b + bmon::HP),
             level: emu.read8(b + bmon::LEVEL),
