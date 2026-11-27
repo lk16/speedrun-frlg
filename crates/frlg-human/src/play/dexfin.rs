@@ -1043,6 +1043,25 @@ pub fn errands(s: &mut Session, center: &str, place: Option<Place>, reserve: u32
             json!({"center": center, "caught": caught, "money": money,
                    "plan": acts.iter().map(|a| json!({"target": a.target, "place": format!("{:?}", a.place), "kind": format!("{:?}", a.kind)})).collect::<Vec<_>>()}),
         );
+        // The PC refuses to take the last mon that can fight ("That's your last POKeMON!",
+        // `CanMovePartyMon`, `decompiled/src/pokemon_storage_system.c`): with the carry fainted (v5g-s41
+        // after the Mansion, Nidoqueen the only one standing) every deposit soft-locked. The errand is
+        // in the Center: heal at the counter first when anyone in the party is down.
+        if super::ram::Ram::new(&s.obs)
+            .party(s.hf.rec.emu())
+            .iter()
+            .any(|m| m.hp == 0)
+        {
+            s.event(
+                "decision",
+                format!(
+                    "party has a fainted mon: Center heal at {} before the PC",
+                    center.trim_start_matches("MAP_")
+                ),
+                json!({"center": center}),
+            );
+            super::legs::center_heal(s, center)?;
+        }
         execute(s, &acts, center)?;
         if caught_count(s) == caught {
             break;
