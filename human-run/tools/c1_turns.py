@@ -11,6 +11,7 @@ sleep counting `decompiled/src/battle_util.c` `AtkCanceller_UnableToUseMove` (Sl
 Causes of a turn (first match wins):
   sleep     the fighter is asleep and loses the turn (status Sleep(n) with n > 1) and did not use an item
   heal      the action is an item (potion, Full Restore, Awakening, cure)
+  unable    the next turn's `my_last_move` is 0xFFFF: the move did not go off (full paralysis, flinch)
   fallback  the policy chose Heal / FullRestore but an attack went instead
   badmove   an attack scoring < 90 % of the best move known so far (power x effectiveness x STAB x accuracy)
   miss      an attack that dealt no damage to a foe that stayed (accuracy / immunity)
@@ -128,6 +129,9 @@ def classify(fl):
                 c = "sleep"
             elif item:
                 c = "heal"
+            elif nxt is not None and nxt["my_last_move"] == "#65535":
+                # gLastMoves[0] = 0xFFFF: the move did not go off (full paralysis, a flinch, confusion)
+                c = "unable"
             elif n["policy"] in ("Heal", "FullRestore") and a in MV:
                 c = "fallback"
             elif a in MV and MV[a]["power"] > 0:
