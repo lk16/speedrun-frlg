@@ -1064,6 +1064,23 @@ fn cerulean(s: &mut Session) -> PResult<()> {
     if awak > 0 {
         want.push(("ITEM_AWAKENING", awak));
     }
+    // PLAN `marts` after `persim-and-potions` (`mid_bag`: 6 Potions in 1910 / 1930 / 1952 / 1964) right after
+    // the plan's Awakenings, before the controller's own extras: v5b-s41 had $1392, spent it on 3
+    // Awakenings and 2 Antidotes, could not afford a Super Potion and met the Cerulean rival at 12/58 with
+    // no heal (12 blackouts, fatal). Potion 300 (`decompiled/src/data/items.json`), a Cerulean mart row
+    // (`CeruleanCity_Mart/scripts.inc:27`).
+    let plan_potions = s
+        .plan
+        .params
+        .marts
+        .iter()
+        .filter(|m| m.after == "persim-and-potions" && m.topup)
+        .map(|m| m.potions as u16)
+        .max()
+        .unwrap_or(0);
+    if plan_potions > 0 {
+        want.push(("ITEM_POTION", plan_potions));
+    }
     // The Route 25 Cut-carrier hunt (`cut_carrier_hunt`) needs balls, and the plan buys none after the
     // forest catches spend Oak's five (2026-11-27 r2d-s31: 12 of 12 hunts "skipped, no ball in the bag").
     // Poke Balls are the mart's first row (`CeruleanCity_Mart/scripts.inc:24-25`); Bellsprout's catch
