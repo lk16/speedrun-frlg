@@ -2993,6 +2993,12 @@ impl Fs {
         self.last_move = mv;
     }
 
+    /// The trainer's Full Restores still unused (the controller counts the heals it saw: the sim's own
+    /// fight decrements this itself, `act_enemy`).
+    pub fn set_ai_heals(&mut self, left: u32) {
+        self.ai_heals = left;
+    }
+
     /// Screens up on either side as (Reflect, Light Screen) turns left (`gSideTimers`).
     pub fn set_screens(&mut self, mine: (u8, u8), theirs: (u8, u8)) {
         self.my_side.reflect = mine.0;

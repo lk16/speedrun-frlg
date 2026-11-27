@@ -534,7 +534,12 @@ fn sell_from_tm_case(s: &mut Session, it: &str) -> PResult<()> {
                 "soft-lock: selling {it} (TM Case)"
             )));
         }
-        if !owned(s) && case_input(s) {
+        // C5: the sale is done the moment the TM leaves the bag (`Task_DoSaleOfTMs` removes it, then
+        // `Task_AfterSale_ReturnToList` waits for A or B, `tm_case.c:1289-1316`). The old loop kept
+        // pressing A until the list was back, and that A sold the next TM in the case: a sale of TM28
+        // turned over TM34 and TM38 as well (played, C5 replay: +5250 yen for TM28). B below closes the
+        // message and leaves the case.
+        if !owned(s) {
             break;
         }
         if menu::task(s, "Task_CallYesOrNoCallback") {

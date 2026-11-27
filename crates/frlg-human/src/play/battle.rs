@@ -765,6 +765,8 @@ struct Ctl<'a, 'b> {
     trainer: Option<String>,
     ai: u32,
     ai_heals: u32,
+    /// C5: the trainer's item heals seen so far (its Full Restore on a foe under a quarter HP).
+    ai_used: u32,
     wild: bool,
     safari: bool,
     tac: Option<Tactics>,
@@ -858,6 +860,7 @@ pub fn fight(
         trainer: None,
         ai: 0,
         ai_heals: 0,
+        ai_used: 0,
         wild: !trainer,
         safari: flags & BATTLE_TYPE_SAFARI != 0,
         tac: None,
@@ -1060,6 +1063,11 @@ fn on_start(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), Ro
 }
 
 /// One action menu: decide, log, drive.
+/// `FRLG_C5_OLD=1`: the controller leaves the policy's count of the trainer's heals at its start value.
+fn c1_old_ai() -> bool {
+    std::env::var_os("FRLG_C5_OLD").is_some()
+}
+
 fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteError> {
     let dex = c.dex;
     c.turns += 1;
@@ -1095,6 +1103,23 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
         .filter(|&(i, m)| i != sc.active && m.hp > 0 && !m.is_egg)
         .count() as u32;
     fs.set_others_alive(others);
+    // C5: the policy's picture of the trainer's bag. The sim's fight spends `Fs::ai_heals` itself
+    // (`act_enemy`); the controller never did, so after the real Full Restore the policy still
+    // expected a second one at every foe under 1/4 HP (`ai_wants_item`, `battle_ai_switch_items.c:562-598`:
+    // Full Restore under a quarter of max HP) and read that turn as a free one. Count the heals seen:
+    // the same foe, below a quarter HP at the last menu, at full HP now.
+    if c.trainer.is_some() && !c1_old_ai() {
+        if let Some(l) = c.last {
+            if l.foe_slot == sc.foe.slot
+                && l.foe_hp > 0
+                && l.foe_hp < sc.foe.max_hp / 4
+                && sc.foe.hp == sc.foe.max_hp
+            {
+                c.ai_used += 1;
+            }
+        }
+        fs.set_ai_heals(c.ai_heals.saturating_sub(c.ai_used));
+    }
     fs.set_screens(c.ram.screens(f.emu(), 0), c.ram.screens(f.emu(), 1));
     let d = sim_battle::decide(
         dex, &sc.me, &sc.foe, &sc.bench, &tac, fs, c.ai, c.ai_heals, c.wild, &mut c.rng,
