@@ -1199,6 +1199,13 @@ pub struct Params {
     /// at mart stops (`marts[].potions`: Pewter, Cerulean) or picked up (`early_potions` left over join the bag).
     /// Off = the old purse-at-use potions until `potion_bag_from` (Koga).
     pub mid_bag: bool,
+    // ---- R3 round 3 (journal 2026-11-27-r3c-model).
+    /// MODEL CHANGE (R3c item 3): the simulator plays `early_torrent.tackle_only` as the controller does
+    /// (`play/battle.rs`: every damaging move chosen in those fights becomes Tackle while Tackle has PP; status
+    /// moves such as Tail Whip and Withdraw stay the policy's). Implemented by giving the other damaging moves
+    /// 0 PP for that fight in both lanes and restoring their PP afterwards. Off = the old model (the
+    /// restriction documented, not simulated).
+    pub tackle_only_model: bool,
 }
 
 /// The WR runner's early Torrent line at one fight (`Params::early_torrent`): Torrent is x1.5 Water power at
@@ -1513,6 +1520,7 @@ impl Default for Params {
             cut_teach_frames: 700.0,
             cut_detour_tiles: 712,
             mid_bag: false,
+            tackle_only_model: false,
         }
     }
 }

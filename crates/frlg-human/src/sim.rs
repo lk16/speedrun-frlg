@@ -2181,6 +2181,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             );
             m.moves = st.slots.clone();
             m.pp = st.slot_pp.clone();
+            tackle_only_mask(ctx, a.name, &mut m);
             m.status = st.carry_status;
             if ctx.p.ablate_torrent {
                 m.ability = crate::data::Ability::None;
@@ -2460,7 +2461,20 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             }
             if !mewtwo_now {
                 st.carry_status = out.end_status;
-                st.slot_pp = me.pp.clone();
+                // `tackle_only_model`: the masked moves keep the PP they had before the fight.
+                let masked = tackle_only_masked(ctx, a.name, &st.slots, &st.slot_pp);
+                st.slot_pp = me
+                    .pp
+                    .iter()
+                    .enumerate()
+                    .map(|(k, &pp)| {
+                        if masked.contains(&k) {
+                            st.slot_pp.get(k).copied().unwrap_or(pp)
+                        } else {
+                            pp
+                        }
+                    })
+                    .collect();
                 if !in_torrent || ctx.p.poison_frames_per_hp <= 0.0 {
                     cure_status(ctx, st);
                 }
@@ -2633,6 +2647,7 @@ fn risk_fight(
     );
     me.moves = st.slots.clone();
     me.pp = st.slot_pp.clone();
+    tackle_only_mask(ctx, a.name, &mut me);
     me.status = st.carry_status;
     if st.mystic {
         me.boost = Some((11, 10));
@@ -2855,6 +2870,33 @@ fn review_keys(ctx: &Ctx, st: &mut State, name: &str) {
             }
             st.balls[0] += n;
             clock_add(st, p.pewter_ball_frames * p.text_factor);
+        }
+    }
+}
+
+/// MODEL CHANGE `tackle_only_model`: the move slots whose PP is hidden in the fight `name` (the damaging
+/// moves other than Tackle, when the carry still has Tackle PP). Empty when the key is off or does not apply.
+/// Decided on the slots and PP the carry enters the fight with.
+fn tackle_only_masked(ctx: &Ctx, name: &str, moves: &[usize], pp: &[i32]) -> Vec<usize> {
+    if !ctx.p.tackle_only_model || !ctx.p.early_torrent.tackle_only.iter().any(|t| t == name) {
+        return vec![];
+    }
+    let tackle = ctx.dex.move_id("MOVE_TACKLE");
+    let Some(ti) = moves.iter().position(|&m| m == tackle) else {
+        return vec![];
+    };
+    if pp.get(ti).is_some_and(|&p| p <= 0) {
+        return vec![];
+    }
+    (0..moves.len())
+        .filter(|&k| k != ti && ctx.dex.moves[moves[k]].power > 0)
+        .collect()
+}
+
+fn tackle_only_mask(ctx: &Ctx, name: &str, me: &mut crate::battle::Mon) {
+    for k in tackle_only_masked(ctx, name, &me.moves, &me.pp) {
+        if let Some(p) = me.pp.get_mut(k) {
+            *p = 0;
         }
     }
 }
