@@ -958,6 +958,10 @@ fn cerulean(s: &mut Session) -> PResult<()> {
     if cut_learner(s).is_none() {
         want.push(("ITEM_POKE_BALL", 3));
     }
+    // Two Antidotes for the walker's poison guard (`early::field_guard_due`) on Routes 24 / 25 and
+    // Route 9: r2e-s31 entered Route 25 poisoned at 6/65 with no cure. Antidote is a Cerulean mart row
+    // (`CeruleanCity_Mart/scripts.inc:28`); a controller choice, not priced.
+    want.push(("ITEM_ANTIDOTE", 2));
     // Repels for Route 9 / Rock Tunnel are bought at the stop before Route 9 (`rock_tunnel`), with
     // the bridge and Route 25 money; Nugget Bridge's path has no grass.
     // Heals: Super Potions up to 4, while the money lasts (the sim's heals are unrationed).

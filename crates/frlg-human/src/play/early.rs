@@ -1207,9 +1207,6 @@ const STATUS_POISON: u32 = (1 << 3) | (1 << 7);
 /// starter poisoned at 4/26 and it fainted on the way to Pewter; Liam then met Weedle).
 /// What the guard would do now, without pressing anything: `Some((item, hp, floor))` to act.
 pub fn field_guard_due(s: &mut Session) -> PResult<Option<(&'static str, u16, i32)>> {
-    if !s.carry_faint_dead {
-        return Ok(None);
-    }
     let Some(lead) = super::ram::Ram::new(&s.obs)
         .party(s.hf.rec.emu())
         .first()
@@ -1217,7 +1214,7 @@ pub fn field_guard_due(s: &mut Session) -> PResult<Option<(&'static str, u16, i3
     else {
         return Ok(None);
     };
-    if lead.hp == 0 {
+    if lead.hp == 0 && s.carry_faint_dead {
         return Err(PlayError::Death(
             "the starter fainted on the field (field poison): a dead branch before the first Center".into(),
         ));
@@ -1228,7 +1225,17 @@ pub fn field_guard_due(s: &mut Session) -> PResult<Option<(&'static str, u16, i3
     let et = s.plan.params.early_torrent.clone();
     let pos = |n: &str| s.plan.segs.iter().position(|g| g.name == n);
     let before_fight = matches!((pos(&s.seg), pos(&et.fight)), (Some(a), Some(b)) if a < b);
-    let mut floor = 3;
+    // Outside the early stages: in-battle poison takes 1/8 of the max HP a turn (`ENDTURN_POISON`,
+    // `decompiled/src/battle_util.c:805-806`), so a carry under a quarter cannot sit through two turns
+    // (2026-11-27 r2e-s31: Route 25 entered at 6/65 HP poisoned with no cure, 34 dead branches).
+    let mut floor = if s.carry_faint_dead {
+        3
+    } else {
+        (lead.max_hp as i32 / 4).max(3)
+    };
+    if lead.hp == 0 {
+        return Ok(None);
+    }
     if before_fight && et.fight == "brock" {
         let dex = s.plan.dex;
         let foes: Vec<crate::battle::Mon> = dex
@@ -1249,6 +1256,8 @@ pub fn field_guard_due(s: &mut Session) -> PResult<Option<(&'static str, u16, i3
     }
     Ok(if have(s, "ITEM_ANTIDOTE") > 0 {
         Some(("ITEM_ANTIDOTE", lead.hp, floor))
+    } else if !s.carry_faint_dead && have(s, "ITEM_FULL_HEAL") > 0 {
+        Some(("ITEM_FULL_HEAL", lead.hp, floor))
     } else if lead.hp <= 2 && have(s, "ITEM_POTION") > 0 {
         Some(("ITEM_POTION", lead.hp, floor))
     } else {
