@@ -1234,6 +1234,33 @@ pub struct Params {
     /// :3686-3704 `GiveMonToPlayer`: `PARTY_SIZE` full -> `SendMonToPC`), so the teach pays one PC withdrawal
     /// (`pc_frames`, `pc_visit`). Off = the old model (a boxed carrier teaches for free).
     pub cut_box_honest: bool,
+    // ---- R3f (journal 2026-11-27-r3f-league-bag): the League heal bag.
+    /// MODEL CHANGE (R3f item 1): the League bag holds real items, each with its own effect
+    /// (`decompiled/src/data/pokemon/item_effects.h`): a Hyper Potion heals 200 HP (:37-40), a Max Potion
+    /// all HP (:32-35), a Full Restore all HP and every status (:26-30), a Full Heal every status, confusion
+    /// included (:47-49, `include/constants/item_effects.h:28`). `xbuys[].heals` are Hyper Potions; the
+    /// field bag's potions still held at `indigo-heal` join the League bag when their tier is the Hyper
+    /// Potion (they are in the bag); the Indigo top-up buys `league_heal_item`. The fight spends Hyper
+    /// Potions first for HP, a Full Heal for a status, a Full Restore when both are needed or nothing else
+    /// is left. Off = the old pool (every League heal is a Full Restore, whatever was bought).
+    pub league_bag_honest: bool,
+    /// PLAN (with `league_bag_honest`): what the Indigo mart tops the League bag up with
+    /// (`IndigoPlateau_PokemonCenter_1F/scripts.inc:54-60` sells Full Restore and Max Potion, not the Hyper
+    /// Potion): `full_restore` (3000, `items.json`) or `max_potion` (2500). The price is the item's
+    /// `items.json` price; `league_heal_price` is ignored then.
+    pub league_heal_item: String,
+    /// PLAN (with `league_bag_honest`): Full Heals (600, `items.json`; Indigo sells them, `scripts.inc:59`)
+    /// the Indigo mart tops the bag up to at each round's start, before the heals. 0 = none.
+    pub league_full_heals: u32,
+    /// MODEL CHANGE (R3f item 2): a League whiteout costs money. `DoWhiteOut` removes `ComputeWhiteOutMoneyLoss`
+    /// (`decompiled/src/overworld.c:250-268`): highest party level x 4 x 30 with 8 badges (:227-237; the
+    /// League needs all 8, Route 23's gates). Off = whiteouts are free.
+    pub league_whiteout_money: bool,
+    /// PLAN (R3f): after a League whiteout the human respawns at the Indigo Center
+    /// (`Overworld_SetWhiteoutRespawnPoint`, `overworld.c:255`; the mart is in the same room) and tops the
+    /// bag up again to `league_heals` / `league_full_heals` before the rooms (a mart visit). Off = the bag
+    /// carries on as it is.
+    pub league_rebuy: bool,
 }
 
 /// The WR runner's early Torrent line at one fight (`Params::early_torrent`): Torrent is x1.5 Water power at
@@ -1556,6 +1583,11 @@ impl Default for Params {
             cut_rehunt_site: "MAP_ROUTE24".into(),
             hunt_stop_empty: false,
             cut_box_honest: false,
+            league_bag_honest: false,
+            league_heal_item: "full_restore".into(),
+            league_full_heals: 0,
+            league_whiteout_money: false,
+            league_rebuy: false,
         }
     }
 }

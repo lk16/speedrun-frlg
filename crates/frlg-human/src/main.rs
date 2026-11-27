@@ -889,6 +889,12 @@ fn main() {
                     awakenings: arg(&args, "--awakenings", 0u32),
                     sleep_no_potion: args.iter().any(|a| a == "--sleep-fix"),
                     cures: arg(&args, "--cures", 0u32),
+                    // `--bag-honest --frs N --maxes N --full-heals N`: the R3f League bag
+                    // (`Params::league_bag_honest`); `--heals` counts every HP item.
+                    bag_honest: args.iter().any(|a| a == "--bag-honest"),
+                    fr_stock: arg(&args, "--frs", u32::MAX),
+                    max_stock: arg(&args, "--maxes", 0u32),
+                    full_heals: arg(&args, "--full-heals", 0u32),
                 };
                 let mut g = frlg_human::rng::GameRng::from_u32(
                     (seed as u32).wrapping_mul(2654435761) ^ (i as u32).wrapping_mul(0x9E3779B9),

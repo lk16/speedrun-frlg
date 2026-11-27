@@ -906,6 +906,14 @@ pub struct Tactics {
     /// scripts.inc:28`, cures every status, `item_effects.h`): a poisoned fighter that is not about to
     /// finish the foe and survives its next hit spends an item turn on one (Koga's Muk / Koffing Toxic).
     pub cures: u32,
+    /// MODEL CHANGE `Params::league_bag_honest`: the heal items are real items. `heal_stock` counts every HP
+    /// item; `fr_stock` of them are Full Restores and `max_stock` Max Potions, the rest heal `heal` (Hyper
+    /// Potions, 200); `full_heals` cure every status. Off = the old rule (with `full_restore` every heal is a
+    /// Full Restore).
+    pub bag_honest: bool,
+    pub fr_stock: u32,
+    pub max_stock: u32,
+    pub full_heals: u32,
 }
 
 impl Default for Tactics {
@@ -930,6 +938,10 @@ impl Default for Tactics {
             sleep_no_potion: false,
             awakenings: 0,
             cures: 0,
+            bag_honest: false,
+            fr_stock: u32::MAX,
+            max_stock: 0,
+            full_heals: 0,
         }
     }
 }
@@ -989,6 +1001,9 @@ pub struct Outcome {
     pub x_used: u32,
     pub heals_used: u32,
     pub full_restores_used: u32,
+    /// `Tactics::bag_honest`: Max Potions among `heals_used`, and Full Heals spent.
+    pub maxes_used: u32,
+    pub full_heals_used: u32,
     pub awakenings_used: u32,
     pub cures_used: u32,
     /// Sacrificial faints spent (each costs a faint animation and a send-out).
@@ -2896,6 +2911,13 @@ pub struct Fs {
     heals_left: u32,
     awakenings_left: u32,
     cures_left: u32,
+    /// `Tactics::bag_honest`: Full Restores and Max Potions among `heals_left`, Full Heals left, and what
+    /// the last committed item was (a Max Potion heal, a Full Heal cure).
+    frs_left: u32,
+    maxes_left: u32,
+    fh_left: u32,
+    pot_full: bool,
+    cure_all: bool,
     last_heal: bool,
     /// Full Restores the trainer still holds.
     ai_heals: u32,
@@ -2926,6 +2948,13 @@ impl Fs {
             heals_left: tac.heal_stock,
             awakenings_left: tac.awakenings,
             cures_left: tac.cures,
+            frs_left: tac.fr_stock.min(tac.heal_stock),
+            maxes_left: tac
+                .max_stock
+                .min(tac.heal_stock.saturating_sub(tac.fr_stock)),
+            fh_left: tac.full_heals,
+            pot_full: false,
+            cure_all: false,
             last_heal: false,
             ai_heals,
             others_alive: tac.others_alive,
@@ -3113,6 +3142,28 @@ fn greedy_action(
         stalled: false,
     };
     let next_x = tac.x_items.get(fs.setup_idx).copied();
+    // `Tactics::bag_honest`: which items the bag really holds. Potions = Hyper / Max Potions (the cheap HP
+    // heal goes first); a status alone takes a Full Heal when there is one, a Full Restore when HP is
+    // needed too or nothing else is left.
+    let honest = tac.bag_honest;
+    let pots = fs.heals_left.saturating_sub(fs.frs_left);
+    let hypers = pots.saturating_sub(fs.maxes_left);
+    let pot_heal = if !honest || hypers > 0 {
+        tac.heal
+    } else {
+        me.max_hp
+    };
+    let status_bad = matches!(me.status, Status1::Sleep(_) | Status1::Freeze)
+        || (my_frac < 0.6 && (me.status == Status1::Paralysis || me.confusion > 1));
+    let hp_need = (my_frac < tac.heal_below && me.hp <= 2 * danger && me.max_hp > danger
+        || in_danger)
+        && heal_ok
+        && !safe_kill;
+    let fr_ok = !honest
+        || (fs.frs_left > 0
+            && ((status_bad && (fs.fh_left == 0 || hp_need))
+                || (hp_need && pots == 0)
+                || (prep_heal && heal_ok && pots == 0)));
     let action = if fs.must_switch {
         Action::Switch
     } else if forced {
@@ -3125,6 +3176,7 @@ fn greedy_action(
         a
     } else if tac.full_restore
         && fs.heals_left > 0
+        && fr_ok
         && (matches!(me.status, Status1::Sleep(_) | Status1::Freeze)
             || (my_frac < 0.6 && (me.status == Status1::Paralysis || me.confusion > 1))
             || ((my_frac < tac.heal_below && me.hp <= 2 * danger && me.max_hp > danger
@@ -3134,22 +3186,26 @@ fn greedy_action(
             || (prep_heal && heal_ok))
     {
         Action::FullRestore
+    } else if honest && fs.fh_left > 0 && status_bad {
+        // `bag_honest`: a Full Heal cures every status, confusion included (`item_effects.h:47-49`).
+        Action::Cure
     } else if fs.awakenings_left > 0 && matches!(me.status, Status1::Sleep(_)) && danger > 0 {
         Action::Awaken
     } else if fs.heals_left > 0
-        && !(tac.sleep_no_potion && matches!(me.status, Status1::Sleep(_)) && tac.heal <= danger)
+        && (!honest || pots > 0)
+        && !(tac.sleep_no_potion && matches!(me.status, Status1::Sleep(_)) && pot_heal <= danger)
         && ((my_frac < tac.heal_below
             && me.hp <= 2 * danger
-            && tac.heal as f64 + me.hp as f64 > danger as f64)
-            || (in_danger && me.hp + tac.heal > danger)
-            || prep_heal && me.hp + tac.heal > next_danger)
+            && pot_heal as f64 + me.hp as f64 > danger as f64)
+            || (in_danger && me.hp + pot_heal > danger)
+            || prep_heal && me.hp + pot_heal > next_danger)
         && heal_ok
         && !(safe_kill && !prep_heal)
     {
         // A human only burns a heal turn when the foe can actually reach them
         // within ~2 hits (the WR run heals mid-fight only under real pressure).
         Action::Heal
-    } else if fs.cures_left > 0
+    } else if fs.cures_left + if honest { fs.fh_left } else { 0 } > 0
         && matches!(me.status, Status1::Poison | Status1::Toxic(_))
         && !sure_kill
         && me.hp > danger
@@ -3299,9 +3355,36 @@ fn commit(fs: &mut Fs, action: Action, out: &mut Outcome) {
     match action {
         Action::Switch => fs.must_switch = false,
         Action::XItem(_) => fs.setup_idx += 1,
-        Action::Heal | Action::FullRestore => fs.heals_left = fs.heals_left.saturating_sub(1),
+        Action::Heal => {
+            // `bag_honest`: a Hyper Potion first, then a Max Potion.
+            let hypers = fs
+                .heals_left
+                .saturating_sub(fs.frs_left)
+                .saturating_sub(fs.maxes_left);
+            fs.pot_full = hypers == 0 && fs.maxes_left > 0;
+            if fs.pot_full {
+                fs.maxes_left -= 1;
+            }
+            fs.heals_left = fs.heals_left.saturating_sub(1);
+            if fs.heals_left < fs.frs_left {
+                // No potion was left: the item was a Full Restore.
+                fs.frs_left = fs.heals_left;
+            }
+        }
+        Action::FullRestore => {
+            fs.heals_left = fs.heals_left.saturating_sub(1);
+            fs.frs_left = fs.frs_left.saturating_sub(1).min(fs.heals_left);
+        }
         Action::Awaken => fs.awakenings_left = fs.awakenings_left.saturating_sub(1),
-        Action::Cure => fs.cures_left = fs.cures_left.saturating_sub(1),
+        Action::Cure => {
+            // `bag_honest`: the Full Heals go first (only they cure more than poison).
+            fs.cure_all = fs.fh_left > 0;
+            if fs.cure_all {
+                fs.fh_left -= 1;
+            } else {
+                fs.cures_left = fs.cures_left.saturating_sub(1);
+            }
+        }
         Action::Sac(x) => {
             fs.sacs_left -= 1;
             fs.others_alive = fs.others_alive.saturating_sub(1);
@@ -3538,7 +3621,13 @@ fn run(
                         out.item_turns += 1;
                         out.heals_used += 1;
                         let before = me.hp;
-                        me.hp = (me.hp + tac.heal).min(me.max_hp);
+                        let amount = if tac.bag_honest && fs.pot_full {
+                            out.maxes_used += 1;
+                            me.max_hp
+                        } else {
+                            tac.heal
+                        };
+                        me.hp = (me.hp + amount).min(me.max_hp);
                         out.hp_up += me.hp - before;
                     }
                     Action::Awaken => {
@@ -3550,7 +3639,12 @@ fn run(
                     }
                     Action::Cure => {
                         out.item_turns += 1;
-                        out.cures_used += 1;
+                        if fs.cure_all {
+                            out.full_heals_used += 1;
+                            me.confusion = 0;
+                        } else {
+                            out.cures_used += 1;
+                        }
                         me.status = Status1::None;
                     }
                     Action::FullRestore => {
@@ -4045,7 +4139,16 @@ fn choose_by_rollouts(
     if let (_, Some(alt)) = best_attack(dex, me, e, fs, wild) {
         add(Action::Move(alt), &mut cands);
     }
-    if fs.heals_left > 0 && me.hp < me.max_hp {
+    if tac.bag_honest {
+        let pots = fs.heals_left.saturating_sub(fs.frs_left);
+        if pots > 0 && me.hp < me.max_hp {
+            add(Action::Heal, &mut cands);
+        }
+        if fs.frs_left > 0 && tac.full_restore && (me.hp < me.max_hp || me.status != Status1::None)
+        {
+            add(Action::FullRestore, &mut cands);
+        }
+    } else if fs.heals_left > 0 && me.hp < me.max_hp {
         add(
             if tac.full_restore {
                 Action::FullRestore
@@ -4454,6 +4557,7 @@ mod tests {
                 sleep_no_potion: false,
                 awakenings: 0,
                 cures: 0,
+                ..Default::default()
             };
             let mut g = rng(i + 7000);
             let o = fight(&dex, &mut me, &tac, &foes, f.ai, f.heals, false, &mut g);
@@ -5370,6 +5474,81 @@ mod tests {
             ..Default::default()
         };
         assert!(matches!(pick(&cure), Action::Cure), "{:?}", pick(&cure));
+    }
+
+    /// MODEL CHANGE `league_bag_honest` (R3f): an asleep fighter at full HP takes a Full Heal, not a Full
+    /// Restore; with only Hyper Potions it cannot cure; a low fighter with a Hyper Potion and a Full Restore
+    /// drinks the potion. The old pool (every heal a Full Restore) uses the Full Restore for the sleep.
+    #[test]
+    fn honest_league_bag_picks_the_right_item() {
+        let dex = Dex::load();
+        let mut me = make_mon(&dex, dex.id("SPECIES_BLASTOISE"), 55, [20; 6], [0; 6], 0, 0);
+        me.moves = vec![dex.move_id("MOVE_SURF")];
+        me.pp = vec![];
+        me.status = Status1::Sleep(3);
+        let mut foe = make_mon(&dex, dex.id("SPECIES_GENGAR"), 56, [0; 6], [0; 6], 0, 0);
+        foe.moves = vec![dex.move_id("MOVE_SHADOW_BALL")];
+        foe.pp = vec![];
+        let pick = |me: &Mon, tac: &Tactics| {
+            let fs = Fs::new(tac, 0);
+            greedy_action(
+                &dex,
+                me,
+                &foe,
+                tac,
+                &fs,
+                false,
+                None,
+                &mut Outcome::default(),
+            )
+            .0
+        };
+        let old = Tactics {
+            heal: 999,
+            full_restore: true,
+            heal_stock: 2,
+            ..Default::default()
+        };
+        assert!(matches!(pick(&me, &old), Action::FullRestore));
+        let honest = Tactics {
+            heal: 200,
+            full_restore: true,
+            heal_stock: 2,
+            bag_honest: true,
+            fr_stock: 1,
+            full_heals: 1,
+            ..Default::default()
+        };
+        assert!(
+            matches!(pick(&me, &honest), Action::Cure),
+            "{:?}",
+            pick(&me, &honest)
+        );
+        let hypers_only = Tactics {
+            full_restore: false,
+            fr_stock: 0,
+            full_heals: 0,
+            ..honest.clone()
+        };
+        assert!(!matches!(
+            pick(&me, &hypers_only),
+            Action::FullRestore | Action::Cure
+        ));
+        let mut low = me.clone();
+        low.status = Status1::None;
+        low.hp = 30;
+        let hyper_and_fr = Tactics {
+            full_heals: 0,
+            ..honest.clone()
+        };
+        assert!(
+            matches!(pick(&low, &hyper_and_fr), Action::Heal),
+            "{:?}",
+            pick(&low, &hyper_and_fr)
+        );
+        let mut fs = Fs::new(&hyper_and_fr, 0);
+        commit(&mut fs, Action::Heal, &mut Outcome::default());
+        assert_eq!((fs.heals_left, fs.frs_left, fs.pot_full), (1, 1, false));
     }
 
     #[test]
