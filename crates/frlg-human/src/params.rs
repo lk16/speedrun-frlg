@@ -1234,6 +1234,26 @@ pub struct Params {
     /// :3686-3704 `GiveMonToPlayer`: `PARTY_SIZE` full -> `SendMonToPC`), so the teach pays one PC withdrawal
     /// (`pc_frames`, `pc_visit`). Off = the old model (a boxed carrier teaches for free).
     pub cut_box_honest: bool,
+    // ---- R3e: calibration against the played runs (journal 2026-11-27-r3e-calibration).
+    /// MODEL CHANGE (R3e item 1): the route crosses Route 1 three times before the forest (Oak's lab to
+    /// Viridian, back to Pallet with the parcel, north again with the Pokedex: `ViridianCity_Mart/scripts.inc`
+    /// parcel, `PalletTown_ProfessorOaksLab/scripts.inc` delivery, Route 1 the only link,
+    /// `data/maps/Route1/map.json` connections), but the model rolls the Route 1 grass once. On adds two more
+    /// `route1-encounters` wanders (same grass steps), before `deliver` and before `tutorial`. Played: Route 1
+    /// encounters 4 / 4 / 3 (r2g-s31, r2j-s31, r2i-s11) against the model's 1.76. Off = one crossing.
+    pub route1_rewalk: bool,
+    /// MODEL CHANGE (R3e item 2): played lumps (frames, human speed already, no factor on top) that replace
+    /// the base frames of the named `Text` / `Walk` segments, like `vod_frames` (which wins where both are
+    /// set). Each value is the mean over the played runs of walking at the fastest transport the game allows
+    /// (on foot before Pewter's Running Shoes) + warps + scripted text + menus on the stretch the segment
+    /// stands for, minus what the model charges separately there (marts, pickups, Center heals); controller
+    /// idle, turns, bumps and slow transport are left out. Jitter, mistakes and encounters stay. Empty = off.
+    pub played_frames: std::collections::HashMap<String, f64>,
+    /// MODEL CHANGE (R3e item 3): frames added after the named trainer segment: the scripted text a boss fight
+    /// has that the fitted per-battle price (`trainer_cost`, 79 mostly route-trainer episodes) misses, e.g.
+    /// Brock's defeat speech and the TM39 hand-over (`data/maps/PewterCity_Gym/scripts.inc:12-30`). Value =
+    /// played episode minus the price at the played actions, KOs and level-ups (mean of three runs). Empty = off.
+    pub post_fight_frames: std::collections::HashMap<String, f64>,
 }
 
 /// The WR runner's early Torrent line at one fight (`Params::early_torrent`): Torrent is x1.5 Water power at
@@ -1556,6 +1576,9 @@ impl Default for Params {
             cut_rehunt_site: "MAP_ROUTE24".into(),
             hunt_stop_empty: false,
             cut_box_honest: false,
+            route1_rewalk: false,
+            played_frames: Default::default(),
+            post_fight_frames: Default::default(),
         }
     }
 }

@@ -1366,7 +1366,16 @@ pub fn build(dex: &Dex, p: &Params) -> Result<Vec<Seg>, String> {
     detour(&mut b, "route1-detour", 16);
     b.wander("route1-encounters", "MAP_ROUTE1", g(22, 20, 50));
     b.text("parcel", 1278, Src::Ledger);
+    // MODEL CHANGE `route1_rewalk` (R3e): the parcel goes back south over Route 1 and the Pokedex north
+    // again, so the grass is crossed twice more. Encounter-tile steps of the played shortest paths
+    // (r2i-s11 / r2j-s31 traces, `pathenc.py` `enc_type`): 21 north, 15 south (the ledges), 21 north.
+    if p.route1_rewalk {
+        b.wander("route1-encounters-2", "MAP_ROUTE1", 15);
+    }
     b.text("deliver", 4422, Src::Ledger);
+    if p.route1_rewalk {
+        b.wander("route1-encounters-3", "MAP_ROUTE1", 21);
+    }
     b.text("tutorial", 5551, Src::Ledger);
     b.text("to-forest", 1161, Src::Ledger);
     detour(&mut b, "route2-detour", 4);
