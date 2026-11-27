@@ -264,7 +264,20 @@ fn pass_plan(s: &mut Session, default: WildPlan) -> WildPlan {
     let p = &s.plan.params;
     let sp = &s.plan.dex.species[idx];
     let (name, rate) = (sp.name.clone(), sp.catch_rate);
-    let allowed = p.catch_on_pass && rate >= p.pass_min_catch && !p.pass_off.contains(&s.seg);
+    // The stage name is not the place: `tutorial` and `deliver` cross Route 1, `to-forest` Route 2
+    // (r2g / r2j caught a Route 1 Pidgey under `tutorial` with `route1-encounters` in `pass_off`).
+    let cur_map = here(s).map(|n| s.graph().maps[&n.0].id.clone());
+    let map_seg = match cur_map.as_deref() {
+        Some("MAP_ROUTE1") => Some("route1-encounters"),
+        Some("MAP_ROUTE2") => Some("route2-encounters"),
+        Some("MAP_MT_MOON_B1F") => Some("mt-moon-b1f"),
+        Some("MAP_MT_MOON_B2F") => Some("mt-moon-b2f"),
+        _ => None,
+    };
+    let p = &s.plan.params;
+    let off =
+        p.pass_off.contains(&s.seg) || map_seg.is_some_and(|m| p.pass_off.iter().any(|o| o == m));
+    let allowed = p.catch_on_pass && rate >= p.pass_min_catch && !off;
     let is_owned = owned(s, national);
     if !sim::wants_catch(&s.ctx, idx, is_owned, &[], allowed) {
         return default;
@@ -306,6 +319,8 @@ fn pass_plan(s: &mut Session, default: WildPlan) -> WildPlan {
     // Power Plant, whose 4 species were fled from). The sim does not ration balls between passing
     // catches and hunts (model bug, journal 2026-11-23-04-00).
     const PASS_RESERVE: u16 = 8;
+    /// A passing catch needs at least this chance of landing within the balls it may throw.
+    const PASS_MIN_CHANCE: f64 = 0.6;
     if !safari && rate < 100 && balls <= PASS_RESERVE {
         s.event(
             "model-vs-actual",
@@ -316,6 +331,35 @@ fn pass_plan(s: &mut Session, default: WildPlan) -> WildPlan {
             json!({"species": name, "level": level, "catch_rate": rate, "balls": balls, "seg": s.seg}),
         );
         return default;
+    }
+    // Poor odds: the catch rule weakens a foe only down to half HP (`play::battle`, `Weaken first`) and
+    // throws at that HP. The chance of one ball is `catch_odds` (`Cmd_handleballthrow`,
+    // `decompiled/src/battle_script_commands.c:9549-9556`); if the balls in the bag are unlikely to
+    // land one at that HP, the passing catch costs 5 balls and ~70 s for nothing (r2i Metapod, 34 %
+    // per ball), so it is fled from.
+    if !safari {
+        let max = 100u32;
+        let hp = if p.weaken { max / 2 } else { max };
+        let odds = sim::catch_odds(
+            rate as u32,
+            sim::BALL_MULT[0],
+            hp,
+            max,
+            crate::battle::Status1::None,
+        );
+        let n = (balls as u32).min(sim::MAX_THROWS) as i32;
+        let chance = 1.0 - (1.0 - sim::catch_prob(odds)).powi(n);
+        if chance < PASS_MIN_CHANCE {
+            s.event(
+                "decision",
+                format!(
+                    "passing {} Lv{level} (new, catch rate {rate}): {chance:.2} to land one in {n} balls at the HP it can be weakened to, fled",
+                    short(&name)
+                ),
+                json!({"species": name, "level": level, "catch_rate": rate, "chance": chance, "balls": balls, "seg": s.seg}),
+            );
+            return default;
+        }
     }
     s.event(
         "decision",
