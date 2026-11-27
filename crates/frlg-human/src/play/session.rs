@@ -448,6 +448,7 @@ impl<'p> Session<'p> {
     /// Run `stages` from the one after the resumed checkpoint until `until` (a stage name,
     /// inclusive) or the end.
     pub fn play(&mut self, stages: &[Stage], until: Option<&str>) -> PResult<()> {
+        super::walk::set_grass_cost(self.plan.params.walk_grass_cost);
         let start = self.last_checkpoint().to_string();
         let mut i = stages
             .iter()

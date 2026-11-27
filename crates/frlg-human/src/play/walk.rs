@@ -528,6 +528,15 @@ struct View {
 const STEP: u32 = 100;
 const TURN: u32 = 3;
 const GRASS: u32 = 25;
+thread_local! {
+    /// The grass price of this thread's session (`Params::walk_grass_cost`, default [`GRASS`]).
+    static GRASS_COST: std::cell::Cell<u32> = const { std::cell::Cell::new(GRASS) };
+}
+
+/// Set the walker's grass price for this thread (the session does at the start of `play`).
+pub fn set_grass_cost(c: u32) {
+    GRASS_COST.with(|g| g.set(c));
+}
 const SIGHT: u32 = 300;
 /// Crossing a turning trainer's possible line: the expected wait for it to face away (~90 frames,
 /// about 10 running steps; review item 17 estimates 1.5 s for Lass Robin).
@@ -1064,7 +1073,7 @@ impl Graph {
                 };
                 let mut cost = STEP + turn;
                 if t.land && !opts.steps_only {
-                    cost += GRASS;
+                    cost += GRASS_COST.with(|g| g.get());
                 }
                 if sight.contains_key(&(nx, ny)) {
                     // An unbeaten trainer's sight line costs about a battle (~60 steps of

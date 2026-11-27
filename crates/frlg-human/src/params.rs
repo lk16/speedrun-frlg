@@ -609,6 +609,10 @@ pub struct Params {
     /// below it the human runs. 0 = no floor (the old rule). Shared by the simulator and the controller
     /// (`sim::fights_wild`).
     pub wild_fight_floor: f64,
+    /// Controller only (journal 2026-11-27 encounter-seed): the walker's price of one step on an
+    /// encounter tile, in hundredths of a step (`play/walk.rs`). 25 = the old tie-breaker; a large
+    /// value plans the fewest-grass path (the encounter-seed route).
+    pub walk_grass_cost: u32,
     /// Effective-level multiplier of a full team over the lone carry (guess).
     pub team_bonus: f64,
     pub hunts: Vec<Hunt>,
@@ -1422,6 +1426,7 @@ impl Default for Params {
             fight_wild: false,
             fight_until_level: 30,
             wild_fight_floor: 0.0,
+            walk_grass_cost: 25,
             team_bonus: 1.08,
             hunts: vec![],
             specials: vec![],
