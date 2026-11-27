@@ -459,9 +459,11 @@ fn bedroom_pc_potion(s: &mut Session) -> PResult<()> {
         .any(|t| task(s, t));
         // Free for a while with no PC menu up: the PC's field menus leave the player looking free
         // (no script lock while they run), and a later `settle` A there would reopen the empty PC.
-        if got && closed && !menu && super::prims::is_free(s) {
+        // Without `closed` seen (the B presses can pass the top menu between two samples: seeds 11 and
+        // 31 of 2026-11-27 pressed B in the overworld until the timeout), a longer free run is the answer.
+        if got && !menu && super::prims::is_free(s) {
             free_run += 1;
-            if free_run >= 20 {
+            if free_run >= if closed { 20 } else { 90 } {
                 break;
             }
             s.hf.step(0)?;
@@ -1180,6 +1182,80 @@ const STATUS_POISON: u32 = (1 << 3) | (1 << 7);
 /// `sim::early_torrent_target` (the top of the Torrent window, never below the foes' best hit after
 /// one Withdraw + 1), then drinks the Antidote (`cure`). A carry that is not poisoned enters as it is.
 /// Logs the frames of the walk and of the cure for the model's `poison_frames_per_hp` / `cure_frames`.
+/// The walker's field-poison guard, between steps of the early stages (`Session::carry_faint_dead`):
+/// field poison takes 1 HP per 5 steps and can faint the mon (`DoPoisonFieldEffect`, `hp == 0 || --hp ==
+/// 0`, `decompiled/src/field_poison.c:93-115`). Before the `early_torrent` fight the carry may walk poisoned
+/// (the plan's resource) but never below the window top `sim::early_torrent_target`, where
+/// `steer_into_window` would cure it anyway; elsewhere at 3 HP. Antidote first; with none, a Potion at
+/// 2 HP. A carry that fainted on the field is a dead branch (played 2026-11-27: a forest exp fight left the
+/// starter poisoned at 4/26 and it fainted on the way to Pewter; Liam then met Weedle).
+/// What the guard would do now, without pressing anything: `Some((item, hp, floor))` to act.
+pub fn field_guard_due(s: &mut Session) -> PResult<Option<(&'static str, u16, i32)>> {
+    if !s.carry_faint_dead {
+        return Ok(None);
+    }
+    let Some(lead) = super::ram::Ram::new(&s.obs)
+        .party(s.hf.rec.emu())
+        .first()
+        .cloned()
+    else {
+        return Ok(None);
+    };
+    if lead.hp == 0 {
+        return Err(PlayError::Death(
+            "the starter fainted on the field (field poison): a dead branch before the first Center".into(),
+        ));
+    }
+    if lead.status & STATUS_POISON == 0 {
+        return Ok(None);
+    }
+    let et = s.plan.params.early_torrent.clone();
+    let pos = |n: &str| s.plan.segs.iter().position(|g| g.name == n);
+    let before_fight = matches!((pos(&s.seg), pos(&et.fight)), (Some(a), Some(b)) if a < b);
+    let mut floor = 3;
+    if before_fight && et.fight == "brock" {
+        let dex = s.plan.dex;
+        let foes: Vec<crate::battle::Mon> = dex
+            .fight("TRAINER_LEADER_BROCK")
+            .full
+            .iter()
+            .map(|m| crate::battle::enemy_mon(dex, m))
+            .collect();
+        let ram = super::battle_ram::BattleRam::new(s.obs.symbols())?;
+        let raw = ram.player_party(s.hf.rec.emu())[0].clone();
+        let badges = super::battle_ram::badges(&s.obs, s.hf.rec.emu());
+        if let Some(me) = super::battle::sim_party_mon(dex, &raw, badges, true, 0) {
+            floor = floor.max(crate::sim::early_torrent_target(dex, &me, &foes));
+        }
+    }
+    if lead.hp as i32 > floor {
+        return Ok(None);
+    }
+    Ok(if have(s, "ITEM_ANTIDOTE") > 0 {
+        Some(("ITEM_ANTIDOTE", lead.hp, floor))
+    } else if lead.hp <= 2 && have(s, "ITEM_POTION") > 0 {
+        Some(("ITEM_POTION", lead.hp, floor))
+    } else {
+        None
+    })
+}
+
+/// Carry out [`field_guard_due`]'s item (the player stands still).
+pub fn field_guard(s: &mut Session, (item, hp, floor): (&'static str, u16, i32)) -> PResult<()> {
+    let f0 = s.frame();
+    super::shop::use_item_on(s, item, 0)?;
+    let frames = s.frame() - f0;
+    s.event(
+        "decision",
+        format!(
+            "field poison guard: carry poisoned at {} HP (floor {floor}, seg {}): {item} ({frames} frames)",
+            hp, s.seg
+        ),
+        json!({"hp": hp, "floor": floor, "item": item, "frames": frames, "seg": s.seg}),
+    );
+    Ok(())
+}
+
 fn steer_into_window(s: &mut Session, fight: &str, trainer: &str) -> PResult<()> {
     let et = s.plan.params.early_torrent.clone();
     let poisoned = |s: &mut Session| {

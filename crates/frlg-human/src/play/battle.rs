@@ -417,6 +417,23 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
         .filter(|&(i, m)| i != sc.active && m.hp > 0 && !m.is_egg)
         .count() as u32;
     let mewtwo = ctx.dex.id("SPECIES_MEWTWO");
+    // PLAN `early_torrent` with `steer_poison` + `cure`: the poison is the resource that walks the carry's
+    // HP into the window and the Antidote is the cure after the walk (`params.rs` `EarlyTorrent`), so the
+    // battles before that fight keep it (played 2026-11-27: a forest Weedle's poison spent it in battle
+    // and the carry met Brock unpoisoned, with no Antidote).
+    let et = &ctx.p.early_torrent;
+    let keep_antidote = et.steer_poison
+        && et.cure
+        && ctx
+            .segs
+            .iter()
+            .position(|s| s.name == et.fight)
+            .is_some_and(|fi| seg_i < fi);
+    let antidotes = if keep_antidote {
+        0
+    } else {
+        count(&sc.items, ITEM_ANTIDOTE)
+    };
     let mut tac = sim::fight_tactics(
         ctx,
         if wild { "wild" } else { seg },
@@ -433,7 +450,7 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
             heal_items: usable_heals(&sc.items, sc.me.level),
             mewtwo_now: sc.me.species == mewtwo,
             awakenings: count(&sc.items, ITEM_AWAKENING),
-            cures: count(&sc.items, ITEM_FULL_HEAL) + count(&sc.items, ITEM_ANTIDOTE),
+            cures: count(&sc.items, ITEM_FULL_HEAL) + antidotes,
         },
     );
     // The real bag rations the heals (the sim leaves them unlimited outside the League), and the

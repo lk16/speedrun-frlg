@@ -1290,6 +1290,14 @@ pub fn go_to(
         if held == 0 {
             settle(s)?;
         }
+        if let Some(act) = super::early::field_guard_due(s)? {
+            if held != 0 {
+                stop(s)?;
+                held = 0;
+            }
+            super::early::field_guard(s, act)?;
+            continue;
+        }
         let Some(cur) = here(s) else {
             return Err(PlayError::Fatal("no save block while walking".into()));
         };

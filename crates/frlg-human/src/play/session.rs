@@ -605,8 +605,18 @@ impl<'p> Session<'p> {
         self.hf
             .rec
             .truncate((frame - self.prefix.len() as u64) as usize);
-        // The dead branch's events go, but earlier rollbacks of this checkpoint stay: every
-        // death is counted (`PROMPT.md`, *Count the deaths*).
+        // The dead branch's events go to `dead/` for debugging (a death is otherwise only a picture),
+        // but earlier rollbacks of this checkpoint stay: every death is counted (`PROMPT.md`, *Count
+        // the deaths*).
+        let lost = EventLog {
+            events: self.log.events[ev_len.min(self.log.events.len())..].to_vec(),
+            new_game_frame: self.log.new_game_frame,
+        };
+        let dbg = self.cfg.out_dir.join("dead");
+        if std::fs::create_dir_all(&dbg).is_ok() {
+            let n = self.rollbacks + self.prefix_rollbacks + 1;
+            let _ = lost.save(&dbg.join(format!("{died_at:07}-r{n}.events.jsonl")));
+        }
         let kept: Vec<_> = self.log.events[ev_len.min(self.log.events.len())..]
             .iter()
             .filter(|e| e.kind == "rollback")
