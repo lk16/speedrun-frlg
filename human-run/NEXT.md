@@ -1,5 +1,28 @@
 # Handoff for the next session
 
+## 2026-11-27 main session: R2 done to Giovanni 1, CURRENT 1952 (read this first)
+
+Journal `journal/2026-11-27-11-00-r2c-controller-fixes.md`. **CURRENT = `1952-r3d-cut-route5`** (R3c dials 2 +
+mid_bag + R3d honest Cut via a Route 5 Meowth/Bellsprout hunt), played.
+- **R2 done**: power-on to `giovanni1` verified from boot, 0 bumps, skipped trainers never fought (Dan and Chad
+  waited out): `r2g-s31` (1842, 4726 s), `r2i-s11` (1842, 4900 s), `r2j-s31` (1952 from `brock`, 4720 s; Route 5
+  Meowth in 9 steps, HM01 at `bike-redeem`), `r2k-s41` (1930 from power-on, dials 2 starter after 0 resets, 43
+  rollbacks, mostly field-poison faints now fixed).
+- **Controller bugs fixed this session**: the move pick (every non-slot-0 move ran as slot 0 since R2a round 2:
+  the old "no PP" Liam loop); field poison (guard in the walker, a field faint is a dead branch, a quarter-HP floor
+  after Brock, Potion fallback at 6 HP, preheal counts battle poison); the forest Antidote reserved for the Brock
+  cure; Tackle-only Liam dropped (12/12 blackouts); bedroom PC exit; 3 balls / 2 Antidotes at Cerulean (balls only
+  without the Route 5 plan); Shadow Tag, Arena Trap and Wrap make RUN impossible, so the driver attacks; a hunt stops
+  when its balls run out; the Vermilion trash cans (the walker's settle-A opened the first switch, our press then
+  reset the locks); `talk_to` matches the object's map; a Pewter Center fallback when the bag can't reach Liam's
+  floor; dead branches keep their events (`dead/*.events.jsonl`).
+- **Running at wrap-up of this section**: `v5-s41`, `v5-s51` (1952, power-on to the end: R4 candidates);
+  `r2g-s31-full2` (1842, Giovanni 1 to the end, at the round-1 Lance with many blackouts); R3e agent (model vs
+  played calibration: played runs are +870..+1050 s behind the model p50 at Giovanni 1, Rock Tunnel the largest).
+- **Next**: R4: verify the best v5 run from boot, render (`VIDEO.md`, host-side ffmpeg), journal with splits vs v4
+  and the model, bump count and the review items closed. Adopt R3e's honest calibration. The Lance / Bruno blackouts
+  in the round-1 League (r2g-s31-full2).
+
 ## 2026-11-27 R3d: honest Cut (journal `journal/2026-11-27-13-00-r3d-cut.md`)
 
 **CURRENT unchanged (1930).** Candidate **`plans/1952-r3d-cut-route5.md`** = 1930 + honest Cut (`cut_honest`,
