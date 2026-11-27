@@ -197,6 +197,52 @@ fn repel_for(s: &mut Session, seg: &str, nodes: &[Node]) -> PResult<()> {
     super::shop::use_item(s, item)
 }
 
+/// [`plan_nodes`] around every unbeaten trainer's sight line when there is a way, else the plain
+/// plan: the order `go_to` walks in (`walk.rs`, "Around every unbeaten trainer's sight line"). A
+/// waypoint taken from the plain plan can lie behind a skipped trainer's line that the walked route
+/// avoids (r2i walked into Lass Miriam and Grunt 4 that way).
+fn plan_nodes_walled(
+    s: &mut Session,
+    from: Node,
+    goal: &dyn Fn(&Node) -> bool,
+    o: &Opts,
+) -> Option<Vec<Node>> {
+    let walls = Opts {
+        cone_walls: true,
+        ..o.clone()
+    };
+    plan_nodes(s, from, goal, &walls).or_else(|| plan_nodes(s, from, goal, o))
+}
+
+/// The Repel runs out on the path `nodes` (`VAR_REPEL_STEP_COUNT` counts every step down,
+/// `decompiled/src/wild_encounter.c:576-598`; Repel 100 steps, Super 200, Max 250,
+/// `decompiled/src/data/items.json` `holdEffectParam`): walk to the tile where it ends so the next
+/// loop turn re-uses one, when encounter tiles lie beyond it. `true` when it walked.
+fn repel_waypoint(
+    s: &mut Session,
+    cur_id: &str,
+    rs: &str,
+    nodes: &[Node],
+    o: &Opts,
+) -> PResult<bool> {
+    let left = var(s, "VAR_REPEL_STEP_COUNT") as usize;
+    let on_plan = s.plan.params.repel_on.iter().any(|r| r == rs);
+    if !on_plan || left == 0 || left + 1 >= nodes.len() {
+        return Ok(false);
+    }
+    if path_has_encounters(s, &nodes[left..]) == 0 {
+        return Ok(false);
+    }
+    let wp = nodes[left];
+    go_to(
+        s,
+        &format!("{cur_id} ({}, {}): where the Repel ends", wp.1, wp.2),
+        &move |n: &Node| *n == wp,
+        o,
+    )?;
+    Ok(true)
+}
+
 /// Walk to `dest` one map at a time; on each map, first the plan's Repel for that map's segment
 /// (`seg_of(map id)`), then the trainers of `fights` that stand on this map, nearest first.
 fn travel(
@@ -255,7 +301,7 @@ fn travel_to(
                 let mid = cur.0;
                 let (m, _, x, y) = trainer_obj(s, &tr).unwrap();
                 let _ = m;
-                let nodes = plan_nodes(
+                let nodes = plan_nodes_walled(
                     s,
                     cur,
                     &move |n: &Node| n.0 == mid && (n.1 - x).abs() + (n.2 - y).abs() <= 1,
@@ -263,6 +309,11 @@ fn travel_to(
                 )
                 .unwrap_or_default();
                 repel_for(s, rs, &nodes)?;
+                // The walk to the trainer can outlast the Repel (Rock Tunnel: r2g / r2j / r2i):
+                // re-use where it ends, then the trainer.
+                if repel_waypoint(s, &cur_id, rs, &nodes, o)? {
+                    continue;
+                }
             }
             fight_trainer(s, &tr, &seg, o)?;
             continue;
@@ -270,7 +321,7 @@ fn travel_to(
         if arrived(&cur) {
             return Ok(());
         }
-        let nodes = plan_nodes(s, cur, &arrived, o)
+        let nodes = plan_nodes_walled(s, cur, &arrived, o)
             .ok_or_else(|| PlayError::Fatal(format!("no path from {cur_id} to {dest} {at:?}")))?;
         // The first node past this map on the planned path: the warp's landing tile or the
         // connection's edge. Going to "anywhere on the next map" can take another ladder, from
@@ -280,18 +331,7 @@ fn travel_to(
         if let Some(rs) = seg_of(&cur_id) {
             let on_map: Vec<Node> = nodes.iter().take_while(|n| n.0 == cur.0).copied().collect();
             repel_for(s, rs, &on_map)?;
-            // The Repel runs out on this map (`VAR_REPEL_STEP_COUNT` counts steps down,
-            // `decompiled/src/wild_encounter.c:586-591`): walk to where it ends, then the next one.
-            let left = var(s, "VAR_REPEL_STEP_COUNT") as usize;
-            let on_plan = s.plan.params.repel_on.iter().any(|r| r == rs);
-            if on_plan && left > 0 && left + 1 < on_map.len() {
-                let wp = on_map[left];
-                go_to(
-                    s,
-                    &format!("{cur_id} ({}, {}): where the Repel ends", wp.1, wp.2),
-                    &move |n: &Node| *n == wp,
-                    o,
-                )?;
+            if repel_waypoint(s, &cur_id, rs, &on_map, o)? {
                 continue;
             }
         }
@@ -1404,12 +1444,12 @@ fn rock_tunnel(s: &mut Session) -> PResult<()> {
         );
         center_heal(s, "MAP_CERULEAN_CITY_POKEMON_CENTER_1F")?;
     }
-    // Repels for `repel_on` route9 / rock-tunnel (the tunnel's two floors are ~140 steps, the
-    // Route 9 / 10 grass ~80), then Super Potions; $500 kept (the Nugget pays for the X items).
+    // Repels for `repel_on` route9 / rock-tunnel (every step counts, `wild_encounter.c:576-598`: the
+    // played Route 9 - tunnel stretch is ~470 bike tiles, 5 Repels), then Super Potions; $500 kept (the Nugget pays for the X items).
     stock_up(
         s,
         "MAP_CERULEAN_CITY_MART",
-        3,
+        5,
         10,
         500,
         "Repels and Super Potions for Route 9 / Rock Tunnel",

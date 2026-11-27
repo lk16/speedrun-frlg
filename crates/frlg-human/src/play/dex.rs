@@ -261,7 +261,6 @@ fn pass_plan(s: &mut Session, default: WildPlan) -> WildPlan {
     let Some((idx, national)) = dex_species(s, game_id) else {
         return default;
     };
-    let p = &s.plan.params;
     let sp = &s.plan.dex.species[idx];
     let (name, rate) = (sp.name.clone(), sp.catch_rate);
     // The stage name is not the place: `tutorial` and `deliver` cross Route 1, `to-forest` Route 2
