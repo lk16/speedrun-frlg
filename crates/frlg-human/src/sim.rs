@@ -2940,6 +2940,50 @@ fn cut_carrier(ctx: &Ctx, st: &mut State, rng: &mut Rng, name: &str) {
         };
         hunt(ctx, st, rng, &h, Era::Run);
     }
+    if name == p.cut_teach_at && p.cut_rehunt && !has_cutter(ctx, st) {
+        // MODEL CHANGE `cut_rehunt`: no legal walk-around; back to the Route 24 grass for another hunt.
+        let tile = Era::Bike.frames_per_tile() * p.path_overhead;
+        bump(st, p.cut_rehunt_tiles as f64 * tile);
+        let have: u32 = st.balls.iter().sum();
+        if have < p.cut_rehunt_balls {
+            let qty = if p.money_model {
+                (p.cut_rehunt_balls - have).min(st.money / BALL_PRICE[0])
+            } else {
+                p.cut_rehunt_balls - have
+            };
+            if qty > 0 {
+                if p.money_model {
+                    st.money -= qty * BALL_PRICE[0];
+                }
+                st.balls[0] += qty;
+                bump(st, MART as f64 * p.text_factor + 32.0 * tile);
+            }
+        }
+        let cut = ctx.dex.move_id("MOVE_CUT");
+        let skip: Vec<String> = ctx
+            .dex
+            .area(&p.cut_rehunt_site, Area::Land, p.version == "LG", &p.rod)
+            .map(|(_, slots, _)| {
+                slots
+                    .iter()
+                    .filter(|s| !can_learn(ctx, s.species, cut))
+                    .map(|s| ctx.dex.species[s.species].name.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let h = Hunt {
+            after: name.to_string(),
+            site: p.cut_rehunt_site.clone(),
+            area: "land".into(),
+            steps: p.cut_rehunt_steps,
+            skip,
+            detour_tiles: 0,
+            on_route: true,
+            stop_after: 1,
+            repel_level: 0,
+        };
+        hunt(ctx, st, rng, &h, Era::Bike);
+    }
     if name == p.cut_teach_at {
         if has_cutter(ctx, st) {
             clock_add(st, p.cut_teach_frames * p.text_factor);

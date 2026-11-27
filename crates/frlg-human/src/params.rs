@@ -1206,6 +1206,22 @@ pub struct Params {
     /// 0 PP for that fight in both lanes and restoring their PP afterwards. Off = the old model (the
     /// restriction documented, not simulated).
     pub tackle_only_model: bool,
+    /// MODEL CHANGE (R3c item 5): there is no walk around the Cut trees. `frlg-mapgraph` finds Route 9 without Cut
+    /// only through Saffron (Route 5 gate -> Saffron -> Route 8 -> Lavender -> Rock Tunnel), and the Route 5 / 6 / 7 /
+    /// 8 gate guards stop the player until the Tea is given (`decompiled/data/maps/Route5_SouthEntrance/map.json`
+    /// coord events on `VAR_MAP_SCENE_ROUTE5_ROUTE6_ROUTE7_ROUTE8_GATES` 0, `scripts.inc:27-50` `FLAG_GOT_TEA`; the
+    /// Tea is in Celadon, `CeladonCity_Condominiums_1F/scripts.inc`), and Route 9 itself has a second tree at (2,8)
+    /// (`decompiled/data/maps/Route9/map.json`). So `cut_detour_tiles` is not a legal fallback. On: a human with no
+    /// HM01 mon at `cut_teach_at` rides back to the Route 24 grass (`cut_rehunt_tiles` extra bike tiles: Bike Shop
+    /// -> Route 24 (4,25) 87 + Route 24 -> Route 9 (1,9) 104 - Bike Shop -> Route 9 83 = 108, `frlg-mapgraph`), tops
+    /// the bag up to `cut_rehunt_balls` Poke Balls at the Cerulean mart when it holds fewer balls (a mart visit + 32
+    /// tiles), and hunts on the bike for at most `cut_rehunt_steps` steps. Only if that fails too is the old
+    /// `cut_detour_tiles` charge kept (a stand-in for hunting on). Off = the old walk-around.
+    pub cut_rehunt: bool,
+    pub cut_rehunt_tiles: u32,
+    pub cut_rehunt_balls: u32,
+    pub cut_rehunt_steps: u32,
+    pub cut_rehunt_site: String,
 }
 
 /// The WR runner's early Torrent line at one fight (`Params::early_torrent`): Torrent is x1.5 Water power at
@@ -1521,6 +1537,11 @@ impl Default for Params {
             cut_detour_tiles: 712,
             mid_bag: false,
             tackle_only_model: false,
+            cut_rehunt: false,
+            cut_rehunt_tiles: 108,
+            cut_rehunt_balls: 5,
+            cut_rehunt_steps: 3000,
+            cut_rehunt_site: "MAP_ROUTE24".into(),
         }
     }
 }
