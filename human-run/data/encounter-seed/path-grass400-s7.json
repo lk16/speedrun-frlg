@@ -1,0 +1,1119 @@
+[
+{
+"kind": "reset",
+"why": "map PalletTown_PlayersHouse_2F"
+},
+{
+"kind": "check",
+"map": "PalletTown_PlayersHouse_2F",
+"x": 10,
+"y": 2,
+"land": 0,
+"beh": 111,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map PalletTown_PlayersHouse_1F"
+},
+{
+"kind": "check",
+"map": "PalletTown_PlayersHouse_1F",
+"x": 9,
+"y": 2,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "PalletTown_PlayersHouse_1F",
+"x": 4,
+"y": 8,
+"land": 0,
+"beh": 101,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map PalletTown"
+},
+{
+"kind": "check",
+"map": "PalletTown",
+"x": 6,
+"y": 8,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "trainer battle 24"
+},
+{
+"kind": "reset",
+"why": "map PalletTown_ProfessorOaksLab"
+},
+{
+"kind": "check",
+"map": "PalletTown_ProfessorOaksLab",
+"x": 6,
+"y": 12,
+"land": 0,
+"beh": 101,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map PalletTown"
+},
+{
+"kind": "check",
+"map": "PalletTown",
+"x": 16,
+"y": 14,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map Route1"
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 39,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 38,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 37,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 36,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 35,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 34,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 10,
+"y": 32,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 9,
+"y": 32,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 8,
+"y": 32,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 8,
+"y": 31,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 27,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 26,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 25,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 24,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 23,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 17,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 16,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 15,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 14,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 15,
+"y": 14,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 10,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 9,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 8,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 7,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 6,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 5,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map ViridianCity_Mart"
+},
+{
+"kind": "check",
+"map": "ViridianCity_Mart",
+"x": 4,
+"y": 7,
+"land": 0,
+"beh": 101,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map ViridianCity"
+},
+{
+"kind": "check",
+"map": "ViridianCity",
+"x": 36,
+"y": 20,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map Route1"
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 35,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 36,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 37,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 38,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 39,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map PalletTown"
+},
+{
+"kind": "check",
+"map": "PalletTown",
+"x": 12,
+"y": 0,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map PalletTown_ProfessorOaksLab"
+},
+{
+"kind": "check",
+"map": "PalletTown_ProfessorOaksLab",
+"x": 6,
+"y": 12,
+"land": 0,
+"beh": 101,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map PalletTown"
+},
+{
+"kind": "check",
+"map": "PalletTown",
+"x": 16,
+"y": 14,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "map Route1"
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 39,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 38,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 37,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 36,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 35,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 34,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 10,
+"y": 32,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 9,
+"y": 32,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 8,
+"y": 32,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 8,
+"y": 31,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 27,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 26,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 25,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 24,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 12,
+"y": 23,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 17,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 16,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 15,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 14,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 15,
+"y": 14,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 10,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 9,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 8,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 7,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 6,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "Route1",
+"x": 16,
+"y": 5,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "reset",
+"why": "trainer battle 512"
+},
+{
+"kind": "reset",
+"why": "map ViridianForest"
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 29,
+"y": 62,
+"land": 0,
+"beh": 101,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 28,
+"y": 61,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 41,
+"y": 46,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 41,
+"y": 45,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 41,
+"y": 44,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 42,
+"y": 44,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 36,
+"y": 19,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 35,
+"y": 19,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 34,
+"y": 19,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 33,
+"y": 19,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 32,
+"y": 19,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 32,
+"y": 20,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 32,
+"y": 21,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 32,
+"y": 22,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 21,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 20,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 19,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 18,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 17,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 16,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 15,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 14,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 13,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 12,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 19,
+"y": 11,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 12,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 13,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 14,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 15,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 16,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 17,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 18,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 19,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 20,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 21,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 22,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 23,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 24,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 25,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 26,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 27,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 11,
+"y": 28,
+"land": 0,
+"beh": 0,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 6,
+"y": 27,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 6,
+"y": 26,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 6,
+"y": 26,
+"land": 1,
+"beh": 2,
+"turn": true
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 7,
+"y": 26,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 7,
+"y": 25,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 7,
+"y": 24,
+"land": 1,
+"beh": 2,
+"turn": false
+},
+{
+"kind": "check",
+"map": "ViridianForest",
+"x": 7,
+"y": 23,
+"land": 1,
+"beh": 2,
+"turn": false
+}
+]

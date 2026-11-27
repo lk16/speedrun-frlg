@@ -8,10 +8,13 @@
 //!         value of `SeedRngAndSetTrainerId` (`src/main.c:264-269`), `wild_state` =
 //!         `sWildEncounterData.rngState` after `SeedWildEncounterRng(Random())`
 //!         (`src/new_game.c:103`, `src/wild_encounter.c:661-664`).
-//!     encounter_seed trace <rom> <sym> <run.ilog> <end> <out.tsv>
+//!     encounter_seed trace <rom> <sym> <run.ilog> <end> <out.tsv> [<state> <start>]
 //!         Replays a played run's log from reset and writes one row per completed player step
 //!         (map or tile change) and per battle start: frame, map, x, y, land, behavior, the wild
 //!         data (`wild_encounter.c:24-32`), `gRngValue`, battle type flags.
+//!     encounter_seed poke <rom> <sym> <state_in> <state_out> <wild_state>
+//!         Writes `sWildEncounterData.rngState` in a savestate (validation only: plays the path
+//!         from a checkpoint as if the title press had produced `wild_state`).
 use std::io::Write;
 use std::path::Path;
 
@@ -111,10 +114,17 @@ fn trace(a: &[String]) {
     .unwrap();
     let mut world = World::load().expect("world");
     let mut e = boot(rom);
+    // Optional: start from a savestate taken at log frame `start` (a poked checkpoint).
+    let start: usize = if a.len() >= 7 {
+        e.load_state_file(Path::new(&a[5])).expect("state");
+        a[6].parse().unwrap()
+    } else {
+        0
+    };
     let mut last: Option<((u8, u8), (i16, i16))> = None;
     let mut last_wild = (0u32, 0u16, 0u16, 0u8);
     let mut was_battle = false;
-    for (i, &k) in log.frames.iter().enumerate().take(end) {
+    for (i, &k) in log.frames.iter().enumerate().take(end).skip(start) {
         e.step(k);
         if obs.player_avatar_flags(&mut e) == 0 {
             continue;
@@ -163,11 +173,25 @@ fn trace(a: &[String]) {
     }
 }
 
+fn poke(a: &[String]) {
+    let syms = SymbolTable::load(Path::new(&a[1])).expect("sym");
+    let wild = syms.get("sWildEncounterData").unwrap().addr;
+    let v: u32 = a[4].parse().unwrap();
+    let mut e = boot(Path::new(&a[0]));
+    e.load_state_file(Path::new(&a[2])).expect("state");
+    for (i, b) in v.to_le_bytes().iter().enumerate() {
+        e.write8(wild + i as u32, *b);
+    }
+    assert_eq!(e.read32(wild), v);
+    e.save_state_file(Path::new(&a[3])).expect("save");
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
     match a.first().map(String::as_str) {
         Some("title") => title(&a[1..]),
         Some("trace") => trace(&a[1..]),
+        Some("poke") => poke(&a[1..]),
         _ => {
             eprintln!("usage: encounter_seed title|trace ... (see the module doc)");
             std::process::exit(2);
