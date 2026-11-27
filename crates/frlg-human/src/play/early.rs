@@ -1211,7 +1211,7 @@ const STATUS_POISON: u32 = (1 << 3) | (1 << 7);
 /// 0`, `decompiled/src/field_poison.c:93-115`). Before the `early_torrent` fight the carry may walk poisoned
 /// (the plan's resource) but never below the window top `sim::early_torrent_target`, where
 /// `steer_into_window` would cure it anyway; elsewhere at 3 HP. Antidote first; with none, a Potion at
-/// 2 HP. A carry that fainted on the field is a dead branch (played 2026-11-27: a forest exp fight left the
+/// 6 HP. A carry that fainted on the field is a dead branch (played 2026-11-27: a forest exp fight left the
 /// starter poisoned at 4/26 and it fainted on the way to Pewter; Liam then met Weedle).
 /// What the guard would do now, without pressing anything: `Some((item, hp, floor))` to act.
 pub fn field_guard_due(s: &mut Session) -> PResult<Option<(&'static str, u16, i32)>> {
@@ -1268,7 +1268,10 @@ pub fn field_guard_due(s: &mut Session) -> PResult<Option<(&'static str, u16, i3
         Some(("ITEM_ANTIDOTE", lead.hp, floor))
     } else if !s.carry_faint_dead && have(s, "ITEM_FULL_HEAL") > 0 {
         Some(("ITEM_FULL_HEAL", lead.hp, floor))
-    } else if lead.hp <= 2 && have(s, "ITEM_POTION") > 0 {
+    } else if lead.hp <= 6 && have(s, "ITEM_POTION") > 0 {
+        // 6 HP = 30 steps of field poison: the walker checks between plans, and a held direction can
+        // cover several steps (r2k-s41: 14/26 poisoned with 2 Potions at `forest-north`, fainted on the
+        // walk to Pewter on every branch with the old 2-HP trigger).
         Some(("ITEM_POTION", lead.hp, floor))
     } else {
         None
