@@ -997,6 +997,20 @@ fn hunt_loop(
             rep.why = "budget".into();
             break;
         }
+        // The last ball thrown: nothing left to catch with (r2d-s21 walked Route 25's grass fleeing).
+        if !s.dex.hunt.as_ref().is_some_and(|r| r.safari) {
+            let master = id("ITEM_MASTER_BALL");
+            let balls: u16 = Ram::new(&s.obs)
+                .pocket(s.hf.rec.emu(), 2)
+                .iter()
+                .filter(|&&(it, _)| it != master)
+                .map(|&(_, n)| n)
+                .sum();
+            if balls == 0 {
+                rep.why = "no balls".into();
+                break;
+            }
+        }
         if s.dex.hunt.as_ref().is_some_and(|r| r.safari) {
             let (balls, steps) = safari_counters(s);
             let inside =

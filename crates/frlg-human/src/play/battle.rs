@@ -408,6 +408,8 @@ const ABILITY_SHADOW_TAG: u8 = 23;
 const ABILITY_LEVITATE: u8 = 26;
 const ABILITY_ARENA_TRAP: u8 = 71;
 const TYPE_FLYING: u8 = 2;
+const STATUS2_WRAPPED: u32 = 0b111 << 13;
+const STATUS2_ESCAPE_PREVENTION: u32 = 1 << 26;
 
 /// Full Restores the round-2 Elite Four rooms leave in the bag for the Champion (a played rule).
 pub const CHAMPION2_RESERVE: u32 = 4;
@@ -1601,13 +1603,20 @@ fn wild_turn(
     let grounded = me_raw.types.0 != TYPE_FLYING
         && me_raw.types.1 != TYPE_FLYING
         && me_raw.ability != ABILITY_LEVITATE;
-    if foe_ability == ABILITY_SHADOW_TAG || (foe_ability == ABILITY_ARENA_TRAP && grounded) {
+    // Wrapped / Mean Look'd: `BATTLE_RUN_FORBIDDEN` without a turn passing (`battle_main.c:3047-3051`,
+    // `STATUS2_WRAPPED` / `STATUS2_ESCAPE_PREVENTION`, `include/constants/battle.h:116,126`), so the wrap
+    // never runs down (r2d-s21: a Route 25 Bellsprout's Wrap after the last ball missed, 1.09M frames of RUN).
+    let trapped = me_raw.status2 & (STATUS2_WRAPPED | STATUS2_ESCAPE_PREVENTION) != 0;
+    if trapped
+        || foe_ability == ABILITY_SHADOW_TAG
+        || (foe_ability == ABILITY_ARENA_TRAP && grounded)
+    {
         let mv = best_move(dex, sc);
         log.push(
             f.frame(),
             "model-vs-actual",
             format!(
-                "{} cannot be fled (ability {foe_ability}): attacking with {}",
+                "{} cannot be fled (ability {foe_ability}, trapped {trapped}): attacking with {}",
                 species_name(dex, sc.foe.species),
                 move_name(dex, mv)
             ),
