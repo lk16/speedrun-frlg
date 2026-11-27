@@ -1337,14 +1337,29 @@ fn execute(
     }
 }
 
-/// The highest-PP damaging move with PP, for the fallbacks.
+/// The fallback attack (a heal the bag cannot pay, a Full Restore for a status at full HP): the damaging
+/// move with PP that does the most expected damage to the foe on the field. C1: this was "highest base
+/// power", which ignores the type chart (`gTypeEffectiveness`, `decompiled/src/battle_main.c`), STAB and
+/// accuracy; `damage_range` runs the sim's `CalculateBaseDamage` pipeline (`decompiled/src/pokemon.c`,
+/// STAB and chart in `battle_script_commands.c` `Cmd_typecalc`), so a resisted STAB move loses to a
+/// neutral one.
 fn best_move(dex: &Dex, sc: &Scene) -> usize {
     sc.me
         .moves
         .iter()
         .enumerate()
         .filter(|&(i, &mv)| sc.me.pp.get(i).is_none_or(|&p| p > 0) && dex.moves[mv].power > 0)
-        .max_by_key(|&(_, &mv)| dex.moves[mv].power)
+        .max_by(|&(_, &a), &(_, &b)| {
+            let score = |mv: usize| {
+                let (lo, hi) = sim_battle::damage_range(dex, &sc.me, &sc.foe, mv);
+                let acc = match dex.moves[mv].acc {
+                    0 => 100,
+                    a => a.min(100),
+                };
+                (lo + hi) as f64 / 2.0 * acc as f64
+            };
+            score(a).total_cmp(&score(b))
+        })
         .map(|(_, &mv)| mv)
         .unwrap_or(sc.me.moves[0])
 }
