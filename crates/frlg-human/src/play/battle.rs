@@ -411,6 +411,16 @@ const TYPE_FLYING: u8 = 2;
 const STATUS2_WRAPPED: u32 = 0b111 << 13;
 const STATUS2_ESCAPE_PREVENTION: u32 = 1 << 26;
 
+/// Dev toggle for before / after runs of the C1 controller fixes: `FRLG_C1_OLD=1` restores the old
+/// behaviour (replays of the played runs reproduce them with it set).
+fn c1_old() -> bool {
+    static L: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *L.get_or_init(|| std::env::var_os("FRLG_C1_OLD").is_some())
+}
+
+/// C1: the shortest `Sleep(t)` for which an Awakening beats waiting (`t - 1` lost turns vs 1).
+const AWAKEN_MIN_SLEEP: u8 = 3;
+
 /// Full Restores the round-2 Elite Four rooms leave in the bag for the Champion (a played rule).
 pub const CHAMPION2_RESERVE: u32 = 4;
 
@@ -1078,6 +1088,16 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
                     action = Action::Move(tackle);
                 }
             }
+        }
+    }
+    // C1: asleep with an Awakening in the bag and a foe the policy finds harmless (it only wakes the
+    // fighter when `danger > 0`, `battle.rs` `greedy_action`). A sleeping fighter loses `t - 1` turns
+    // from `Sleep(t)` (`AtkCanceller_UnableToUseMove`, `decompiled/src/battle_util.c`; the sim's
+    // `do_move` agrees), the Awakening costs one: it pays from `t >= 3`. Played: r2j Martha lost 4
+    // turns to Sleep Powder at Oddish 1/51 with an Awakening in the bag, Dana 3 (59 s a run).
+    if let (Action::Move(_), Status1::Sleep(t)) = (action, sc.me.status) {
+        if t >= AWAKEN_MIN_SLEEP && count(&sc.items, ITEM_AWAKENING) > 0 && !c1_old() {
+            action = Action::Awaken;
         }
     }
     let taken = execute(f, c, log, &sc, action)?;
