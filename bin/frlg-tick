@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Event-driven watchdog for open-ended searches (CLAUDE.md, "Open-ended tasks: the watchdog").
+
+Run it as a *background* command from the foreground session. It polls cheaply (no tokens) and exits
+only when something needs the foreground's attention, printing a short summary; the exit is what
+wakes the session. Events:
+
+  exited   a long run of the foreground's (frlg-human play / descend.py / ffmpeg, outside agent
+           worktrees) that was alive is gone
+  run      a play log under $FRLG_ARTIFACTS/runs/human-play gained a "done:", "stopped:" or "panicked" line
+  stall    compute is alive but no scores.jsonl row, commit or checkpoint line for --stall minutes
+  idle     1-minute load below --idle-load for --idle minutes (cores free: start the next round)
+  beat     --beat minutes passed without any other event (a periodic look anyway)
+
+Usage: bin/frlg-tick [--poll 60] [--stall 25] [--idle 10] [--idle-load 4] [--beat 90]
+       bin/frlg-tick --once      # print the status line and exit (no waiting)
+Read-only: it never kills or starts anything.
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+COMPUTE = re.compile(r"frlg-human|descend\.py|try\.py|ffmpeg")
+WATCHED = re.compile(r" play |descend\.py|ffmpeg")
+SKIP = re.compile(r"frlg-tick|frlg-watchdog|claude --|grep |bash -c|cargo |rustc")
+
+
+def repo() -> Path:
+    r = os.environ.get("FRLG_REPO")
+    return Path(r) if r else Path(__file__).resolve().parent.parent
+
+
+def compute() -> dict:
+    """pid -> short command line of the live compute processes (not shells wrapping them)."""
+    out = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True).stdout
+    procs = {}
+    for line in out.splitlines():
+        pid, _, args = line.strip().partition(" ")
+        if COMPUTE.search(args) and not SKIP.search(args):
+            short = re.sub(r".*/\.claude/worktrees/agent-([a-f0-9]{7})[a-f0-9]*", r"W:\1", args)
+            procs[int(pid)] = " ".join(short.split()[:6])[:140]
+    return procs
+
+
+def worktrees(r: Path) -> list:
+    return [r] + sorted((r / ".claude" / "worktrees").glob("agent-*"))
+
+
+def progress_mtime(r: Path, art: Path) -> float:
+    """Newest sign of progress: scores.jsonl rows, commits (any worktree), play logs and checkpoints."""
+    t = 0.0
+    for w in worktrees(r):
+        for f in (w / "human-run" / "scores.jsonl",):
+            if f.exists():
+                t = max(t, f.stat().st_mtime)
+        try:
+            c = subprocess.run(["git", "-C", str(w), "log", "-1", "--format=%ct"],
+                               capture_output=True, text=True).stdout.strip()
+            if c:
+                t = max(t, float(c))
+        except OSError:
+            pass
+    runs = art / "runs" / "human-play"
+    if runs.exists():
+        for f in runs.glob("*/checkpoints.jsonl"):
+            t = max(t, f.stat().st_mtime)
+    return t
+
+
+def play_logs(art: Path) -> dict:
+    runs = art / "runs" / "human-play"
+    return {f: f.stat().st_size for f in runs.glob("*.log")} if runs.exists() else {}
+
+
+def fatal_lines(f: Path, start: int) -> list:
+    try:
+        with open(f, "rb") as h:
+            h.seek(start)
+            tail = h.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    return [ln for ln in tail.splitlines() if ln.startswith("stopped:") or "panicked" in ln
+            or ln.startswith("done:")]
+
+
+def load1() -> float:
+    return float(open("/proc/loadavg").read().split()[0])
+
+
+def status(r: Path, art: Path, procs: dict) -> str:
+    cur = (r / "human-run" / "plans" / "CURRENT").read_text().strip() if (r / "human-run" / "plans" / "CURRENT").exists() else "?"
+    age = (time.time() - progress_mtime(r, art)) / 60
+    return (f"{time.strftime('%H:%M')} load {load1():.1f}, {len(procs)} compute procs, "
+            f"last progress {age:.0f} min ago, CURRENT {cur}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--poll", type=int, default=60)
+    ap.add_argument("--stall", type=int, default=25)
+    ap.add_argument("--idle", type=int, default=10)
+    ap.add_argument("--idle-load", type=float, default=4.0)
+    ap.add_argument("--beat", type=int, default=90)
+    ap.add_argument("--once", action="store_true")
+    a = ap.parse_args()
+    r = repo()
+    art = Path(os.environ.get("FRLG_ARTIFACTS", "/nonexistent"))
+    procs0 = compute()
+    if a.once:
+        print(status(r, art, procs0))
+        for p, c in sorted(procs0.items()):
+            print(f"  {p} {c}")
+        return 0
+    logs0 = play_logs(art)
+    t0 = time.time()
+    idle_since = None
+    events = []
+    while not events:
+        time.sleep(a.poll)
+        now = time.time()
+        procs = compute()
+        for p, c in procs0.items():
+            # Only the foreground's own long runs: agents' short evaluation jobs come and go, and an
+            # agent reports its own completion.
+            if p not in procs and WATCHED.search(c) and not c.startswith("W:"):
+                events.append(f"exited: {p} {c}")
+        procs0.update(procs)
+        for p in [p for p in procs0 if p not in procs]:
+            del procs0[p]
+        logs = play_logs(art)
+        for f, size in logs.items():
+            for ln in fatal_lines(f, logs0.get(f, size)):
+                events.append(f"run: {f.name}: {ln[:160]}")
+        logs0 = logs
+        if procs and now - progress_mtime(r, art) > a.stall * 60:
+            events.append(f"stall: no scores row, commit or checkpoint for {a.stall}+ min")
+        if load1() < a.idle_load:
+            idle_since = idle_since or now
+            if now - idle_since > a.idle * 60:
+                events.append(f"idle: load under {a.idle_load} for {a.idle}+ min")
+        else:
+            idle_since = None
+        if not events and now - t0 > a.beat * 60:
+            events.append(f"beat: {a.beat} min without an event")
+    print(status(r, art, compute()))
+    for e in dict.fromkeys(events):
+        print(e)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

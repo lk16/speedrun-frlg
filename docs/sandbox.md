@@ -225,7 +225,8 @@ need allowed and why.
 
 ## Open-ended tasks need a watchdog
 
-For work that runs until the human stops it (the `human-run` route search is the example), create the
-10-minute progress and hygiene cron described in `CLAUDE.md` ("Open-ended tasks: the watchdog cron") at
-the start, run `bin/frlg-watchdog` for the status, and keep `human-run/NEXT.md` current for the next
-session. The cron is session-only; recreate it after a restart.
+For work that runs until the human stops it (the `human-run` route search is the example), start the
+event watchdog described in `CLAUDE.md` ("Open-ended tasks: the event watchdog") at the start:
+`bin/frlg-tick` in the background, plus an hourly fallback cron that re-arms it. Run `bin/frlg-watchdog`
+for the status, and keep `human-run/NEXT.md` current for the next session. The cron is session-only;
+recreate it after a restart.

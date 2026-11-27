@@ -76,18 +76,37 @@ and `git clean` outright, so they fail instead of waiting. Never delete: write e
 a unique name in the scratchpad (stale ones are harmless; `scratch/` is wiped per sandbox anyway),
 overwrite with `>` or the Write tool, and leave old generated files in place.
 
-## Open-ended tasks: the watchdog cron
+## Open-ended tasks: the event watchdog
 
 Any task that runs "forever" or until the human stops it (route and strategy searches such as
-`human-run/`) must start a **10-minute watchdog** in the first turn, and keep it until the human
-says to wrap up. Create it with `CronCreate` (every 10 minutes, recurring; it is session-only, so
-recreate it after a restart or `/resume`; `CronList` shows whether it is alive; cancel it with
-`CronDelete` only at wrap-up). Do not rely on agents waking themselves: they stall in "waiting on
-background work" and background poll loops never wake them.
+`human-run/`) must start a watchdog in the first turn, and keep it until the human says to wrap up.
+Do not rely on agents waking themselves: they stall in "waiting on background work" and background
+poll loops never wake them.
 
-Cron prompt (use verbatim, adjust the target if it is not `human-run`):
+The watchdog is **event-driven**, so a quiet hour costs no turns (a fixed 10-minute cron re-sent the
+whole session context six times an hour, mostly to report "no change"):
 
-> Progress and hygiene check (every 10 min). 1) Run `bin/frlg-watchdog` (live compute by worktree,
+1. **Primary: `bin/frlg-tick`**, run with the Bash tool's `run_in_background`. It polls in the shell
+   (no tokens) and exits only on an event, printing a summary: one of the foreground's runs (`play`,
+   `descend.py`, `ffmpeg`) exited or logged `done:` / `stopped:` / `panicked`; no scores row, commit or
+   checkpoint for 25 min while compute is alive (`stall`); load under 4 for 10 min (`idle`: start the
+   next round); or 90 min without any of these (`beat`). The exit notification wakes the session: run
+   the check below, then **re-arm `bin/frlg-tick` in the same turn**. Agent completions notify
+   on their own and are not its job.
+2. **Fallback: an hourly `CronCreate`** (recurring, session-only: recreate it after a restart or
+   `/resume`; cancel with `CronDelete` only at wrap-up) whose only job is to re-arm `bin/frlg-tick` if
+   it is not running (`bin/frlg-tick --once` prints the status; a running tick shows in `ps` as
+   `python3 bin/frlg-tick`).
+
+Fallback cron prompt (use verbatim):
+
+> Watchdog fallback (hourly). If no `bin/frlg-tick` process is running (`pgrep -fa 'bin/frlg-tick'`;
+> ignore the pgrep itself), run the event check below once and re-arm `bin/frlg-tick` with
+> run_in_background. If one is running, reply "tick alive" and do nothing else.
+
+Event check (on every `bin/frlg-tick` wake; adjust the target if it is not `human-run`):
+
+> Progress and hygiene check. 1) Run `bin/frlg-watchdog` (live compute by worktree,
 > stale poller shells, per-worktree scores.jsonl mtime and last commit), `git log --since='60 minutes ago'
 > --oneline`, and `ListAgents`. 2) Dead work: an agent with no live process (frlg-human, descend.py,
 > try.py, cargo) and no new scores.jsonl rows or commits for 20+ minutes is dead or stalled: SendMessage
@@ -97,8 +116,8 @@ Cron prompt (use verbatim, adjust the target if it is not `human-run`):
 > agent's compute job or descent. TaskStop stale monitors of completed agents. 4) If no agent is running,
 > or CPU is idle, start the next improvement round from `human-run/NEXT.md` in worktree-isolated agents,
 > and merge finished branches into the target branch (merge first, resolve `scores.jsonl` conflicts by
-> keeping both sides, run fmt/build/tests, commit). Never use rm. Report in 3 lines: progress yes/no,
-> what was killed, what was started.
+> keeping both sides, run fmt/build/tests, commit). Never use rm. 5) Re-arm `bin/frlg-tick` with
+> run_in_background. Report in 3 lines: progress yes/no, what was killed, what was started.
 
 Rules the watchdog and the agents follow:
 
