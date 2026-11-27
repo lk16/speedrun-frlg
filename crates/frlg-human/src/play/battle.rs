@@ -1107,6 +1107,7 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
     // Diagnostics for engine-vs-emulator comparisons: the foe's last move (`gLastMoves[1]`) and both
     // battlers' raw stat stages (`gBattleMons[].statStages`, 6 = neutral).
     let foe_last = c.ram.last_move(f.emu(), 1);
+    let my_last = c.ram.last_move(f.emu(), 0);
     let my_stages = c.ram.battle_mon(f.emu(), 0).stages;
     let foe_stages = c.ram.battle_mon(f.emu(), 1).stages;
     let st = |m: &Mon| match m.status {
@@ -1140,6 +1141,7 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
             "rollouts": d.rollouts.iter().map(|(a, w)| format!("{} {w}", describe(dex, &sc, *a))).collect::<Vec<_>>(),
             "bench": sc.bench.len(),
             "foe_last_move": if foe_last == 0 || foe_last == u16::MAX { format!("#{foe_last}") } else { super::names::names().mv(foe_last).trim_start_matches("MOVE_").to_string() },
+            "my_last_move": if my_last == 0 || my_last == u16::MAX { format!("#{my_last}") } else { super::names::names().mv(my_last).trim_start_matches("MOVE_").to_string() },
             "my_stages": my_stages, "foe_stages": foe_stages,
         }),
     );
@@ -1305,13 +1307,28 @@ fn best_move(dex: &Dex, sc: &Scene) -> usize {
 /// FIGHT, steer to the move's slot, A; then mash to the end of the selection.
 fn use_move(f: &mut HumanFeed, c: &Ctl, sc: &Scene, mv: usize) -> Result<(), RouteError> {
     let obs = c.obs;
+    // A move with no PP left is refused ("There's no PP left for this move!", `HandleInputChooseMove`,
+    // `decompiled/src/battle_controller_player.c:474`) and the menu stays open: take the best usable one.
+    let usable = |i: usize| {
+        sc.me.pp.get(i).is_none_or(|&p| p > 0)
+            && sc.me.disabled.is_none_or(|(d, _)| d != sc.me.moves[i])
+    };
+    let mv = match sc.me.moves.iter().position(|&m| m == mv) {
+        Some(i) if !usable(i) => best_move(c.dex, sc),
+        _ => mv,
+    };
     let slot = sc.me.moves.iter().position(|&m| m == mv).unwrap_or(0) as u8;
     nav_2x2(f, "action cursor on FIGHT", 0, |e| obs.action_cursor(e, 0))?;
     // With no usable move FIGHT goes straight to Struggle (`AreAllMovesUnusable`,
-    // `decompiled/src/battle_main.c:3146-3147`), so there is no move menu: the action menu just closes (the r2a forest soft-lock: a Metapod whose Harden ran out).
+    // `decompiled/src/battle_main.c:3146-3147`, `battle_util.c:405-424`), so there is no move menu: the
+    // action menu just closes (the r2a forest soft-lock: a Metapod whose Harden ran out). Otherwise the
+    // controller passes through `PlayerBufferRunCommand` before the move menu opens, so "the action
+    // menu closed" is not an answer: the 2026-11-24 r2a-dev21 bug returned there and the next mashed A
+    // chose slot 0, so every BUBBLE of the forest was a TACKLE and Liam met a Tackle with 0 PP.
+    let struggle = (0..sc.me.moves.len()).all(|i| !usable(i));
     press_until(f, "the move menu", keys::A, 4, 30, |e| {
         obs.battle_controller_is(e, 0, "HandleInputChooseMove")
-            || !obs.battle_controller_is(e, 0, "HandleInputChooseAction")
+            || (struggle && !obs.battle_controller_is(e, 0, "HandleInputChooseAction"))
     })?;
     if !obs.battle_controller_is(f.emu(), 0, "HandleInputChooseMove") {
         return Ok(());
