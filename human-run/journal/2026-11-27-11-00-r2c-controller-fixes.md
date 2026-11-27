@@ -84,3 +84,16 @@ covered by the same rule (only `hideout-grunts` plan fights appear).
 
 The gap to the model grows most in Bill (+230 s, Route 25 hunt and fights) and Rock Tunnel (+325 s from the
 Bike split: ten trainers, walked without Flash). Those are the next targets for the controller and the model.
+
+## Plan 1952 played (CURRENT -> 1952-r3d-cut-route5)
+
+`runs/human-play/r2j-s31`: the r2g-s31 prefix to `brock`, then plan 1952 (R3d honest Cut). `play-verify`
+**32 checkpoints match from boot, 0 bumps.** Pewter bought 2 Poké Balls before the 9 Potions. The Route 5
+hunt after `tm28-dig` caught a **Meowth in 9 steps, 1 encounter, 2418 frames** (616 of them walking there),
+and HM01 went to Meowth at `bike-redeem`. No Route 25 hunt. Giovanni 1 at **4720 s** (model p50 3847).
+Also verified to Giovanni 1: `r2i-s11` (1842, 4900 s, 0 bumps, 4 rollbacks).
+
+Other fixes: `talk_to` now matches the live object's map as well (a connected map's objects are loaded in
+the current map's frame: Pallet's object 1 was taken for the Route 1 clerk at (3, 48), r2h-s41 fatal). The
+Vermilion trash cans credit a switch opened by the walker's own settle-A (the cans were 15/10 from
+VAR_TEMP_0/1, and the first switch was found on arrival and then "reset" by our press).
