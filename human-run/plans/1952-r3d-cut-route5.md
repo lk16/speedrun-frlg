@@ -19,7 +19,7 @@ and answers it:
   attempts. 7 % of carriers are the 7th mon caught, so they go to the box (`decompiled/src/pokemon.c:3686-3704`) and
   are withdrawn at the Cerulean Center (`cut_box_honest`, `pc_frames`).
 
-Scores (WR+2m, fixed rung, journal `2026-11-27-14-00-r3d-cut.md`):
+Scores (WR+2m, fixed rung, journal `2026-11-27-13-00-r3d-cut.md`):
 * vs 1930 (Cut omitted): **+927 h [+482, +1532]** (seed 8402, R 1.6M; 3411 vs 2484 h). On the same seed, honest Cut
   with R3c's response costs +3122 h [+2015, +4693] (row 1950), so this response saves about 2200 h of it.
 * vs the Route 25 hunt under the same model (`cut_honest` + `cut_rehunt` + `hunt_stop_empty`):

@@ -1,5 +1,23 @@
 # Handoff for the next session
 
+## 2026-11-27 R3d: honest Cut (journal `journal/2026-11-27-13-00-r3d-cut.md`)
+
+**CURRENT unchanged (1930).** Candidate **`plans/1952-r3d-cut-route5.md`** = 1930 + honest Cut (`cut_honest`,
+`cut_rehunt`, and the new MODEL keys `hunt_stop_empty` and `cut_box_honest`) + Poke Balls topped up to 2 at Pewter
++ a Route 5 hunt after TM28 (first Meowth or Bellsprout, flee Pidgey), with no Route 25 hunt. WR+2m **+927 h
+[482, 1532] vs 1930** (seed 8402). With R3c's response, honest Cut costs +3122 [2015, 4693] on the same seed.
+Route 5 vs the Route 25 hunt under the same model: **-1520 [-2125, -997]** (8403).
+- Why R3c's response cost +3000: in 27 % of attempts the forest leaves 0 balls, and the old hunt walked 300 steps
+  with an empty bag (452 s, then a reset). `hunt_stop_empty` fixes that, -471 [-929, -133]. When a ball is in the
+  bag, the hunt takes 73 s, because Bellsprout is only 25 % of Route 25. Money is not binding: the prize formula and
+  prices check out. The `persim-and-potions` stop has 181 left after its 3 Awakenings, so the controller's
+  "3 balls there" buys nothing in the model.
+- Refuted (screens): Route 1 / 2 Rattata (the L6 carry fights and loses HP), Mt. Moon B1F Paras, Route 4 (+943), a
+  forest ball reserve (+1080). Pewter top-up 1 / 3 is no better than 2.
+- **Controller (main session):** top up to 2 Poke Balls at Pewter; no balls at persim; the Route 5 grass hunt after
+  TM28 (x 20-27, y 5-6); teach HM01 at `bike-redeem` (PC withdrawal if the carrier was the 7th mon caught); the
+  fallback is `cut_rehunt` (Route 24 on the bike after topping up to 5 balls).
+
 ## 2026-11-27 R3c: model / plan round 3 (journal `journal/2026-11-27-12-00-r3c-model.md`)
 
 **CURRENT unchanged (1841).** Candidate **`plans/1930-r3c-dials2.md`** = 1910 + `manip.dials` 2 + tier-1 frames +
