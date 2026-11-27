@@ -733,14 +733,18 @@ fn celadon_shopping(s: &mut Session) -> PResult<()> {
     }
     let heals: u32 = xb.iter().map(|x| x.heals).sum();
     let revives: u32 = xb.iter().map(|x| x.revives).sum();
-    // v3: a top-up to plan 1413's sabrina-badge stop (35), not `ball_batch` on top of the bag.
-    super::shop::mart_topup(
-        s,
-        "MAP_CELADON_CITY_DEPARTMENT_STORE_2F",
-        Some((1, 8)),
-        &[("ITEM_GREAT_BALL", 35)],
-        "plan 1413 sabrina-badge (Celadon is on the way)",
-    )?;
+    // R3f / C3: the plan's order is X items, then the League's Hyper Potions (Saffron, after
+    // this store), then the extras. The purse is spent in that order: the stones keep back the X
+    // items' and the Hyper Potions' cost, the X items keep back the Hyper Potions'. The Great Balls
+    // (the plan's `marts` sabrina-badge stop, 25) are bought at Saffron after the Hyper Potions
+    // and again after Sabrina (`SaffronCity_Mart/scripts.inc:25` sells them); the full2 run spent
+    // 5400 of its 10757 on them here and had 107 left for the Hyper Potions.
+    let hyper_price = super::shop::price(s, super::names::id("ITEM_HYPER_POTION"));
+    let hyper_cost = heals * hyper_price;
+    let mut x_cost = 0;
+    for &(it, n) in &x_items {
+        x_cost += n as u32 * super::shop::price(s, super::names::id(it));
+    }
     let mut stones: Vec<String> = vec![];
     for e in &s.plan.params.evolutions {
         if e.via == "stone" && e.buy && !e.item.is_empty() {
@@ -753,19 +757,21 @@ fn celadon_shopping(s: &mut Session) -> PResult<()> {
     let stones: Vec<String> = stones.into_iter().filter(|it| have(s, it) == 0).collect();
     if !stones.is_empty() {
         let want: Vec<(&str, u16)> = stones.iter().map(|it| (it.as_str(), 1)).collect();
-        let _ = super::shop::buy(
+        let _ = super::shop::buy_keeping(
             s,
             "MAP_CELADON_CITY_DEPARTMENT_STORE_4F",
             Some((3, 13)),
             &want,
+            x_cost + hyper_cost,
         )?;
     }
     if !x_items.is_empty() {
-        let _ = super::shop::buy(
+        let _ = super::shop::buy_keeping(
             s,
             "MAP_CELADON_CITY_DEPARTMENT_STORE_5F",
             Some((1, 7)),
             &x_items,
+            hyper_cost,
         )?;
     }
     // v3: the dex errands of Celadon: stones bought at 4F for party and boxed mons (Leaf:
@@ -788,9 +794,10 @@ fn celadon_shopping(s: &mut Session) -> PResult<()> {
             json!({"segment": "tm-ice_beam@fly-celadon-2"}),
         );
     }
+    // The League's Hyper Potions first (`xbuys` heals, plan 2010), then plan 1413's silph-walk 4;
+    // the Great Balls and sabrina-badge's 3 potions wait for the stop after Sabrina.
     let mut saffron: Vec<(&str, u16)> = vec![];
-    // v3: plan 1413's potion stops (sabrina-badge 3, silph-walk 4) on top of the xbuy heals.
-    let heals = heals + 7;
+    let heals = heals + 4;
     if heals > 0 {
         saffron.push(("ITEM_HYPER_POTION", heals as u16));
     }
@@ -1045,6 +1052,17 @@ fn sabrina(s: &mut Session) -> PResult<()> {
     // The plan's heal after the badge (`extra_heals` sabrina-badge) and its gift (Hitmonlee:
     // the dex module's).
     center_heal(s, "MAP_SAFFRON_CITY_POKEMON_CENTER_1F")?;
+    // Plan 1413 `marts` sabrina-badge: Great Balls to 25 and 3 Hyper Potions (the full2 run
+    // skipped this stop: ¥107 left at Celadon). Saffron's mart sells both
+    // (`SaffronCity_Mart/scripts.inc:25-26`); the Silph trainers' prizes paid for it.
+    let _ = super::items::mount_bike(s)?;
+    let balls = 25u16.saturating_sub(have(s, "ITEM_GREAT_BALL") as u16);
+    let mut want: Vec<(&str, u16)> = vec![];
+    if balls > 0 {
+        want.push(("ITEM_GREAT_BALL", balls));
+    }
+    want.push(("ITEM_HYPER_POTION", 3));
+    let _ = super::shop::buy(s, "MAP_SAFFRON_CITY_MART", None, &want)?;
     dex_hook(s, "sabrina-badge")
 }
 
@@ -1956,12 +1974,35 @@ pub fn league_prep(s: &mut Session) -> PResult<()> {
         );
     }
     let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
-    if (m.hp * 2 < m.max_hp || m.status != 0) && have(s, "ITEM_FULL_RESTORE") > fr_reserve(s) {
-        super::shop::use_item_on(s, "ITEM_FULL_RESTORE", 0)?;
+    between_rooms_heal(s, &m, "the carry")?;
+    Ok(())
+}
+
+/// The between-room heal (plan 2010 obligation 4, `league_preheal`): below half HP a Hyper Potion first
+/// (200 HP, `item_effects.h:37-40`; a Full Restore only when none is left), a status (it clears
+/// every one, `item_effects.h:26-30`) a Full Restore. A Full Restore never goes under
+/// [`fr_reserve`]; a Hyper Potion has no reserve.
+fn between_rooms_heal(s: &mut Session, m: &super::ram::Mon, who: &str) -> PResult<()> {
+    let low = m.hp * 2 < m.max_hp;
+    let fr_ok = have(s, "ITEM_FULL_RESTORE") > fr_reserve(s);
+    let item = if m.status != 0 {
+        fr_ok.then_some("ITEM_FULL_RESTORE")
+    } else if low && have(s, "ITEM_HYPER_POTION") > 0 {
+        Some("ITEM_HYPER_POTION")
+    } else if low && fr_ok {
+        Some("ITEM_FULL_RESTORE")
+    } else {
+        None
+    };
+    if let Some(it) = item {
+        super::shop::use_item_on(s, it, 0)?;
         s.event(
             "model-vs-actual",
-            "Full Restore on the carry between League rooms (not in the model)",
-            json!({"hp": m.hp, "max_hp": m.max_hp, "status": m.status}),
+            format!(
+                "{} on {who} between League rooms (not in the model)",
+                it.trim_start_matches("ITEM_")
+            ),
+            json!({"hp": m.hp, "max_hp": m.max_hp, "status": m.status, "item": it}),
         );
     }
     Ok(())
@@ -2050,14 +2091,7 @@ fn mewtwo_pp_prep(s: &mut Session, m: &super::ram::Mon) -> PResult<()> {
         }
     }
     let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
-    if (m.hp * 2 < m.max_hp || m.status != 0) && have(s, "ITEM_FULL_RESTORE") > fr_reserve(s) {
-        super::shop::use_item_on(s, "ITEM_FULL_RESTORE", 0)?;
-        s.event(
-            "model-vs-actual",
-            "Full Restore on Mewtwo between League rooms (not in the model)",
-            json!({"hp": m.hp, "max_hp": m.max_hp, "status": m.status}),
-        );
-    }
+    between_rooms_heal(s, &m, "Mewtwo")?;
     Ok(())
 }
 

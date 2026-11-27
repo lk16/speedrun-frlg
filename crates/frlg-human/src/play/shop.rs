@@ -131,6 +131,18 @@ pub fn buy(
     clerk: Option<(i16, i16)>,
     want: &[(&str, u16)],
 ) -> PResult<Vec<Bought>> {
+    buy_keeping(s, map, clerk, want, 0)
+}
+
+/// [`buy`] that leaves `keep` yen in the purse: a later stop's planned buy (the League's Hyper
+/// Potions at Saffron) is paid before this one's extras, as the plan's order says.
+pub fn buy_keeping(
+    s: &mut Session,
+    map: &str,
+    clerk: Option<(i16, i16)>,
+    want: &[(&str, u16)],
+    keep: u32,
+) -> PResult<Vec<Bought>> {
     let (cx, cy) = match clerk {
         Some(p) => p,
         None => {
@@ -194,13 +206,16 @@ pub fn buy(
         };
         let p = price(s, item);
         let money = Ram::new(&s.obs).money(s.hf.rec.emu());
-        let can = money.checked_div(p).map_or(99, |q| q.min(99)) as u16;
+        let can = money
+            .saturating_sub(keep)
+            .checked_div(p)
+            .map_or(99, |q| q.min(99)) as u16;
         let n = qty.min(can);
         if n == 0 {
             s.event(
                 "model-vs-actual",
-                format!("cannot afford {name} (¥{p}, have ¥{money})"),
-                json!({"item": name, "price": p, "money": money, "want": qty}),
+                format!("cannot afford {name} (¥{p}, have ¥{money}, keeping ¥{keep})"),
+                json!({"item": name, "price": p, "money": money, "want": qty, "keep": keep}),
             );
             continue;
         }
