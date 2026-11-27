@@ -50,3 +50,37 @@ forever. `wild_turn` now attacks with the best move. **Not yet seen played.**
 
 `r2d-s11`, `r2d-s21`, `r2d-s31`: plan 1842, power-on to `giovanni1`, binary a36f3300 (no Shadow Tag fix;
 not needed before Giovanni 1). Results below once they finish.
+
+## More fixes on the way (commits c0d20b77, caa9a850, 2683b176, 097582b4)
+
+- **No ball for the Cut hunt**: r2d-s31 died 12/12 at `nugget-bridge` ("hunt skipped, no ball in the bag").
+  Cerulean (`persim-and-potions`) now tops up 3 Poké Balls when nobody in the party can learn Cut
+  (`CeruleanCity_Mart/scripts.inc:24-25`).
+- **Pewter Center fallback**: r2d-s31 met Liam at 4/28 HP, poisoned, with no item left (~25 dead branches).
+  `preheal` heals at the Pewter Center when the bag cannot reach the floor. Not yet exercised.
+- **Poison in every stage**: r2e-s31 entered Route 25 at 6/65 HP, poisoned (in-battle poison 1/8 a turn,
+  `battle_util.c:805-806`). The carry died and Lass Haley beat the helpers, 34 dead branches. The walker
+  guard now cures under max/4 everywhere, and Cerulean tops up 2 Antidotes.
+- **Wrap**: RUN while wrapped is `BATTLE_RUN_FORBIDDEN` with no turn passing (`battle_main.c:3047-3051`), so
+  the wrap never wears off. r2d-s21 pressed RUN against a Route 25 Bellsprout for 1.09M frames after its last
+  ball missed. `wild_turn` now attacks when wrapped or escape-prevented, and a hunt stops with "no balls".
+
+## Run of record to Giovanni 1: `runs/human-play/r2g-s31` (plan 1842, seed 31)
+
+Power-on prefix from `r2d-s31` (binary a36f3300) to `mega-kick`, then binary 2683b176. **`play-verify`:
+32 checkpoints match from boot. Bumps: 0.** Every trainer fought is a plan fight. Dan and Chad (Route 25)
+were waited out until they faced away, and no hideout grunt outside the plan was fought. Grunt 4 / B1F are
+covered by the same rule (only `hideout-grunts` plan fights appear).
+
+| split | r2g-s31 (s) | model p50 (s) | r2b-full3b (s) |
+| --- | --- | --- | --- |
+| Brock | 1087 | 965 | (r2a-s11 978) |
+| Mt. Moon PC | 1348 | 1155 | (r2a-s11 1366) |
+| Misty | 1882 | 1691 | 1964 |
+| Bill | 2699 | 2277 | 2791 |
+| Bike | 3165 | 2752 | 3319 |
+| Rock Tunnel | 4045 | 3307 | 4080 |
+| Giovanni 1 | 4726 | 3845 | 4809 |
+
+The gap to the model grows most in Bill (+230 s, Route 25 hunt and fights) and Rock Tunnel (+325 s from the
+Bike split: ten trainers, walked without Flash). Those are the next targets for the controller and the model.
