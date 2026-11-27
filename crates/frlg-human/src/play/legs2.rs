@@ -1908,6 +1908,17 @@ pub fn indigo_mart(s: &mut Session) -> PResult<()> {
             "ITEM_TINY_MUSHROOM",
             "ITEM_BIG_MUSHROOM",
             "ITEM_POTION",
+            // C5: not League heals at a Lv 52 carry's 160 HP (`honest_heal_pick`).
+            "ITEM_SUPER_POTION",
+            // C5: the badge TMs no plan move uses (`tms` teaches Water Pulse, Mega Kick, Blizzard,
+            // and Mewtwo's Fire Blast / Shock Wave, Earthquake, Calm Mind): Toxic (TM06), Giga
+            // Drain (TM19), Dig (TM28), Rock Tomb (TM39). A TM sells for half its price,
+            // `decompiled/src/tm_case.c:1295`: 1500 + 1500 + 1000 + 1500 = 5500 yen, nearly two Full
+            // Restores of a bag that runs out at Lance (round 1 needs 13 heals by Lance: C5 journal).
+            "ITEM_TM06",
+            "ITEM_TM19",
+            "ITEM_TM28",
+            "ITEM_TM39",
         ],
     )?;
     if got > 0 {
