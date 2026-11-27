@@ -674,6 +674,31 @@ fn cut_learner(s: &mut Session) -> Option<usize> {
         })
 }
 
+/// PLAN `cut_hunt_after` `none` with a Route 5 hunt anchored at `tm28-dig` (R3d plan 1952): no Route 25
+/// hunt; the carrier is the first Meowth or Bellsprout of Route 5 (`sRoute5_LeafGreen`,
+/// `decompiled/src/data/wild_encounters.json`), taught at `bike-redeem`.
+fn cut_route5(s: &Session) -> bool {
+    let p = &s.plan.params;
+    p.cut_hunt_after == "none"
+        && p.hunts
+            .iter()
+            .any(|h| h.after == "tm28-dig" && h.site == "MAP_ROUTE5")
+}
+
+/// A boxed Cut learner (a catch made with six in the party went to the PC, `GiveMonToPlayer`,
+/// `decompiled/src/pokemon.c:3686-3704`): its species, from box 1 to 14.
+fn cut_learner_boxed(s: &mut Session) -> Option<u16> {
+    let dex = s.ctx.dex;
+    let cut = super::battle::move_index(dex, id("MOVE_CUT"))?;
+    (0..14u32).find_map(|b| {
+        super::shop::box_species(s, b).into_iter().find(|&sp| {
+            sp != 0
+                && super::battle::species_index(dex, sp)
+                    .is_some_and(|i| crate::sim::can_learn(&s.ctx, i, cut))
+        })
+    })
+}
+
 /// The route needs a Cut user from Route 9 on (the tree at (50, 18) of `CeruleanCity/map.json`
 /// is the only way east: `bin/frlg-mapgraph` 60 tiles with Cut, 772 without), and the post-Giovanni
 /// stages cut too. The model has no Cut carrier (MODEL BUG): when nobody in the party can learn
@@ -681,6 +706,10 @@ fn cut_learner(s: &mut Session) -> Option<usize> {
 /// `decompiled/src/data/wild_encounters.json`; Bellsprout learns HM01, `tmhm_learnsets.h`), leaving
 /// every other species alone.
 fn cut_carrier_hunt(s: &mut Session) -> PResult<()> {
+    cut_carrier_hunt_at(s, "MAP_ROUTE25", "route25-trainers")
+}
+
+fn cut_carrier_hunt_at(s: &mut Session, site: &str, after: &str) -> PResult<()> {
     if cut_learner(s).is_some() {
         return Ok(());
     }
@@ -702,8 +731,8 @@ fn cut_carrier_hunt(s: &mut Session) -> PResult<()> {
         json!({}),
     );
     let h = crate::params::Hunt {
-        after: "route25-trainers".into(),
-        site: "MAP_ROUTE25".into(),
+        after: after.into(),
+        site: site.into(),
         area: "land".into(),
         steps: 400,
         skip,
@@ -716,7 +745,7 @@ fn cut_carrier_hunt(s: &mut Session) -> PResult<()> {
     s.seg = prev;
     if cut_learner(s).is_none() {
         return Err(PlayError::Death(format!(
-            "no Cut carrier after the Route 25 hunt ({} encounters)",
+            "no Cut carrier after the {site} hunt ({} encounters)",
             rep.encounters
         )));
     }
@@ -726,6 +755,50 @@ fn cut_carrier_hunt(s: &mut Session) -> PResult<()> {
 fn teach_cut(s: &mut Session) -> PResult<()> {
     if super::items::slot_with_move(s, "MOVE_CUT").is_some() {
         return Ok(());
+    }
+    if cut_learner(s).is_none() && cut_route5(s) {
+        if let Some(sp) = cut_learner_boxed(s) {
+            // PLAN 1952 (`cut_box_honest`): the carrier is in the box; withdraw it at the Cerulean
+            // Center, depositing the lowest-level helper first when the party is full.
+            let party = Ram::new(&s.obs).party(s.hf.rec.emu());
+            let mut ops = vec![];
+            if party.len() >= 6 {
+                let slot = party
+                    .iter()
+                    .enumerate()
+                    .skip(1)
+                    .min_by_key(|(_, m)| m.level)
+                    .map(|(i, _)| i)
+                    .unwrap_or(5);
+                ops.push(super::shop::PcOp::Deposit(slot));
+            }
+            ops.push(super::shop::PcOp::Withdraw(sp));
+            s.event(
+                "decision",
+                format!(
+                    "Cut carrier {} is in the box: Cerulean Center PC",
+                    short(names().species(sp))
+                ),
+                json!({"species": sp, "plan_key": "cut_box_honest"}),
+            );
+            super::shop::pc(s, "MAP_CERULEAN_CITY_POKEMON_CENTER_1F", &ops)?;
+        } else {
+            // PLAN 1952 `cut_rehunt`: the Route 5 hunt found nothing (or the balls ran out): balls to 5 at
+            // the Cerulean mart, then Route 24's grass (Oddish / Bellsprout, `sRoute24_LeafGreen`).
+            s.event(
+                "model-vs-actual",
+                "no Cut carrier after Route 5: balls to 5 at Cerulean, Route 24 hunt (plan cut_rehunt)",
+                json!({"plan_key": "cut_rehunt"}),
+            );
+            super::shop::mart_topup(
+                s,
+                "MAP_CERULEAN_CITY_MART",
+                None,
+                &[("ITEM_POKE_BALL", 5)],
+                "cut_rehunt",
+            )?;
+            cut_carrier_hunt_at(s, "MAP_ROUTE24", "cut-rehunt")?;
+        }
     }
     let Some(slot) = cut_learner(s) else {
         return Err(PlayError::Fatal(
@@ -955,7 +1028,7 @@ fn cerulean(s: &mut Session) -> PResult<()> {
     // forest catches spend Oak's five (2026-11-27 r2d-s31: 12 of 12 hunts "skipped, no ball in the bag").
     // Poke Balls are the mart's first row (`CeruleanCity_Mart/scripts.inc:24-25`); Bellsprout's catch
     // rate is 255. A controller choice the model does not price (its Cut carrier is a MODEL BUG).
-    if cut_learner(s).is_none() {
+    if cut_learner(s).is_none() && !cut_route5(s) {
         want.push(("ITEM_POKE_BALL", 3));
     }
     // Two Antidotes for the walker's poison guard (`early::field_guard_due`) on Routes 24 / 25 and
@@ -1073,7 +1146,9 @@ fn bill(s: &mut Session) -> PResult<()> {
         .map(|t| (t, "route25-trainers".to_string()))
         .collect();
     travel(s, "MAP_ROUTE25", &Opts::default(), &bill_seg, &fights)?;
-    cut_carrier_hunt(s)?;
+    if !cut_route5(s) {
+        cut_carrier_hunt(s)?;
+    }
     travel(
         s,
         "MAP_ROUTE25_SEA_COTTAGE",
@@ -1151,6 +1226,20 @@ fn dig_grunt(s: &mut Session) -> PResult<()> {
             format!("Cerulean Rocket beaten: TM28 x{dig} (picked up, not taught: no_dig)"),
             json!({"tm28": dig}),
         );
+    }
+    // PLAN 1952: the plan's anchors after `tm28-dig`, the Route 5 Cut-carrier hunt among them (the grass
+    // the path to the Underground Path crosses), unless a Cut learner is already in the party.
+    if cut_route5(s) {
+        if cut_learner(s).is_some() {
+            s.event(
+                "decision",
+                "Route 5 Cut hunt skipped: a party mon already learns HM01",
+                json!({}),
+            );
+        } else {
+            s.seg = "tm28-dig".into();
+            super::dex::dex_hook(s, "tm28-dig")?;
+        }
     }
     Ok(())
 }

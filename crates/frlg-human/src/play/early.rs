@@ -1472,11 +1472,34 @@ fn pewter_mart(s: &mut Session) -> PResult<()> {
     .max()
     .unwrap_or(3) as u16;
     let balls = s.plan.params.pewter_balls as u16;
-    let mut want = vec![("ITEM_REPEL", repels_wanted(s)), ("ITEM_POTION", stock)];
-    if balls > 0 {
-        let have_balls = super::dex::ball_count(s);
-        want.push(("ITEM_POKE_BALL", balls + have_balls));
+    // PLAN `marts` after `brock`: Poke Balls topped up to `poke` (R3d plan 1952: 2 for the Route 5 Cut
+    // hunt), bought before the Potions so the money goes there first.
+    let poke_target = s
+        .plan
+        .params
+        .marts
+        .iter()
+        .filter(|m| m.after == "brock" && m.topup)
+        .map(|m| m.poke as u16)
+        .max()
+        .unwrap_or(0);
+    let have_balls = super::dex::ball_count(s);
+    let mut want = vec![("ITEM_REPEL", repels_wanted(s))];
+    let ball_target = (balls + have_balls).max(poke_target);
+    if ball_target > have_balls {
+        want.push(("ITEM_POKE_BALL", ball_target));
     }
+    // `marts` `potions` after `brock` (`mid_bag`: 10 in plans 1910 / 1930 / 1952) is a top-up target too.
+    let mart_potions = s
+        .plan
+        .params
+        .marts
+        .iter()
+        .filter(|m| m.after == "brock" && m.topup)
+        .map(|m| m.potions as u16)
+        .max()
+        .unwrap_or(0);
+    want.push(("ITEM_POTION", stock.max(mart_potions)));
     super::shop::mart_topup(
         s,
         mart,

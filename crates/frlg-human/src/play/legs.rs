@@ -68,11 +68,15 @@ pub fn talk_to(s: &mut Session, map: &str, local_id: u8) -> PResult<()> {
     let o = Opts::default();
     for _ in 0..20 {
         go_map(s, map, &o)?;
+        // Same local id *and* map: a connected map's objects are loaded too, with their own
+        // map's local ids, placed in the current map's frame (r2h-s41: Pallet's object 1 at (3, 8) was
+        // taken for Route 1's clerk, at (3, 48) south of Route 1).
+        let mid = s.graph().id(map);
         let pos = {
             let ram = super::ram::Ram::new(&s.obs);
             ram.objects(s.hf.rec.emu())
                 .iter()
-                .find(|l| l.local_id == local_id)
+                .find(|l| l.local_id == local_id && l.map == mid)
                 .map(|l| (l.x, l.y))
         };
         // Off screen (objects only spawn near the camera): head for where the map puts it.
