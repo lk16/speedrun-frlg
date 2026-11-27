@@ -164,6 +164,11 @@ pub struct LiveObject {
     pub elevation: u8,
     /// `invisible` (bit 13): hidden objects still collide, but nobody sees them.
     pub invisible: bool,
+    /// `initialCoords` (the centre of a wanderer's range box) and `directionSequenceIndex`
+    /// (`struct ObjectEvent`, `decompiled/include/global.fieldmap.h:251,265`).
+    pub ix: i16,
+    pub iy: i16,
+    pub seq_idx: u8,
 }
 
 impl<'a> Ram<'a> {
@@ -297,6 +302,9 @@ impl<'a> Ram<'a> {
                     map: (emu.read8(b + 0x0A), emu.read8(b + 0x09)),
                     elevation: emu.read8(b + 0x0B) & 0x0F,
                     invisible: flags & (1 << 13) != 0,
+                    ix: emu.read16(b + 0x0C) as i16 - MAP_OFFSET,
+                    iy: emu.read16(b + 0x0E) as i16 - MAP_OFFSET,
+                    seq_idx: emu.read8(b + 0x21),
                 })
             })
             .collect()

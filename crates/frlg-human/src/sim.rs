@@ -359,6 +359,11 @@ struct State {
     league_items: bool,
     /// Heal items left for the League round in progress (bought at its first fight).
     heal_items: u32,
+    /// MODEL CHANGE `league_bag_honest`: Full Restores and Max Potions among `heal_items` (the rest are
+    /// Hyper Potions), and the League bag's Full Heals.
+    lg_fr: u32,
+    lg_max: u32,
+    lg_fh: u32,
     /// Mewtwo's HP fraction carried between R2 fights.
     mewtwo_hp: f64,
     /// Mewtwo's exp (Slow growth); its level follows (`Params::mewtwo_levels`).
@@ -1947,6 +1952,81 @@ pub struct TacIn<'a> {
     pub cures: u32,
 }
 
+/// The Indigo mart at a League round's start (and after a League whiteout with `league_rebuy`): the
+/// bag is topped up to `league_heals` heal items out of the purse. With `league_bag_honest` the Full Heals
+/// (`league_full_heals`, 600) come first and the heals are `league_heal_item` at its `items.json` price
+/// (the mart, `IndigoPlateau_PokemonCenter_1F/scripts.inc:54-60`, sells no Hyper Potion). Returns the
+/// money spent.
+fn league_topup(ctx: &Ctx, st: &mut State) -> u32 {
+    let before = st.money;
+    let price_of = |item: &str, dflt: u32| ctx.dex.item_prices.get(item).copied().unwrap_or(dflt);
+    let honest = ctx.p.league_bag_honest;
+    if honest && ctx.p.league_full_heals > st.lg_fh {
+        let price = price_of("ITEM_FULL_HEAL", 600);
+        let want = ctx.p.league_full_heals - st.lg_fh;
+        let n = if ctx.p.money_model {
+            want.min(st.money / price)
+        } else {
+            want
+        };
+        if ctx.p.money_model {
+            st.money -= n * price;
+        }
+        st.lg_fh += n;
+    }
+    let max_potion = honest && ctx.p.league_heal_item == "max_potion";
+    let price = if !honest {
+        ctx.p.league_heal_price.max(1)
+    } else if max_potion {
+        price_of("ITEM_MAX_POTION", 2500)
+    } else {
+        price_of("ITEM_FULL_RESTORE", 3000)
+    };
+    let want = ctx.p.league_heals.saturating_sub(st.heal_items);
+    let n = if ctx.p.money_model {
+        want.min(st.money / price)
+    } else {
+        want
+    };
+    if ctx.p.money_model {
+        st.money -= n * price;
+    }
+    st.heal_items += n;
+    if max_potion {
+        st.lg_max += n;
+    } else {
+        st.lg_fr += n;
+    }
+    if std::env::var_os("FRLG_SIM_TRACE").is_some() {
+        eprintln!(
+            "LEAGUE topup seg {} money {} -> {} bought {} want {} have {} fr {} max {} fh {}",
+            st.seg_i, before, st.money, n, want, st.heal_items, st.lg_fr, st.lg_max, st.lg_fh
+        );
+    }
+    before - st.money
+}
+
+/// One League heal item spent between fights (`league_preheal`): with `league_bag_honest` a Hyper Potion
+/// (200 HP), else a Max Potion, else a Full Restore; the old pool heals in full. Returns the HP fraction
+/// after it.
+fn league_preheal_item(ctx: &Ctx, st: &mut State, cur: f64, max_hp: i32) -> f64 {
+    st.heal_items -= 1;
+    if !ctx.p.league_bag_honest {
+        return 1.0;
+    }
+    let hypers = st.heal_items + 1 - st.lg_fr.min(st.heal_items + 1) - st.lg_max;
+    if hypers > 0 {
+        let hp = (max_hp as f64 * cur).round() as i32 + 200;
+        (hp as f64 / max_hp as f64).min(1.0)
+    } else if st.lg_max > 0 {
+        st.lg_max -= 1;
+        1.0
+    } else {
+        st.lg_fr = st.lg_fr.saturating_sub(1);
+        1.0
+    }
+}
+
 /// The [`Tactics`] of the fight named `name` (`Params::fight_tactics`, the global knobs): the one
 /// place the simulator ([`sim_battle`]) and the playing controller build them.
 pub fn fight_tactics(ctx: &Ctx, name: &str, league: bool, t: &TacIn) -> crate::battle::Tactics {
@@ -2004,6 +2084,12 @@ pub fn fight_tactics(ctx: &Ctx, name: &str, league: bool, t: &TacIn) -> crate::b
         sleep_no_potion: ctx.p.sleep_no_potion,
         awakenings: t.awakenings,
         cures: t.cures,
+        // `league_bag_honest` is set by the simulator's League fight (`sim_battle`); the controller reads its
+        // real bag (`play::battle::tactics_for`).
+        bag_honest: false,
+        fr_stock: u32::MAX,
+        max_stock: 0,
+        full_heals: 0,
     }
 }
 
@@ -2090,16 +2176,7 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
     // League round start: the heal items come out of the purse (Indigo Plateau mart, 600
     // frames of menus; guess).
     if a.league && (a.name == "lorelei" || a.name == "lorelei-2") {
-        let want = ctx.p.league_heals.saturating_sub(st.heal_items);
-        let n = if ctx.p.money_model {
-            want.min(st.money / ctx.p.league_heal_price.max(1))
-        } else {
-            want
-        };
-        if ctx.p.money_model {
-            st.money -= n * ctx.p.league_heal_price;
-        }
-        st.heal_items += n;
+        league_topup(ctx, st);
         st.mewtwo_hp = 1.0;
         bump(st, 600.0 * ctx.p.text_factor);
     }
@@ -2316,19 +2393,26 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 eprintln!("league-torrent: {} keeps hp {:.2}", a.name, cur);
             }
             if cur < ctx.p.league_preheal && !in_window {
-                st.heal_items -= 1;
+                let max_hp = if mewtwo_now {
+                    // Mewtwo's own max HP is not built yet here; the Hyper Potion's 200 of its ~228 at
+                    // Lv 70 (guess: the fight's `mhp` trace) is near enough to call it a full heal.
+                    200
+                } else {
+                    me.max_hp
+                };
+                let after = league_preheal_item(ctx, st, cur, max_hp);
                 bump(st, ctx.turn());
                 if mewtwo_now {
-                    st.mewtwo_hp = 1.0;
+                    st.mewtwo_hp = after;
                 } else {
-                    st.hp_frac = 1.0;
+                    st.hp_frac = after;
                 }
             }
         }
         let t_in = st.clock;
         let start_frac = if mewtwo_now { st.mewtwo_hp } else { st.hp_frac };
         me.hp = ((me.max_hp as f64 * start_frac).round() as i32).clamp(1, me.max_hp);
-        let tac = fight_tactics(
+        let mut tac = fight_tactics(
             ctx,
             a.name,
             a.league,
@@ -2347,6 +2431,15 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
                 cures: st.cures,
             },
         );
+        if a.league && ctx.p.league_bag_honest {
+            // MODEL CHANGE `league_bag_honest`: the bag's real items (Hyper Potion 200, `item_effects.h:37-40`).
+            tac.bag_honest = true;
+            tac.heal = 200;
+            tac.full_restore = st.lg_fr > 0;
+            tac.fr_stock = st.lg_fr.min(st.heal_items);
+            tac.max_stock = st.lg_max;
+            tac.full_heals = st.lg_fh;
+        }
         let xs = tac.x_items.clone();
         // Risk lane: the honest copy of this fight decides whether the attempt survives it.
         let mut risk_healed = false;
@@ -2444,6 +2537,13 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             st.heal_items = st
                 .heal_items
                 .saturating_sub(out.heals_used + out.full_restores_used);
+            if ctx.p.league_bag_honest {
+                st.lg_fr = st.lg_fr.saturating_sub(out.full_restores_used);
+                st.lg_max = st.lg_max.saturating_sub(out.maxes_used);
+                st.lg_fh = st.lg_fh.saturating_sub(out.full_heals_used);
+                // A Heal with no potion left was a Full Restore (`battle::commit`).
+                st.lg_fr = st.lg_fr.min(st.heal_items);
+            }
         }
         // `tcost_whole`: the fitted price already holds the WR's reactions and mashing; the draws are kept
         // (common random numbers) and not charged.
@@ -2586,6 +2686,19 @@ fn sim_battle(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &BattleArgs) -> bool 
             // Back to the first room: the rooms are walked and fought again.
             let spent = (st.clock - st.league_t0) as f64;
             bump(st, spent * ctx.p.league_redo);
+            // MODEL CHANGE `league_whiteout_money`: `ComputeWhiteOutMoneyLoss` with 8 badges
+            // (`overworld.c:227-268`): highest party level x 4 x 30.
+            if ctx.p.league_whiteout_money && ctx.p.money_model {
+                let mut top = st.carry;
+                if st.mewtwo.is_some() {
+                    top = top.max(mewtwo_level(ctx, st));
+                }
+                st.money -= (top * 4 * 30).min(st.money);
+            }
+            // PLAN `league_rebuy`: the respawn is the Indigo Center, the mart is in the room.
+            if ctx.p.league_rebuy && league_topup(ctx, st) > 0 {
+                bump(st, 600.0 * ctx.p.text_factor);
+            }
         }
         bump(st, ctx.k("whiteout", WHITEOUT as f64));
         if rule >= 0.0 {
@@ -3739,6 +3852,9 @@ pub fn attempt(
         badges: 0,
         league_items: false,
         heal_items: 0,
+        lg_fr: 0,
+        lg_max: 0,
+        lg_fh: 0,
         mewtwo_hp: 1.0,
         mewtwo_exp: 0,
         log_fights: probe.is_some(),
@@ -4722,11 +4838,16 @@ pub fn attempt(
                 "indigo-heal" => {
                     if std::env::var_os("FRLG_SIM_TRACE").is_some() {
                         eprintln!(
-                        "STATE indigo-heal money {} x_stock {:?} revives {} fodder {} candies {} carry {} elixirs {} max {}",
-                        st.money, st.x_stock, st.revives, st.fodder, st.candies, st.carry, st.elixirs, st.max_elixirs
+                        "STATE indigo-heal money {} x_stock {:?} revives {} fodder {} candies {} carry {} elixirs {} max {} potions {} heals {}",
+                        st.money, st.x_stock, st.revives, st.fodder, st.candies, st.carry, st.elixirs, st.max_elixirs, st.potions, st.heal_items
                     );
                     }
                     st.league_items = true;
+                    // MODEL CHANGE `league_bag_honest`: the field bag's Hyper Potions still held are League
+                    // heals too (the Hyper tier is 200 HP, `item_effects.h:37-40`).
+                    if ctx.p.league_bag_honest && potion_hp(ctx, i, st.carry, false) == 200 {
+                        st.heal_items += std::mem::take(&mut st.potions);
+                    }
                     // Rare Candies kept for the League go down now: a level each, worth the
                     // most exp this late (~400 frames per use).
                     while st.candies > ctx.p.mewtwo_candies && st.carry < 100 {

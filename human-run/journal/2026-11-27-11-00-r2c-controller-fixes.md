@@ -97,3 +97,9 @@ Other fixes: `talk_to` now matches the live object's map as well (a connected ma
 the current map's frame: Pallet's object 1 was taken for the Route 1 clerk at (3, 48), r2h-s41 fatal). The
 Vermilion trash cans credit a switch opened by the walker's own settle-A (the cans were 15/10 from
 VAR_TEMP_0/1, and the first switch was found on arrival and then "reset" by our press).
+
+## Post-game on the current controller (`runs/human-play/post-v4-icefall`)
+
+The v4 run (plan 1122) resumed from `icefall` (Six Island) with today's controller (binary 240cd9d7) played on to
+`hall-of-fame-2` (39 rollbacks, mostly the rematch Champion). So the post-League stages still work with the R1
+walker and today's battle fixes. The Shadow Tag / Wrap path was not triggered on this route.

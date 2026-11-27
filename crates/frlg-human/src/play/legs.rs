@@ -133,8 +133,11 @@ fn hm02(s: &mut Session) -> PResult<()> {
         "got HM02 (Fly) in the Route 16 house",
         json!({}),
     );
+    // Any party mon that learns HM02 (`tmhm_learnsets.h`): the Route 5 Pidgey (`early2.rs`
+    // `dig_grunt`) or whatever flier the run caught.
     let slot = party_slot_of(s, "SPECIES_PIDGEY")
-        .ok_or_else(|| super::session::PlayError::Fatal("no Pidgey to teach Fly".into()))?;
+        .or_else(|| super::early2::hm_learner(s, "MOVE_FLY"))
+        .ok_or_else(|| super::session::PlayError::Death("no party mon learns HM02 Fly".into()))?;
     super::items::teach_tmhm(s, "ITEM_HM02", slot)?;
     Ok(())
 }

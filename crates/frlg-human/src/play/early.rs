@@ -1496,6 +1496,30 @@ fn pewter_mart(s: &mut Session) -> PResult<()> {
         .map(|m| m.poke as u16)
         .max()
         .unwrap_or(0);
+    // The Route 5 hunts after Dig (R3d plan 1952 on) take a Cut carrier and, with no HM02 learner, a
+    // Pidgey (`early2.rs` `dig_grunt`): the plan's 2 balls cover one (v5d-s41: the Meowth took both,
+    // the Pidgey hunt ended "no balls", HM02 had no learner, fatal). Two more here, ~1 Potion of money;
+    // the Cerulean stop cannot pay for them ($1392 against the plan's Awakenings and Potions). Not in
+    // the model (it has no Fly carrier): logged.
+    let route5 = s.plan.params.cut_hunt_after == "none"
+        && s.plan
+            .params
+            .hunts
+            .iter()
+            .any(|h| h.after == "tm28-dig" && h.site == "MAP_ROUTE5");
+    let poke_target = if route5 && poke_target > 0 {
+        s.event(
+            "model-vs-actual",
+            format!(
+                "Pewter: {} Poke Balls instead of the plan's {poke_target} (a Route 5 Pidgey for HM02; the model has no Fly carrier)",
+                poke_target + 2
+            ),
+            json!({"plan": poke_target, "bought_to": poke_target + 2}),
+        );
+        poke_target + 2
+    } else {
+        poke_target
+    };
     let have_balls = super::dex::ball_count(s);
     let mut want = vec![("ITEM_REPEL", repels_wanted(s))];
     let ball_target = (balls + have_balls).max(poke_target);

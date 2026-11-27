@@ -1,5 +1,19 @@
 # Handoff for the next session
 
+## 2026-11-27 R3f: the League heal bag (journal `journal/2026-11-27-14-00-r3f-league-bag.md`)
+
+**CURRENT unchanged (1952).** Candidate **`plans/2010-r3f-league-bag.md`** = 1952 + MODEL keys `league_bag_honest`
+(Hyper Potion 200 HP no cure, Full Restore full + status, Full Heal status; field Hypers join at Indigo) and
+`league_whiteout_money` (`overworld.c:227-268`; 0 effect at WR+2m). CURRENT priced honestly: **+519 h [209, 909]**
+(8502), +244 [-34, 564] n.s. (8504); the old pool made every heal a Full Restore.
+- Money: the model's bag was always purse-capped (plans price 3000 since 1842; only the `params.rs` default is
+  2500). Indigo purse p10/50/90: 1952 11.2k/17.8k/23.1k, 1842 6.7k/11.4k/16.1k; played 1842 had 25.4k because the
+  controller skipped ~12k of buys. Round 1 is purse-bound (85 % can't fill 14); round 2 is funded (41k p50).
+- Responses (8503): more Hyper Potions at Saffron +267..+1544 (worse), Max Potions +17 849, Full Heals +695..+727
+  (n.s. with a 0.75-HP gate), league_heals 18 = 0, 10 +320, Saffron Hypers 4 -> 2 -67 / -154 n.s. on 2 seeds.
+  **Best bag = 1952's: 4 Hyper Potions at Saffron Mart + Full Restores to 14 at Indigo.**
+- **Controller:** buy the 4 Hypers at Saffron Mart (Celadon sells none); Hyper for HP, Full Restore for sleep /
+  freeze / para-or-confusion under 60 % or when no Hyper is left; no Max Potions, no Full Heals.
 ## 2026-11-27 R3e: model vs three played runs to Giovanni 1 (journal `journal/2026-11-27-14-00-r3e-calibration.md`)
 
 **CURRENT unchanged (1952).** The played gap (+873..+1055 s at Giovanni 1) splits into ~390 s of model optimism and

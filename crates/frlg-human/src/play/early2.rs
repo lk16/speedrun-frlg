@@ -197,6 +197,52 @@ fn repel_for(s: &mut Session, seg: &str, nodes: &[Node]) -> PResult<()> {
     super::shop::use_item(s, item)
 }
 
+/// [`plan_nodes`] around every unbeaten trainer's sight line when there is a way, else the plain
+/// plan: the order `go_to` walks in (`walk.rs`, "Around every unbeaten trainer's sight line"). A
+/// waypoint taken from the plain plan can lie behind a skipped trainer's line that the walked route
+/// avoids (r2i walked into Lass Miriam and Grunt 4 that way).
+fn plan_nodes_walled(
+    s: &mut Session,
+    from: Node,
+    goal: &dyn Fn(&Node) -> bool,
+    o: &Opts,
+) -> Option<Vec<Node>> {
+    let walls = Opts {
+        cone_walls: true,
+        ..o.clone()
+    };
+    plan_nodes(s, from, goal, &walls).or_else(|| plan_nodes(s, from, goal, o))
+}
+
+/// The Repel runs out on the path `nodes` (`VAR_REPEL_STEP_COUNT` counts every step down,
+/// `decompiled/src/wild_encounter.c:576-598`; Repel 100 steps, Super 200, Max 250,
+/// `decompiled/src/data/items.json` `holdEffectParam`): walk to the tile where it ends so the next
+/// loop turn re-uses one, when encounter tiles lie beyond it. `true` when it walked.
+fn repel_waypoint(
+    s: &mut Session,
+    cur_id: &str,
+    rs: &str,
+    nodes: &[Node],
+    o: &Opts,
+) -> PResult<bool> {
+    let left = var(s, "VAR_REPEL_STEP_COUNT") as usize;
+    let on_plan = s.plan.params.repel_on.iter().any(|r| r == rs);
+    if !on_plan || left == 0 || left + 1 >= nodes.len() {
+        return Ok(false);
+    }
+    if path_has_encounters(s, &nodes[left..]) == 0 {
+        return Ok(false);
+    }
+    let wp = nodes[left];
+    go_to(
+        s,
+        &format!("{cur_id} ({}, {}): where the Repel ends", wp.1, wp.2),
+        &move |n: &Node| *n == wp,
+        o,
+    )?;
+    Ok(true)
+}
+
 /// Walk to `dest` one map at a time; on each map, first the plan's Repel for that map's segment
 /// (`seg_of(map id)`), then the trainers of `fights` that stand on this map, nearest first.
 fn travel(
@@ -255,7 +301,7 @@ fn travel_to(
                 let mid = cur.0;
                 let (m, _, x, y) = trainer_obj(s, &tr).unwrap();
                 let _ = m;
-                let nodes = plan_nodes(
+                let nodes = plan_nodes_walled(
                     s,
                     cur,
                     &move |n: &Node| n.0 == mid && (n.1 - x).abs() + (n.2 - y).abs() <= 1,
@@ -263,6 +309,11 @@ fn travel_to(
                 )
                 .unwrap_or_default();
                 repel_for(s, rs, &nodes)?;
+                // The walk to the trainer can outlast the Repel (Rock Tunnel: r2g / r2j / r2i):
+                // re-use where it ends, then the trainer.
+                if repel_waypoint(s, &cur_id, rs, &nodes, o)? {
+                    continue;
+                }
             }
             fight_trainer(s, &tr, &seg, o)?;
             continue;
@@ -270,7 +321,7 @@ fn travel_to(
         if arrived(&cur) {
             return Ok(());
         }
-        let nodes = plan_nodes(s, cur, &arrived, o)
+        let nodes = plan_nodes_walled(s, cur, &arrived, o)
             .ok_or_else(|| PlayError::Fatal(format!("no path from {cur_id} to {dest} {at:?}")))?;
         // The first node past this map on the planned path: the warp's landing tile or the
         // connection's edge. Going to "anywhere on the next map" can take another ladder, from
@@ -280,18 +331,7 @@ fn travel_to(
         if let Some(rs) = seg_of(&cur_id) {
             let on_map: Vec<Node> = nodes.iter().take_while(|n| n.0 == cur.0).copied().collect();
             repel_for(s, rs, &on_map)?;
-            // The Repel runs out on this map (`VAR_REPEL_STEP_COUNT` counts steps down,
-            // `decompiled/src/wild_encounter.c:586-591`): walk to where it ends, then the next one.
-            let left = var(s, "VAR_REPEL_STEP_COUNT") as usize;
-            let on_plan = s.plan.params.repel_on.iter().any(|r| r == rs);
-            if on_plan && left > 0 && left + 1 < on_map.len() {
-                let wp = on_map[left];
-                go_to(
-                    s,
-                    &format!("{cur_id} ({}, {}): where the Repel ends", wp.1, wp.2),
-                    &move |n: &Node| *n == wp,
-                    o,
-                )?;
+            if repel_waypoint(s, &cur_id, rs, &on_map, o)? {
                 continue;
             }
         }
@@ -652,10 +692,16 @@ fn tutor(s: &mut Session, map: &str, script: &str, mv: &str) -> PResult<()> {
 /// The party slot (not the carry) that learns HM01 Cut, by the TM/HM learnsets
 /// (`decompiled/src/data/pokemon/tmhm_learnsets.h`, `sim::can_learn`): first such slot.
 fn cut_learner(s: &mut Session) -> Option<usize> {
+    hm_learner(s, "MOVE_CUT")
+}
+
+/// The party slot (not the carry) that knows `mv` or can learn it into a free move slot, by the TM/HM
+/// learnsets (`decompiled/src/data/pokemon/tmhm_learnsets.h`, `sim::can_learn`).
+pub(crate) fn hm_learner(s: &mut Session, mv: &str) -> Option<usize> {
     let dex = s.ctx.dex;
-    let cut = super::battle::move_index(dex, id("MOVE_CUT"))?;
+    let m_id = super::battle::move_index(dex, id(mv))?;
     let party = Ram::new(&s.obs).party(s.hf.rec.emu());
-    if let Some(i) = party.iter().position(|m| m.knows(id("MOVE_CUT")).is_some()) {
+    if let Some(i) = party.iter().position(|m| m.knows(id(mv)).is_some()) {
         return Some(i);
     }
     party
@@ -664,12 +710,12 @@ fn cut_learner(s: &mut Session) -> Option<usize> {
         .skip(1)
         .find_map(|(i, m)| {
             let sp = super::battle::species_index(dex, m.species)?;
-            (crate::sim::can_learn(&s.ctx, sp, cut) && m.moves.contains(&0)).then_some(i)
+            (crate::sim::can_learn(&s.ctx, sp, m_id) && m.moves.contains(&0)).then_some(i)
         })
         .or_else(|| {
             party.iter().enumerate().skip(1).find_map(|(i, m)| {
                 let sp = super::battle::species_index(dex, m.species)?;
-                crate::sim::can_learn(&s.ctx, sp, cut).then_some(i)
+                crate::sim::can_learn(&s.ctx, sp, m_id).then_some(i)
             })
         })
 }
@@ -1024,6 +1070,23 @@ fn cerulean(s: &mut Session) -> PResult<()> {
     if awak > 0 {
         want.push(("ITEM_AWAKENING", awak));
     }
+    // PLAN `marts` after `persim-and-potions` (`mid_bag`: 6 Potions in 1910 / 1930 / 1952 / 1964) right after
+    // the plan's Awakenings, before the controller's own extras: v5b-s41 had $1392, spent it on 3
+    // Awakenings and 2 Antidotes, could not afford a Super Potion and met the Cerulean rival at 12/58 with
+    // no heal (12 blackouts, fatal). Potion 300 (`decompiled/src/data/items.json`), a Cerulean mart row
+    // (`CeruleanCity_Mart/scripts.inc:27`).
+    let plan_potions = s
+        .plan
+        .params
+        .marts
+        .iter()
+        .filter(|m| m.after == "persim-and-potions" && m.topup)
+        .map(|m| m.potions as u16)
+        .max()
+        .unwrap_or(0);
+    if plan_potions > 0 {
+        want.push(("ITEM_POTION", plan_potions));
+    }
     // The Route 25 Cut-carrier hunt (`cut_carrier_hunt`) needs balls, and the plan buys none after the
     // forest catches spend Oak's five (2026-11-27 r2d-s31: 12 of 12 hunts "skipped, no ball in the bag").
     // Poke Balls are the mart's first row (`CeruleanCity_Mart/scripts.inc:24-25`); Bellsprout's catch
@@ -1240,6 +1303,41 @@ fn dig_grunt(s: &mut Session) -> PResult<()> {
             s.seg = "tm28-dig".into();
             super::dex::dex_hook(s, "tm28-dig")?;
         }
+        // HM02 (Route 16 house, `leg_hm02`) needs a Fly learner; the model has none (MODEL BUG, like Cut
+        // before R3d). Earlier runs had a Route 1 Pidgey caught against `pass_off`; with that fixed
+        // (v5c-s41: fatal "no Pidgey to teach Fly"), the human takes the first Pidgey of the same Route 5
+        // grass, 40 % of `sRoute5_LeafGreen` (`decompiled/src/data/wild_encounters.json`; Pidgey learns
+        // HM02, `tmhm_learnsets.h`).
+        if hm_learner(s, "MOVE_FLY").is_none() {
+            s.event(
+                "model-vs-actual",
+                "no party mon learns HM02 Fly: a Route 5 Pidgey (the model has no Fly carrier)",
+                json!({}),
+            );
+            let h = crate::params::Hunt {
+                after: "tm28-dig".into(),
+                site: "MAP_ROUTE5".into(),
+                area: "land".into(),
+                steps: 150,
+                skip: vec!["SPECIES_MEOWTH".into(), "SPECIES_BELLSPROUT".into()],
+                on_route: true,
+                stop_after: 1,
+                ..Default::default()
+            };
+            let prev = std::mem::replace(&mut s.seg, "fly-carrier-hunt".into());
+            let rep = super::dex::hunt(s, &h)?;
+            s.seg = prev;
+            if hm_learner(s, "MOVE_FLY").is_none() {
+                s.event(
+                    "warn",
+                    format!(
+                        "no Fly learner after the Route 5 hunt ({} encounters, {})",
+                        rep.encounters, rep.why
+                    ),
+                    json!({"encounters": rep.encounters}),
+                );
+            }
+        }
     }
     Ok(())
 }
@@ -1404,12 +1502,12 @@ fn rock_tunnel(s: &mut Session) -> PResult<()> {
         );
         center_heal(s, "MAP_CERULEAN_CITY_POKEMON_CENTER_1F")?;
     }
-    // Repels for `repel_on` route9 / rock-tunnel (the tunnel's two floors are ~140 steps, the
-    // Route 9 / 10 grass ~80), then Super Potions; $500 kept (the Nugget pays for the X items).
+    // Repels for `repel_on` route9 / rock-tunnel (every step counts, `wild_encounter.c:576-598`: the
+    // played Route 9 - tunnel stretch is ~470 bike tiles, 5 Repels), then Super Potions; $500 kept (the Nugget pays for the X items).
     stock_up(
         s,
         "MAP_CERULEAN_CITY_MART",
-        3,
+        5,
         10,
         500,
         "Repels and Super Potions for Route 9 / Rock Tunnel",

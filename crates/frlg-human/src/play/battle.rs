@@ -411,6 +411,16 @@ const TYPE_FLYING: u8 = 2;
 const STATUS2_WRAPPED: u32 = 0b111 << 13;
 const STATUS2_ESCAPE_PREVENTION: u32 = 1 << 26;
 
+/// Dev toggle for before / after runs of the C1 controller fixes: `FRLG_C1_OLD=1` restores the old
+/// behaviour (replays of the played runs reproduce them with it set).
+fn c1_old() -> bool {
+    static L: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *L.get_or_init(|| std::env::var_os("FRLG_C1_OLD").is_some())
+}
+
+/// C1: the shortest `Sleep(t)` for which an Awakening beats waiting (`t - 1` lost turns vs 1).
+const AWAKEN_MIN_SLEEP: u8 = 3;
+
 /// Full Restores the round-2 Elite Four rooms leave in the bag for the Champion (a played rule).
 pub const CHAMPION2_RESERVE: u32 = 4;
 
@@ -479,7 +489,43 @@ pub fn tactics_for(ctx: &Ctx, seg: &str, wild: bool, sc: &Scene) -> Tactics {
     if let (_, Some(id)) = heal_pick(&sc.items, sc.me.level, false) {
         tac.heal = item_hp(id);
     }
+    if league && !c1_old() {
+        league_bag(&mut tac, seg, &sc.items);
+    }
     tac
+}
+
+/// C3 (plan 2010-r3f-league-bag, obligation 4): the League bag is played as the real items it holds
+/// (`Tactics::bag_honest`). HP alone takes a Hyper Potion (200 HP, `item_effects.h:37-40`: the carry's
+/// max HP is under 200 through round 1, so it is a full heal); a Full Restore (full HP and every status,
+/// `item_effects.h:26-30`) is spent on sleep or freeze, on paralysis or confusion below 60 % HP, or on HP
+/// once no Hyper / Max Potion is left (`decide`'s `status_bad` / `fr_ok`). Potions and Super Potions are
+/// not League heals. Before this, the controller's non-honest policy spent a Full Restore on every HP
+/// heal (`Action::FullRestore`, `heal_pick(.., full = true)`): the full2 run's 8 were gone by Lance.
+fn league_bag(tac: &mut Tactics, seg: &str, items: &[(u16, u16)]) {
+    let reserve = if matches!(seg, "lorelei-2" | "bruno-2" | "agatha-2" | "lance-2") {
+        CHAMPION2_RESERVE
+    } else {
+        0
+    };
+    let fr = count(items, ITEM_FULL_RESTORE).saturating_sub(reserve);
+    let max = count(items, ITEM_MAX_POTION);
+    let hyper = count(items, ITEM_HYPER_POTION);
+    tac.bag_honest = true;
+    tac.heal = 200;
+    tac.full_restore = fr > 0;
+    tac.fr_stock = fr;
+    tac.max_stock = max;
+    tac.full_heals = count(items, ITEM_FULL_HEAL);
+    tac.heal_stock = hyper + max + fr;
+}
+
+/// The item an honest League bag spends for `Action::Heal` (HP alone): Hyper Potion, then Max Potion,
+/// then a Full Restore when nothing else is left.
+fn honest_heal_pick(items: &[(u16, u16)]) -> Option<u16> {
+    [ITEM_HYPER_POTION, ITEM_MAX_POTION, ITEM_FULL_RESTORE]
+        .into_iter()
+        .find(|&id| count(items, id) > 0)
 }
 
 /// HP an item restores: Potion 20, Super Potion 50, Hyper Potion 200, Max Potion / Full Restore
@@ -1080,6 +1126,16 @@ fn turn(f: &mut HumanFeed, c: &mut Ctl, log: &mut EventLog) -> Result<(), RouteE
             }
         }
     }
+    // C1: asleep with an Awakening in the bag and a foe the policy finds harmless (it only wakes the
+    // fighter when `danger > 0`, `battle.rs` `greedy_action`). A sleeping fighter loses `t - 1` turns
+    // from `Sleep(t)` (`AtkCanceller_UnableToUseMove`, `decompiled/src/battle_util.c`; the sim's
+    // `do_move` agrees), the Awakening costs one: it pays from `t >= 3`. Played: r2j Martha lost 4
+    // turns to Sleep Powder at Oddish 1/51 with an Awakening in the bag, Dana 3 (59 s a run).
+    if let (Action::Move(_), Status1::Sleep(t)) = (action, sc.me.status) {
+        if t >= AWAKEN_MIN_SLEEP && count(&sc.items, ITEM_AWAKENING) > 0 && !c1_old() {
+            action = Action::Awaken;
+        }
+    }
     let taken = execute(f, c, log, &sc, action)?;
     let what = describe(dex, &sc, taken);
     let mv_pp = match taken {
@@ -1219,7 +1275,12 @@ fn execute(
             Ok(a)
         }
         Action::Heal | Action::FullRestore => {
-            let (model, pick) = heal_pick(&sc.items, sc.me.level, a == Action::FullRestore);
+            let (model, pick) = if a == Action::Heal && c.tac.as_ref().is_some_and(|t| t.bag_honest)
+            {
+                (ITEM_HYPER_POTION, honest_heal_pick(&sc.items))
+            } else {
+                heal_pick(&sc.items, sc.me.level, a == Action::FullRestore)
+            };
             // A potion on a fighter at full HP "won't have any effect" and the bag stays open: the
             // policy's Full Restore for a status (Freeze) with only HP potions in the bag. Attack
             // (the frozen turn passes, with its thaw chance) instead.
@@ -1317,14 +1378,29 @@ fn execute(
     }
 }
 
-/// The highest-PP damaging move with PP, for the fallbacks.
+/// The fallback attack (a heal the bag cannot pay, a Full Restore for a status at full HP): the damaging
+/// move with PP that does the most expected damage to the foe on the field. C1: this was "highest base
+/// power", which ignores the type chart (`gTypeEffectiveness`, `decompiled/src/battle_main.c`), STAB and
+/// accuracy; `damage_range` runs the sim's `CalculateBaseDamage` pipeline (`decompiled/src/pokemon.c`,
+/// STAB and chart in `battle_script_commands.c` `Cmd_typecalc`), so a resisted STAB move loses to a
+/// neutral one.
 fn best_move(dex: &Dex, sc: &Scene) -> usize {
     sc.me
         .moves
         .iter()
         .enumerate()
         .filter(|&(i, &mv)| sc.me.pp.get(i).is_none_or(|&p| p > 0) && dex.moves[mv].power > 0)
-        .max_by_key(|&(_, &mv)| dex.moves[mv].power)
+        .max_by(|&(_, &a), &(_, &b)| {
+            let score = |mv: usize| {
+                let (lo, hi) = sim_battle::damage_range(dex, &sc.me, &sc.foe, mv);
+                let acc = match dex.moves[mv].acc {
+                    0 => 100,
+                    a => a.min(100),
+                };
+                (lo + hi) as f64 / 2.0 * acc as f64
+            };
+            score(a).total_cmp(&score(b))
+        })
         .map(|(_, &mv)| mv)
         .unwrap_or(sc.me.moves[0])
 }

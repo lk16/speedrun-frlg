@@ -158,19 +158,25 @@ impl ObjInfo {
     /// over at its spawn (`MoveNextDirectionInSequence`, `decompiled/src/event_object_movement.c:3909-3935`),
     /// so only the rim of its box with one facing per side; an obstacle stops it (it walks in
     /// place). Everyone else: any offset of [`Self::offsets`] with any of [`Self::facings`].
+    /// The four directions of a `WALK_SEQUENCE_A_B_C_D` object, in order.
+    pub fn sequence_dirs(&self) -> Option<Vec<(i16, i16)>> {
+        let seq = self.movement.strip_prefix("MOVEMENT_TYPE_WALK_SEQUENCE_")?;
+        let dirs: Vec<(i16, i16)> = seq
+            .split('_')
+            .filter_map(|w| match w {
+                "UP" => Some((0, -1)),
+                "DOWN" => Some((0, 1)),
+                "LEFT" => Some((-1, 0)),
+                "RIGHT" => Some((1, 0)),
+                _ => None,
+            })
+            .collect();
+        (dirs.len() == 4).then_some(dirs)
+    }
+
     pub fn poses(&self, m: &MapInfo, x0: i16, y0: i16) -> Vec<((i16, i16), (i16, i16))> {
-        if let Some(seq) = self.movement.strip_prefix("MOVEMENT_TYPE_WALK_SEQUENCE_") {
-            let dirs: Vec<(i16, i16)> = seq
-                .split('_')
-                .filter_map(|w| match w {
-                    "UP" => Some((0, -1)),
-                    "DOWN" => Some((0, 1)),
-                    "LEFT" => Some((-1, 0)),
-                    "RIGHT" => Some((1, 0)),
-                    _ => None,
-                })
-                .collect();
-            if dirs.len() == 4 {
+        {
+            if let Some(dirs) = self.sequence_dirs() {
                 let out_of_range = |x: i16, y: i16| {
                     (self.range_x != 0 && (x - x0).abs() > self.range_x)
                         || (self.range_y != 0 && (y - y0).abs() > self.range_y)
@@ -1761,24 +1767,222 @@ fn sees_now(m: &MapInfo, l: &LiveObject, tiles: &[(i16, i16)]) -> bool {
     line.iter().any(|t| tiles.contains(t))
 }
 
-/// Wait on the current tile until the turning trainer `id` faces away from `tiles` (the stretch
-/// of path it could see), then go. A wanderer keeps a facing for at least 32 frames
-/// (`gMovementDelaysMedium` {32, 64, 96, 128} after each turn, `MovementType_WanderUpAndDown_Step2`,
-/// `decompiled/src/event_object_movement.c:3084-3093`; 16 more when the turn is a step), and its
-/// sight is checked on every frame the player has control (`ProcessPlayerFieldInput`,
-/// `decompiled/src/field_control_avatar.c:209`). So the human waits for a *visible* turn or step
-/// away, reacts (`U{15..30}`), and crosses while the new facing lasts. Returns the frames waited.
+fn c4_trace(s: &mut Session, tag: &str) {
+    if std::env::var_os("FRLG_C4_TRACE").is_none() {
+        return;
+    }
+    let f = s.frame();
+    let p = here(s);
+    let o: Vec<String> = live_objects(s)
+        .iter()
+        .filter(|l| l.trainer_type != 0)
+        .map(|l| {
+            format!(
+                "{}:({},{})<-({},{})f{}",
+                l.local_id, l.x, l.y, l.px, l.py, l.facing
+            )
+        })
+        .collect();
+    eprintln!("c4 {f} {tag} {p:?} {}", o.join(" "));
+}
+
+/// Is `to` inside the box of an unbeaten, on-screen trainer that turns to face a *running* player?
+/// `LOOK_AROUND` and the `FACE_*_AND_*` types test `ObjectEventIsTrainerAndCloseToPlayer` while they
+/// wait out a delay: with the dash flag set (B held while stepping) and the player's destination
+/// within `trainerRange` tiles on both axes, the delay is skipped and the trainer turns toward the
+/// player along the longer axis (`TryGetTrainerEncounterDirection`,
+/// `decompiled/src/event_object_movement.c:2772-2799,2992-3015,3044-3064`). That is a sight line
+/// whenever the player is in its row or column. Walking (no B) never triggers it. The plan's
+/// `norun` is drawn when the walk is planned, before the trainer is on screen; this is live.
+fn in_turn_box(s: &mut Session, to: Node) -> bool {
+    if here(s).is_none_or(|n| n.0 != to.0) {
+        return false;
+    }
+    let live = live_objects(s);
+    let objs: Vec<ObjInfo> = s
+        .graph()
+        .maps
+        .get(&to.0)
+        .map(|m| m.objects.clone())
+        .unwrap_or_default();
+    for l in live {
+        if l.map != to.0 || l.invisible || !matches!(l.trainer_type, 1 | 3) || l.range == 0 {
+            continue;
+        }
+        let Some(o) = objs.iter().find(|o| o.local_id == l.local_id) else {
+            continue;
+        };
+        let m = o.movement.as_str();
+        let looks = m.contains("LOOK_AROUND")
+            || (m.starts_with("MOVEMENT_TYPE_FACE_") && m.contains("_AND_"));
+        if !looks {
+            continue;
+        }
+        if o.beaten != 0 && s.obs.flag(s.hf.rec.emu(), o.beaten).unwrap_or(false) {
+            continue;
+        }
+        let r = l.range as i16;
+        if (to.1 - l.x).abs() <= r && (to.2 - l.y).abs() <= r {
+            return true;
+        }
+    }
+    false
+}
+
+/// One step of a trainer's predicted walk: it stands at `(x, y)` facing `dir` (a step's
+/// destination coordinates and facing are set on its first frame) for `t0..t1` frames from now.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SeqPose {
+    t0: i64,
+    t1: i64,
+    x: i16,
+    y: i16,
+    dir: (i16, i16),
+}
+
+/// Frames one NPC step takes (`MOVEMENT_ACTION_WALK_NORMAL_*`, one pixel a frame,
+/// `decompiled/src/event_object_movement.c`); measured on the Mt. Moon Lass: her coordinates
+/// change every 16 frames.
+const NPC_STEP: i64 = 16;
+
+/// Predict a `WALK_SEQUENCE_A_B_C_D` trainer for `horizon` frames from the state in RAM
+/// (`MoveNextDirectionInSequence`, `decompiled/src/event_object_movement.c:3909-3935`, and the
+/// per-variant `_Step1` that skips to leg 3 when the object is back on its initial row or
+/// column, `:3945-4400`). Deterministic: no `Random()`. `next_start` is the frame the next step
+/// begins. The player standing in its way is ignored (it would walk in place).
+fn predict_sequence(
+    o: &ObjInfo,
+    m: &MapInfo,
+    l: &LiveObject,
+    next_start: i64,
+    horizon: i64,
+) -> Option<Vec<SeqPose>> {
+    let dirs = o.sequence_dirs()?;
+    let opposite = |a: (i16, i16), b: (i16, i16)| a.0 == -b.0 && a.1 == -b.1;
+    // Legs 0 and 1 opposite (`RightLeftDownUp`): the skip is tested at leg 1, else at leg 2.
+    let k = if opposite(dirs[0], dirs[1]) { 1 } else { 2 };
+    let axis_x = dirs[k].0 != 0;
+    let out_of_range = |x: i16, y: i16| {
+        (o.range_x != 0 && (x - l.ix).abs() > o.range_x)
+            || (o.range_y != 0 && (y - l.iy).abs() > o.range_y)
+    };
+    let blocked = |x: i16, y: i16| m.tile(x, y).is_none_or(|t| t.collision != 0);
+    let (mut x, mut y) = (l.x, l.y);
+    let mut idx = (l.seq_idx as usize).min(3);
+    let mut out = vec![SeqPose {
+        t0: -1000,
+        t1: next_start,
+        x,
+        y,
+        dir: dir_vec(l.facing).unwrap_or((0, 0)),
+    }];
+    let mut t = next_start;
+    while t < horizon {
+        if idx == k && (if axis_x { l.ix == x } else { l.iy == y }) {
+            idx = k + 1;
+        }
+        if idx == 3 && (l.ix, l.iy) == (x, y) {
+            idx = 0;
+        }
+        let mut d = dirs[idx];
+        if out_of_range(x + d.0, y + d.1) {
+            idx = (idx + 1).min(3);
+            d = dirs[idx];
+        }
+        let walk = !out_of_range(x + d.0, y + d.1) && !blocked(x + d.0, y + d.1);
+        if walk {
+            x += d.0;
+            y += d.1;
+        }
+        out.push(SeqPose {
+            t0: t,
+            t1: t + NPC_STEP,
+            x,
+            y,
+            dir: d,
+        });
+        t += NPC_STEP;
+    }
+    Some(out)
+}
+
+/// Does a trainer standing at `p` (type `trainer_type`, sight `range`) see tile `t`?
+fn pose_sees(m: &MapInfo, trainer_type: u8, range: i16, p: &SeqPose, t: (i16, i16)) -> bool {
+    let mut line = vec![];
+    if trainer_type == 1 {
+        sight_line(m, p.x, p.y, p.dir, range, &mut line);
+    } else {
+        for d in [(0, -1), (0, 1), (-1, 0), (1, 0)] {
+            sight_line(m, p.x, p.y, d, range, &mut line);
+        }
+    }
+    line.contains(&t)
+}
+
+/// Is every tile of `tiles` unseen while the player is on it, if the player takes its first
+/// step `d` frames from now (every `d` in `d_lo..=d_hi`) at `period` frames a tile? The player's
+/// destination is the tile from the frame its step starts, and the sight check runs on frames it
+/// can move (`ProcessPlayerFieldInput`, `decompiled/src/field_control_avatar.c:209`; the
+/// destination: `PlayerGetDestCoords`, `trainer_see.c:127`), so tile `j` is exposed from its
+/// step's start to the next step's start; one frame of slack on each side.
+fn crossing_clear(
+    m: &MapInfo,
+    (trainer_type, range): (u8, i16),
+    poses: &[SeqPose],
+    tiles: &[(i16, i16)],
+    (d_lo, d_hi): (i64, i64),
+    period: i64,
+) -> bool {
+    for d in d_lo..=d_hi {
+        for (j, &t) in tiles.iter().enumerate() {
+            let a = d + j as i64 * period - 1;
+            let b = d + (j as i64 + 1) * period + 1;
+            for p in poses {
+                if p.t1 > a && p.t0 < b && pose_sees(m, trainer_type, range, p, t) {
+                    return false;
+                }
+            }
+        }
+    }
+    true
+}
+
+/// Wait on the current tile until crossing `tiles` is safe from the trainer `id`.
+///
+/// A walk-sequence patroller (`MOVEMENT_TYPE_WALK_SEQUENCE_*`: Lass Miriam on Mt. Moon 1F) is
+/// deterministic, so the human learns its loop by watching: the walker predicts its poses from
+/// its RAM state (`predict_sequence`) and the step phase it has seen, and starts only when no
+/// predicted sight line covers a tile while the player stands on it, over the whole window
+/// of reaction time plus input jitter. (Waiting for one visible turn away, as turners are
+/// handled below, is not enough for a walker: it turns back within the crossing.)
+///
+/// A wanderer or looker keeps a facing for at least 32 frames after a turn
+/// (`gMovementDelaysMedium` {32, 64, 96, 128} after each turn, `MovementType_LookAround_Step2`,
+/// `decompiled/src/event_object_movement.c:3033-3041`), and its sight is checked on every frame
+/// the player has control. So the human waits for a *visible* turn or step away, reacts
+/// (`U{15..30}`), and crosses while the new facing lasts. Returns the frames waited.
 fn wait_away(s: &mut Session, map: MapId, id: u8, tiles: &[(i16, i16)]) -> PResult<u64> {
     let t0 = s.frame();
     let Some(m) = live_map(s, map).or_else(|| s.graph().maps.get(&map).cloned()) else {
         return Ok(0);
     };
+    let info = s
+        .graph()
+        .maps
+        .get(&map)
+        .and_then(|g| g.objects.iter().find(|o| o.local_id == id).cloned());
     let find = |s: &mut Session| {
         live_objects(s)
             .into_iter()
             .find(|l| l.map == map && l.local_id == id)
     };
+    let seq = info.as_ref().is_some_and(|o| o.sequence_dirs().is_some());
+    let period: i64 = if run_bit(s) != 0 { 9 } else { 17 };
+    let (rlo, rhi) = (s.hf.model.react_lo as i64, s.hf.model.react_hi as i64);
+    let jitter = s.hf.model.jitter_n as i64;
     let mut prev: Option<(i16, i16, u8)> = None;
+    // The frame the trainer's coordinates or facing last changed: a walker's step began then.
+    let mut changed: Option<u64> = None;
     for _ in 0..1800 {
         if s.obs.in_battle(s.hf.rec.emu()) || !is_free(s) {
             return Ok(s.frame() - t0);
@@ -1788,7 +1992,32 @@ fn wait_away(s: &mut Session, map: MapId, id: u8, tiles: &[(i16, i16)]) -> PResu
         };
         let now = (l.x, l.y, l.facing);
         let turned = prev.is_some_and(|p| p != now);
+        if turned {
+            changed = Some(s.frame());
+        }
         prev = Some(now);
+        c4_trace(s, "wait");
+        if seq {
+            if let (Some(o), Some(c)) = (info.as_ref(), changed) {
+                let el = (s.frame() - c) as i64;
+                let next = NPC_STEP - el % NPC_STEP;
+                if let Some(poses) = predict_sequence(o, &m, &l, next, 1200) {
+                    if crossing_clear(
+                        &m,
+                        (l.trainer_type, l.range as i16),
+                        &poses,
+                        tiles,
+                        (rlo, rhi + jitter + 1),
+                        period,
+                    ) {
+                        s.hf.react()?;
+                        return Ok(s.frame() - t0);
+                    }
+                }
+            }
+            s.hf.step(0)?;
+            continue;
+        }
         if turned && !sees_now(&m, &l, tiles) {
             s.hf.react()?;
             match find(s) {
@@ -2047,7 +2276,12 @@ fn follow(
                         }
                     }
                     // Into a spinner's box: walk (see `Blk::norun`).
-                    let b = if plan.norun[i + 1] { 0 } else { run_bit(s) };
+                    let b = if plan.norun[i + 1] || in_turn_box(s, to) {
+                        0
+                    } else {
+                        run_bit(s)
+                    };
+                    c4_trace(s, "go");
                     s.hf.step(dir | b)?;
                     fed += 1;
                 }
@@ -2072,4 +2306,98 @@ fn follow(
     // Let the last step land.
     stop(s)?;
     Ok(Follow::Arrived)
+}
+
+#[cfg(test)]
+mod patrol_tests {
+    use super::*;
+
+    /// Lass Miriam (`MtMoon_1F/map.json`: spawn (33, 4), `WALK_SEQUENCE_LEFT_DOWN_RIGHT_UP`, range
+    /// 5 x 3, sight 2) on an open 40 x 12 floor: her loop is 16 steps, and she faces down on
+    /// (28, 7) for one step only, the only time she sees row 9.
+    #[test]
+    fn miriam_loop_and_crossing_window() {
+        let t = Tile {
+            collision: 0,
+            behavior: 0,
+            land: false,
+            elevation: 3,
+        };
+        let o = ObjInfo {
+            x: 33,
+            y: 4,
+            local_id: 4,
+            movement: "MOVEMENT_TYPE_WALK_SEQUENCE_LEFT_DOWN_RIGHT_UP".into(),
+            script: String::new(),
+            graphics: String::new(),
+            flag: 0,
+            trainer: true,
+            sight: 2,
+            beaten: 0,
+            range_x: 5,
+            range_y: 3,
+        };
+        let m = MapInfo {
+            name: String::new(),
+            id: String::new(),
+            w: 40,
+            h: 12,
+            tiles: vec![t; 40 * 12],
+            warps: vec![],
+            conns: vec![],
+            objects: vec![o.clone()],
+            bike: false,
+        };
+        // Just stepped left from (33, 4) to (32, 4): index 0, facing west.
+        let l = LiveObject {
+            local_id: 4,
+            x: 32,
+            y: 4,
+            graphics: 0,
+            px: 33,
+            py: 4,
+            facing: 3,
+            movement: 0,
+            trainer_type: 1,
+            range: 2,
+            map: (0, 0),
+            elevation: 3,
+            invisible: false,
+            ix: 33,
+            iy: 4,
+            seq_idx: 0,
+        };
+        let poses = predict_sequence(&o, &m, &l, 16, 16 * 30).unwrap();
+        // Steps from (32, 4): 4 left to x=28, 3 down to y=7, 5 right to x=33, 3 up to y=4.
+        let at = |i: usize| (poses[i].x, poses[i].y, poses[i].dir);
+        assert_eq!(at(4), (28, 4, (-1, 0)));
+        assert_eq!(at(7), (28, 7, (0, 1)));
+        assert_eq!(at(8), (29, 7, (1, 0)));
+        assert_eq!(at(12), (33, 7, (1, 0)));
+        assert_eq!(at(15), (33, 4, (0, -1)));
+        assert_eq!(at(16), (32, 4, (-1, 0)));
+        // She sees (28, 9) only while she walks onto (28, 7), once per 16-step loop.
+        let seen: Vec<usize> = (0..poses.len())
+            .filter(|&i| pose_sees(&m, 1, 2, &poses[i], (28, 9)))
+            .collect();
+        assert_eq!(seen, vec![7, 23]);
+        // A start 15-40 frames from now is in that step's window (112..128): not clear.
+        assert!(!crossing_clear(
+            &m,
+            (1, 2),
+            &poses,
+            &[(28, 9)],
+            (60, 120),
+            9
+        ));
+        // Right after it, up to the next loop's (368..384): clear.
+        assert!(crossing_clear(
+            &m,
+            (1, 2),
+            &poses,
+            &[(28, 9)],
+            (130, 340),
+            9
+        ));
+    }
 }

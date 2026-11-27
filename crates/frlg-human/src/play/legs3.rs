@@ -2423,13 +2423,22 @@ fn champion2(s: &mut Session) -> PResult<()> {
     // Into the Champion at full HP: a Full Restore from the reserve the rooms left
     // (`battle::CHAMPION2_RESERVE`) on a lead below full (a Revive leaves it at half).
     let m = Ram::new(&s.obs).party(s.hf.rec.emu())[0].clone();
-    if m.hp > 0 && m.hp < m.max_hp && have(s, "ITEM_FULL_RESTORE") > 1 {
-        super::shop::use_item_on(s, "ITEM_FULL_RESTORE", 0)?;
+    // C3: a Hyper Potion first when 200 HP covers the gap (plan 2010; `item_effects.h:37-40`).
+    let hyper = have(s, "ITEM_HYPER_POTION") > 0 && m.max_hp - m.hp <= 200;
+    if m.hp > 0 && m.hp < m.max_hp && (hyper || have(s, "ITEM_FULL_RESTORE") > 1) {
+        let it = if hyper {
+            "ITEM_HYPER_POTION"
+        } else {
+            "ITEM_FULL_RESTORE"
+        };
+        super::shop::use_item_on(s, it, 0)?;
         s.event(
             "model-vs-actual",
             format!(
-                "Full Restore on the lead before the Champion ({}/{} HP)",
-                m.hp, m.max_hp
+                "{} on the lead before the Champion ({}/{} HP)",
+                it.trim_start_matches("ITEM_"),
+                m.hp,
+                m.max_hp
             ),
             json!({"hp": m.hp, "max_hp": m.max_hp}),
         );
