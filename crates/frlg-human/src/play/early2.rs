@@ -951,6 +951,13 @@ fn cerulean(s: &mut Session) -> PResult<()> {
     if awak > 0 {
         want.push(("ITEM_AWAKENING", awak));
     }
+    // The Route 25 Cut-carrier hunt (`cut_carrier_hunt`) needs balls, and the plan buys none after the
+    // forest catches spend Oak's five (2026-11-27 r2d-s31: 12 of 12 hunts "skipped, no ball in the bag").
+    // Poke Balls are the mart's first row (`CeruleanCity_Mart/scripts.inc:24-25`); Bellsprout's catch
+    // rate is 255. A controller choice the model does not price (its Cut carrier is a MODEL BUG).
+    if cut_learner(s).is_none() {
+        want.push(("ITEM_POKE_BALL", 3));
+    }
     // Repels for Route 9 / Rock Tunnel are bought at the stop before Route 9 (`rock_tunnel`), with
     // the bridge and Route 25 money; Nugget Bridge's path has no grass.
     // Heals: Super Potions up to 4, while the money lasts (the sim's heals are unrationed).
