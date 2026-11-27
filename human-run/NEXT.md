@@ -1,5 +1,12 @@
 # Handoff for the next session
 
+## 2026-11-27 R3g: WR+20m reset-table refit (journal `journal/2026-11-27-15-00-r3g-refit.md`)
+
+**CURRENT unchanged.** Plans `1965-r3g-refit` (1964 + table) and `2012-r3g-refit` (2011 + table): a fitted `WR+20m` table
+(optstop, train R 8M seed 95, 6 iters). Paired at WR+20m, R 6M: 1965 vs 1964 **-72.7 h [-83.0, -63.8]** (seed 9601),
+2012 vs 2011 **-59.1 h [-68.7, -50.0]** (seed 9602). EHT 582.5 -> 509.8 h and 578.3 -> 519.2 h. WR+10m: ~10 finishes per
+8M (no table), WR+5m / WR+2m: 0 finishes. Descend from 2012 (WR+20m rung); the table should be refit after route changes.
+
 ## 2026-11-27 R3f: the League heal bag (journal `journal/2026-11-27-14-00-r3f-league-bag.md`)
 
 **CURRENT unchanged (1952).** Candidate **`plans/2010-r3f-league-bag.md`** = 1952 + MODEL keys `league_bag_honest`
