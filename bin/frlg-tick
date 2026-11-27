@@ -42,6 +42,14 @@ def compute() -> dict:
         pid, _, args = line.strip().partition(" ")
         if COMPUTE.search(args) and not SKIP.search(args):
             short = re.sub(r".*/\.claude/worktrees/agent-([a-f0-9]{7})[a-f0-9]*", r"W:\1", args)
+            # An agent's job started with a relative path: its working directory is the worktree.
+            try:
+                cwd = os.readlink(f"/proc/{pid}/cwd")
+            except OSError:
+                cwd = ""
+            m = re.search(r"/\.claude/worktrees/agent-([a-f0-9]{7})", cwd)
+            if m and not short.startswith("W:"):
+                short = f"W:{m.group(1)} {short}"
             procs[int(pid)] = " ".join(short.split()[:6])[:140]
     return procs
 
