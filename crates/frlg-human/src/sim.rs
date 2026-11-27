@@ -1446,6 +1446,14 @@ fn encounter(
             max_throws,
         );
         st.ball_tier = None;
+        if std::env::var_os("FRLG_CATCH_TRACE").is_some() {
+            let seg = ctx.segs.get(st.seg_i).map_or("?", |s| s.name.as_str());
+            let res = if ok { "caught" } else { "missed" };
+            eprintln!(
+                "catch {seg} {} {res} balls {:?} seq {}",
+                sp.name, st.balls, st.catch_n
+            );
+        }
         if ok {
             got(st, sp.dex, level);
         }
@@ -1641,8 +1649,19 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
     let mut cooldown = cd_steps;
     let mut left = steps as u64;
     let mut used = 0u32;
+    let safari_site = ctx.p.safari_model && site.starts_with("MAP_SAFARI_ZONE");
     loop {
         if stop_when_done && site_done(ctx, &slots, &|d| st.caught.has(d), skip) {
+            break;
+        }
+        // MODEL CHANGE `hunt_stop_empty`: no ball left and no mart inside a hunt: the human stops hunting.
+        if stop_when_done
+            && ctx.p.hunt_stop_empty
+            && ctx.p.money_model
+            && !safari_site
+            && st.balls.iter().sum::<u32>() == 0
+            && (!ctx.p.marts.is_empty() || ctx.ball_shop_from.is_some_and(|f| st.seg_i < f))
+        {
             break;
         }
         // Steps inside the cooldown window roll at 5% of the rate; afterwards at full rate.
@@ -2938,7 +2957,14 @@ fn cut_carrier(ctx: &Ctx, st: &mut State, rng: &mut Rng, name: &str) {
             stop_after: 1,
             repel_level: 0,
         };
+        let c0 = st.clock;
         hunt(ctx, st, rng, &h, Era::Run);
+        if std::env::var_os("FRLG_CATCH_TRACE").is_some() {
+            let s = (st.clock - c0) as f64 / 59.7275;
+            eprintln!("cut-hunt {} got {} s {:.0}", name, has_cutter(ctx, st), s);
+        }
+    } else if name == p.cut_hunt_after && std::env::var_os("FRLG_CATCH_TRACE").is_some() {
+        eprintln!("cut-hunt {name} already");
     }
     if name == p.cut_teach_at && p.cut_rehunt && !has_cutter(ctx, st) {
         // MODEL CHANGE `cut_rehunt`: no legal walk-around; back to the Route 24 grass for another hunt.
@@ -2982,10 +3008,29 @@ fn cut_carrier(ctx: &Ctx, st: &mut State, rng: &mut Rng, name: &str) {
             stop_after: 1,
             repel_level: 0,
         };
+        let c0 = st.clock;
         hunt(ctx, st, rng, &h, Era::Bike);
+        if std::env::var_os("FRLG_CATCH_TRACE").is_some() {
+            let s = (st.clock - c0) as f64 / 59.7275;
+            eprintln!("cut-rehunt {} got {} s {:.0}", name, has_cutter(ctx, st), s);
+        }
     }
     if name == p.cut_teach_at {
         if has_cutter(ctx, st) {
+            if p.cut_box_honest {
+                // MODEL CHANGE `cut_box_honest`: the earliest-obtained HM01 learner, withdrawn when boxed.
+                let cut = ctx.dex.move_id("MOVE_CUT");
+                let first = (0..ctx.dex.species.len())
+                    .filter(|&i| {
+                        let d = ctx.dex.species[i].dex;
+                        d != 0 && st.caught.has(d) && can_learn(ctx, i, cut)
+                    })
+                    .map(|i| ctx.dex.species[i].dex)
+                    .min_by_key(|&d| st.catch_seq[d as usize]);
+                if let Some(d) = first {
+                    pc_visit(ctx, st, &[d], name);
+                }
+            }
             clock_add(st, p.cut_teach_frames * p.text_factor);
         } else {
             bump(

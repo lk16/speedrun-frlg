@@ -1222,6 +1222,18 @@ pub struct Params {
     pub cut_rehunt_balls: u32,
     pub cut_rehunt_steps: u32,
     pub cut_rehunt_site: String,
+    // ---- R3 round 4 (journal 2026-11-27-r3d-cut).
+    /// MODEL CHANGE (R3d item 1): a hunt ends when the bag is empty. With scheduled mart stops (`marts`) no ball
+    /// can be bought inside a hunt (`take_ball`), and the old model kept walking the whole `steps` budget with
+    /// no ball, fleeing the very species it came for (the R3c Route 25 Bellsprout hunt: 27 % of the hunts ran
+    /// dry and walked their 300 steps, ~450 s). A human stops and buys balls at the next mart instead; for the
+    /// Cut hunt that is `cut_rehunt`'s top-up. Off = the old walk-on.
+    pub hunt_stop_empty: bool,
+    /// MODEL CHANGE (R3d item 1): the HM01 carrier has to be in the party at `cut_teach_at`. With the party full
+    /// (six obtained before it, `catch_seq`) a fresh catch went to the box (`decompiled/src/pokemon.c`
+    /// :3686-3704 `GiveMonToPlayer`: `PARTY_SIZE` full -> `SendMonToPC`), so the teach pays one PC withdrawal
+    /// (`pc_frames`, `pc_visit`). Off = the old model (a boxed carrier teaches for free).
+    pub cut_box_honest: bool,
 }
 
 /// The WR runner's early Torrent line at one fight (`Params::early_torrent`): Torrent is x1.5 Water power at
@@ -1542,6 +1554,8 @@ impl Default for Params {
             cut_rehunt_balls: 5,
             cut_rehunt_steps: 3000,
             cut_rehunt_site: "MAP_ROUTE24".into(),
+            hunt_stop_empty: false,
+            cut_box_honest: false,
         }
     }
 }
