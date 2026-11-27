@@ -103,3 +103,22 @@ VAR_TEMP_0/1, and the first switch was found on arrival and then "reset" by our 
 The v4 run (plan 1122) resumed from `icefall` (Six Island) with today's controller (binary 240cd9d7) played on to
 `hall-of-fame-2` (39 rollbacks, mostly the rematch Champion). So the post-League stages still work with the R1
 walker and today's battle fixes. The Shadow Tag / Wrap path was not triggered on this route.
+
+## v5 attempts on today's controller: both die in the round-1 League (afternoon)
+
+Two power-on attempts, with resumes only after controller bugs:
+- **`v5h-s41`** (plans 1964/2012): Lorelei 11 799 s, Bruno 12 049, Agatha 12 270, Lance 12 442 (+1679 s vs model p50).
+  Then the Champion blacked out on every branch.
+- **`v5i-s51`** (plan 2012): Lorelei 12 372 s, Bruno ~12 580, Agatha ~12 840. Then Lance blacked out on every branch.
+
+Both had 0 bumps. Under the human's rule (a death resets the attempt; PROMPT.md, model key `death_resets`), both
+attempts end there. C5 (journal `2026-11-27-15-00-c5-league-play.md`) found the controller plays the League the way the
+model's engine does at `league_power` 1.0, while the plan priced it at 1.2. R3i is pricing the honest power and the
+plan responses. No more v5 attempts until the League has an answer.
+
+Bugs found and fixed on the way (each made a v5 attempt fatal):
+- the Cerulean mart did not buy the plan's mid_bag Potions;
+- no Fly carrier (Route 5 Pidgey, balls from the Nugget sold at Cerulean);
+- the walker planned Cut through trees before anyone knew Cut;
+- a PC deposit of the last standing mon (Center heal first);
+- the Vermilion beam nodes.
