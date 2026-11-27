@@ -1,5 +1,20 @@
 # Handoff for the next session
 
+## 2026-11-27 R3e: model vs three played runs to Giovanni 1 (journal `journal/2026-11-27-14-00-r3e-calibration.md`)
+
+**CURRENT unchanged (1952).** The played gap (+873..+1055 s at Giovanni 1) splits into ~390 s of model optimism and
+~480-710 s of controller. Model fixes (new MODEL keys `route1_rewalk`, `played_frames`, `post_fight_frames`, plus the
+existing `catch_end_new` / `throw_frames` / `flee_frames` and `trainer_cost` a 714) are in **`plans/1964-r3e-honest.md`**:
+model p50 at Giovanni 1 3855 -> 4244 s; its tightest rung is **WR+20m (628 h; vs 1952 +513 h [455, 597])**, no WR+2m
+finish at R 800k. Per key at WR+2m: Route 1 three crossings +4604 h, played walk / text lumps (Rock Tunnel stretch,
+Celadon / Hideout, route3; pre-Brock ledger lumps were 66 s *pessimistic*) +23 635 h, boss text (Brock +41 s) +1855 h.
+- **Controller, ranked:** trainer actions above the WR on the same fights (+30..43 actions, 253-362 s: Potion loops
+  vs the Cerulean rival, Water moves into grass, Tackle with STAB); idle/turn/bump 115-123 s; r2i fought Miriam and
+  Grunt 4 (153 s) after the "Repel ends" walk; Repel lapses in Rock Tunnel (counted by encounter tiles, the game
+  counts steps) 47-66 s; a Route 1 catch against `pass_off`, 5 balls at a Metapod.
+- Refit the optstop table before descending from 1964. New tool: `examples/seg_dist.rs` (per-segment model
+  distribution with encounter seconds).
+
 ## 2026-11-27 R3d: honest Cut (journal `journal/2026-11-27-13-00-r3d-cut.md`)
 
 **CURRENT unchanged (1930).** Candidate **`plans/1952-r3d-cut-route5.md`** = 1930 + honest Cut (`cut_honest`,
