@@ -177,6 +177,9 @@ pub struct Probe {
     /// the intro to the last faint without outro and level-up text, the carry's level-ups in it). Only
     /// recorded when a probe is passed.
     pub fights: Vec<(String, u32, bool, f64, u32)>,
+    /// Per segment of the attempt's last pass (diagnostic, `examples/seg_dist.rs`): (frames in the
+    /// segment, wild encounters met in it, frames those encounters took).
+    pub seg_enc: Vec<(u64, u32, u64)>,
     /// National numbers still missing when the fill gave up (an abandoned attempt).
     pub missing: Vec<u32>,
     /// National numbers missing when the fill (or Oak's check) starts.
@@ -365,6 +368,9 @@ struct State {
     /// Rare Candies eaten on the spot so far (`candy_early_n` caps it).
     candies_eaten: u32,
     fight_log: Vec<(String, u32, bool, f64, u32)>,
+    /// Diagnostic only (`Probe::seg_enc`): wild encounters met and the frames they took, all segments.
+    enc_n: u32,
+    enc_frames: u64,
     /// Index of the segment being played, and the poison HP not yet charged (frames).
     seg_i: usize,
     poison_acc: f64,
@@ -535,6 +541,12 @@ impl Ctx<'_> {
         // MODEL CHANGE `vod_frames`: a WR-VOD-measured lump replaces the guessed text / walk frames.
         if matches!(seg.kind, Kind::Text { .. } | Kind::Walk { .. }) {
             if let Some(&f) = p.vod_frames.get(&seg.name) {
+                return f;
+            }
+        }
+        // MODEL CHANGE `played_frames` (R3e): a played-run lump replaces the guessed / ledger frames.
+        if matches!(seg.kind, Kind::Text { .. } | Kind::Walk { .. }) {
+            if let Some(&f) = p.played_frames.get(&seg.name) {
                 return f;
             }
         }
@@ -1712,6 +1724,7 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
             || !ctx.p.money_model
             || rate_s >= ctx.p.pass_reserve_rate
             || st.balls.iter().sum::<u32>() > ctx.p.pass_reserve;
+        let enc_t0 = st.clock;
         encounter(
             ctx,
             st,
@@ -1726,6 +1739,8 @@ fn run_encounters(ctx: &Ctx, st: &mut State, rng: &mut Rng, a: &EncArgs) -> u32 
                     && rate_s >= ctx.p.pass_min_catch),
             safari,
         );
+        st.enc_n += 1;
+        st.enc_frames += st.clock - enc_t0;
         if stop_new > 0 && st.caught.count() - c0 >= stop_new {
             break;
         }
@@ -2860,6 +2875,10 @@ fn review_keys(ctx: &Ctx, st: &mut State, name: &str) {
             clock_add(st, f * p.text_factor);
         }
     }
+    // MODEL CHANGE `post_fight_frames` (R3e): a boss fight's scripted text the fitted price misses.
+    if let Some(&f) = p.post_fight_frames.get(name) {
+        clock_add(st, f);
+    }
     if name == "deliver" && p.viridian_potions > 0 {
         let n = if p.money_model {
             p.viridian_potions.min(st.money / 300)
@@ -3725,6 +3744,8 @@ pub fn attempt(
         log_fights: probe.is_some(),
         candies_eaten: 0,
         fight_log: vec![],
+        enc_n: 0,
+        enc_frames: 0,
         seg_i: 0,
         poison_acc: 0.0,
         catch_lv: [0; 152],
@@ -4952,6 +4973,12 @@ pub fn attempt(
                     });
                 }
                 pr.fights.append(&mut st.fight_log);
+                if pr.seg_enc.len() <= i {
+                    pr.seg_enc.resize(i + 1, (0, 0, 0));
+                }
+                pr.seg_enc[i] = (st.clock - before, st.enc_n, st.enc_frames);
+                st.enc_n = 0;
+                st.enc_frames = 0;
                 if pr.caught_at.len() <= i {
                     pr.caught_at.resize(i + 1, 0);
                 }
