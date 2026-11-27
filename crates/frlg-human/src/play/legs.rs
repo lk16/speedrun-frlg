@@ -324,11 +324,12 @@ fn surge_cans(s: &mut Session) -> PResult<()> {
 /// `leg_surge`: Tucker (forced, `VermilionCity_Gym/map.json`) on the way, Lt. Surge at (5, 2).
 fn surge(s: &mut Session) -> PResult<()> {
     s.seg = "surge-gym-trainers".into();
-    // The beam barrier rows 6-7, x 3-7, are switched off by `SetBeamsOff` once both locks are
-    // open (`VermilionCity_Gym/scripts.inc`).
+    // The beam barrier rows 6-7 are switched off by `SetBeamsOff` once both locks are open, but only
+    // x 4-6: the end nodes at x 3 and 7 are set back impassable (`setmetatile ..., 1`,
+    // `VermilionCity_Gym/scripts.inc:30-39`; r2g-s31-full2 bumped (3, 7)).
     let mut o = Opts::default();
     for y in 6..=7 {
-        for x in 3..=7 {
+        for x in 4..=6 {
             o.open.push(("MAP_VERMILION_CITY_GYM", x, y));
         }
     }
