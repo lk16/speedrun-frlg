@@ -446,3 +446,20 @@ Stretches: Safari (East first) 26 718 frames vs 31 655 (5 species vs 7); post-Ho
 39 -> 56 caught in ~2 535 s, ~149 s per species (v3 ~160); round 1 Lorelei -> Hall of Fame 1 077 s (v3 1 047) with 1
 Lance rollback instead of 20. Rollbacks Giovanni 1 -> finish: 14 (v3 40): Koga 2, Silph rival 1, Victory Road
 Colby 2, Lance 1, Gideon 2, Indigo sell soft-lock 2 (controller), plus the 4 before `safari-trip` inherited from v3.
+
+## Early pickups and mart rows, played (R2a / R2c, tier 1; R3c 2026-11-27)
+
+Measured from the `frames` fields of the controller's events (`runs/human-play/r2a-dev21`, `r2c-s21`, plan 1841),
+written into plan `1930-r3c-dials2` (the `params.rs` defaults keep the old guesses so older rows stay reproducible):
+
+| constant | guess | measured | source | plan value |
+| --- | --- | --- | --- | --- |
+| `early_potion_frames.bedroom_pc` | 420 | 466-474 (6 samples) | r2a journal round 2, `r2a-dev21` 467 | 470 |
+| `early_potion_frames.route1_clerk` | 300 | 946 from the lab door, walk included; 400-560 as an event difference (R3b bug 11) | `r2a-dev21` / `r2c-s21` 946 | 480 (the walk itself is in the route's legs) |
+| `early_potion_frames.forest_hidden` | 240 | 238-242 after Sammy | `r2a-dev21` 238, `r2c-s21` 242 | 239 |
+| `early_torrent.cure_frames` | 640 (240 + 400) | Antidote pickup 239-246 from the forest entrance; the bag use is unmeasured (guess 400) | `r2a-dev21` 239 | 642 |
+| `tm39_sell_frames` | 360 | ~470 | R3b bug 11 (`r2a-dev1` vs `r2a-s11`) | 470 |
+| `pewter_ball_frames` (one buy row) | 150 | 200-213 | same | 210 |
+
+Paired effect on 1910 (row 1913, WR+2m, seed 8302, R 3.2M): +52 h [17, 116]: adopted as honesty. `MART` (900 frames a
+mart visit, `sim.rs`) is still a guess; nothing measured it whole.

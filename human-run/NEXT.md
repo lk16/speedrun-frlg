@@ -1,5 +1,20 @@
 # Handoff for the next session
 
+## 2026-11-27 R3c: model / plan round 3 (journal `journal/2026-11-27-12-00-r3c-model.md`)
+
+**CURRENT unchanged (1841).** Candidate **`plans/1930-r3c-dials2.md`** = 1910 + `manip.dials` 2 + tier-1 frames +
+`tackle_only` []: WR+2m **-485 h [-726, -282]** vs 1910 (seed 8303, R 1.6M; 2356 vs 2841 h).
+- **dials 2 confirmed** on three more seeds: -780 [-1057, -545] (8301, on 1841), -681 [-995, -421] (8302, on 1910),
+  inside 1930 (8303). Tier spe 28 / hp 16 / spd 20 on 1930: -105 / -140 n.s. (8303 / 8304): grow R.
+- **`1910-r3c-midbag` = model of record:** `mid_bag` + Potions 10/6/6 + Cerulean heal before Route 9, -435 h
+  [-834, -64] vs 1841 (8301; R3b 8201 -335 n.s.).
+- **Tackle-only Liam refuted** (engine 60-68 turns, MODEL key `tackle_only_model` gives no finish). `wild_fight_floor`
+  0.25 / 0.4 n.s., 0.55 +422*: keep 0. Frames (`calibration.md` table): +52 h, adopted.
+- **Cut:** the `cut_honest` walk-around is illegal (Saffron gate guards before the Tea, Route 9's own tree at (2,8));
+  new MODEL key `cut_rehunt`. `cut_honest` costs +3000..+4700 h on 1910 with every response tried (balls at Pewter /
+  Cerulean / after Misty, Route 24); the hunt runs out of balls because the purse is spent. Open.
+- Controller gap: the forest Antidote is spent in battle on a Weedle's poison; the model keeps it for the Brock cure.
+
 ## 2026-11-24 20:15 session end, review round 1 (read this first)
 
 All four branches are merged into `human-run`: R1 walker, R2a `play/early.rs` (power-on to `mt-moon-pc`), R2b
